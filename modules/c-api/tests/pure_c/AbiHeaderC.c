@@ -5,6 +5,8 @@
 #include <CNA/C/graphics.h>
 #include <CNA/C/cna.h>
 
+#include <stddef.h>
+
 _Static_assert(CNA_ABI_VERSION == CNA_ABI_VERSION_ENCODE(0, 1, 0),
                "CNA C ABI version encoding must remain stable");
 _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
@@ -210,3 +212,126 @@ _Static_assert(sizeof(CNA_GraphicsFormatSelection) == 24U,
                "CNA_GraphicsFormatSelection layout must remain stable");
 _Static_assert(sizeof(CNA_PresentationParameters) == 44U,
                "CNA_PresentationParameters layout must remain stable");
+_Static_assert(sizeof(CNA_ContainmentType) == sizeof(uint32_t) &&
+                   CNA_CONTAINMENT_DISJOINT == UINT32_C(0) &&
+                   CNA_CONTAINMENT_CONTAINS == UINT32_C(1) &&
+                   CNA_CONTAINMENT_INTERSECTS == UINT32_C(2),
+               "CNA containment identities must remain stable");
+_Static_assert(sizeof(CNA_PlaneIntersectionType) == sizeof(uint32_t) &&
+                   CNA_PLANE_INTERSECTION_FRONT == UINT32_C(0) &&
+                   CNA_PLANE_INTERSECTION_BACK == UINT32_C(1) &&
+                   CNA_PLANE_INTERSECTION_INTERSECTING == UINT32_C(2),
+               "CNA plane-intersection identities must remain stable");
+_Static_assert(CNA_CURVE_CONTINUITY_SMOOTH == UINT32_C(0) &&
+                   CNA_CURVE_CONTINUITY_STEP == UINT32_C(1) &&
+                   CNA_CURVE_LOOP_CONSTANT == UINT32_C(0) &&
+                   CNA_CURVE_LOOP_CYCLE == UINT32_C(1) &&
+                   CNA_CURVE_LOOP_CYCLE_OFFSET == UINT32_C(2) &&
+                   CNA_CURVE_LOOP_OSCILLATE == UINT32_C(3) &&
+                   CNA_CURVE_LOOP_LINEAR == UINT32_C(4) &&
+                   CNA_CURVE_TANGENT_FLAT == UINT32_C(0) &&
+                   CNA_CURVE_TANGENT_LINEAR == UINT32_C(1) &&
+                   CNA_CURVE_TANGENT_SMOOTH == UINT32_C(2),
+               "CNA curve identities must remain stable");
+_Static_assert(sizeof(CNA_Point) == 8U && sizeof(CNA_Vector4) == 16U &&
+                   sizeof(CNA_Quaternion) == 16U && _Alignof(CNA_Point) == 4U &&
+                   _Alignof(CNA_Vector4) == 4U && _Alignof(CNA_Quaternion) == 4U,
+               "CNA foundational value layouts must remain stable");
+_Static_assert(offsetof(CNA_Point, x) == 0U && offsetof(CNA_Point, y) == 4U &&
+                   offsetof(CNA_Vector4, x) == 0U && offsetof(CNA_Vector4, y) == 4U &&
+                   offsetof(CNA_Vector4, z) == 8U && offsetof(CNA_Vector4, w) == 12U &&
+                   offsetof(CNA_Quaternion, x) == 0U && offsetof(CNA_Quaternion, y) == 4U &&
+                   offsetof(CNA_Quaternion, z) == 8U && offsetof(CNA_Quaternion, w) == 12U,
+               "CNA foundational value fields must remain stable");
+_Static_assert(sizeof(CNA_Matrix) == 64U && sizeof(CNA_Plane) == 16U &&
+                   sizeof(CNA_Ray) == 24U,
+               "CNA matrix/intersection value layouts must remain stable");
+_Static_assert(offsetof(CNA_Matrix, m11) == 0U && offsetof(CNA_Matrix, m12) == 4U &&
+                   offsetof(CNA_Matrix, m13) == 8U && offsetof(CNA_Matrix, m14) == 12U &&
+                   offsetof(CNA_Matrix, m21) == 16U && offsetof(CNA_Matrix, m22) == 20U &&
+                   offsetof(CNA_Matrix, m23) == 24U && offsetof(CNA_Matrix, m24) == 28U &&
+                   offsetof(CNA_Matrix, m31) == 32U && offsetof(CNA_Matrix, m32) == 36U &&
+                   offsetof(CNA_Matrix, m33) == 40U && offsetof(CNA_Matrix, m34) == 44U &&
+                   offsetof(CNA_Matrix, m41) == 48U && offsetof(CNA_Matrix, m42) == 52U &&
+                   offsetof(CNA_Matrix, m43) == 56U && offsetof(CNA_Matrix, m44) == 60U,
+               "CNA matrix fields must remain stable");
+_Static_assert(offsetof(CNA_Plane, normal) == 0U && offsetof(CNA_Plane, d) == 12U &&
+                   offsetof(CNA_Ray, position) == 0U && offsetof(CNA_Ray, direction) == 12U,
+               "CNA matrix/intersection value fields must remain stable");
+_Static_assert(sizeof(CNA_BoundingBox) == 24U && sizeof(CNA_BoundingSphere) == 16U &&
+                   sizeof(CNA_BoundingFrustum) == 64U,
+               "CNA bounding-volume layouts must remain stable");
+_Static_assert(offsetof(CNA_BoundingBox, min) == 0U &&
+                   offsetof(CNA_BoundingBox, max) == 12U &&
+                   offsetof(CNA_BoundingSphere, center) == 0U &&
+                   offsetof(CNA_BoundingSphere, radius) == 12U &&
+                   offsetof(CNA_BoundingFrustum, matrix) == 0U,
+               "CNA bounding-volume fields must remain stable");
+_Static_assert(sizeof(CNA_PackedAlpha8) == 1U && sizeof(CNA_PackedBgr565) == 2U &&
+                   sizeof(CNA_PackedBgra4444) == 2U && sizeof(CNA_PackedBgra5551) == 2U &&
+                   sizeof(CNA_PackedByte4) == 4U && sizeof(CNA_PackedHalfSingle) == 2U &&
+                   sizeof(CNA_PackedHalfVector2) == 4U && sizeof(CNA_PackedHalfVector4) == 8U &&
+                   sizeof(CNA_PackedNormalizedByte2) == 2U &&
+                   sizeof(CNA_PackedNormalizedByte4) == 4U &&
+                   sizeof(CNA_PackedNormalizedShort2) == 4U &&
+                   sizeof(CNA_PackedNormalizedShort4) == 8U &&
+                   sizeof(CNA_PackedRg32) == 4U && sizeof(CNA_PackedRgba1010102) == 4U &&
+                   sizeof(CNA_PackedRgba64) == 8U && sizeof(CNA_PackedShort2) == 4U &&
+                   sizeof(CNA_PackedShort4) == 8U,
+               "CNA packed-value layouts must remain stable");
+_Static_assert(sizeof(CNA_BufferUsage) == sizeof(uint32_t) &&
+                   CNA_BUFFER_USAGE_NONE == UINT32_C(0) &&
+                   CNA_BUFFER_USAGE_WRITE_ONLY == UINT32_C(1),
+               "CNA buffer-usage identities must remain stable");
+_Static_assert(sizeof(CNA_IndexElementSize) == sizeof(uint32_t) &&
+                   CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS == UINT32_C(0) &&
+                   CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS == UINT32_C(1),
+               "CNA index-element identities must remain stable");
+_Static_assert(sizeof(CNA_PrimitiveType) == sizeof(uint32_t) &&
+                   CNA_PRIMITIVE_TRIANGLE_LIST == UINT32_C(0) &&
+                   CNA_PRIMITIVE_TRIANGLE_STRIP == UINT32_C(1) &&
+                   CNA_PRIMITIVE_LINE_LIST == UINT32_C(2) &&
+                   CNA_PRIMITIVE_LINE_STRIP == UINT32_C(3) &&
+                   CNA_PRIMITIVE_POINT_LIST_EXT == UINT32_C(4),
+               "CNA primitive identities must remain stable");
+_Static_assert(sizeof(CNA_SetDataOptions) == sizeof(uint32_t) &&
+                   CNA_SET_DATA_NONE == UINT32_C(0) &&
+                   CNA_SET_DATA_DISCARD == UINT32_C(1) &&
+                   CNA_SET_DATA_NO_OVERWRITE == UINT32_C(2),
+               "CNA SetData identities must remain stable");
+_Static_assert(sizeof(CNA_VertexElementFormat) == sizeof(uint32_t) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_SINGLE == UINT32_C(0) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_VECTOR2 == UINT32_C(1) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_VECTOR3 == UINT32_C(2) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_VECTOR4 == UINT32_C(3) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_COLOR == UINT32_C(4) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_BYTE4 == UINT32_C(5) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_SHORT2 == UINT32_C(6) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_SHORT4 == UINT32_C(7) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT2 == UINT32_C(8) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_NORMALIZED_SHORT4 == UINT32_C(9) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR2 == UINT32_C(10) &&
+                   CNA_VERTEX_ELEMENT_FORMAT_HALF_VECTOR4 == UINT32_C(11),
+               "CNA vertex-element format identities must remain stable");
+_Static_assert(sizeof(CNA_VertexElementUsage) == sizeof(uint32_t) &&
+                   CNA_VERTEX_ELEMENT_USAGE_POSITION == UINT32_C(0) &&
+                   CNA_VERTEX_ELEMENT_USAGE_COLOR == UINT32_C(1) &&
+                   CNA_VERTEX_ELEMENT_USAGE_TEXTURE_COORDINATE == UINT32_C(2) &&
+                   CNA_VERTEX_ELEMENT_USAGE_NORMAL == UINT32_C(3) &&
+                   CNA_VERTEX_ELEMENT_USAGE_BINORMAL == UINT32_C(4) &&
+                   CNA_VERTEX_ELEMENT_USAGE_TANGENT == UINT32_C(5) &&
+                   CNA_VERTEX_ELEMENT_USAGE_BLEND_INDICES == UINT32_C(6) &&
+                   CNA_VERTEX_ELEMENT_USAGE_BLEND_WEIGHT == UINT32_C(7) &&
+                   CNA_VERTEX_ELEMENT_USAGE_DEPTH == UINT32_C(8) &&
+                   CNA_VERTEX_ELEMENT_USAGE_FOG == UINT32_C(9) &&
+                   CNA_VERTEX_ELEMENT_USAGE_POINT_SIZE == UINT32_C(10) &&
+                   CNA_VERTEX_ELEMENT_USAGE_SAMPLE == UINT32_C(11) &&
+                   CNA_VERTEX_ELEMENT_USAGE_TESSELLATE_FACTOR == UINT32_C(12),
+               "CNA vertex semantic identities must remain stable");
+_Static_assert(sizeof(CNA_VertexElement) == 16U && _Alignof(CNA_VertexElement) == 4U,
+               "CNA_VertexElement layout must remain stable");
+_Static_assert(offsetof(CNA_VertexElement, offset) == 0U &&
+                   offsetof(CNA_VertexElement, format) == 4U &&
+                   offsetof(CNA_VertexElement, usage) == 8U &&
+                   offsetof(CNA_VertexElement, usage_index) == 12U,
+               "CNA_VertexElement fields must remain stable");

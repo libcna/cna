@@ -8,10 +8,12 @@
  */
 #include "CNA/C/abi.h"
 #include "CNA/C/core.h"
+#include "CNA/C/math_values.h"
 #include "CNA/C/display.h"
 #include "CNA/C/runtime.h"
 #include "CNA/C/graphics.h"
 #include "CNA/C/graphics_state.h"
+#include "CNA/C/graphics3d.h"
 #include "CNA/C/render_target.h"
 #include "CNA/C/sprite_font.h"
 #include "CNA/C/input.h"

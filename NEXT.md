@@ -1,11 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS RESOURCES COMPLETE THROUGH CBIND-034 (2026-08-14)
+## C BINDING / C ABI — 3D VALUE/IDENTITY FOUNDATION COMPLETE THROUGH CBIND-035A (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`034` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`034` and slice `CBIND-035A` are complete:
+> `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -43,10 +44,14 @@
 > snapshots and queries, owned RenderTarget2D/RenderTargetCube handles and copied-glyph SpriteFont
 > handles with enforced texture retention. The same strict-C test passes against HEADLESS and
 > SDL_RENDERER, including real SDL 2D target binding and honest unavailable target/state paths.
-> The inventory is now 814 implemented, 21 partial, 5,510 planned and 70 explicitly
-> deleted/not applicable, with no planned CBIND-034 row. Deterministic `--check` detects drift;
-> wiring it into CI remains correctly reserved for CBIND-043. `CBIND-035` 3D resources, effects,
-> models and bulk draw submission is next.
+> CBIND-035 is split into independently reviewable CBIND-035A–G slices. CBIND-035A now freezes the
+> C layouts for Point, Vector4, Quaternion, Matrix, Plane, Ray, bounding volumes, all 17
+> PackedVector raw values and VertexElement, plus containment/curve/buffer/draw/vertex enum
+> identities. Strict C17 and C++23 assertions cover sizes, offsets and ordinals; no constructor,
+> numeric operation or resource behavior is claimed by this layout-only foundation. The inventory
+> is now 983 implemented, 21 partial, 5,341 planned and 70 explicitly deleted/not applicable.
+> Deterministic `--check` detects drift; wiring it into CI remains reserved for CBIND-043.
+> CBIND-035B math, geometry and PackedVector operations is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

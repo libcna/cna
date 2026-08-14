@@ -658,6 +658,87 @@
       "tests": "HEADLESS/SDL device round-trip, binding, backend-refusal, invalid input, threading and ABI cases in `GraphicsSurfaceSmoke.c`",
       "status": "implemented",
       "task": "CBIND-034"
+    },
+    {
+      "id": "math-geometry-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/(?:ContainmentType|PlaneIntersectionType|CurveContinuity|CurveLoopType|CurveTangent)\\.hpp$",
+      "mapping": "fixed-width `CNA_*` identity and stable constants in `math_values.h`",
+      "tests": "C/C++ ABI identity assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "graphics3d-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:BufferUsage|IndexElementSize|PrimitiveType|SetDataOptions|VertexElementFormat|VertexElementUsage)\\.hpp$",
+      "mapping": "fixed-width `CNA_*` identity and stable constants in `graphics3d.h`",
+      "tests": "C/C++ ABI identity assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "math3d-pod-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Point|Vector4|Quaternion|Matrix|Plane|Ray|BoundingBox|BoundingSphere|BoundingFrustum)$",
+      "kinds": ["class", "struct"],
+      "mapping": "corresponding fixed-layout `CNA_*` POD in `math_values.h`",
+      "tests": "C/C++ ABI size, alignment and field-offset assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "math3d-pod-fields",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Point::[XY]|Vector4::[XYZW]|Quaternion::[XYZW]|Matrix::M[1-4][1-4]|Plane::(?:Normal|D)|Ray::(?:Position|Direction)|BoundingBox::(?:Min|Max)|BoundingSphere::(?:Center|Radius))$",
+      "kinds": ["field"],
+      "mapping": "corresponding lower-case field in the fixed-layout `CNA_*` POD",
+      "tests": "C/C++ ABI size, alignment and field-offset assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "bounding-frustum-matrix-property",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::BoundingFrustum::(?:get|set)MatrixProperty$",
+      "kinds": ["method"],
+      "mapping": "direct `matrix` field in `CNA_BoundingFrustum`",
+      "tests": "C/C++ ABI size, alignment and field-offset assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "vertex-element-pod-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexElement$",
+      "kinds": ["struct"],
+      "mapping": "fixed-layout `CNA_VertexElement` POD in `graphics3d.h`",
+      "tests": "C/C++ ABI size, alignment and field-offset assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "vertex-element-pod-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexElement::(?:get|set)(?:Offset|VertexElementFormat|VertexElementUsage|UsageIndex)Property$",
+      "kinds": ["method"],
+      "mapping": "corresponding field in fixed-layout `CNA_VertexElement`",
+      "tests": "C/C++ ABI size, alignment and field-offset assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "packed-vector-raw-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)$",
+      "kinds": ["struct"],
+      "mapping": "matching fixed-width `CNA_Packed*` raw-storage alias",
+      "tests": "C/C++ ABI size assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
+    },
+    {
+      "id": "packed-vector-raw-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)::(?:get|set)PackedValueProperty$",
+      "kinds": ["method"],
+      "mapping": "the value of the matching fixed-width `CNA_Packed*` raw-storage alias",
+      "tests": "C/C++ ABI size assertions",
+      "status": "implemented",
+      "task": "CBIND-035A"
     }
   ]
 }

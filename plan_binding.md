@@ -233,11 +233,23 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-033 | Inventory the complete public CNA surface | ✅ | Doxygen-backed `tools/c-api/generate_coverage_inventory.py` deterministically tracks all 414 public headers and 6,415 public/protected declarations while explicitly excluding 95 `Internal`/`Detail` headers and the C API itself. `coverage_mappings.json` assigns reviewed current mappings; every remaining symbol has a C-native mapping proposal, test obligation, status and owner task. The snapshot records 443 implemented, 21 partial, 5,881 planned and 70 explicitly deleted/not-applicable declarations; `--check` proves drift without prematurely wiring the CBIND-043 CI gate. |
 | CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ✅ | `graphics_state.h`, `display.h`, `render_target.h` and `sprite_font.h` map every inventory row in this family: fixed identities and complete state PODs/presets/device round-trips, sampler slots and explicit-state SpriteBatch Begin; display/adapter/presentation values and safe native-handle/refresh limitations; owned 2D/cube targets with applied-property snapshots and atomic singular/MRT binding; copied glyph SpriteFonts retaining their source Texture2D. Strict-C HEADLESS and SDL_RENDERER tests cover ABI layouts, properties, UTF-8, ownership, stale/wrong-thread handles, real 2D binding and honest unavailable-backend paths. The inventory now records 814 implemented, 21 partial, 5,510 planned and 70 not applicable rows, with no planned CBIND-034 row. |
-| CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ⬜ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. |
+| CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | 🟨 | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. Work is decomposed into CBIND-035A–G below; the parent becomes complete only when all seven rows and every CBIND-035 inventory row are closed. |
 | CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
 | CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
 | CBIND-043 | Maintain a machine-checked coverage gate | ⬜ | A CI checker compares the public-header inventory to `COVERAGE.md` and fails if a public type/member/constant/event has no mapping/status. New C++ public API cannot land without its C API row and tests in the same change. |
 | CBIND-044 | Close the public API coverage matrix | ⬜ | Every row is implemented and tested, or carries an owner-approved native limitation with a callable C API that reports it. No unspecified omission remains. |
+
+### CBIND-035 implementation slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
+| CBIND-035B | Complete math, geometry and packed-value operations | ⬜ | Map every remaining public math and PackedVector constructor, method, operator, constant and collection behavior to C-native value/bulk operations with numeric edge-case tests. |
+| CBIND-035C | Add texture, buffer and vertex-resource coverage | ⬜ | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. |
+| CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
+| CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
+| CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
+| CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -304,7 +316,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034` are ✅; `CBIND-035` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-034` and slice `CBIND-035A` are ✅; parent `CBIND-035` is 🟨 and
+`CBIND-035B` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -315,6 +328,7 @@ Texture2D loads, keyboard/mouse/gamepad/touch capture and a PCM16 SoundEffect/in
 route with stable native playback-availability reporting and isolated success/unavailable-device
 regressions. B5 is complete. B6 has a deterministic, reviewed 414-header/6,415-symbol baseline and
 now maps the full CBIND-034 graphics family through C-native state/display PODs, adapter queries,
-owned render targets and SpriteFonts. The current snapshot is 814 implemented, 21 partial, 5,510
-planned and 70 not applicable; CBIND-035 3D resources, effects, models and bulk draw submission is
-next.
+owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value and identity ABI
+without claiming its still-unimplemented operations. The current snapshot is 983 implemented, 21
+partial, 5,341 planned and 70 not applicable; CBIND-035B math, geometry and PackedVector operations
+are next.

@@ -7,7 +7,8 @@ the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycl
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
 owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission,
 complete graphics-state descriptors, display/adapter/presentation snapshots, owned render targets
-and caller-built SpriteFonts, plus point-in-time keyboard, mouse, gamepad and touch snapshots. An
+and caller-built SpriteFonts, fixed-layout 3D math/geometry values, packed storage and core
+draw/buffer/vertex identities, plus point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. Exact support and omissions are recorded in
@@ -72,8 +73,8 @@ gate.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
-`sprite_font.h`, `input.h`, `content.h` and `audio.h`; later family headers follow as coverage
-requires.
+`sprite_font.h`, `math_values.h`, `graphics3d.h`, `input.h`, `content.h` and `audio.h`; later family
+headers follow as coverage requires.
 
 ## Supported configurations
 
@@ -97,7 +98,8 @@ The C API must not expose:
 
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
-[input snapshots](INPUT_SNAPSHOTS.md) and the Sharp Runtime boundary. The owned content/cache
+[math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
+Runtime boundary. The owned content/cache
 contract is in [`CONTENT.md`](CONTENT.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;

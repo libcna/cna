@@ -18,7 +18,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **414 headers**, **6415 symbols**, **814 implemented**, **21 partial**, **5510 planned**, **70 not applicable**. Explicitly excluded internal/detail headers: **95**.
+Snapshot: **414 headers**, **6415 symbols**, **983 implemented**, **21 partial**, **5341 planned**, **70 not applicable**. Explicitly excluded internal/detail headers: **95**.
 
 Regenerate with:
 
@@ -40,10 +40,10 @@ gate is deliberately reserved for CBIND-043.
 | `devices` | 18 | 208 | 0 | 0 | 206 | 2 |
 | `devices-ext` | 17 | 87 | 0 | 0 | 83 | 4 |
 | `gamer-services` | 54 | 676 | 0 | 0 | 674 | 2 |
-| `graphics` | 128 | 2132 | 440 | 17 | 1657 | 18 |
+| `graphics` | 128 | 2132 | 543 | 17 | 1554 | 18 |
 | `graphics-ext` | 12 | 118 | 0 | 0 | 118 | 0 |
 | `input` | 50 | 861 | 247 | 0 | 599 | 15 |
-| `math` | 23 | 914 | 21 | 0 | 892 | 1 |
+| `math` | 23 | 914 | 87 | 0 | 826 | 1 |
 | `media` | 24 | 328 | 0 | 0 | 325 | 3 |
 | `net` | 23 | 267 | 0 | 0 | 267 | 0 |
 | `runtime` | 20 | 296 | 19 | 0 | 273 | 4 |
@@ -2419,9 +2419,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-26F5507C13D2` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::BufferUsage::None = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-6D1D238951F3` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::BufferUsage::WriteOnly = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-CACBB3B1B031` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::BufferUsage` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-26F5507C13D2` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::BufferUsage::None = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-6D1D238951F3` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::BufferUsage::WriteOnly = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-CACBB3B1B031` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::BufferUsage` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/ClearOptions.hpp`
 
@@ -3354,9 +3354,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-8AB3E9DEFE2A` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::IndexElementSize::SixteenBits = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-BD96B7DD5DBC` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::IndexElementSize::ThirtyTwoBits = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-72A9C79010A6` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::IndexElementSize` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-8AB3E9DEFE2A` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::IndexElementSize::SixteenBits = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-BD96B7DD5DBC` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::IndexElementSize::ThirtyTwoBits = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-72A9C79010A6` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::IndexElementSize` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model.hpp`
 
@@ -3553,11 +3553,11 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-D312FEF34FA2` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-D312FEF34FA2` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-AD85FBB451FE` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::Alpha8()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-8DB760CB4EE4` | 22 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::Alpha8(float alpha)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-62657910CD56` | 28 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D2F0CF5DB353` | 34 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::setPackedValueProperty(uint8_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-62657910CD56` | 28 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D2F0CF5DB353` | 34 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::setPackedValueProperty(uint8_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-A64D83194BE2` | 40 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-0026952159BE` | 46 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-3198CE367507` | 52 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Alpha8::ToAlpha() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3568,12 +3568,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-86CDAB49D8DB` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-86CDAB49D8DB` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-5264705E9349` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::Bgr565()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E68BE08505D6` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::Bgr565(float r, float g, float b)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-7A11C4C923CD` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::Bgr565(Vector3 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-7CB24E91069E` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-93D162C78D11` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::setPackedValueProperty(uint16_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-7CB24E91069E` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-93D162C78D11` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::setPackedValueProperty(uint16_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-C8E551E493B1` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-64AA2FABBA56` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-56333B551799` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgr565::operator==(const Bgr565 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3583,12 +3583,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-BB12D3D5FE6E` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-BB12D3D5FE6E` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-085BB3B1E9AC` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::Bgra4444()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-AE8C33608FF1` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::Bgra4444(float r, float g, float b, float a)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-FE1B1DC6B68E` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::Bgra4444(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-3FFCF1098999` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-3F8EE8A79B42` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::setPackedValueProperty(uint16_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-3FFCF1098999` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-3F8EE8A79B42` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::setPackedValueProperty(uint16_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-9EBDE59D1AEC` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-C2AABD57585C` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-800EA188B082` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra4444::operator==(const Bgra4444 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3598,12 +3598,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-6F369839FF9A` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-6F369839FF9A` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-583D8E41F12D` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::Bgra5551()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-093E40D0AE7C` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::Bgra5551(float r, float g, float b, float a)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-31E9B8532B91` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::Bgra5551(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-19C39610F983` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2491CF657109` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::setPackedValueProperty(uint16_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-19C39610F983` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-2491CF657109` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::setPackedValueProperty(uint16_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-F2450175E0AE` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-FD1E7E8612AD` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-C541AE2498ED` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Bgra5551::operator==(const Bgra5551 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3613,13 +3613,13 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-32031CCF650B` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-32031CCF650B` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-16F237D9A82D` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Byte4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-DBAA68C75AC0` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Byte4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-FF6490E5EFEB` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Byte4(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-65DF944853B4` | 37 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::Byte4(uint32_t packed)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-64120B2DFC8F` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F3D4DDF265F1` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-64120B2DFC8F` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-F3D4DDF265F1` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-7B2214BAEB52` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6DB15CD50140` | 61 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-2C37067321FD` | 76 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Byte4::operator==(const Byte4 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3629,12 +3629,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-D93682A660B2` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-D93682A660B2` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-969CF6970363` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::HalfSingle()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-01A5A97C497B` | 22 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::HalfSingle(float single)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-20FF92EDE054` | 28 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::HalfSingle(uint16_t packed)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-0CFA146476FC` | 34 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F2AA6D91D147` | 40 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::setPackedValueProperty(uint16_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-0CFA146476FC` | 34 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-F2AA6D91D147` | 40 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::setPackedValueProperty(uint16_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-8E9895A70EDC` | 46 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6967782CFED2` | 52 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-F26BAAA4E3EB` | 58 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfSingle::ToSingle() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3654,12 +3654,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-9D10CC79C9FC` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-9D10CC79C9FC` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-FC0955EEA55B` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::HalfVector2()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E00A319DF169` | 24 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::HalfVector2(float x, float y)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-48F155E2FB1D` | 30 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::HalfVector2(Vector2 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-AAE1C7B15571` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-7C41889BF6D7` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-AAE1C7B15571` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-7C41889BF6D7` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-70D03A939D46` | 48 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-DA31C62E61FF` | 54 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-789677EFCA1E` | 67 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector2::ToVector2() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3670,12 +3670,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-42A89E8B323D` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-42A89E8B323D` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-6D7648965282` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::HalfVector4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-DBB342C9BEE6` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::HalfVector4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E0E6F3BAC183` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::HalfVector4(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F36DBF478F5A` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-0A1C3FD70704` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::setPackedValueProperty(uint64_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-F36DBF478F5A` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-0A1C3FD70704` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::setPackedValueProperty(uint64_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-1B4A060413C6` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-F56519C36FEE` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-37E84C798BAC` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::HalfVector4::operator==(const HalfVector4 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3685,12 +3685,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-61BC82369FF6` | 15 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-61BC82369FF6` | 15 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-2E4F27D93362` | 18 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::NormalizedByte2()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-9C1F9E170301` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::NormalizedByte2(float x, float y)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-55D620D5CFEA` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::NormalizedByte2(Vector2 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-27C485112F69` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8D8C9DE8E3C4` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::setPackedValueProperty(uint16_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-27C485112F69` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-8D8C9DE8E3C4` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::setPackedValueProperty(uint16_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-50293B309FBB` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-F0408711FE98` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-671A05DA7EC1` | 69 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte2::operator==(const NormalizedByte2 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3700,12 +3700,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-C7E01AE21A8A` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-C7E01AE21A8A` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-3AB8D7130FE7` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::NormalizedByte4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-5DD896625FD5` | 26 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::NormalizedByte4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6A84AB04E86A` | 32 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::NormalizedByte4(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-AE3B9E116AB0` | 38 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E7F7D33077BF` | 44 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-AE3B9E116AB0` | 38 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E7F7D33077BF` | 44 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-0BA7E8B0AA58` | 50 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-642DD0D84460` | 56 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-2AC6C6248792` | 71 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedByte4::operator==(const NormalizedByte4 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3715,12 +3715,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-92FF43ADD6B7` | 15 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-92FF43ADD6B7` | 15 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-EA7DB8AE6E1E` | 18 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::NormalizedShort2()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-809931D737A9` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::NormalizedShort2(float x, float y)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-4E5402B7E015` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::NormalizedShort2(Vector2 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-580395F09352` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-01B72925D76D` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-580395F09352` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-01B72925D76D` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-FD030BCCBD28` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-318EF461FA1E` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-3CB91339025E` | 69 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort2::operator==(const NormalizedShort2 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3730,12 +3730,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-7DAFDE0C8C15` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-7DAFDE0C8C15` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-F034D4BD4F19` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::NormalizedShort4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-3DC84058C5C8` | 26 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::NormalizedShort4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E7D97D59C28C` | 32 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::NormalizedShort4(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-02C19A5E2BA9` | 38 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-49976DF15615` | 44 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::setPackedValueProperty(uint64_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-02C19A5E2BA9` | 38 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-49976DF15615` | 44 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::setPackedValueProperty(uint64_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-7AAAD12E460C` | 50 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-3C52FF938AB3` | 56 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-320DCA67174D` | 71 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::NormalizedShort4::operator==(const NormalizedShort4 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3745,12 +3745,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-BA828B554BF3` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-BA828B554BF3` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-3D79726937C1` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::Rg32()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-4215FBED8723` | 24 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::Rg32(float r, float g)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-D207AFDE3DB6` | 30 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::Rg32(Vector2 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-20275BA45A60` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-5CCAA6B1BD9F` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-20275BA45A60` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-5CCAA6B1BD9F` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-16E4ED0EDCF4` | 48 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-D5CF1FB540D7` | 54 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-A8D855944301` | 68 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Rg32::operator==(const Rg32 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3760,12 +3760,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-10B2A7B1B5CE` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-10B2A7B1B5CE` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-DEDFA64CA229` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::Rgba1010102()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-1DC1F14E60A8` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::Rgba1010102(float r, float g, float b, float a)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6D3916583391` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::Rgba1010102(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D0D57ADEE3D0` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-152DF84210D3` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-D0D57ADEE3D0` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-152DF84210D3` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-508143D82247` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-8F389D5EA0F9` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-729C4FEC0268` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba1010102::operator==(const Rgba1010102 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3775,12 +3775,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-1D81B44FB1F3` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-1D81B44FB1F3` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-4316ED0A555C` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::Rgba64()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-5C8486E86441` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::Rgba64(float r, float g, float b, float a)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-D2F3DA0034BB` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::Rgba64(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-491DCC8739D7` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D57BBA5AF81D` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::setPackedValueProperty(uint64_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-491DCC8739D7` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D57BBA5AF81D` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::setPackedValueProperty(uint64_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-473DE5896411` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-148FE49E71B3` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-5D09340DA09C` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Rgba64::operator==(const Rgba64 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3790,12 +3790,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-2C169649EEAB` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-2C169649EEAB` | 14 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-E84E72A1A8BE` | 17 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::Short2()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-EB02C2833930` | 24 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::Short2(float x, float y)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-77BD5CCC109B` | 30 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::Short2(Vector2 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F581C2CC85CC` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E956F84EFE5B` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::setPackedValueProperty(uint32_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-F581C2CC85CC` | 36 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E956F84EFE5B` | 42 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::setPackedValueProperty(uint32_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-07D6EC90DA33` | 48 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-15550F367114` | 54 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-1A245DAC38A1` | 68 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Short2::operator==(const Short2 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3805,12 +3805,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-00FFF3EBA831` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-00FFF3EBA831` | 13 | public struct | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4` | matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-6C6437717DB3` | 16 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::Short4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-734FE30D1B16` | 25 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::Short4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-C72D4289351D` | 31 | public constructor | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::Short4(Vector4 vector)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F1DA8E71B797` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::getPackedValueProperty() const override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-B5554EFD18AE` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::setPackedValueProperty(uint64_t v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-F1DA8E71B797` | 37 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::getPackedValueProperty() const override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-B5554EFD18AE` | 43 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::setPackedValueProperty(uint64_t v) override` | the value of the matching fixed-width `CNA_Packed*` raw-storage alias | C/C++ ABI size assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-4089D8C1639F` | 49 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::PackFromVector4(const Vector4 &v) override` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6DA8D4961CA2` | 55 | public method | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::ToVector4() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-336AF4F8CE3B` | 70 | public operator | `Microsoft::Xna::Framework::Graphics::PackedVector::Short4::operator==(const Short4 &o) const` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -3924,12 +3924,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-56FA586B6A1E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::LineList = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-83359BB31C64` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::LineStrip = 3` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-064A6E01D557` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::PointListEXT = 4` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-B5DF93FCA47E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-BF2861F11AF1` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleStrip = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A059E217D563` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::PrimitiveType` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-56FA586B6A1E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::LineList = 2` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-83359BB31C64` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::LineStrip = 3` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-064A6E01D557` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::PointListEXT = 4` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-B5DF93FCA47E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleList = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-BF2861F11AF1` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::PrimitiveType::TriangleStrip = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A059E217D563` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::PrimitiveType` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/RasterizerState.hpp`
 
@@ -4078,10 +4078,10 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-92EFDD1C0289` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::Discard = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-20BA26118F3D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::NoOverwrite = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D3AE445D1D8E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::None = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-5AE08B465E04` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::SetDataOptions` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-92EFDD1C0289` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::Discard = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-20BA26118F3D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::NoOverwrite = 2` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D3AE445D1D8E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::SetDataOptions::None = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-5AE08B465E04` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::SetDataOptions` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp`
 
@@ -4743,17 +4743,17 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-C5C248947E6B` | 18 | public struct | `Microsoft::Xna::Framework::Graphics::VertexElement` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-C5C248947E6B` | 18 | public struct | `Microsoft::Xna::Framework::Graphics::VertexElement` | fixed-layout `CNA_VertexElement` POD in `graphics3d.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-EB3BEE635973` | 23 | public constructor | `Microsoft::Xna::Framework::Graphics::VertexElement::VertexElement()=default` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-C300623C452D` | 32 | public constructor | `Microsoft::Xna::Framework::Graphics::VertexElement::VertexElement(int offset, VertexElementFormat format, VertexElementUsage usage, int usageIndex)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-4B33B510E37E` | 49 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getOffsetProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F766DD02AE51` | 55 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setOffsetProperty(int value)` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-CFF1B59B992B` | 61 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getVertexElementFormatProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-FAA51CD95154` | 67 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setVertexElementFormatProperty(VertexElementFormat value)` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-81F56315CBC2` | 73 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getVertexElementUsageProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-EE6C96A64E30` | 79 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setVertexElementUsageProperty(VertexElementUsage value)` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-BAAC79E4B87A` | 85 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getUsageIndexProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-B70800DB55EE` | 91 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setUsageIndexProperty(int value)` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-4B33B510E37E` | 49 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getOffsetProperty() const` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-F766DD02AE51` | 55 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setOffsetProperty(int value)` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-CFF1B59B992B` | 61 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getVertexElementFormatProperty() const` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-FAA51CD95154` | 67 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setVertexElementFormatProperty(VertexElementFormat value)` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-81F56315CBC2` | 73 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getVertexElementUsageProperty() const` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-EE6C96A64E30` | 79 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setVertexElementUsageProperty(VertexElementUsage value)` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-BAAC79E4B87A` | 85 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::getUsageIndexProperty() const` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-B70800DB55EE` | 91 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::setUsageIndexProperty(int value)` | corresponding field in fixed-layout `CNA_VertexElement` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-DC8D444B8FDD` | 101 | public operator | `Microsoft::Xna::Framework::Graphics::VertexElement::operator==(const VertexElement &left, const VertexElement &right)` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-263531581975` | 115 | public operator | `Microsoft::Xna::Framework::Graphics::VertexElement::operator!=(const VertexElement &left, const VertexElement &right)` | Planned named `cna_*` value operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-CDE85083A41A` | 125 | public method | `Microsoft::Xna::Framework::Graphics::VertexElement::Equals(const VertexElement &other) const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -4764,38 +4764,38 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-19BB1CDF8AAF` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Byte4 = 5` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C7E5CD91C6D5` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Color = 4` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A4D8C44FA85B` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector2 = 10` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C5C930F44411` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector4 = 11` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A06AD3C87CC8` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort2 = 8` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-32EBCDA3889E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort4 = 9` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-98959991EBD4` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short2 = 6` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-FD81F2120CBD` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short4 = 7` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A48FA23F9874` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Single = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-1F96F6253351` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector2 = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-765A37A7E77A` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3 = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-84CCB40E1DED` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4 = 3` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-10C7049B25C9` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::VertexElementFormat` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-19BB1CDF8AAF` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Byte4 = 5` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C7E5CD91C6D5` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Color = 4` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A4D8C44FA85B` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector2 = 10` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C5C930F44411` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::HalfVector4 = 11` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A06AD3C87CC8` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort2 = 8` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-32EBCDA3889E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::NormalizedShort4 = 9` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-98959991EBD4` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short2 = 6` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-FD81F2120CBD` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Short4 = 7` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A48FA23F9874` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Single = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-1F96F6253351` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector2 = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-765A37A7E77A` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector3 = 2` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-84CCB40E1DED` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementFormat::Vector4 = 3` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-10C7049B25C9` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::VertexElementFormat` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp`
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-B9548B3D9AF0` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Binormal = 4` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D0541E74C897` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendIndices = 6` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-330F837FF7A9` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight = 7` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8E472E7A8238` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E9FEC078FD0D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Depth = 8` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-094A95D85EAE` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Fog = 9` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8A7EA603E40F` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal = 3` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2FAB882D823D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::PointSize = 10` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-54078E3207C0` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-EFFAC68E1B8C` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Sample = 11` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A8F8A2B3C38E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Tangent = 5` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E8646FD39210` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::TessellateFactor = 12` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-4CE3D868A9AF` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-7FA86FD8CB02` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::VertexElementUsage` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-B9548B3D9AF0` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Binormal = 4` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D0541E74C897` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendIndices = 6` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-330F837FF7A9` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::BlendWeight = 7` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-8E472E7A8238` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Color = 1` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E9FEC078FD0D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Depth = 8` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-094A95D85EAE` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Fog = 9` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-8A7EA603E40F` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Normal = 3` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-2FAB882D823D` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::PointSize = 10` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-54078E3207C0` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Position = 0` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-EFFAC68E1B8C` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Sample = 11` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A8F8A2B3C38E` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::Tangent = 5` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E8646FD39210` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::TessellateFactor = 12` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-4CE3D868A9AF` | 7 | public enum-value | `Microsoft::Xna::Framework::Graphics::VertexElementUsage::TextureCoordinate = 2` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-7FA86FD8CB02` | 7 | public enum | `Microsoft::Xna::Framework::Graphics::VertexElementUsage` | fixed-width `CNA_*` identity and stable constants in `graphics3d.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp`
 
@@ -6259,9 +6259,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-B083FF626987` | 24 | public struct | `Microsoft::Xna::Framework::BoundingBox` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-0FC029864D0E` | 28 | public field | `Microsoft::Xna::Framework::BoundingBox::Min` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-95148E38BC37` | 31 | public field | `Microsoft::Xna::Framework::BoundingBox::Max` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-B083FF626987` | 24 | public struct | `Microsoft::Xna::Framework::BoundingBox` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-0FC029864D0E` | 28 | public field | `Microsoft::Xna::Framework::BoundingBox::Min` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-95148E38BC37` | 31 | public field | `Microsoft::Xna::Framework::BoundingBox::Max` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-710E8959E160` | 34 | public constant | `Microsoft::Xna::Framework::BoundingBox::CornerCount = 8` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-998CB265383C` | 44 | public constructor | `Microsoft::Xna::Framework::BoundingBox::BoundingBox()=default` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-AC92EA5A1FF7` | 52 | public constructor | `Microsoft::Xna::Framework::BoundingBox::BoundingBox(const Vector3 &min, const Vector3 &max)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6298,11 +6298,11 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-23EE3654CDBB` | 25 | public class | `Microsoft::Xna::Framework::BoundingFrustum` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-23EE3654CDBB` | 25 | public class | `Microsoft::Xna::Framework::BoundingFrustum` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-34BF81F8B0FE` | 29 | public constant | `Microsoft::Xna::Framework::BoundingFrustum::CornerCount = 8` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E2888A7B083C` | 36 | public constructor | `Microsoft::Xna::Framework::BoundingFrustum::BoundingFrustum(Matrix value)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-FABFECD7CAFB` | 43 | public method | `Microsoft::Xna::Framework::BoundingFrustum::getMatrixProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D0C53828CEB5` | 50 | public method | `Microsoft::Xna::Framework::BoundingFrustum::setMatrixProperty(Matrix value)` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-FABFECD7CAFB` | 43 | public method | `Microsoft::Xna::Framework::BoundingFrustum::getMatrixProperty() const` | direct `matrix` field in `CNA_BoundingFrustum` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D0C53828CEB5` | 50 | public method | `Microsoft::Xna::Framework::BoundingFrustum::setMatrixProperty(Matrix value)` | direct `matrix` field in `CNA_BoundingFrustum` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-40389F6EB500` | 57 | public method | `Microsoft::Xna::Framework::BoundingFrustum::getNearProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-83AB15D819DF` | 64 | public method | `Microsoft::Xna::Framework::BoundingFrustum::getFarProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-0F7A1EC2099B` | 71 | public method | `Microsoft::Xna::Framework::BoundingFrustum::getLeftProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6337,9 +6337,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-2FED25B3D1DA` | 24 | public struct | `Microsoft::Xna::Framework::BoundingSphere` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C6DF2D7A164F` | 27 | public field | `Microsoft::Xna::Framework::BoundingSphere::Center` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E3BE98419FED` | 30 | public field | `Microsoft::Xna::Framework::BoundingSphere::Radius {0.0f}` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-2FED25B3D1DA` | 24 | public struct | `Microsoft::Xna::Framework::BoundingSphere` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C6DF2D7A164F` | 27 | public field | `Microsoft::Xna::Framework::BoundingSphere::Center` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E3BE98419FED` | 30 | public field | `Microsoft::Xna::Framework::BoundingSphere::Radius {0.0f}` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-EA110327D350` | 33 | public constructor | `Microsoft::Xna::Framework::BoundingSphere::BoundingSphere()=default` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-739ECE30A6EB` | 41 | public constructor | `Microsoft::Xna::Framework::BoundingSphere::BoundingSphere(Vector3 center, float radius)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-B454FED8B220` | 49 | public method | `Microsoft::Xna::Framework::BoundingSphere::Transform(Matrix matrix) const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6556,10 +6556,10 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-02A21ED9D2A2` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Contains = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8EC84DB71EF4` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Disjoint = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-16E0F04EE191` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Intersects = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-54032A5568ED` | 8 | public enum | `Microsoft::Xna::Framework::ContainmentType` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-02A21ED9D2A2` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Contains = 1` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-8EC84DB71EF4` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Disjoint = 0` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-16E0F04EE191` | 8 | public enum-value | `Microsoft::Xna::Framework::ContainmentType::Intersects = 2` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-54032A5568ED` | 8 | public enum | `Microsoft::Xna::Framework::ContainmentType` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/math/include/Microsoft/Xna/Framework/Curve.hpp`
 
@@ -6585,9 +6585,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-A95858A1A44A` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveContinuity::Smooth = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-100FD7CDBC75` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveContinuity::Step = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-69E2FB27282B` | 8 | public enum | `Microsoft::Xna::Framework::CurveContinuity` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-A95858A1A44A` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveContinuity::Smooth = 0` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-100FD7CDBC75` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveContinuity::Step = 1` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-69E2FB27282B` | 8 | public enum | `Microsoft::Xna::Framework::CurveContinuity` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/math/include/Microsoft/Xna/Framework/CurveKey.hpp`
 
@@ -6648,21 +6648,21 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-93F9C5F638F0` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Constant = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-04760EB6DE86` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::CycleOffset = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-42F52DA54A20` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Cycle = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8EA5DB9BF308` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Linear = 4` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-BBA81E9F928C` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Oscillate = 3` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-6ACFC8035077` | 8 | public enum | `Microsoft::Xna::Framework::CurveLoopType` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-93F9C5F638F0` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Constant = 0` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-04760EB6DE86` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::CycleOffset = 2` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-42F52DA54A20` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Cycle = 1` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-8EA5DB9BF308` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Linear = 4` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-BBA81E9F928C` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveLoopType::Oscillate = 3` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-6ACFC8035077` | 8 | public enum | `Microsoft::Xna::Framework::CurveLoopType` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/math/include/Microsoft/Xna/Framework/CurveTangent.hpp`
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-25897D07DE90` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Flat = 0` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-5502D0564637` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Linear = 1` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E59CC8EB98C1` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Smooth = 2` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C47FCA0DCD8A` | 8 | public enum | `Microsoft::Xna::Framework::CurveTangent` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-25897D07DE90` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Flat = 0` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-5502D0564637` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Linear = 1` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E59CC8EB98C1` | 8 | public enum-value | `Microsoft::Xna::Framework::CurveTangent::Smooth = 2` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C47FCA0DCD8A` | 8 | public enum | `Microsoft::Xna::Framework::CurveTangent` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector.hpp`
 
@@ -6709,24 +6709,24 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-38596F5DD5D3` | 17 | public struct | `Microsoft::Xna::Framework::Matrix` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-38596F5DD5D3` | 17 | public struct | `Microsoft::Xna::Framework::Matrix` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-B23699BF9CBE` | 24 | public method | `Microsoft::Xna::Framework::Matrix::getIdentityProperty()` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-CD8D4ACBE7CD` | 27 | public field | `Microsoft::Xna::Framework::Matrix::M11` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-13B6121FEA65` | 29 | public field | `Microsoft::Xna::Framework::Matrix::M12` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-572F7266A0B3` | 31 | public field | `Microsoft::Xna::Framework::Matrix::M13` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-36B23454812D` | 33 | public field | `Microsoft::Xna::Framework::Matrix::M14` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-82A0A72228BE` | 36 | public field | `Microsoft::Xna::Framework::Matrix::M21` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-0EE76F58AE83` | 38 | public field | `Microsoft::Xna::Framework::Matrix::M22` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-45E8D6E23B62` | 40 | public field | `Microsoft::Xna::Framework::Matrix::M23` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-B8F5016A77AA` | 42 | public field | `Microsoft::Xna::Framework::Matrix::M24` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-278034C363E7` | 45 | public field | `Microsoft::Xna::Framework::Matrix::M31` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-588FF5517804` | 47 | public field | `Microsoft::Xna::Framework::Matrix::M32` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-7C3CDE71855F` | 49 | public field | `Microsoft::Xna::Framework::Matrix::M33` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-0CE75012EB36` | 51 | public field | `Microsoft::Xna::Framework::Matrix::M34` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-E7A3EF478EC2` | 54 | public field | `Microsoft::Xna::Framework::Matrix::M41` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-9FBAA9A87A9A` | 56 | public field | `Microsoft::Xna::Framework::Matrix::M42` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A85494086E36` | 58 | public field | `Microsoft::Xna::Framework::Matrix::M43` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-EB9994B79D2C` | 60 | public field | `Microsoft::Xna::Framework::Matrix::M44` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-CD8D4ACBE7CD` | 27 | public field | `Microsoft::Xna::Framework::Matrix::M11` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-13B6121FEA65` | 29 | public field | `Microsoft::Xna::Framework::Matrix::M12` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-572F7266A0B3` | 31 | public field | `Microsoft::Xna::Framework::Matrix::M13` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-36B23454812D` | 33 | public field | `Microsoft::Xna::Framework::Matrix::M14` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-82A0A72228BE` | 36 | public field | `Microsoft::Xna::Framework::Matrix::M21` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-0EE76F58AE83` | 38 | public field | `Microsoft::Xna::Framework::Matrix::M22` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-45E8D6E23B62` | 40 | public field | `Microsoft::Xna::Framework::Matrix::M23` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-B8F5016A77AA` | 42 | public field | `Microsoft::Xna::Framework::Matrix::M24` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-278034C363E7` | 45 | public field | `Microsoft::Xna::Framework::Matrix::M31` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-588FF5517804` | 47 | public field | `Microsoft::Xna::Framework::Matrix::M32` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-7C3CDE71855F` | 49 | public field | `Microsoft::Xna::Framework::Matrix::M33` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-0CE75012EB36` | 51 | public field | `Microsoft::Xna::Framework::Matrix::M34` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-E7A3EF478EC2` | 54 | public field | `Microsoft::Xna::Framework::Matrix::M41` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-9FBAA9A87A9A` | 56 | public field | `Microsoft::Xna::Framework::Matrix::M42` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-A85494086E36` | 58 | public field | `Microsoft::Xna::Framework::Matrix::M43` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-EB9994B79D2C` | 60 | public field | `Microsoft::Xna::Framework::Matrix::M44` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-805AC42FD5A9` | 63 | public constructor | `Microsoft::Xna::Framework::Matrix::Matrix()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-6901F97EC8FC` | 85 | public constructor | `Microsoft::Xna::Framework::Matrix::Matrix(float m11, float m12, float m13, float m14, float m21, float m22, float m23, float m24, float m31, float m32, float m33, float m34, float m41, float m42, float m43, float m44)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E5C24345B812` | 97 | public method | `Microsoft::Xna::Framework::Matrix::getBackwardProperty() const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6829,9 +6829,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-3E61CB7F3CA1` | 21 | public struct | `Microsoft::Xna::Framework::Plane` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D6A05AAFEBF4` | 24 | public field | `Microsoft::Xna::Framework::Plane::Normal` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2B499C6B9F9C` | 26 | public field | `Microsoft::Xna::Framework::Plane::D {0.0f}` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-3E61CB7F3CA1` | 21 | public struct | `Microsoft::Xna::Framework::Plane` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-D6A05AAFEBF4` | 24 | public field | `Microsoft::Xna::Framework::Plane::Normal` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-2B499C6B9F9C` | 26 | public field | `Microsoft::Xna::Framework::Plane::D {0.0f}` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-849B76CB9BA2` | 29 | public constructor | `Microsoft::Xna::Framework::Plane::Plane()=default` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-C43ACCF72817` | 36 | public constructor | `Microsoft::Xna::Framework::Plane::Plane(Vector4 value)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-398BDCF2700C` | 44 | public constructor | `Microsoft::Xna::Framework::Plane::Plane(Vector3 normal, float d)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6865,19 +6865,19 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-D52B8D834364` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Back` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C676E3B4A00D` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Front` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-EB089E790B9D` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Intersecting` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-1A63608657C2` | 8 | public enum | `Microsoft::Xna::Framework::PlaneIntersectionType` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-D52B8D834364` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Back` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C676E3B4A00D` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Front` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-EB089E790B9D` | 8 | public enum-value | `Microsoft::Xna::Framework::PlaneIntersectionType::Intersecting` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-1A63608657C2` | 8 | public enum | `Microsoft::Xna::Framework::PlaneIntersectionType` | fixed-width `CNA_*` identity and stable constants in `math_values.h` | C/C++ ABI identity assertions | ✅ implemented (`CBIND-035A`) |
 
 #### `modules/math/include/Microsoft/Xna/Framework/Point.hpp`
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-2DB6D0AD627A` | 14 | public struct | `Microsoft::Xna::Framework::Point` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-2DB6D0AD627A` | 14 | public struct | `Microsoft::Xna::Framework::Point` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-E20CF8BF0004` | 17 | public constant | `Microsoft::Xna::Framework::Point::Zero` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-FCC6DAB5BFE3` | 20 | public field | `Microsoft::Xna::Framework::Point::X` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-08B5E0ED08C1` | 23 | public field | `Microsoft::Xna::Framework::Point::Y` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-FCC6DAB5BFE3` | 20 | public field | `Microsoft::Xna::Framework::Point::X` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-08B5E0ED08C1` | 23 | public field | `Microsoft::Xna::Framework::Point::Y` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-207C2DFCD426` | 26 | public constructor | `Microsoft::Xna::Framework::Point::Point()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-64041B5D154D` | 34 | public constructor | `Microsoft::Xna::Framework::Point::Point(intcs x, intcs y)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-06FCE0E3987A` | 41 | public method | `Microsoft::Xna::Framework::Point::getZeroProperty()` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6895,12 +6895,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-84DF3331D882` | 13 | public struct | `Microsoft::Xna::Framework::Quaternion` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-84DF3331D882` | 13 | public struct | `Microsoft::Xna::Framework::Quaternion` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-B4836FCC301C` | 16 | public constant | `Microsoft::Xna::Framework::Quaternion::Identity` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-F1F035BB3CC6` | 19 | public field | `Microsoft::Xna::Framework::Quaternion::X` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C3620DD9852C` | 22 | public field | `Microsoft::Xna::Framework::Quaternion::Y` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-1A96F0420420` | 25 | public field | `Microsoft::Xna::Framework::Quaternion::Z` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2C0068E15C71` | 28 | public field | `Microsoft::Xna::Framework::Quaternion::W` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-F1F035BB3CC6` | 19 | public field | `Microsoft::Xna::Framework::Quaternion::X` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-C3620DD9852C` | 22 | public field | `Microsoft::Xna::Framework::Quaternion::Y` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-1A96F0420420` | 25 | public field | `Microsoft::Xna::Framework::Quaternion::Z` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-2C0068E15C71` | 28 | public field | `Microsoft::Xna::Framework::Quaternion::W` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-ABAD2B2C9672` | 38 | public constructor | `Microsoft::Xna::Framework::Quaternion::Quaternion(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-9AC5F6C9810A` | 46 | public constructor | `Microsoft::Xna::Framework::Quaternion::Quaternion(Vector3 vectorPart, float scalarPart)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E4AC596E4101` | 49 | public method | `Microsoft::Xna::Framework::Quaternion::Conjugate()` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -6955,9 +6955,9 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-C63CBC6D3F3E` | 19 | public struct | `Microsoft::Xna::Framework::Ray` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-22B9114F483A` | 22 | public field | `Microsoft::Xna::Framework::Ray::Position` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-614A2EC9C5C2` | 24 | public field | `Microsoft::Xna::Framework::Ray::Direction` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-C63CBC6D3F3E` | 19 | public struct | `Microsoft::Xna::Framework::Ray` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-22B9114F483A` | 22 | public field | `Microsoft::Xna::Framework::Ray::Position` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-614A2EC9C5C2` | 24 | public field | `Microsoft::Xna::Framework::Ray::Direction` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-E2E4758BF1BE` | 27 | public constructor | `Microsoft::Xna::Framework::Ray::Ray()=default` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-4353A354DF47` | 35 | public constructor | `Microsoft::Xna::Framework::Ray::Ray(Vector3 position, Vector3 direction)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-453E4AB5F4E1` | 43 | public method | `Microsoft::Xna::Framework::Ray::Equals(Ray other) const` | Planned `cna_*` operation with C-safe arguments (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
@@ -7197,17 +7197,17 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-5F4411B564AD` | 17 | public struct | `Microsoft::Xna::Framework::Vector4` | Planned `CNA_*` POD or validated handle design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-5F4411B564AD` | 17 | public struct | `Microsoft::Xna::Framework::Vector4` | corresponding fixed-layout `CNA_*` POD in `math_values.h` | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-2CF7257A1769` | 20 | public constant | `Microsoft::Xna::Framework::Vector4::Zero` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-269D38407D9F` | 22 | public constant | `Microsoft::Xna::Framework::Vector4::One` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-3AD04DB197A5` | 24 | public constant | `Microsoft::Xna::Framework::Vector4::UnitX` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-E9A954E96D99` | 26 | public constant | `Microsoft::Xna::Framework::Vector4::UnitY` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-647938964A19` | 28 | public constant | `Microsoft::Xna::Framework::Vector4::UnitZ` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-246105E4CE65` | 30 | public constant | `Microsoft::Xna::Framework::Vector4::UnitW` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-5002A631E8A4` | 33 | public field | `Microsoft::Xna::Framework::Vector4::X` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-17E63FBC554E` | 35 | public field | `Microsoft::Xna::Framework::Vector4::Y` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-AD34E8B45B53` | 37 | public field | `Microsoft::Xna::Framework::Vector4::Z` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-84D62497B66C` | 39 | public field | `Microsoft::Xna::Framework::Vector4::W` | Planned POD field or `cna_*_get/set_*` access (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-5002A631E8A4` | 33 | public field | `Microsoft::Xna::Framework::Vector4::X` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-17E63FBC554E` | 35 | public field | `Microsoft::Xna::Framework::Vector4::Y` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-AD34E8B45B53` | 37 | public field | `Microsoft::Xna::Framework::Vector4::Z` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
+| `CPP-84D62497B66C` | 39 | public field | `Microsoft::Xna::Framework::Vector4::W` | corresponding lower-case field in the fixed-layout `CNA_*` POD | C/C++ ABI size, alignment and field-offset assertions | ✅ implemented (`CBIND-035A`) |
 | `CPP-2496A6EACC17` | 42 | public constructor | `Microsoft::Xna::Framework::Vector4::Vector4()` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-18835742733A` | 52 | public constructor | `Microsoft::Xna::Framework::Vector4::Vector4(float x, float y, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
 | `CPP-37B41A80A146` | 61 | public constructor | `Microsoft::Xna::Framework::Vector4::Vector4(Vector2 value, float z, float w)` | Planned `cna_*_create_<variant>` operation (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
