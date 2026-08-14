@@ -2057,6 +2057,20 @@ namespace Microsoft::Xna::Framework::Graphics
                                              vertexDeclaration);
     }
 
+    CNA::GraphicsRendererType GraphicsDevice::GetGraphicsRendererType() const
+    {
+        // plan_runtimerenderer.md RTR-P7-3: this device's own renderer. activeDescriptor_ is null
+        // only if the accessor is somehow reached before resolution, in which case the build
+        // default is the honest answer.
+        return activeDescriptor_ != nullptr ? activeDescriptor_->type
+                                            : CNA::getCurrentGraphicsRendererType();
+    }
+
+    std::string_view GraphicsDevice::GetGraphicsRendererName() const
+    {
+        return CNA::getGraphicsRendererName(GetGraphicsRendererType());
+    }
+
     CNA::Internal::Renderers::IGraphicsRenderer& GraphicsDevice::GetRenderer() const
     {
         if (renderer_ == nullptr)

@@ -28,7 +28,7 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
 | Fallback chain | ✅ resolution, recording, logging, exhaustion; cross-window-kind recreation unverified until a multi-renderer build |
 | Multi-renderer CMake mode | ⬜ not implemented |
-| Runtime identity reporting | ⬜ not implemented |
+| Runtime identity reporting | ✅ `GraphicsDevice::GetGraphicsRendererType/Name()` report the device's real renderer |
 
 Legend: ✅ implemented and verified · 🟨 exists but unverified · ⬜ not implemented.
 
@@ -167,6 +167,21 @@ they all describe the **default**. Making the test corpus itself renderer-agnost
 piece of work (`plan_runtimerenderer.md` phase P9).
 
 `CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in.
+
+### Which accessor answers which question
+
+| Question | Use |
+|---|---|
+| What did this build select **by default**? | `CNA::getCurrentGraphicsRendererType()` — still a constant expression in both modes |
+| What will CNA **attempt**? | `GraphicsRendererSelection::GetSelected()` |
+| What was actually **created**? | `GraphicsRendererSelection::GetActive()` |
+| What is **this device** using? | `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` |
+
+`GraphicsDevice::GetGraphicsRendererType()` used to be `constexpr` and ignored `this`, returning the
+compile-time identity. That was correct while a build could hold only one renderer and wrong as soon
+as it can hold several, so it is now a real accessor. The `constexpr` had to go with it: a
+compile-time answer cannot describe a runtime choice. Callers wanting the build's compile-time
+identity still have `CNA::getCurrentGraphicsRendererType()`.
 
 ## Renderer combinations
 

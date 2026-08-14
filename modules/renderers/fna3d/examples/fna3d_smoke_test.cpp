@@ -71,8 +71,14 @@ public:
         auto& device = getGraphicsDeviceProperty();
 
         // Check A -- identity.
+        // plan_runtimerenderer.md RTR-P7-7: the compile-time identity names the build DEFAULT, so
+        // this assertion only holds when FNA3D is that default. In a multi-renderer build where
+        // FNA3D is merely one of several, it is not -- and this program is still meaningful,
+        // because it selects FNA3D at runtime.
+#ifndef CNA_MULTI_RENDERER
         static_assert(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Fna3d,
                       "this test only means anything when built as the FNA3D renderer");
+#endif
         Check(CNA::getCurrentGraphicsRendererName() == "FNA3D",
               "compiled renderer identity is FNA3D");
 

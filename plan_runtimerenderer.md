@@ -680,17 +680,17 @@ The first phase that changes the build model.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P7-1 | ⬜ | Split `GraphicsRendererType.hpp`: keep `constexpr getCurrentGraphicsRendererType()` under `#ifndef CNA_MULTI_RENDERER`; add a non-`constexpr` `CNA::getActiveGraphicsRendererType()` available in both modes. |
-| RTR-P7-2 | ⬜ | Same split for `getCurrentGraphicsRendererName()` / `getActiveGraphicsRendererName()`. |
-| RTR-P7-3 | ⬜ | `GraphicsDevice::GetGraphicsRendererType()` (`GraphicsDevice.hpp:989`) — non-`constexpr` in multi mode, returning the device's real renderer. Document the intentional deviation. |
-| RTR-P7-4 | ⬜ | `GraphicsDevice::GetGraphicsRendererName()` — same treatment. |
+| RTR-P7-1 | ✅ | Split `GraphicsRendererType.hpp`: keep `constexpr getCurrentGraphicsRendererType()` under `#ifndef CNA_MULTI_RENDERER`; add a non-`constexpr` `CNA::getActiveGraphicsRendererType()` available in both modes. |
+| RTR-P7-2 | ✅ | Same split for `getCurrentGraphicsRendererName()` / `getActiveGraphicsRendererName()`. |
+| RTR-P7-3 | ✅ | `GraphicsDevice::GetGraphicsRendererType()` (`GraphicsDevice.hpp:989`) — non-`constexpr` in multi mode, returning the device's real renderer. Document the intentional deviation. |
+| RTR-P7-4 | ✅ | `GraphicsDevice::GetGraphicsRendererName()` — same treatment. |
 | RTR-P7-5 | ✅ | Move the name table out of the `constexpr` switch into a shared function usable by both modes, so the 46 names exist exactly once. |
-| RTR-P7-6 | ⬜ | `GraphicsBackendMaturity.hpp` / `GraphicsBackendCategory.hpp` — their `getCurrent*()` convenience wrappers need the same dual treatment. |
-| RTR-P7-7 | ⬜ | `modules/renderers/fna3d/examples/fna3d_smoke_test.cpp:74` — its `static_assert` must be guarded for multi mode. |
-| RTR-P7-8 | ⬜ | `GraphicsRendererCompileDefinitionTests.cpp:172` — the `EXPECT_EQ(enabled, 1)` assertion becomes "exactly one in single mode, at least one in multi mode". |
-| RTR-P7-9 | ⬜ | `tests/modules/probe_core.cpp` uses `getCurrentGraphicsRendererType()` — update the minimal-link probe. |
+| RTR-P7-6 | ✅ | `GraphicsBackendMaturity.hpp` / `GraphicsBackendCategory.hpp` — their `getCurrent*()` convenience wrappers need the same dual treatment. |
+| RTR-P7-7 | ✅ | `modules/renderers/fna3d/examples/fna3d_smoke_test.cpp:74` — its `static_assert` must be guarded for multi mode. |
+| RTR-P7-8 | ✅ | `GraphicsRendererCompileDefinitionTests.cpp:172` — the `EXPECT_EQ(enabled, 1)` assertion becomes "exactly one in single mode, at least one in multi mode". |
+| RTR-P7-9 | ✅ | `tests/modules/probe_core.cpp` uses `getCurrentGraphicsRendererType()` — update the minimal-link probe. |
 | RTR-P7-10 | ✅ | The startup log line in `createRenderer()` (`GraphicsDevice.cpp:2435`) must print the **active** renderer, and in multi mode also how it was chosen (default / API / env / fallback). |
-| RTR-P7-11 | ⬜ | **Phase gate.** Both modes report identity correctly; no `constexpr` regression in single mode. |
+| RTR-P7-11 | ✅ | **Phase gate.** Both modes report identity correctly; no `constexpr` regression in single mode. |
 
 ---
 

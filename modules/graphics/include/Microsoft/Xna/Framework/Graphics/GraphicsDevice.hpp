@@ -986,25 +986,32 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns a reference to the active graphics renderer. */
         CNAEXT [[nodiscard]] CNA::Internal::Renderers::IGraphicsRenderer& GetRenderer() const;
 
-        /** @brief Returns which graphics renderer was compiled into this build (see CNA_GRAPHICS_RENDERER). */
-        CNAEXT [[nodiscard]] inline constexpr CNA::GraphicsRendererType GetGraphicsRendererType() const
-        {
-            return CNA::getCurrentGraphicsRendererType();
-        }
+        /**
+         * @brief Returns which graphics renderer THIS DEVICE is using.
+         *
+         * plan_runtimerenderer.md RTR-P7-3. This used to be `constexpr`, returning
+         * CNA::getCurrentGraphicsRendererType() and ignoring `this` entirely -- correct while a
+         * build could contain only one renderer, and wrong the moment it can contain several: it
+         * would report the build's default even on a device that resolved to something else.
+         *
+         * The `constexpr` had to go with it. That is a deliberate, documented deviation: a
+         * compile-time answer cannot describe a runtime choice. A caller that genuinely wants the
+         * build's compile-time identity still has CNA::getCurrentGraphicsRendererType(), which
+         * remains a constant expression.
+         *
+         * @return The renderer identity backing this device.
+         */
+        CNAEXT [[nodiscard]] CNA::GraphicsRendererType GetGraphicsRendererType() const;
 
         /**
-         * @brief Returns the human-readable name of the graphics renderer compiled into this build.
+         * @brief Returns the human-readable name of the renderer THIS DEVICE is using.
          *
-         * Matches the CNA_GRAPHICS_RENDERER CMake option value exactly (e.g. "EASYGL", "D3D9").
-         * Doesn't depend on `this` -- delegates to CNA::getCurrentGraphicsRendererName(), a pure
-         * compile-time constant -- so, like GetGraphicsRendererType(), this is `constexpr`.
+         * Matches the CNA_GRAPHICS_RENDERER spelling exactly (e.g. "OPENGLES3", "DIRECTX9"). See
+         * GetGraphicsRendererType() for why this is no longer `constexpr`.
          *
          * @return The active renderer's name.
          */
-        CNAEXT [[nodiscard]] inline constexpr std::string_view GetGraphicsRendererName() const
-        {
-            return CNA::getCurrentGraphicsRendererName();
-        }
+        CNAEXT [[nodiscard]] std::string_view GetGraphicsRendererName() const;
 
         /**
          * @brief Returns whether the active renderer (and, for device-dependent entries, the
