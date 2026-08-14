@@ -297,6 +297,29 @@ typedef struct CNA_RendererInfo {
 } CNA_RendererInfo;
 
 /**
+ * @brief Describes the logical backbuffer addressed by GraphicsDevice readback.
+ */
+typedef struct CNA_BackBufferInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Logical backbuffer width in pixels. */
+    uint32_t width;
+
+    /** @brief Logical backbuffer height in pixels. */
+    uint32_t height;
+
+    /** @brief Canonical surface format reported by the presentation parameters. */
+    CNA_SurfaceFormat format;
+
+    /** @brief Reserved for future use; returned as zero. */
+    uint32_t reserved;
+} CNA_BackBufferInfo;
+
+/**
  * @brief Configures creation of an owned two-dimensional texture.
  */
 typedef struct CNA_Texture2DCreateInfo {
@@ -466,6 +489,36 @@ CNA_C_API CNA_Result cna_graphics_device_supports_capability(
     CNA_Handle graphics_device,
     CNA_GraphicsCapability capability,
     CNA_Bool* out_supported);
+
+/**
+ * @brief Gets the logical backbuffer dimensions and surface format.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_info Caller-provided versioned structure to receive backbuffer information.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_info(
+    CNA_Handle graphics_device,
+    CNA_BackBufferInfo* out_info);
+
+/**
+ * @brief Reads the complete logical backbuffer into a caller-owned RGBA8 array.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param destination Caller-owned output pixels, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination measured in pixels.
+ * @param out_pixels Receives the exact width-times-height pixel count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, `CNA_RESULT_NOT_SUPPORTED` when the
+ * active renderer has no honest backbuffer readback, or another documented
+ * argument/handle/thread/native failure. No partial pixel array is written.
+ *
+ * Readback is intended for draw-time capture before the callback returns and the game presents.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
+    CNA_Handle graphics_device,
+    CNA_Color* destination,
+    uint64_t capacity,
+    uint64_t* out_pixels);
 
 /**
  * @brief Creates an owned Color-format two-dimensional texture.

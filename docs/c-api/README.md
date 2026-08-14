@@ -62,8 +62,9 @@ The C API shares CNA's compile-time renderer selection. It does not add a second
 selection mechanism. A C program can query the selected renderer and supported capabilities, and
 an unsupported operation returns `CNA_RESULT_NOT_SUPPORTED` instead of silently changing behavior.
 
-The first automated vertical slice must run with the HEADLESS renderer. Every rendering-correctness
-claim additionally requires a real selected renderer and a renderer-appropriate observable test.
+The automated vertical slice runs with HEADLESS for deterministic state and honest unsupported
+readback behavior. The same strict-C source runs under SDL_RENDERER and verifies exact texture,
+SpriteBatch, clear and backbuffer pixels rather than inferring rendering correctness from calls.
 
 ## Hard boundaries
 

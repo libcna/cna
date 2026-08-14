@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 complete; B4 underway through CBIND-025 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 complete; B4 underway through CBIND-026 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -203,7 +203,7 @@ conversion, and shut down cleanly without any C++ source or header dependency.
 | CBIND-023 | Expose `Texture2D` ownership and bulk upload | ✅ | All canonical `SurfaceFormat` identities are frozen; the initial supported Color subset provides versioned create/info, full-level bulk RGBA8 `SetData`/readback and explicit dispose/release. Pointer/count, dimensions, capacity, stale/double-destroy and parent-before-child errors are C-tested under HEADLESS and SDL_RENDERER; game destruction refuses live C graphics children. |
 | CBIND-024 | Expose a batched `SpriteBatch` command path | ✅ | All five native sort identities and both effect bits are frozen; an owned same-game SpriteBatch accepts a fully prevalidated, versioned POD command array through one C ABI call. The initial state set is explicitly fixed to XNA defaults, textures are retained through successful `End`, active destruction cancels safely, and native `NotSupportedException` maps to `CNA_RESULT_NOT_SUPPORTED`; HEADLESS and SDL_RENDERER C tests cover state, validation, lifetime and stale handles. |
 | CBIND-025 | Expose input as snapshots | ✅ | `input.h` freezes all 160 canonical `Keys` identities and captures a fresh canonical 256-key `KeyboardState` POD per call on the active game's creation thread. Key tests and ascending count/copy are runtime-free POD helpers valid on any thread; full-array, invalid-key, no-partial-copy and wrong-thread behavior is C-tested under HEADLESS and SDL_RENDERER. No live input object, per-key native call or callback crosses the ABI; mouse/game-pad/touch remain in the already planned expanded-input task. |
-| CBIND-026 | Validate 2D results through C | ⬜ | Add a C test that creates/uploads a texture and emits a deterministic sprite batch. Use HEADLESS for lifecycle/state assertions and a supported real renderer for pixel assertions where available. |
+| CBIND-026 | Validate 2D results through C | ✅ | The strict-C lifecycle program creates and uploads a 2×2 RGBA texture, submits deterministic SpriteBatch commands and uses a versioned logical-backbuffer descriptor plus full RGBA8 count/copy readback. HEADLESS proves `CNA_RESULT_NOT_SUPPORTED` with untouched output; SDL_RENDERER proves exact red/green/blue texture pixels and an untouched clear pixel before presentation. |
 | CBIND-027 | Document the initial C API feature matrix | ⬜ | Publish exact supported operations, renderer limits, error behavior, resource ownership and intentionally unavailable XNA/C++ features. Do not label the surface as full XNA coverage. |
 
 **B4 gate:** a pure C 2D application can create a game, upload a texture, submit a batched draw,
@@ -304,9 +304,10 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-025` are ✅; `CBIND-026` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-026` are ✅; `CBIND-027` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
-owned Color `Texture2D` bulk transfer, batched textured-quad submission and keyboard POD snapshots,
-not complete public CNA coverage. No language-specific binding exists. B4 C-side rendering
-validation and the complete public-surface inventory remain subsequent work.
+owned Color `Texture2D` bulk transfer, batched textured-quad submission, keyboard POD snapshots and
+SDL pixel-verified backbuffer readback, not complete public CNA coverage. No language-specific
+binding exists. B4's exact initial feature matrix and the complete public-surface inventory remain
+subsequent work.

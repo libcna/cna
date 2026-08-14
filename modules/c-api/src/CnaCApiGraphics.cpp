@@ -425,6 +425,122 @@ CNA_Result cna_graphics_device_supports_capability(
     });
 }
 
+CNA_Result cna_graphics_device_get_backbuffer_info(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_BackBufferInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_BackBufferInfo) ||
+            outInfo->struct_version != StructureVersion) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The backbuffer-info output structure is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const auto& presentationParameters =
+            graphicsDevice->value->getPresentationParametersProperty();
+        const int width = presentationParameters.getBackBufferWidthProperty();
+        const int height = presentationParameters.getBackBufferHeightProperty();
+        if (width <= 0 || height <= 0) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The native graphics device reported invalid backbuffer dimensions.");
+        }
+        *outInfo = CNA_BackBufferInfo{
+            .struct_size = sizeof(CNA_BackBufferInfo),
+            .struct_version = StructureVersion,
+            .width = static_cast<uint32_t>(width),
+            .height = static_cast<uint32_t>(height),
+            .format = MapSurfaceFormat(presentationParameters.getBackBufferFormatProperty()),
+            .reserved = 0U
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_backbuffer_data_rgba8(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Color* const destination,
+    const uint64_t capacity,
+    uint64_t* const outPixels)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outPixels == nullptr || (destination == nullptr && capacity != 0U)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The backbuffer readback output buffer is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const auto& presentationParameters =
+            graphicsDevice->value->getPresentationParametersProperty();
+        const int width = presentationParameters.getBackBufferWidthProperty();
+        const int height = presentationParameters.getBackBufferHeightProperty();
+        if (width <= 0 || height <= 0) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The native graphics device reported invalid backbuffer dimensions.");
+        }
+        const uint64_t requiredPixels =
+            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        *outPixels = requiredPixels;
+        if (requiredPixels > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The backbuffer pixel count exceeds the native readback range.");
+        }
+        if (capacity < requiredPixels) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The backbuffer readback output buffer is too small.");
+        }
+
+        std::vector<Color> nativePixels;
+        if (requiredPixels > nativePixels.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The backbuffer pixel count exceeds the native collection range.");
+        }
+        nativePixels.reserve(static_cast<std::size_t>(requiredPixels));
+        for (uint64_t index = 0U; index < requiredPixels; ++index) {
+            nativePixels.emplace_back(
+                UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+        }
+        graphicsDevice->value->GetBackBufferData(
+            nativePixels.data(),
+            static_cast<int>(nativePixels.size()));
+        for (uint64_t index = 0U; index < requiredPixels; ++index) {
+            destination[index] = CNA_Color{
+                .r = nativePixels[index].getRProperty(),
+                .g = nativePixels[index].getGProperty(),
+                .b = nativePixels[index].getBProperty(),
+                .a = nativePixels[index].getAProperty()
+            };
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_texture2d_create(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Texture2DCreateInfo* const createInfo,

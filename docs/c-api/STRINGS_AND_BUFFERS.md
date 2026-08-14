@@ -77,6 +77,11 @@ source, keys are emitted in ascending numeric order, and insufficient capacity r
 count without writing a prefix. Repeated per-key checks are local snapshot operations rather than
 repeated calls into the platform input backend.
 
+Full backbuffer readback first reports logical width-times-height capacity and writes only after an
+exact native read succeeds. The adapter stages canonical `Color` values and converts them to
+`CNA_Color`; a too-small destination or renderer `NOT_SUPPORTED` result leaves every caller pixel
+unchanged.
+
 ## Collections
 
 No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.

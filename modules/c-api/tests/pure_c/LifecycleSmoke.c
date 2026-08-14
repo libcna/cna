@@ -2,6 +2,7 @@
 
 #include <CNA/C/cna.h>
 
+#include <stdlib.h>
 #include <string.h>
 #include <threads.h>
 
@@ -19,6 +20,7 @@ typedef struct LifecycleState {
     CNA_Handle texture;
     CNA_Handle sprite_batch;
     uint32_t pressed_key_count;
+    int readback_validated;
 } LifecycleState;
 
 typedef struct WrongThreadState {
@@ -309,6 +311,93 @@ static CNA_Result on_draw(
         cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_INVALID_STATE) {
         return CNA_RESULT_INVALID_STATE;
     }
+
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    CNA_RendererInfo renderer_info = {
+        sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    CNA_BackBufferInfo backbuffer_info = {
+        sizeof(CNA_BackBufferInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    uint64_t required_pixels = 0U;
+    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_renderer_info(graphics_device, &renderer_info) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_backbuffer_info(graphics_device, &backbuffer_info) !=
+            CNA_RESULT_SUCCESS ||
+        backbuffer_info.width < 8U || backbuffer_info.height < 8U ||
+        backbuffer_info.format != CNA_SURFACE_FORMAT_COLOR || backbuffer_info.reserved != 0U ||
+        cna_graphics_device_get_backbuffer_data_rgba8(
+            graphics_device,
+            0,
+            0U,
+            &required_pixels) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        required_pixels !=
+            (uint64_t)backbuffer_info.width * (uint64_t)backbuffer_info.height) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    CNA_Color* const backbuffer =
+        (CNA_Color*)malloc((size_t)required_pixels * sizeof(CNA_Color));
+    if (backbuffer == 0) {
+        return CNA_RESULT_OUT_OF_MEMORY;
+    }
+    for (uint64_t index = 0U; index < required_pixels; ++index) {
+        backbuffer[index] = (CNA_Color){UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)};
+    }
+    if (cna_graphics_device_get_backbuffer_data_rgba8(
+            graphics_device,
+            backbuffer,
+            required_pixels - 1U,
+            &required_pixels) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        memcmp(
+            &backbuffer[0],
+            &(CNA_Color){UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+            sizeof(CNA_Color)) != 0) {
+        free(backbuffer);
+        return CNA_RESULT_INVALID_STATE;
+    }
+    const CNA_Result readback_result = cna_graphics_device_get_backbuffer_data_rgba8(
+        graphics_device,
+        backbuffer,
+        required_pixels,
+        &required_pixels);
+    int readback_ok = 0;
+    if (renderer_info.renderer_type == CNA_GRAPHICS_RENDERER_HEADLESS) {
+        readback_ok = readback_result == CNA_RESULT_NOT_SUPPORTED &&
+            memcmp(
+                &backbuffer[0],
+                &(CNA_Color){UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+                sizeof(CNA_Color)) == 0;
+    } else if (renderer_info.renderer_type == CNA_GRAPHICS_RENDERER_SDL_RENDERER) {
+        const CNA_Color expected_red = {
+            UINT8_C(255), UINT8_C(0), UINT8_C(0), UINT8_C(255)
+        };
+        const CNA_Color expected_green = {
+            UINT8_C(0), UINT8_C(255), UINT8_C(0), UINT8_C(255)
+        };
+        const CNA_Color expected_blue = {
+            UINT8_C(0), UINT8_C(0), UINT8_C(255), UINT8_C(255)
+        };
+        const CNA_Color expected_clear = {
+            UINT8_C(10), UINT8_C(20), UINT8_C(30), UINT8_C(255)
+        };
+        readback_ok = readback_result == CNA_RESULT_SUCCESS &&
+            memcmp(&backbuffer[0], &expected_red, sizeof(CNA_Color)) == 0 &&
+            memcmp(&backbuffer[1], &expected_green, sizeof(CNA_Color)) == 0 &&
+            memcmp(
+                &backbuffer[backbuffer_info.width],
+                &expected_blue,
+                sizeof(CNA_Color)) == 0 &&
+            memcmp(
+                &backbuffer[(uint64_t)backbuffer_info.width * UINT64_C(4) + UINT64_C(4)],
+                &expected_clear,
+                sizeof(CNA_Color)) == 0;
+    }
+    free(backbuffer);
+    if (!readback_ok) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->readback_validated = 1;
     ++state->lifecycle_stage;
     ++state->draw_count;
     return CNA_RESULT_SUCCESS;
@@ -486,7 +575,7 @@ int main(void)
         state.load_count != 1 || state.update_count < 1 || state.draw_count != 1 ||
         state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
         state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE ||
-        state.sprite_batch == CNA_INVALID_HANDLE) {
+        state.sprite_batch == CNA_INVALID_HANDLE || state.readback_validated != 1) {
         return 4;
     }
     CNA_RendererInfo stale_renderer_info = {

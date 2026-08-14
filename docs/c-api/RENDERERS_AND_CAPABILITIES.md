@@ -37,10 +37,20 @@ If a renderer raises `System::NotSupportedException` while creating, beginning, 
 ending this path, the exception barrier returns `CNA_RESULT_NOT_SUPPORTED`. The active-batch
 destroy route remains available for cleanup after a failed flush.
 
+## Backbuffer readback boundary
+
+`CNA_BackBufferInfo` reports the logical dimensions and format from canonical presentation
+parameters. Full-buffer RGBA8 readback uses the native `GraphicsDevice::GetBackBufferData(Color*)`
+route after capacity validation and copies through native `Color` values; it never exposes or
+reinterprets renderer memory. HEADLESS has no rasterized backbuffer and returns
+`CNA_RESULT_NOT_SUPPORTED` without modifying the destination. The SDL_RENDERER C test verifies the
+exact red, green and blue uploaded texels plus an untouched clear pixel before presentation.
+
 ## Test policy
 
-HEADLESS is the deterministic lifecycle/state control. It can prove C callback order, handle
-lifetime, error behavior and native command/state observations. It cannot by itself prove visual
-pixel correctness. Any C API rendering feature that claims visual output requires an appropriate
-real renderer test in addition to its HEADLESS test. Renderer-specific unavailability is recorded
-in the public C API coverage matrix and feature documentation.
+HEADLESS is the deterministic lifecycle/state control. It proves C callback order, handle lifetime,
+error behavior and honest refusal when no pixel result exists. It cannot by itself prove visual
+pixel correctness. The initial 2D slice therefore runs the same C test on SDL_RENDERER and checks
+exact pixels. Every later rendering claim requires an appropriate real-renderer observation in
+addition to HEADLESS. Renderer-specific unavailability is recorded in the public C API coverage
+matrix and feature documentation.

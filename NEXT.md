@@ -5,7 +5,7 @@
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`025` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`026` are complete: `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -21,8 +21,10 @@
 > `SpriteBatch` slice adds all native sort/effect identities, a single-transition POD command array,
 > fixed default XNA state, retained texture lifetime and cancel-safe destruction. The keyboard C
 > API now captures a fresh 256-key POD snapshot, maps all 160 canonical `Keys` identities and keeps
-> repeated key/count/copy queries local to that value. C-side 2D result validation follows; the
-> coverage matrix remains the guard against omitted public CNA symbols.
+> repeated key/count/copy queries local to that value. Full backbuffer RGBA8 readback now proves
+> honest `NOT_SUPPORTED` behavior under HEADLESS and exact uploaded texture/SpriteBatch/clear
+> pixels under SDL_RENDERER. The initial feature matrix follows; the coverage matrix remains the
+> guard against omitted public CNA symbols.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

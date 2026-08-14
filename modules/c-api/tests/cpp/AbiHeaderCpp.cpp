@@ -24,6 +24,7 @@ static_assert(CNA_SURFACE_FORMAT_COLOR == UINT32_C(0));
 static_assert(CNA_SURFACE_FORMAT_USHORT_EXT == UINT32_C(26));
 static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U);
 static_assert(sizeof(CNA_Texture2DInfo) == 24U);
+static_assert(sizeof(CNA_BackBufferInfo) == 24U);
 static_assert(sizeof(CNA_Vector2) == 8U);
 static_assert(sizeof(CNA_Rectangle) == 16U);
 static_assert(sizeof(CNA_SpriteSortMode) == sizeof(uint32_t));

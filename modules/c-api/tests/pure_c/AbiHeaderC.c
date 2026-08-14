@@ -40,6 +40,8 @@ _Static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U,
                "CNA_Texture2DCreateInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Texture2DInfo) == 24U,
                "CNA_Texture2DInfo layout must remain stable");
+_Static_assert(sizeof(CNA_BackBufferInfo) == 24U,
+               "CNA_BackBufferInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Vector2) == 8U && sizeof(CNA_Rectangle) == 16U,
                "CNA two-dimensional value layouts must remain stable");
 _Static_assert(sizeof(CNA_SpriteSortMode) == sizeof(uint32_t) &&
