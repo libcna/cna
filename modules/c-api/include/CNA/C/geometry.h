@@ -147,6 +147,117 @@ CNA_C_API CNA_Result cna_ray_copy_string(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/** @brief Fixed number of corners returned for a bounding box. */
+#define CNA_BOUNDING_BOX_CORNER_COUNT UINT32_C(8)
+
+/** @brief Initializes a zero bounding box. @param out_value Receives the box. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_init(CNA_BoundingBox* out_value);
+/** @brief Initializes a bounding box from minimum and maximum corners. @param min Minimum corner. @param max Maximum corner. @param out_value Receives the box. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_init_min_max(
+    CNA_Vector3 min,
+    CNA_Vector3 max,
+    CNA_BoundingBox* out_value);
+/** @brief Classifies a box relative to this box. @param value Source box. @param box Box to classify. @param out_containment Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_contains_box(
+    CNA_BoundingBox value,
+    CNA_BoundingBox box,
+    CNA_ContainmentType* out_containment);
+/** @brief Classifies a sphere relative to this box. @param value Source box. @param sphere Sphere to classify. @param out_containment Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_contains_sphere(
+    CNA_BoundingBox value,
+    CNA_BoundingSphere sphere,
+    CNA_ContainmentType* out_containment);
+/** @brief Classifies a point relative to this box. @param value Source box. @param point Point to classify. @param out_containment Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_contains_point(
+    CNA_BoundingBox value,
+    CNA_Vector3 point,
+    CNA_ContainmentType* out_containment);
+/** @brief Classifies a frustum relative to this box. @param value Source box. @param frustum Frustum to classify. @param out_containment Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_contains_frustum(
+    CNA_BoundingBox value,
+    CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Copies all eight corners in XNA order.
+ * @param value Source box.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination element capacity.
+ * @param out_count Receives the required element count.
+ * @return A CNA result code; insufficient capacity writes no corner.
+ */
+CNA_C_API CNA_Result cna_bounding_box_copy_corners(
+    CNA_BoundingBox value,
+    CNA_Vector3* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Intersects a box with a ray. @param value Source box. @param ray Ray to test. @param out_hit Receives whether a hit exists. @param out_distance Receives distance, or zero on no hit. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_intersects_ray(
+    CNA_BoundingBox value,
+    CNA_Ray ray,
+    CNA_Bool* out_hit,
+    float* out_distance);
+/** @brief Tests box/frustum intersection. @param value Source box. @param frustum Frustum to test. @param out_intersects Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_intersects_frustum(
+    CNA_BoundingBox value,
+    CNA_BoundingFrustum frustum,
+    CNA_Bool* out_intersects);
+/** @brief Tests box/sphere intersection. @param value Source box. @param sphere Sphere to test. @param out_intersects Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_intersects_sphere(
+    CNA_BoundingBox value,
+    CNA_BoundingSphere sphere,
+    CNA_Bool* out_intersects);
+/** @brief Tests two boxes for intersection. @param value Source box. @param box Other box. @param out_intersects Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_intersects_box(
+    CNA_BoundingBox value,
+    CNA_BoundingBox box,
+    CNA_Bool* out_intersects);
+/** @brief Classifies a box against a plane. @param value Source box. @param plane Plane to test. @param out_intersection Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_intersects_plane(
+    CNA_BoundingBox value,
+    CNA_Plane plane,
+    CNA_PlaneIntersectionType* out_intersection);
+/** @brief Tests bounding-box equality. @param left First box. @param right Second box. @param out_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_equals(
+    CNA_BoundingBox left,
+    CNA_BoundingBox right,
+    CNA_Bool* out_equal);
+/** @brief Tests bounding-box inequality. @param left First box. @param right Second box. @param out_not_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_not_equals(
+    CNA_BoundingBox left,
+    CNA_BoundingBox right,
+    CNA_Bool* out_not_equal);
+/** @brief Computes a bounding-box hash. @param value Source box. @param out_hash Receives the hash. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_get_hash_code(
+    CNA_BoundingBox value,
+    int32_t* out_hash);
+/** @brief Gets a bounding-box string byte count. @param value Box to format. @param out_bytes Receives the count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_get_string_size(
+    CNA_BoundingBox value,
+    uint64_t* out_bytes);
+/** @brief Copies the canonical bounding-box UTF-8 string without a terminator. @param value Box to format. @param destination Destination bytes, or null only for zero capacity. @param capacity Destination capacity. @param out_bytes Receives the required count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_copy_string(
+    CNA_BoundingBox value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/** @brief Creates the smallest box enclosing a point array. @param points Source points, non-null and nonempty. @param count Point count. @param out_value Receives the box. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_create_from_points(
+    const CNA_Vector3* points,
+    uint64_t count,
+    CNA_BoundingBox* out_value);
+/** @brief Creates the smallest box enclosing a sphere. @param sphere Source sphere. @param out_value Receives the box. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_create_from_sphere(
+    CNA_BoundingSphere sphere,
+    CNA_BoundingBox* out_value);
+/** @brief Creates the smallest box enclosing two boxes. @param original First box. @param additional Second box. @param out_value Receives the merged box. @return A CNA result code. */
+CNA_C_API CNA_Result cna_bounding_box_create_merged(
+    CNA_BoundingBox original,
+    CNA_BoundingBox additional,
+    CNA_BoundingBox* out_value);
+
 #ifdef __cplusplus
 }
 #endif

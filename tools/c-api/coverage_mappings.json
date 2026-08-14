@@ -839,6 +839,16 @@
       "tests": "every entry point, hit/miss distances, frustum containment, exact strings and null/capacity failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B4a"
+    },
+    {
+      "id": "bounding-box-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingBox\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`CNA_BOUNDING_BOX_CORNER_COUNT` and `cna_bounding_box_*` construction, corner copy, containment, intersection, factory, merge, equality/hash/string and explicit hit-plus-distance ray operations",
+      "tests": "every entry point, corner order and capacity atomicity, containment/classification, hit/miss, factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B4b"
     }
   ]
 }

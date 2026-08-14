@@ -124,3 +124,15 @@ intersection are likewise value-only operations.
 Native `std::optional<float>` ray distances cross the ABI as `out_hit` plus `out_distance`. A miss
 is a successful query with `CNA_FALSE` and a deterministic zero distance; both outputs are required
 and validated before either is written.
+
+## BoundingBox operations
+
+`geometry.h` exposes complete BoundingBox construction, containment and intersection overloads,
+equality/hash/string routes and factories from points, spheres or merged boxes. Ray intersections
+reuse the explicit `out_hit` plus deterministic-distance convention above.
+
+`CNA_BOUNDING_BOX_CORNER_COUNT` fixes the eight-corner contract. Corner copying always reports the
+required count, rejects insufficient capacity without writing a prefix and preserves the canonical
+native corner order. Point-array construction validates the complete byte count before copying;
+an empty point set is invalid and leaves the caller's output unchanged. No C++ collection layout
+crosses the ABI.

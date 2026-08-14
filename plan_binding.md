@@ -284,7 +284,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035B4a | Complete Plane and Ray | ✅ | `geometry.h` maps all 42 remaining Plane/Ray rows through 31 operations: all constructors, dot/normalization/transforms, volume classification, equality/hash/string and box/sphere/plane/frustum ray intersection. Native optional distances become an explicit hit flag plus distance, with zero distance on miss. `GeometrySmoke.c` calls every entry point and covers classifications, matrix/quaternion transforms, hit/miss distances, frustum containment, exact strings and null/capacity failures under both backends and ASan+UBSan. |
-| CBIND-035B4b | Complete BoundingBox | ⬜ | Map all constructors, corners, containment/intersection overloads, factories, merge, equality/hash/string and optional ray distances with caller-capacity arrays. |
+| CBIND-035B4b | Complete BoundingBox | ✅ | `geometry.h` maps all 31 remaining BoundingBox rows through one corner-count constant and 20 operations: construction, all containment/intersection overloads, factories, merge, equality/hash/string and explicit optional ray distance. Corner copy uses a caller-capacity array, always reports the required count and performs no partial write. `GeometrySmoke.c` calls every entry point and covers canonical corner order, capacity atomicity, classifications, hit/miss distances, factories, exact strings and null/empty failures under both backends and ASan+UBSan. |
 | CBIND-035B4c | Complete BoundingSphere | ⬜ | Map all constructors, containment/intersection overloads, factories, merge, transform, equality/hash/string and optional ray distances. |
 | CBIND-035B4d | Complete BoundingFrustum and close parent B4 | ⬜ | Map matrix/plane/corner properties, containment/intersection overloads, equality/hash/string and fixed/caller-capacity corner copies; close parent B4. |
 
@@ -369,6 +369,6 @@ owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value
 without claiming its still-unimplemented operations. CBIND-035B1 completes the Point and Rectangle
 operation families, and completed CBIND-035B2a–B2d cover stateless MathHelper plus all Vector2/3/4
 rows. Completed CBIND-035B3a–B3b cover Quaternion and Matrix. The current snapshot is 1,442
-implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a completes Plane and Ray;
-the current snapshot is 1,484 implemented, 21 partial, 4,840 planned and 70 not applicable, with
-CBIND-035B4b BoundingBox next.
+implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a completes Plane and Ray,
+and CBIND-035B4b completes BoundingBox. The current snapshot is 1,515 implemented, 21 partial,
+4,809 planned and 70 not applicable, with CBIND-035B4c BoundingSphere next.
