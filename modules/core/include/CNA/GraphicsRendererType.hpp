@@ -262,18 +262,23 @@ namespace CNA
     }
 
     /**
-     * @brief Returns the human-readable name of the graphics renderer compiled into this build.
+     * @brief Returns the human-readable name of any graphics renderer identity.
      *
      * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
-     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
-     * so it stays valid for the lifetime of the program. Like getCurrentGraphicsRendererType(),
-     * this is a compile-time constant.
+     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string
+     * literal), so it stays valid for the lifetime of the program.
      *
-     * @return The active renderer's name.
+     * plan_runtimerenderer.md RTR-P7-5: this is the single place the 46 names exist. It takes the
+     * identity as a parameter rather than reading the compile-time one, so it serves both the
+     * compile-time selection (through getCurrentGraphicsRendererName() below) and any runtime
+     * selection, without the table being written twice.
+     *
+     * @param type The renderer identity to name.
+     * @return The renderer's name, or "UNKNOWN" for a value outside the enum.
      */
-    constexpr std::string_view getCurrentGraphicsRendererName()
+    constexpr std::string_view getGraphicsRendererName(GraphicsRendererType type)
     {
-        switch (getCurrentGraphicsRendererType())
+        switch (type)
         {
             case GraphicsRendererType::SdlRenderer: return "SDL_RENDERER";
             case GraphicsRendererType::OpenGLES2:    return "OPENGLES2";
@@ -323,5 +328,20 @@ namespace CNA
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
         }
         return "UNKNOWN";
+    }
+
+    /**
+     * @brief Returns the human-readable name of the graphics renderer compiled into this build.
+     *
+     * The returned view matches the CNA_GRAPHICS_RENDERER CMake option value exactly
+     * (e.g. "OPENGLES3", "SDL_RENDERER", "DIRECTX9") and points at static storage (a string literal),
+     * so it stays valid for the lifetime of the program. Like getCurrentGraphicsRendererType(),
+     * this is a compile-time constant.
+     *
+     * @return The active renderer's name.
+     */
+    constexpr std::string_view getCurrentGraphicsRendererName()
+    {
+        return getGraphicsRendererName(getCurrentGraphicsRendererType());
     }
 } // CNA

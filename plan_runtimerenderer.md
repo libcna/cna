@@ -407,16 +407,16 @@ surface.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P0-1 | ⬜ | Add `modules/graphics/include/CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp` — the `GraphicsRendererDescriptor` POD of design decision 2. Full Doxygen on every member per `CLAUDE.md`. No consumer yet. |
-| RTR-P0-2 | ⬜ | Add `RendererPreWindowRequest` (the subset of `PresentationParameters` a pre-window hook may read: back-buffer size, MSAA count, depth/stencil format, fullscreen) so descriptors never include the XNA headers. |
-| RTR-P0-3 | ⬜ | Add `RendererWindowKind` enum (`None`, `Plain`, `OpenGL`, `Vulkan`, `Metal`) — the *coarse* classification used for conflict detection and window-recreation decisions, distinct from the exact `SDL_WindowFlags` bitmask. |
-| RTR-P0-4 | ⬜ | Add `GraphicsRendererFallbackRecord` (`type`, `reason` enum `NotCompiledIn`/`ProbeUnavailable`/`InitializationFailed`/`WindowKindConflict`, `message`) — the record type `GetFallbackHistory()` returns. |
-| RTR-P0-5 | ⬜ | Add `GraphicsRendererRegistry` interface in `CNA::Internal::Renderers`: `All()`, `Find(GraphicsRendererType)`, `Find(std::string_view)`, `Count()`. Declaration only; the definition arrives generated in P2. |
-| RTR-P0-6 | ⬜ | Verify `System::InvalidOperationException` in the pinned sharp-runtime covers the message/inner-exception shape needed by design decision 6; if not, extend sharp-runtime first (per `CLAUDE.md`'s sharp-runtime-first rule) rather than working around it in CNA. |
-| RTR-P0-7 | ⬜ | Unit tests for the new value types: descriptor is trivially copyable, `RendererWindowKind` conflict matrix (`OpenGL` vs `Vulkan` = conflict, `None` vs anything = compatible), fallback-record construction. |
-| RTR-P0-8 | ⬜ | `docs/runtime-renderer-selection.md` skeleton — capability/status document, this project's convention (`docs/webgpu-renderer.md` as the shape reference). States plainly that nothing is implemented yet. |
-| RTR-P0-9 | ⬜ | Confirm the new headers pass the physical source-partition validator in `modules/CMakeLists.txt` (header-only additions to an existing module's `include/` root). |
-| RTR-P0-10 | ⬜ | **Phase gate.** Single-renderer `OPENGLES3` build + `CnaTests` green, zero behaviour delta. |
+| RTR-P0-1 | ✅ | Add `modules/graphics/include/CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp` — the `GraphicsRendererDescriptor` POD of design decision 2. Full Doxygen on every member per `CLAUDE.md`. No consumer yet. |
+| RTR-P0-2 | ✅ | Add `RendererPreWindowRequest` (the subset of `PresentationParameters` a pre-window hook may read: back-buffer size, MSAA count, depth/stencil format, fullscreen) so descriptors never include the XNA headers. |
+| RTR-P0-3 | ✅ | Add `RendererWindowKind` enum (`None`, `Plain`, `OpenGL`, `Vulkan`, `Metal`) — the *coarse* classification used for conflict detection and window-recreation decisions, distinct from the exact `SDL_WindowFlags` bitmask. |
+| RTR-P0-4 | ✅ | Add `GraphicsRendererFallbackRecord` (`type`, `reason` enum `NotCompiledIn`/`ProbeUnavailable`/`InitializationFailed`/`WindowKindConflict`, `message`) — the record type `GetFallbackHistory()` returns. |
+| RTR-P0-5 | ✅ | Add `GraphicsRendererRegistry` interface in `CNA::Internal::Renderers`: `All()`, `Find(GraphicsRendererType)`, `Find(std::string_view)`, `Count()`. Declaration only; the definition arrives generated in P2. |
+| RTR-P0-6 | ✅ | Verify `System::InvalidOperationException` in the pinned sharp-runtime covers the message/inner-exception shape needed by design decision 6; if not, extend sharp-runtime first (per `CLAUDE.md`'s sharp-runtime-first rule) rather than working around it in CNA. |
+| RTR-P0-7 | ✅ | Unit tests for the new value types: descriptor is trivially copyable, `RendererWindowKind` conflict matrix (`OpenGL` vs `Vulkan` = conflict, `None` vs anything = compatible), fallback-record construction. |
+| RTR-P0-8 | ✅ | `docs/runtime-renderer-selection.md` skeleton — capability/status document, this project's convention (`docs/webgpu-renderer.md` as the shape reference). States plainly that nothing is implemented yet. |
+| RTR-P0-9 | ✅ | Confirm the new headers pass the physical source-partition validator in `modules/CMakeLists.txt` (header-only additions to an existing module's `include/` root). |
+| RTR-P0-10 | ✅ | **Phase gate.** Single-renderer `OPENGLES3` build + `CnaTests` green, zero behaviour delta. |
 
 ---
 
@@ -684,7 +684,7 @@ The first phase that changes the build model.
 | RTR-P7-2 | ⬜ | Same split for `getCurrentGraphicsRendererName()` / `getActiveGraphicsRendererName()`. |
 | RTR-P7-3 | ⬜ | `GraphicsDevice::GetGraphicsRendererType()` (`GraphicsDevice.hpp:989`) — non-`constexpr` in multi mode, returning the device's real renderer. Document the intentional deviation. |
 | RTR-P7-4 | ⬜ | `GraphicsDevice::GetGraphicsRendererName()` — same treatment. |
-| RTR-P7-5 | ⬜ | Move the name table out of the `constexpr` switch into a shared function usable by both modes, so the 46 names exist exactly once. |
+| RTR-P7-5 | ✅ | Move the name table out of the `constexpr` switch into a shared function usable by both modes, so the 46 names exist exactly once. |
 | RTR-P7-6 | ⬜ | `GraphicsBackendMaturity.hpp` / `GraphicsBackendCategory.hpp` — their `getCurrent*()` convenience wrappers need the same dual treatment. |
 | RTR-P7-7 | ⬜ | `modules/renderers/fna3d/examples/fna3d_smoke_test.cpp:74` — its `static_assert` must be guarded for multi mode. |
 | RTR-P7-8 | ⬜ | `GraphicsRendererCompileDefinitionTests.cpp:172` — the `EXPECT_EQ(enabled, 1)` assertion becomes "exactly one in single mode, at least one in multi mode". |
