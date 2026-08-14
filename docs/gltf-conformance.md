@@ -196,6 +196,19 @@ licence is only a summary and directs readers to each model directory for the de
 `THIRD_PARTY_NOTICES.md`'s `GLTF-018` five-step review therefore remains mandatory before a model is
 ever redistributed. Recording this repository pin does not review any particular asset.
 
+`GLTF-405` provides the deliberate fetch operation while preserving those boundaries:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-samples Box ChronographWatch
+```
+
+The caller must name a new destination and each `Models/<name>` directory. The script fetches the
+exact pinned commit with a blob filter, verifies every requested directory in that commit, enables
+cone-mode sparse checkout, and detaches `HEAD` at the verified revision. It refuses an existing
+destination and never deletes a partial checkout. It prints the per-model `README.md`/`LICENSE.md`
+paths for review, but fetching does not itself clear a model for redistribution. This remains a
+developer-only supplementary input: no CMake target or CI job invokes the script.
+
 To check that the immutable objects still exist without changing the pins:
 
 ```bash

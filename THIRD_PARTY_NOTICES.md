@@ -73,8 +73,11 @@ Every one of these, per asset, in the commit that adds it:
    the same path is worth more than a 40 MB one, because it will still be affordable to keep in
    five years.
 
-An asset that fails any step is **not committed** — it is fetched by a script at development time
-(below) or replaced by a generated fixture that exercises the same feature.
+An asset that fails any step is **not committed** — it may be fetched at development time with
+`scripts/fetch-gltf-sample-assets.sh DEST MODEL [MODEL ...]` or replaced by a generated fixture
+that exercises the same feature. The script performs a sparse checkout at the exact pin above,
+requires an explicit new destination and model names, and prints the available per-model licence
+metadata. It deliberately does **not** declare any model reviewed or safe to redistribute.
 
 ### The decision: generated corpus committed, third-party assets fetched (`GLTF-019`)
 
@@ -84,8 +87,10 @@ emitted from a Python description, byte-identical across runs, and covered by a 
 with no network at all, and because a fixture whose expected values were computed from the
 specification is evidence in a way a downloaded model is not.
 
-**Not committed:** the Khronos sample models. Fetched on demand by a script when a developer wants
-them, cached outside the repository, and never a CI dependency.
+**Not committed:** the Khronos sample models. Fetched on demand with
+`scripts/fetch-gltf-sample-assets.sh` when a developer wants them, cached outside the repository,
+and never a CI dependency. The script is not called by CMake or CI and refuses to modify an
+existing destination.
 
 The reasoning, weighed as the row asks:
 

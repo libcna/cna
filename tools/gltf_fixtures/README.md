@@ -69,6 +69,20 @@ the build rather than quietly changing what the suite means.
 `GLTF-016`. These are fetch-on-demand development references, never generated-corpus inputs, CI
 dependencies, or CNA runtime dependencies. In particular, no Khronos model is committed here.
 
+`GLTF-405` executes that policy with a sparse, detached checkout of only explicitly named sample
+models. The destination must be new, and the script verifies the exact `GLTF-013` commit before
+checking anything out:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh /tmp/cna-gltf-samples Box ChronographWatch
+scripts/fetch-gltf-sample-assets.sh --print-pin
+```
+
+This fetch is not a licence review. Before copying or redistributing a model, inspect its own
+`Models/<name>/README.md`, any `LICENSE.md`, and `asset.copyright`, then complete
+`THIRD_PARTY_NOTICES.md`'s `GLTF-018` procedure. The script is intentionally absent from CMake and
+CI.
+
 The pinned Asset Generator revision has root manifests with 28 groups and 219 permutations. An
 explicitly downloaded checkout can be projected onto CNA's canonical fixture identities with:
 

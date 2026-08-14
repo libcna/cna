@@ -364,6 +364,36 @@ TEST(GltfFixtureCorpus, ExternalReferencePinsAreImmutableOptionalAndMapOnlyExist
     EXPECT_EQ(2u, gaps);
 }
 
+TEST(GltfFixtureCorpus, SampleAssetsFetcherIsPinnedSparseExplicitAndDeveloperOnly)
+{
+    // GLTF-405: executing the fetch-on-demand decision means more than documenting a URL. Keep
+    // the opt-in tool bound to GLTF-013's exact pin and make the non-destructive sparse policy
+    // checkout state, without invoking Git or requiring network access in this test.
+    const std::filesystem::path script =
+        CorpusDirectory().parent_path().parent_path().parent_path()
+        / "scripts" / "fetch-gltf-sample-assets.sh";
+    std::ifstream file(script, std::ios::binary);
+    ASSERT_TRUE(file.is_open()) << script.string();
+    const std::string text((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+
+    EXPECT_NE(std::string::npos, text.find(
+        "https://github.com/KhronosGroup/glTF-Sample-Assets"));
+    EXPECT_NE(std::string::npos, text.find(
+        "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf"));
+    EXPECT_NE(std::string::npos, text.find("--filter=blob:none"));
+    EXPECT_NE(std::string::npos, text.find("sparse-checkout init --cone"));
+    EXPECT_NE(std::string::npos, text.find("sparse-checkout set"));
+    EXPECT_NE(std::string::npos,
+              text.find("checkout --quiet --detach \"$SAMPLE_ASSETS_REVISION\""));
+    EXPECT_NE(std::string::npos,
+              text.find("[[ -e \"$destination\" || -L \"$destination\" ]]"));
+    EXPECT_NE(std::string::npos, text.find("^[A-Za-z0-9._-]+$"));
+    EXPECT_NE(std::string::npos, text.find("No model licence was reviewed by this fetch"));
+    EXPECT_EQ(std::string::npos, text.find("rm -"))
+        << "the fetcher must never erase an existing or partial checkout";
+}
+
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
 {
     // GLTF-015: the CI tool is external, but which tool CI trusts is checkout state. Pin the exact
