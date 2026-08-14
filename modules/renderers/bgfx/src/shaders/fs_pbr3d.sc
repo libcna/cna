@@ -30,6 +30,8 @@ uniform vec4 u_light2Diffuse;
 uniform vec4 u_eyePos;
 uniform vec4 u_alphaTest;
 uniform vec4 u_fogColor;
+// x=decode base, y=decode emissive, z=encode output.
+uniform vec4 u_srgb;
 // REMED-GFX-078: per-slot V-flip for render-target color sources (bottom-up FBO on originBottomLeft
 // renderers -- see REMED-GFX-067). x=base color(0), y=normal(1), z=metallic-roughness(2),
 // w=emissive(3). The occlusion map (slot 4) is intentionally NOT covered -- a live RenderTarget2D as
@@ -38,6 +40,20 @@ uniform vec4 u_fogColor;
 uniform vec4 u_rtFlipV;
 
 vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
+
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3_splat(2.4));
+    return mix(lo, hi, step(vec3_splat(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3_splat(0.0)), vec3_splat(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3_splat(0.0031308), c));
+}
 
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
 {
@@ -61,7 +77,8 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
 void main()
 {
     vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
-    vec3 albedo = baseColorTex.rgb * u_diffuseColor.rgb;
+    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), u_srgb.x);
+    vec3 albedo = baseColor * u_diffuseColor.rgb;
     float alpha = baseColorTex.a * u_diffuseColor.a;
 
     vec3 N = normalize(v_normal);
@@ -87,7 +104,9 @@ void main()
     float occlusion = texture2D(s_texOcclusion, v_texcoord0).r;
     occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);
     vec3 ambient = u_ambientColor.xyz * albedo * occlusion;
-    vec3 emissive = u_emissiveColor.xyz * texture2D(s_texEmissive, rtFlipUV(v_texcoord0, u_rtFlipV.w)).rgb;
+    vec3 emissiveSample = texture2D(s_texEmissive, rtFlipUV(v_texcoord0, u_rtFlipV.w)).rgb;
+    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), u_srgb.y);
+    vec3 emissive = u_emissiveColor.xyz * emissiveSample;
 
     vec4 result = vec4(ambient + Lo + emissive, alpha);
 
@@ -96,6 +115,8 @@ void main()
         : ((result.a < u_alphaTest.x) ? u_alphaTest.z : u_alphaTest.w);
     if (at < 0.0) discard;
 
-    result.rgb = mix(u_fogColor.xyz, result.rgb, v_fogFactor);
+    vec3 fogLinear = mix(u_fogColor.xyz, cnaSrgbToLinear(u_fogColor.xyz), u_srgb.z);
+    result.rgb = mix(fogLinear, result.rgb, v_fogFactor);
+    result.rgb = mix(result.rgb, cnaLinearToSrgb(result.rgb), u_srgb.z);
     gl_FragColor = result;
 }

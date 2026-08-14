@@ -1833,6 +1833,7 @@ namespace CNA::Internal::Renderers::Bgfx
 
                 // plan_cnj.md CNB-58/60 (Phase 13A) Bgfx port: PbrEffect/SkinnedPbrEffect uniforms.
                 metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
+                pbrSrgbUnif_                  = bgfx::createUniform("u_srgb",                    bgfx::UniformType::Vec4);
                 normalMapSampler_            = bgfx::createUniform("s_texNormal",             bgfx::UniformType::Sampler);
                 metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
                 emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
@@ -1987,6 +1988,7 @@ namespace CNA::Internal::Renderers::Bgfx
         destroyU(envMapSpecularUnif_);
         destroyU(envMapSampler_);
         destroyU(metallicRoughnessFactorUnif_);
+        destroyU(pbrSrgbUnif_);
         destroyU(normalMapSampler_);
         destroyU(metallicRoughnessSampler_);
         destroyU(emissiveMapSampler_);
@@ -4043,6 +4045,10 @@ namespace CNA::Internal::Renderers::Bgfx
             float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
                                   params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f, 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4092,6 +4098,10 @@ namespace CNA::Internal::Renderers::Bgfx
             float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
                                   params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f, 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4490,6 +4500,10 @@ namespace CNA::Internal::Renderers::Bgfx
             float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
                                   params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f, 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],
@@ -4539,6 +4553,10 @@ namespace CNA::Internal::Renderers::Bgfx
             float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
                                   params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
+            float srgb[4] = { params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
+                              params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f, 0.0f };
+            bgfx::setUniform(pbrSrgbUnif_, srgb);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
             float diff0[4] = { params.light0Diffuse[0], params.light0Diffuse[1],

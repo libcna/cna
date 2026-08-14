@@ -907,6 +907,7 @@ namespace CNA::Internal::Renderers::Bgfx
         // PbrEffect/SkinnedPbrEffect-specific uniforms (plan_cnj.md CNB-58/60, Phase 13A Bgfx port).
         /// x = MetallicFactor, y = RoughnessFactor.
         bgfx::UniformHandle metallicRoughnessFactorUnif_ = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle pbrSrgbUnif_                  = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle normalMapSampler_            = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle metallicRoughnessSampler_    = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle emissiveMapSampler_          = BGFX_INVALID_HANDLE;
