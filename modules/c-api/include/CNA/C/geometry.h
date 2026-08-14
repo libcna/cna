@@ -522,6 +522,283 @@ CNA_C_API CNA_Result cna_bounding_sphere_copy_string(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/** @brief Fixed number of corners returned for a bounding frustum. */
+#define CNA_BOUNDING_FRUSTUM_CORNER_COUNT UINT32_C(8)
+
+/**
+ * @brief Initializes a bounding frustum from a combined view-projection matrix.
+ *
+ * @param matrix Combined view-projection matrix.
+ * @param out_value Receives the frustum value.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_init_matrix(
+    CNA_Matrix matrix,
+    CNA_BoundingFrustum* out_value);
+
+/**
+ * @brief Gets the near clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_near(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Gets the far clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_far(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Gets the left clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_left(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Gets the right clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_right(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Gets the top clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_top(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Gets the bottom clipping plane.
+ *
+ * @param value Source frustum.
+ * @param out_plane Receives the plane.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_bottom(
+    CNA_BoundingFrustum value,
+    CNA_Plane* out_plane);
+
+/**
+ * @brief Classifies another frustum relative to a frustum.
+ *
+ * @param value Source frustum.
+ * @param frustum Frustum to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_contains_frustum(
+    CNA_BoundingFrustum value,
+    CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies a box relative to a frustum.
+ *
+ * @param value Source frustum.
+ * @param box Box to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_contains_box(
+    CNA_BoundingFrustum value,
+    CNA_BoundingBox box,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies a sphere relative to a frustum.
+ *
+ * @param value Source frustum.
+ * @param sphere Sphere to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_contains_sphere(
+    CNA_BoundingFrustum value,
+    CNA_BoundingSphere sphere,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Classifies a point relative to a frustum.
+ *
+ * @param value Source frustum.
+ * @param point Point to classify.
+ * @param out_containment Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_contains_point(
+    CNA_BoundingFrustum value,
+    CNA_Vector3 point,
+    CNA_ContainmentType* out_containment);
+
+/**
+ * @brief Copies all eight frustum corners in XNA order.
+ *
+ * @param value Source frustum.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination element capacity.
+ * @param out_count Receives the required element count.
+ * @return A CNA result code; insufficient capacity writes no corner.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_copy_corners(
+    CNA_BoundingFrustum value,
+    CNA_Vector3* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Tests two frusta for intersection.
+ *
+ * @param value Source frustum.
+ * @param frustum Other frustum.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_intersects_frustum(
+    CNA_BoundingFrustum value,
+    CNA_BoundingFrustum frustum,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Tests frustum/box intersection.
+ *
+ * @param value Source frustum.
+ * @param box Box to test.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_intersects_box(
+    CNA_BoundingFrustum value,
+    CNA_BoundingBox box,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Tests frustum/sphere intersection.
+ *
+ * @param value Source frustum.
+ * @param sphere Sphere to test.
+ * @param out_intersects Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_intersects_sphere(
+    CNA_BoundingFrustum value,
+    CNA_BoundingSphere sphere,
+    CNA_Bool* out_intersects);
+
+/**
+ * @brief Classifies a frustum against a plane.
+ *
+ * @param value Source frustum.
+ * @param plane Plane to test.
+ * @param out_intersection Receives the classification.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_intersects_plane(
+    CNA_BoundingFrustum value,
+    CNA_Plane plane,
+    CNA_PlaneIntersectionType* out_intersection);
+
+/**
+ * @brief Intersects a frustum with a ray.
+ *
+ * @param value Source frustum.
+ * @param ray Ray to test.
+ * @param out_hit Receives whether a hit exists.
+ * @param out_distance Receives distance, or zero on no hit.
+ * @return A CNA result code; the native unimplemented boundary-origin case returns not supported.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_intersects_ray(
+    CNA_BoundingFrustum value,
+    CNA_Ray ray,
+    CNA_Bool* out_hit,
+    float* out_distance);
+
+/**
+ * @brief Tests bounding-frustum equality.
+ *
+ * @param left First frustum.
+ * @param right Second frustum.
+ * @param out_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_equals(
+    CNA_BoundingFrustum left,
+    CNA_BoundingFrustum right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Tests bounding-frustum inequality.
+ *
+ * @param left First frustum.
+ * @param right Second frustum.
+ * @param out_not_equal Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_not_equals(
+    CNA_BoundingFrustum left,
+    CNA_BoundingFrustum right,
+    CNA_Bool* out_not_equal);
+
+/**
+ * @brief Computes a bounding-frustum hash.
+ *
+ * @param value Source frustum.
+ * @param out_hash Receives the hash.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_hash_code(
+    CNA_BoundingFrustum value,
+    int32_t* out_hash);
+
+/**
+ * @brief Gets a bounding-frustum string byte count.
+ *
+ * @param value Frustum to format.
+ * @param out_bytes Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_get_string_size(
+    CNA_BoundingFrustum value,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the canonical bounding-frustum UTF-8 string without a terminator.
+ *
+ * @param value Frustum to format.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity.
+ * @param out_bytes Receives the required count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_bounding_frustum_copy_string(
+    CNA_BoundingFrustum value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

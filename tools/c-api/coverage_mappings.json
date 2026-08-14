@@ -859,6 +859,16 @@
       "tests": "every entry point, nonuniform transformation, containment/classification, hit/miss, point/frustum/box factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B4c"
+    },
+    {
+      "id": "bounding-frustum-operations",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::BoundingFrustum::(?:getMatrixProperty|setMatrixProperty)).*$",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingFrustum\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`CNA_BOUNDING_FRUSTUM_CORNER_COUNT` and `cna_bounding_frustum_*` construction, derived-plane queries, corner copy, containment, intersection, equality/hash/string and explicit hit-plus-distance ray operations; the matrix property remains the direct POD field",
+      "tests": "every entry point, matrix value semantics, all planes/corners, capacity atomicity, containment/classification, hit/miss/not-supported boundary rays, exact strings and null failures in strict-C `GeometrySmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B4d"
     }
   ]
 }

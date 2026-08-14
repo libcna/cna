@@ -84,6 +84,15 @@ using Microsoft::Xna::Framework::Vector4;
     return BoundingFrustum(ToNative(value.matrix));
 }
 
+[[nodiscard]] CNA_Matrix ToC(const Matrix value) noexcept
+{
+    return CNA_Matrix{
+        value.M11, value.M12, value.M13, value.M14,
+        value.M21, value.M22, value.M23, value.M24,
+        value.M31, value.M32, value.M33, value.M34,
+        value.M41, value.M42, value.M43, value.M44};
+}
+
 [[nodiscard]] CNA_Plane ToC(const Plane value) noexcept
 {
     return CNA_Plane{{value.Normal.X, value.Normal.Y, value.Normal.Z}, value.D};
@@ -109,6 +118,11 @@ using Microsoft::Xna::Framework::Vector4;
 [[nodiscard]] CNA_BoundingSphere ToC(const BoundingSphere value) noexcept
 {
     return CNA_BoundingSphere{ToC(value.Center), value.Radius};
+}
+
+[[nodiscard]] CNA_BoundingFrustum ToC(const BoundingFrustum& value) noexcept
+{
+    return CNA_BoundingFrustum{ToC(value.getMatrixProperty())};
 }
 
 template<typename TValue, typename TCallable>
@@ -961,6 +975,244 @@ CNA_Result cna_bounding_sphere_get_string_size(
 
 CNA_Result cna_bounding_sphere_copy_string(
     const CNA_BoundingSphere value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [=] {
+        return ToNative(value).ToString();
+    });
+}
+
+CNA_Result cna_bounding_frustum_init_matrix(
+    const CNA_Matrix matrix,
+    CNA_BoundingFrustum* const outValue)
+{
+    return StoreOutput(outValue, "The BoundingFrustum output is null.", [=] {
+        return ToC(BoundingFrustum(ToNative(matrix)));
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_near(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getNearProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_far(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getFarProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_left(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getLeftProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_right(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getRightProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_top(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getTopProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_bottom(
+    const CNA_BoundingFrustum value,
+    CNA_Plane* const outPlane)
+{
+    return StoreOutput(outPlane, "The Plane output is null.", [=] {
+        return ToC(ToNative(value).getBottomProperty());
+    });
+}
+
+CNA_Result cna_bounding_frustum_contains_frustum(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingFrustum frustum,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        const BoundingFrustum nativeValue = ToNative(value);
+        const BoundingFrustum nativeFrustum = ToNative(frustum);
+        // C frusta are matrix values, so source reference identity maps to equal matrix values.
+        if (nativeValue.Equals(nativeFrustum)) {
+            return CNA_CONTAINMENT_CONTAINS;
+        }
+        return static_cast<CNA_ContainmentType>(nativeValue.Contains(nativeFrustum));
+    });
+}
+
+CNA_Result cna_bounding_frustum_contains_box(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingBox box,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(box)));
+    });
+}
+
+CNA_Result cna_bounding_frustum_contains_sphere(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingSphere sphere,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(sphere)));
+    });
+}
+
+CNA_Result cna_bounding_frustum_contains_point(
+    const CNA_BoundingFrustum value,
+    const CNA_Vector3 point,
+    CNA_ContainmentType* const outContainment)
+{
+    return StoreOutput(outContainment, "The containment output is null.", [=] {
+        return static_cast<CNA_ContainmentType>(ToNative(value).Contains(ToNative(point)));
+    });
+}
+
+CNA_Result cna_bounding_frustum_copy_corners(
+    const CNA_BoundingFrustum value,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The corner destination or required-count output is invalid.");
+        }
+        constexpr uint64_t RequiredCount = CNA_BOUNDING_FRUSTUM_CORNER_COUNT;
+        *outCount = RequiredCount;
+        if (capacity < RequiredCount) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all BoundingFrustum corners.");
+        }
+        const std::vector<Vector3> corners = ToNative(value).GetCorners();
+        for (uint64_t index = 0U; index < RequiredCount; ++index) {
+            destination[index] = ToC(corners[static_cast<std::size_t>(index)]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_frustum(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingFrustum frustum,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(frustum)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_box(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingBox box,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(box)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_sphere(
+    const CNA_BoundingFrustum value,
+    const CNA_BoundingSphere sphere,
+    CNA_Bool* const outIntersects)
+{
+    return StoreOutput(outIntersects, "The Boolean output is null.", [=] {
+        return ToNative(value).Intersects(ToNative(sphere)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_plane(
+    const CNA_BoundingFrustum value,
+    const CNA_Plane plane,
+    CNA_PlaneIntersectionType* const outIntersection)
+{
+    return StoreOutput(outIntersection, "The intersection output is null.", [=] {
+        return static_cast<CNA_PlaneIntersectionType>(ToNative(value).Intersects(ToNative(plane)));
+    });
+}
+
+CNA_Result cna_bounding_frustum_intersects_ray(
+    const CNA_BoundingFrustum value,
+    const CNA_Ray ray,
+    CNA_Bool* const outHit,
+    float* const outDistance)
+{
+    return StoreOptionalDistance(outHit, outDistance, [=] {
+        return ToNative(value).Intersects(ToNative(ray));
+    });
+}
+
+CNA_Result cna_bounding_frustum_equals(
+    const CNA_BoundingFrustum left,
+    const CNA_BoundingFrustum right,
+    CNA_Bool* const outEqual)
+{
+    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
+        return ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_frustum_not_equals(
+    const CNA_BoundingFrustum left,
+    const CNA_BoundingFrustum right,
+    CNA_Bool* const outNotEqual)
+{
+    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
+        return ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_hash_code(
+    const CNA_BoundingFrustum value,
+    int32_t* const outHash)
+{
+    return StoreOutput(outHash, "The hash output is null.", [=] {
+        return static_cast<int32_t>(ToNative(value).GetHashCode());
+    });
+}
+
+CNA_Result cna_bounding_frustum_get_string_size(
+    const CNA_BoundingFrustum value,
+    uint64_t* const outBytes)
+{
+    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
+        return static_cast<uint64_t>(ToNative(value).ToString().size());
+    });
+}
+
+CNA_Result cna_bounding_frustum_copy_string(
+    const CNA_BoundingFrustum value,
     char* const destination,
     const uint64_t capacity,
     uint64_t* const outBytes)

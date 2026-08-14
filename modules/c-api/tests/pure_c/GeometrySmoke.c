@@ -467,8 +467,152 @@ static int validate_bounding_sphere(void)
     return 1;
 }
 
+static int validate_bounding_frustum(void)
+{
+    CNA_Matrix identity;
+    CNA_BoundingFrustum frustum;
+    if (CNA_BOUNDING_FRUSTUM_CORNER_COUNT != 8U ||
+        cna_matrix_get_identity(&identity) != CNA_RESULT_SUCCESS ||
+        cna_bounding_frustum_init_matrix(identity, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_bounding_frustum_init_matrix(identity, &frustum) != CNA_RESULT_SUCCESS ||
+        memcmp(&frustum.matrix, &identity, sizeof(identity)) != 0) {
+        return 0;
+    }
+
+    CNA_Plane near_plane;
+    CNA_Plane far_plane;
+    CNA_Plane left_plane;
+    CNA_Plane right_plane;
+    CNA_Plane top_plane;
+    CNA_Plane bottom_plane;
+    if (cna_bounding_frustum_get_near(frustum, &near_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(near_plane, 0.0F, 0.0F, -1.0F, 0.0F) ||
+        cna_bounding_frustum_get_far(frustum, &far_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(far_plane, 0.0F, 0.0F, 1.0F, -1.0F) ||
+        cna_bounding_frustum_get_left(frustum, &left_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(left_plane, -1.0F, 0.0F, 0.0F, -1.0F) ||
+        cna_bounding_frustum_get_right(frustum, &right_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(right_plane, 1.0F, 0.0F, 0.0F, -1.0F) ||
+        cna_bounding_frustum_get_top(frustum, &top_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(top_plane, 0.0F, 1.0F, 0.0F, -1.0F) ||
+        cna_bounding_frustum_get_bottom(frustum, &bottom_plane) != CNA_RESULT_SUCCESS ||
+        !plane_near(bottom_plane, 0.0F, -1.0F, 0.0F, -1.0F)) {
+        return 0;
+    }
+
+    CNA_ContainmentType containment = CNA_CONTAINMENT_DISJOINT;
+    const CNA_BoundingBox box = {{-0.5F, -0.5F, 0.25F}, {0.5F, 0.5F, 0.75F}};
+    const CNA_BoundingSphere sphere = {{0.0F, 0.0F, 0.5F}, 0.1F};
+    if (cna_bounding_frustum_contains_frustum(frustum, frustum, &containment) !=
+            CNA_RESULT_SUCCESS || containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_frustum_contains_box(frustum, box, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_frustum_contains_sphere(frustum, sphere, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_frustum_contains_point(
+            frustum, (CNA_Vector3){0.0F, 0.0F, 0.5F}, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_CONTAINS ||
+        cna_bounding_frustum_contains_point(
+            frustum, (CNA_Vector3){0.0F, 0.0F, 0.0F}, &containment) != CNA_RESULT_SUCCESS ||
+        containment != CNA_CONTAINMENT_INTERSECTS) {
+        return 0;
+    }
+
+    CNA_Vector3 corners[CNA_BOUNDING_FRUSTUM_CORNER_COUNT];
+    CNA_Vector3 sentinel = {71.0F, 72.0F, 73.0F};
+    uint64_t corner_count = 0U;
+    corners[0] = sentinel;
+    if (cna_bounding_frustum_copy_corners(frustum, corners, 1U, &corner_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        corner_count != CNA_BOUNDING_FRUSTUM_CORNER_COUNT ||
+        !vector3_near(corners[0], 71.0F, 72.0F, 73.0F) ||
+        cna_bounding_frustum_copy_corners(
+            frustum, corners, CNA_BOUNDING_FRUSTUM_CORNER_COUNT, &corner_count) !=
+            CNA_RESULT_SUCCESS ||
+        !vector3_near(corners[0], -1.0F, 1.0F, 0.0F) ||
+        !vector3_near(corners[3], -1.0F, -1.0F, 0.0F) ||
+        !vector3_near(corners[4], -1.0F, 1.0F, 1.0F) ||
+        !vector3_near(corners[7], -1.0F, -1.0F, 1.0F)) {
+        return 0;
+    }
+
+    CNA_Bool predicate = CNA_FALSE;
+    CNA_PlaneIntersectionType plane_intersection = CNA_PLANE_INTERSECTION_FRONT;
+    if (cna_bounding_frustum_intersects_frustum(frustum, frustum, &predicate) !=
+            CNA_RESULT_SUCCESS || predicate != CNA_TRUE ||
+        cna_bounding_frustum_intersects_box(frustum, box, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_frustum_intersects_sphere(frustum, sphere, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_frustum_intersects_plane(
+            frustum, (CNA_Plane){{0.0F, 1.0F, 0.0F}, 0.0F}, &plane_intersection) !=
+            CNA_RESULT_SUCCESS || plane_intersection != CNA_PLANE_INTERSECTION_INTERSECTING) {
+        return 0;
+    }
+
+    CNA_Bool hit = CNA_FALSE;
+    float distance = -1.0F;
+    if (cna_bounding_frustum_intersects_ray(
+            frustum,
+            (CNA_Ray){{0.0F, 0.0F, 0.5F}, {0.0F, 0.0F, 1.0F}},
+            &hit,
+            &distance) != CNA_RESULT_SUCCESS || hit != CNA_TRUE || !near_float(distance, 0.0F) ||
+        cna_bounding_frustum_intersects_ray(
+            frustum,
+            (CNA_Ray){{0.0F, 0.0F, 2.0F}, {0.0F, 0.0F, 1.0F}},
+            &hit,
+            &distance) != CNA_RESULT_SUCCESS || hit != CNA_FALSE || !near_float(distance, 0.0F)) {
+        return 0;
+    }
+    hit = CNA_TRUE;
+    distance = 77.0F;
+    if (cna_bounding_frustum_intersects_ray(
+            frustum,
+            (CNA_Ray){{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}},
+            &hit,
+            &distance) != CNA_RESULT_NOT_SUPPORTED ||
+        hit != CNA_TRUE || !near_float(distance, 77.0F)) {
+        return 0;
+    }
+
+    CNA_Matrix projection;
+    CNA_BoundingFrustum other;
+    int32_t hash = 0;
+    int32_t equal_hash = 1;
+    if (cna_matrix_create_perspective_field_of_view(
+            1.57079632679F, 1.0F, 1.0F, 10.0F, &projection) != CNA_RESULT_SUCCESS ||
+        cna_bounding_frustum_init_matrix(projection, &other) != CNA_RESULT_SUCCESS ||
+        cna_bounding_frustum_equals(frustum, frustum, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_frustum_not_equals(frustum, other, &predicate) != CNA_RESULT_SUCCESS ||
+        predicate != CNA_TRUE ||
+        cna_bounding_frustum_get_hash_code(frustum, &hash) != CNA_RESULT_SUCCESS ||
+        cna_bounding_frustum_get_hash_code(frustum, &equal_hash) != CNA_RESULT_SUCCESS ||
+        hash != equal_hash) {
+        return 0;
+    }
+
+    static const char Expected[] =
+        "{Near:{Normal:{X:-0 Y:-0 Z:-1} D:-0} Far:{Normal:{X:0 Y:0 Z:1} D:-1} "
+        "Left:{Normal:{X:-1 Y:-0 Z:-0} D:-1} Right:{Normal:{X:1 Y:0 Z:0} D:-1} "
+        "Top:{Normal:{X:0 Y:1 Z:0} D:-1} Bottom:{Normal:{X:-0 Y:-1 Z:-0} D:-1}}";
+    uint64_t byte_count = 0U;
+    char bytes[sizeof(Expected) - 1U];
+    char too_small = 'f';
+    if (cna_bounding_frustum_get_string_size(frustum, &byte_count) != CNA_RESULT_SUCCESS ||
+        byte_count != sizeof(Expected) - 1U ||
+        cna_bounding_frustum_copy_string(frustum, &too_small, 1U, &byte_count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL || too_small != 'f' ||
+        cna_bounding_frustum_copy_string(frustum, bytes, sizeof(bytes), &byte_count) !=
+            CNA_RESULT_SUCCESS || byte_count != sizeof(bytes) ||
+        memcmp(bytes, Expected, sizeof(bytes)) != 0) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
     return validate_plane() && validate_ray() && validate_bounding_box() &&
-            validate_bounding_sphere() ? 0 : 1;
+            validate_bounding_sphere() && validate_bounding_frustum() ? 0 : 1;
 }

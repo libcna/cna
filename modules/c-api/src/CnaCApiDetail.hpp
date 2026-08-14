@@ -6,6 +6,7 @@
 #include "CNA/C/core.h"
 
 #include "System/ArgumentException.hpp"
+#include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
 
@@ -83,6 +84,8 @@ template<typename TCallable>
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (const System::ArgumentException& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
+    } catch (const System::NotImplementedException& exception) {
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const System::NotSupportedException& exception) {
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const System::InvalidOperationException& exception) {

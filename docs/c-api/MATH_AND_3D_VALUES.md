@@ -148,3 +148,16 @@ Point-array construction uses the checked raw-array contract: the complete eleme
 validated before copying, an empty set is invalid and failures leave the output unchanged. Box,
 frustum and merge factories operate entirely on fixed-layout values; no native collection or
 cached frustum representation crosses the ABI.
+
+## BoundingFrustum operations
+
+`CNA_BoundingFrustum` keeps its defining matrix as its complete value identity. `geometry.h`
+provides construction, all six derived clipping planes, containment/intersection operations,
+equality/hash/string routes and all eight corners through the fixed
+`CNA_BOUNDING_FRUSTUM_CORNER_COUNT` plus an atomic caller-capacity copy. Equal matrix values are
+treated as the same frustum value for self-containment.
+
+Ray intersections preserve the canonical CNA/FNA behavior: origins inside the frustum succeed at
+distance zero and disjoint origins report no hit. The native boundary-origin branch is explicitly
+unimplemented; the exception barrier maps it to `CNA_RESULT_NOT_SUPPORTED` and leaves both outputs
+unchanged. This is a reported capability boundary, not an omitted API route.

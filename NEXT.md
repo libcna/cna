@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — BOUNDING SPHERE COMPLETE THROUGH CBIND-035B4c (2026-08-15)
+## C BINDING / C ABI — GEOMETRY B4 COMPLETE THROUGH CBIND-035B4d (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -91,7 +91,11 @@
 > B4c maps all 31 remaining BoundingSphere rows through 21 C operations. Every entry point has
 > strict-C transform, containment, intersection, hit/miss, factory, merge, exact-string and failure
 > coverage. The inventory is now 1,546 implemented, 21 partial, 4,778 planned and 70 N/A.
-> CBIND-035B4d BoundingFrustum is next and will close parent B4.
+> B4d maps all 31 remaining BoundingFrustum rows through one corner-count constant and 22 C
+> operations, including six planes, atomic corner copies and an explicit `NOT_SUPPORTED` result for
+> the canonical unimplemented boundary-origin ray case. Every entry point has strict-C normal and
+> failure coverage. Parent B4 is closed; the inventory is now 1,577 implemented, 21 partial, 4,747
+> planned and 70 N/A. CBIND-035B5 Curve is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
