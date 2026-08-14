@@ -185,7 +185,10 @@ unset(_cna_all_module_tus)
 
 # The legacy global trees must not silently come back.
 foreach(_cna_legacy src include)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/${_cna_legacy}")
+    # CNA is also consumed through add_subdirectory(). In that shape CMAKE_SOURCE_DIR is the
+    # application's root (and applications quite reasonably own src/ or include/ directories),
+    # while this file always lives directly below CNA's own repository root.
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../${_cna_legacy}")
         message(FATAL_ERROR
             "CNA: legacy global '${_cna_legacy}/' tree reappeared at the repository root -- "
             "production files belong to modules/<name>/ (physical module layout).")

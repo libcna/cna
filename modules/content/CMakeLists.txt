@@ -18,8 +18,8 @@ target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs
 # stb_image.h/stb_image_write.h.
 target_include_directories(cna_content PRIVATE
-        ${CMAKE_SOURCE_DIR}/third_party/cgltf
-        ${CMAKE_SOURCE_DIR}/third_party/stb
+        ${PROJECT_SOURCE_DIR}/third_party/cgltf
+        ${PROJECT_SOURCE_DIR}/third_party/stb
 )
 if(CNA_DRACO_AVAILABLE)
     target_link_libraries(cna_content PRIVATE draco::draco)
