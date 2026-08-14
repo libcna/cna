@@ -2,6 +2,17 @@ This project contains code derived from or based on portions of FNA.
 FNA is licensed under the Microsoft Public License (Ms-PL).
 FNA copyright: Ethan Lee and the MonoGame Team.
 
+## Draco (glTF mesh-compression dependency)
+
+CNA vendors an unmodified `google/draco` checkout as `third_party/draco`, pinned by its gitlink to
+release **1.5.7**, commit `8786740086a9f4d83f44aa83badfbea4dce7a1b5`. The normal build links
+Draco's static C++ library with the glTF bitstream feature set to decode
+`KHR_draco_mesh_compression`; packagers may explicitly select a compatible system package, and
+`CNA_ENABLE_DRACO=OFF` retains the deterministic decoder-free refusal configuration. Draco is
+Copyright 2016 The Draco Authors (Google Inc. and other contributors) and is licensed under the
+Apache License 2.0. The complete licence text and author notice are preserved in
+`third_party/draco/LICENSE` and `third_party/draco/AUTHORS`.
+
 ## Avatar real-rendering extension content (NOXNA)
 
 The optional, opt-in Avatar real-rendering extension (`AvatarRenderer::EnableRealRenderingEXT`,
@@ -25,7 +36,7 @@ no third-party binary content is currently bundled in this repository.
 ## glTF reference assets — the procedure, and why none is committed (`GLTF-018`/`GLTF-019`)
 
 **No third-party glTF asset is committed to this repository, and none may be without the review
-below.** The conformance corpus is entirely CNA-generated (`tools/gltf_fixtures/`, 141 assets),
+below.** The conformance corpus is entirely CNA-generated (`tools/gltf_fixtures/`, 145 assets),
 which is a deliberate choice rather than an absence — see the decision at the end of this section.
 
 ### Pinned optional sources (`GLTF-013`, `GLTF-014`, `GLTF-016`)
@@ -81,7 +92,7 @@ metadata. It deliberately does **not** declare any model reviewed or safe to red
 
 ### The decision: generated corpus committed, third-party assets fetched (`GLTF-019`)
 
-**Committed:** CNA's own generated corpus. 141 assets and 699 files at **1.79 MiB total**, every one
+**Committed:** CNA's own generated corpus. 145 assets and 729 files at **1.89 MiB total**, every one
 emitted from a Python description, byte-identical across runs, and covered by a size budget
 (`GLTF-419`). It is in the repository because CI must be able to run the whole conformance ladder
 with no network at all, and because a fixture whose expected values were computed from the

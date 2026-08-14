@@ -24,7 +24,14 @@ cmake -S . -B cmake-build-debug -G Ninja \
       -DCNA_ENABLE_NET=OFF
 cmake --build cmake-build-debug --target cna_tool_gltf_to_cnj -j4     # 525 edges, exit 0
 ./cmake-build-debug/cna_tool_gltf_to_cnj <fixture>.gltf <outDir> <baseName> [unitScale]
+./cmake-build-debug/cna_tool_gltf_to_cnj --dump-oracle <fixture>.gltf <emptyOutDir>
 ```
+
+The diagnostic form writes one deterministic `oracle.json`: decoded accessors (L2), imported
+semantic mesh streams (L3), independently expected and CNA world geometry (L4), and exact imported
+vertex/index bytes as hexadecimal (L5). The output directory must be absent or empty; the tool
+refuses to overwrite an earlier capture. Its implementation reuses the test-scope oracle helpers,
+but neither those helpers nor the dump schema are CNA runtime/public API.
 
 The conformance **tests** need a second, test-enabled configuration; it is deliberately a separate
 build directory so the converter reproduction above stays byte-for-byte the one the audit ran:
@@ -321,8 +328,14 @@ Store next to each PNG: the renderer repository and commit, asset path and SHA-2
 WebGL vendor/renderer strings, all state above, camera values, and the PNG SHA-256. Compare the
 reference image to CNA using the same crop and the tolerance stated by the owning L7 task. These
 images are diagnostic external-renderer evidence, not replacements for the spec-derived L1–L6
-oracles. `GLTF-411` owns selecting, capturing, and comparing at least ten actual assets; this row
-only pins the renderer and makes that later work reproducible.
+oracles. `tools/gltf_reference/` contains the local harness and browser driver;
+`scripts/gltf-reference-renderer-compare.py` verifies the renderer commit, serves only local files,
+runs the CNA viewer's clean `--reference-capture`, enforces the comparison thresholds and writes the
+per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in §5.4.
+The driver additionally requires `xvfb-run`, Python Pillow and a Chromium-compatible browser;
+`tools/gltf_reference/capture.mjs` defaults to `/usr/bin/google-chrome` and accepts an explicit
+`CNA_GLTF_CHROME` path. Browser automation is loaded from the pinned renderer's own `npm ci`
+installation, never from a global package.
 
 ### 2.11 Pinned corpus Validator gate (`GLTF-015`)
 
@@ -348,7 +361,7 @@ a missing expected error, or one additional error all fail generation. This is d
 stricter than treating every `bad-*` file as an unrestricted exception: five compatibility/repair
 fixtures whose names predate that convention are also explicit, exact-code exceptions.
 
-The closing audit covers **282 containers: 262 valid, 20 expected-invalid**, from ten declared
+The closing audit covers **290 containers: 270 valid, 20 expected-invalid**, from ten declared
 exception identities. It currently reports 42 warnings, which remain informational because they
 include portability and best-practice advice rather than schema errors. The audit corrected the
 fixtures rather than weakening the gate: animation inputs gained required bounds, absent scenes
@@ -779,7 +792,7 @@ produced them.
 
 ### 4.3 Coverage today
 
-**133 of the 141** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
+**137 of the 145** fixtures carry a golden, covering strides 48, 24 and 68, all seven primitive topologies
 with their own §12.3 primitive counts, the 16-bit index path and the `vertexCount > 65535`
 width-selection rule. Eight do not carry one. Seven are fixtures the importer must **refuse**
 (`GLTF-021`/`GLTF-023`/`GLTF-039`/`GLTF-060`/`GLTF-068`/`GLTF-261`/`GLTF-262`);
@@ -1019,8 +1032,17 @@ prove both sources upright and texel-identical. EasyGL's `cnaSampleUV` flag is r
 resource and uploaded even when zero, so a bottom-up target correction cannot leak into the next
 ordinary glTF/PBR texture draw.
 
-The optional Draco decoder has one parser-adapter invariant that is tested even in builds without
-`libdraco`: cgltf represents each `KHR_draco_mesh_compression.attributes` integer N as the fixed-up
+The normal build uses the unmodified `google/draco` 1.5.7 gitlink at
+`8786740086a9f4d83f44aa83badfbea4dce7a1b5`; `CNA_ENABLE_DRACO=OFF` preserves the deliberate
+decoder-free refusal configuration and `CNA_USE_SYSTEM_DRACO=ON` is an explicit packager escape
+hatch. The four generated Draco assets keep their compressed bytes in the same spec-derived corpus
+as every other fixture. `GltfDracoEncoderPin` recreates all five distinct streams with the pinned
+sequential encoder and requires byte equality, while `GltfDracoParity` compares decoded rigid,
+colour, skinned and morphed streams plus connectivity exactly against uncompressed twins. A corrupt
+real stream is rejected under ASan+UBSan before a `MeshOut` can escape.
+
+The decoder also has one parser-adapter invariant that remains tested in builds without Draco:
+cgltf represents each `KHR_draco_mesh_compression.attributes` integer N as the fixed-up
 pointer `&data->accessors[N]`. `GltfImportCoreTest.DracoUniqueIdsFollowCgltfsFixedUpAttributePointers`
 parses sparse, deliberately reordered IDs 7/2/5 through cgltf itself and requires their exact
 recovery by semantic and set. `FindDracoUniqueIdEXT` first checks the complete accessor byte range
@@ -1039,6 +1061,40 @@ The layers below it are unaffected: L1–L6 are renderer-independent by construc
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
 `CnaGltfConformanceL7` entry beside the others — the label's shape already accommodates it.
+
+### 5.4 Pinned reference-renderer subset (`GLTF-411`)
+
+The supplementary reference comparison is now executed over 12 generated assets: JSON and GLB,
+ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
+unlit and textured materials, normalized vertex colour, and the pinned-Draco path. Reproduce it
+after building the detached renderer and the OPENGLES3 viewer:
+
+```bash
+python3 scripts/gltf-reference-renderer-compare.py \
+  --renderer /tmp/glTF-Sample-Renderer \
+  --viewer /path/to/cna-gltf-viewer/build/cna_gltf_viewer \
+  --viewer-source /path/to/cna-gltf-viewer \
+  --output /tmp/cna-gltf-reference-results
+```
+
+The run of 2026-08-14 passed all 12. The minimum non-clear-mask intersection-over-union was
+**0.999579** (only ten edge pixels differed in the common triangle cases); foreground coverage
+ranged from **0.999891 to 1.000422**. RGB is not required to be byte-identical because the two
+applications deliberately use independent fixed light rigs and only the Khronos renderer applies
+its PBR Neutral tone map. It is still gated: the intersection RGB mean absolute error must be at
+most **80**, while the largest healthy result was **67.60**. The first run exposed why that second
+gate matters: EasyGL's shared lit program evaluated specular math even for an unlit BasicEffect,
+`normalize(0)` contaminated the triangle with NaNs and produced black at RGB MAE **189.33**. The
+shader now branches before lighting math and the origin-vertex GPU regression is 5/5 green.
+
+Foreground means a pixel differs from the transparent clear `(0,0,0,0)`, not alpha ≥ a threshold.
+For glTF `OPAQUE`, vertex/material alpha is ignored for compositing; interpreting that ignored
+destination channel as geometry made `normalized-u8-color` look half absent while its visible RGB
+coverage was pixel-aligned. Alpha differences remain in the report as diagnostics. PNGs stay
+disposable; [`gltf-reference-comparison.json`](gltf-reference-comparison.json) retains every asset,
+camera, state, environment, input/output hash and metric needed to audit the result without adding
+an external renderer or browser to CNA's CI/runtime dependency graph. This 12-asset cross-check does
+not claim `GLTF-009`'s still-open corpus-wide L7 rung.
 
 ---
 
@@ -1263,6 +1319,10 @@ written for this document: two descriptions of the same fixture are two things t
 | `scene-default-selection` | scenes | L1, L3, L4 | scene != 0; unreferenced decoy mesh; multiple scenes |
 | `scene-two-roots` | scenes | L1, L2, L3, L4 | two scene roots; root with a child |
 | `scene-no-scenes` | scenes | L1, L2, L3, L4 | no scenes array; scene-less fallback |
+| `draco-triangle` | draco | L1, L3, L4, L5 | KHR_draco_mesh_compression; decoded face connectivity; generated tangent after decompression |
+| `draco-vs-uncompressed-pair` | draco | L1, L3, L4, L5 | compressed/uncompressed L3 parity; all rigid vertex streams; sequential point ordering |
+| `draco-skinned` | draco | L1, L3, L4, L5 | Draco with JOINTS_0 / WEIGHTS_0; two-joint skin; compressed/uncompressed skin parity |
+| `draco-morph` | draco | L1, L3, L4, L5 | Draco base with morph target; POSITION/NORMAL/TANGENT deltas; compressed/uncompressed morph parity |
 | `bad-accessor-out-of-bounds` | robustness | L1 | accessor beyond bufferView; structural validation; import rejection |
 | `bad-accessor-count-overflow` | robustness | L1 | accessor count overflow; size_t wrap; structural validation; import rejection |
 | `bad-index-out-of-range` | robustness | L1, L2 | index beyond vertex count; index range validation; import rejection |
