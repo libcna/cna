@@ -105,15 +105,21 @@ tests; configuring the same checkout again confirmed that patch application is i
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
-- a compiler-produced conformance fixture with shaders, structures, textures, and samplers, plus
-  an independent normalized FNA oracle (`FX-004`, `FX-005`); the synthetic state-only fixture
-  already supplies the remaining deterministic reflection/pass/render-state coverage without a
-  proprietary compiler dependency;
-- a reusable coverage-guided fuzz harness, sanitizer stress runs, performance baselines, and full
-  project regressions (remaining `FX-050`–`FX-054` work);
-- additional renderer implementations (`FX-060`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
-  (`FX-062`) and Vulkan (`FX-064`–`FX-065`). Until each passes the shared contract, its correct
-  behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
+- an independent normalized FNA oracle (`FX-005`) and the compiler-produced fixture it would be
+  compared against (`FX-004`). This is **blocked by the environment, not by effort**: the FNA
+  reference tool needs `mono`/`xbuild` and a built `FNA.dll`, and neither `mono` nor `dotnet`
+  exists on the development machine. The synthetic fixture now covers reflection, pass identity,
+  every render-state token, samplers, textures and a real Shader Model 2.0 program without a
+  proprietary compiler, but comparing CNA against itself is self-consistency, not ground truth;
+- a fuzz gate that runs dry (`FX-051`). Eleven crash classes found so far are fixed in the managed
+  MojoShader patch; the campaign now reaches roughly iteration 6,400 before a wild read in the
+  shader-array selection path, recorded with its reproduction command;
+- `SamplerState.AddressW` reaching any renderer at all (`FX-026`), a pre-existing shared-layer gap
+  that compiled sampler coverage exposed;
+- additional renderer implementations (`FX-061`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
+  (`FX-062`) and Vulkan (`FX-064`–`FX-065`). The shared contract they must pass now exists
+  (`FX-060`); until a backend passes it, its correct behavior is an explicit
+  `NotSupportedException`, never a silent stock-shader fallback.
 
 ## 1. Executive conclusion
 

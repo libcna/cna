@@ -24,6 +24,39 @@ not rename or absorb them:
 The original detailed entries remain below as evidence of discovery and prior experiments. Their
 old `OPEN` headings are historical where this disposition explicitly supersedes them.
 
+## Pinned MojoShader is not hardened against hostile compiled-effect content
+
+**Backend:** FNA3D (the defect is in MojoShader itself, so it reaches every backend that would use
+it -- SDL_GPU, OpenGL, D3D11 and the planned Vulkan/Metal adapters alike).
+
+**Status:** PARTIALLY FIXED. Eleven crash classes found so far are fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`; at least one remains.
+
+A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
+written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found eleven distinct ways it crashed the
+process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
+their own bounds check, register copies sized by a constant table rather than by the parsed
+storage, an unchecked shader-array selector, and a union member read without checking the object's
+type. Each is now an ordinary parser error. `docs/fx-bytecode-fuzzing.md` lists them.
+
+What remains: the campaign reaches roughly iteration 6,400 before a wild read inside
+`MOJOSHADER_effectCommitChanges`'s shader-array selection path. Reproduce with
+
+```sh
+mkdir -p fx-corpus && cp modules/renderers/fna3d/effects/*.fxb fx-corpus/
+SDL_VIDEODRIVER=offscreen SDL_ASSERT=abort ASAN_OPTIONS=detect_leaks=0 \
+  ./cmake-build-fna3d-asan/cna_compiled_effect_fuzzer --campaign fx-corpus 6500 0x4658465556555A
+```
+
+**Consequence for CNA's contract:** `docs/fx-compiled-effects.md` promises that malformed content
+fails explicitly and safely. That holds for CNA's own layer and for the parser paths reached so
+far, but not for arbitrary hostile content, and the porter guide says so. Treat a compiled effect
+like any other natively-parsed asset: ship your own, do not load one a user supplied.
+
+**Fix direction:** continue the campaign until it runs dry, extending the managed patch. Upstream
+MojoShader would be the better long-term home for these fixes.
+
 ## FNA3D resource renderers that outlive their device free through a dangling FNA3D_Device
 
 **Backend:** FNA3D (found on the SDL_GPU/Vulkan driver; the ownership bug is driver-independent).
