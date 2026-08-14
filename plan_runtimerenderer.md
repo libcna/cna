@@ -432,9 +432,9 @@ Still exactly one renderer per build throughout.
 | RTR-P1-3 | ✅ | Replace the `SDL_INIT_VIDEO` guard (`GraphicsDevice.cpp:317`) with `descriptor.needsVideoSubsystem`. |
 | RTR-P1-4 | ✅ | Replace the no-window branch of `createOrAttachWindow()` (`GraphicsDevice.cpp:2270`) with `descriptor.needsWindow`. |
 | RTR-P1-5 | ✅ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. |
-| RTR-P1-6 | ⬜ | Assert in a test that `modules/graphics/src/Xna/GraphicsDevice.cpp` contains **zero** `CNA_RENDERER_*` occurrences related to window creation (down from 25 total; the `GDI` write-back leaves in P3). |
+| RTR-P1-6 | ✅ | Assert in a test that `modules/graphics/src/Xna/GraphicsDevice.cpp` contains **zero** `CNA_RENDERER_*` occurrences related to window creation (down from 25 total; the `GDI` write-back leaves in P3). |
 | RTR-P1-7 | ✅ | Cross-renderer regression: window flags produced through the descriptor are bit-identical to the previous `#ifdef` result, verified per renderer as its descriptor lands. |
-| RTR-P1-8 | ⬜ | Document in `docs/runtime-renderer-selection.md` which four families (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`) already decided window flags at runtime before this plan, and that the descriptor generalizes their existing mechanism. |
+| RTR-P1-8 | ✅ | Document in `docs/runtime-renderer-selection.md` which four families (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`) already decided window flags at runtime before this plan, and that the descriptor generalizes their existing mechanism. |
 
 #### P1 descriptors, one task per family
 
@@ -445,49 +445,49 @@ running that family's own smoke/example target where one exists.
 
 | ID | St | Family → identity |
 |---|---|---|
-| RTR-P1-D01 | ⬜ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
+| RTR-P1-D01 | ✅ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
 | RTR-P1-D02 | ✅ | `easygl` → `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` — one descriptor, profile still compile-time (`CNA_GL_PROFILE_*`); the 5-identity split is P11 |
-| RTR-P1-D03 | ⬜ | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()` |
-| RTR-P1-D04 | ⬜ | `vulkan` → `VULKAN` (`SDL_WINDOW_VULKAN`; `isAvailable` = real `vkEnumerateInstanceVersion` probe) |
-| RTR-P1-D05 | ⬜ | `webgpu` → `WEBGPU` |
-| RTR-P1-D06 | ⬜ | `magnum` → `MAGNUM` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D07 | ⬜ | `headless` → `HEADLESS` (`needsWindow=false`, `needsVideoSubsystem=false`) |
-| RTR-P1-D08 | ⬜ | `software` → `SOFTWARE` (`needsWindow=false`, `needsVideoSubsystem=false`) |
-| RTR-P1-D09 | ⬜ | `stub` → `STUB` (`needsWindow=false`, `needsVideoSubsystem=false`) |
-| RTR-P1-D10 | ⬜ | `portablegl` → `PORTABLEGL` (`needsWindow=false`, `needsVideoSubsystem=false`) |
-| RTR-P1-D11 | ⬜ | `directx11` → `DIRECTX11` |
-| RTR-P1-D12 | ⬜ | `directx12` → `DIRECTX12` (honours `PresentationParameters::HeadlessEXT`) |
-| RTR-P1-D13 | ⬜ | `direct2d` → `DIRECT2D` |
-| RTR-P1-D14 | ⬜ | `canvas` → `CANVAS` (Emscripten) |
-| RTR-P1-D15 | ⬜ | `html-dom` → `HTML_DOM` (Emscripten) |
-| RTR-P1-D16 | ⬜ | `svg-dom` → `SVG_DOM` (Emscripten) |
-| RTR-P1-D17 | ⬜ | `skia` → `SKIA` |
-| RTR-P1-D18 | ⬜ | `blend2d` → `BLEND2D` |
-| RTR-P1-D19 | ⬜ | `freedirect` → `FREEDIRECT` |
-| RTR-P1-D20 | ⬜ | `directx9` → `DIRECTX9` |
-| RTR-P1-D21 | ⬜ | `directx1` → `DIRECTX1` |
-| RTR-P1-D22 | ⬜ | `directx2` → `DIRECTX2` |
-| RTR-P1-D23 | ⬜ | `directx3` → `DIRECTX3` |
-| RTR-P1-D24 | ⬜ | `directx5` → `DIRECTX5` |
-| RTR-P1-D25 | ⬜ | `directx6` → `DIRECTX6` |
-| RTR-P1-D26 | ⬜ | `directx7` → `DIRECTX7` |
-| RTR-P1-D27 | ⬜ | `directx8` → `DIRECTX8` |
-| RTR-P1-D28 | ⬜ | `directx10` → `DIRECTX10` |
-| RTR-P1-D29 | ⬜ | `sdl-gpu` → `SDL_GPU` |
-| RTR-P1-D30 | ⬜ | `opengles1` → `OPENGLES1` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D31 | ⬜ | `opengl4` → `OPENGL4` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D32 | ⬜ | `opengl1` → `OPENGL1` — owns `applyPreWindowAttributes` (GLX visual: depth 24, stencil 8, double buffer, MSAA) |
-| RTR-P1-D33 | ⬜ | `opengl2` → `OPENGL2` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D34 | ⬜ | `wicked` → `WICKED` |
-| RTR-P1-D35 | ⬜ | `sokol` → `SOKOL` (`SDL_WINDOW_OPENGL`; `CNA_SOKOL_API` stays compile-time) |
-| RTR-P1-D36 | ⬜ | `diligent` → `DILIGENT` — `prepareWindowFlags` wraps `ParseDeviceTypeOverride()`; keeps the documented single-flag limitation |
-| RTR-P1-D37 | ⬜ | `glide` → `GLIDE` |
-| RTR-P1-D38 | ⬜ | `gdi` → `GDI` |
-| RTR-P1-D39 | ⬜ | `llgl` → `LLGL` — `prepareWindowFlags` wraps `RendererModuleNeedsOpenGLWindow()` |
-| RTR-P1-D40 | ⬜ | `metal` → `METAL` (`SDL_WINDOW_METAL` \| `SDL_WINDOW_HIGH_PIXEL_DENSITY`; descriptor in the `.mm` unit) |
-| RTR-P1-D41 | ⬜ | `fna3d` → `FNA3D` — `prepareWindowFlags` wraps `Fna3d::Detail::PrepareWindowFlags()` |
-| RTR-P1-D42 | ⬜ | `openvg` → `OPENVG` (`SDL_WINDOW_OPENGL`) |
-| RTR-P1-D43 | ⬜ | **Coverage gate.** A test enumerates all 46 identities and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. |
+| RTR-P1-D03 | 🟨 | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()` |
+| RTR-P1-D04 | ✅ | `vulkan` → `VULKAN` (`SDL_WINDOW_VULKAN`; `isAvailable` = real `vkEnumerateInstanceVersion` probe) |
+| RTR-P1-D05 | ✅ | `webgpu` → `WEBGPU` |
+| RTR-P1-D06 | ✅ | `magnum` → `MAGNUM` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D07 | ✅ | `headless` → `HEADLESS` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D08 | ✅ | `software` → `SOFTWARE` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D09 | ✅ | `stub` → `STUB` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D10 | ✅ | `portablegl` → `PORTABLEGL` (`needsWindow=false`, `needsVideoSubsystem=false`) |
+| RTR-P1-D11 | ✅ | `directx11` → `DIRECTX11` |
+| RTR-P1-D12 | ✅ | `directx12` → `DIRECTX12` (honours `PresentationParameters::HeadlessEXT`) |
+| RTR-P1-D13 | ✅ | `direct2d` → `DIRECT2D` |
+| RTR-P1-D14 | ✅ | `canvas` → `CANVAS` (Emscripten) |
+| RTR-P1-D15 | ✅ | `html-dom` → `HTML_DOM` (Emscripten) |
+| RTR-P1-D16 | ✅ | `svg-dom` → `SVG_DOM` (Emscripten) |
+| RTR-P1-D17 | ✅ | `skia` → `SKIA` |
+| RTR-P1-D18 | ✅ | `blend2d` → `BLEND2D` |
+| RTR-P1-D19 | ✅ | `freedirect` → `FREEDIRECT` |
+| RTR-P1-D20 | ✅ | `directx9` → `DIRECTX9` |
+| RTR-P1-D21 | ✅ | `directx1` → `DIRECTX1` |
+| RTR-P1-D22 | ✅ | `directx2` → `DIRECTX2` |
+| RTR-P1-D23 | ✅ | `directx3` → `DIRECTX3` |
+| RTR-P1-D24 | ✅ | `directx5` → `DIRECTX5` |
+| RTR-P1-D25 | ✅ | `directx6` → `DIRECTX6` |
+| RTR-P1-D26 | ✅ | `directx7` → `DIRECTX7` |
+| RTR-P1-D27 | ✅ | `directx8` → `DIRECTX8` |
+| RTR-P1-D28 | ✅ | `directx10` → `DIRECTX10` |
+| RTR-P1-D29 | ✅ | `sdl-gpu` → `SDL_GPU` |
+| RTR-P1-D30 | ✅ | `opengles1` → `OPENGLES1` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D31 | ✅ | `opengl4` → `OPENGL4` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D32 | ✅ | `opengl1` → `OPENGL1` — owns `applyPreWindowAttributes` (GLX visual: depth 24, stencil 8, double buffer, MSAA) |
+| RTR-P1-D33 | ✅ | `opengl2` → `OPENGL2` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D34 | ✅ | `wicked` → `WICKED` |
+| RTR-P1-D35 | ✅ | `sokol` → `SOKOL` (`SDL_WINDOW_OPENGL`; `CNA_SOKOL_API` stays compile-time) |
+| RTR-P1-D36 | ✅ | `diligent` → `DILIGENT` — `prepareWindowFlags` wraps `ParseDeviceTypeOverride()`; keeps the documented single-flag limitation |
+| RTR-P1-D37 | ✅ | `glide` → `GLIDE` |
+| RTR-P1-D38 | ✅ | `gdi` → `GDI` |
+| RTR-P1-D39 | ✅ | `llgl` → `LLGL` — `prepareWindowFlags` wraps `RendererModuleNeedsOpenGLWindow()` |
+| RTR-P1-D40 | ✅ | `metal` → `METAL` (`SDL_WINDOW_METAL` \| `SDL_WINDOW_HIGH_PIXEL_DENSITY`; descriptor in the `.mm` unit) |
+| RTR-P1-D41 | ✅ | `fna3d` → `FNA3D` — `prepareWindowFlags` wraps `Fna3d::Detail::PrepareWindowFlags()` |
+| RTR-P1-D42 | ✅ | `openvg` → `OPENVG` (`SDL_WINDOW_OPENGL`) |
+| RTR-P1-D43 | ✅ | **Coverage gate.** A test enumerates all 46 identities and fails if any lacks a descriptor in its own configuration — the mechanical equivalent of `check_renderer_identities.py` for descriptors. |
 
 ---
 

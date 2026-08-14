@@ -22,8 +22,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Capability | Status |
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
-| Pre-window contract extracted from `GraphicsDevice` | ⬜ not implemented |
-| Per-family descriptors | ⬜ not implemented |
+| Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and OPENGL1's GLX attributes are all descriptor-driven |
+| Per-family descriptors | ✅ all 42 families; guarded by `scripts/check_runtime_renderer_discipline.py` |
 | Namespaced factories / generated registry | ⬜ not implemented |
 | `GraphicsRendererSelection` API | ⬜ not implemented |
 | Fallback chain | ⬜ not implemented |
@@ -31,6 +31,37 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Runtime identity reporting | ⬜ not implemented |
 
 Legend: ✅ implemented and verified · 🟨 exists but unverified · ⬜ not implemented.
+
+---
+
+## What a renderer descriptor answers
+
+Four decisions have to be made *before* an `IGraphicsRenderer` instance exists, so no virtual method
+can serve them. Each renderer family answers them through its own
+`GraphicsRendererDescriptor` (`modules/renderers/<family>/src/*RendererDescriptor.cpp`):
+
+| Question | Field |
+|---|---|
+| Does this renderer need a window at all? | `needsWindow` — false for `HEADLESS`, `SOFTWARE`, `STUB`, `PORTABLEGL` |
+| Must SDL's video subsystem be initialized? | `needsVideoSubsystem` — false for the same four, which is what lets them run with no display server |
+| Which SDL window flags does it need? | `prepareWindowFlags()` |
+| Anything to set before `SDL_CreateWindow`? | `applyPreWindowAttributes()` — only `OPENGL1` has real work here |
+
+Four families compute their window flags at **runtime**, because their own native API is itself a
+runtime choice. This predates runtime renderer selection; the plan generalizes their existing
+mechanism rather than inventing one:
+
+| Renderer | Decides | Via |
+|---|---|---|
+| `BGFX` | Vulkan vs OpenGL/GLES | `Bgfx::Detail::ResolveRendererType()`, honouring `CNA_BGFX_RENDERER` |
+| `LLGL` | OpenGL module needs a GL window; Vulkan module needs no flag | `Llgl::Detail::RendererModuleNeedsOpenGLWindow()` |
+| `FNA3D` | SDL_GPU / D3D11 / OpenGL | `FNA3D_PrepareWindowAttributes`, which also primes the GL attributes |
+| `DILIGENT` | D3D12 / Vulkan / D3D11 / OpenGL | `ParseDeviceTypeOverride()`, honouring `CNA_DILIGENT_DEVICE` |
+
+`DILIGENT` carries a documented limitation here: SDL3 rejects a window created with both
+`SDL_WINDOW_VULKAN` and `SDL_WINDOW_OPENGL`, so an `auto` build whose first preference fails at
+runtime cannot fall through across that boundary against an already-created window
+(plan_diligent.md DILIGENT-57).
 
 ---
 
