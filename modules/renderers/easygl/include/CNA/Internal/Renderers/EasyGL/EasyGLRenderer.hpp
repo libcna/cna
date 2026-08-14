@@ -676,6 +676,10 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_normalscale = -1;
             /// plan_gltf.md GLTF-225: float occlusionTexture.strength (PbrEffect only).
             int loc_pbr_occlstrength = -1;
+            /// plan_gltf.md GLTF-182/183: vec4 UV1 selectors for PBR slots 0-3.
+            int loc_pbr_texcoordsets = -1;
+            /// plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
+            int loc_pbr_occlusiontexcoordset = -1;
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
@@ -692,8 +696,8 @@ namespace CNA::Internal::Renderers::EasyGL
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
         Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
-        Prog3D prog_pbr_;            ///< stride=48: aPos + aNormal + aTangent + aUV, real glTF metallic-roughness BRDF (PbrEffect, plan_cnj.md CNB-58)
-        Prog3D prog_pbr_skinned_;    ///< stride=68: aPos + aNormal + aTangent + aUV + weights + indices, PBR BRDF + skinning (SkinnedPbrEffect, PBR+skinning combo)
+        Prog3D prog_pbr_;            ///< stride=48/60: aPos + aNormal + aTangent + aUV[+aUV1], real glTF metallic-roughness BRDF (PbrEffect)
+        Prog3D prog_pbr_skinned_;    ///< stride=68/76: rigid PBR prefix + weights + indices [+aUV1], PBR BRDF + skinning (SkinnedPbrEffect)
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;

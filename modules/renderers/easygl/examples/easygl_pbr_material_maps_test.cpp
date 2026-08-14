@@ -20,6 +20,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include <cstdint>
 #include <string>
@@ -46,6 +48,21 @@ namespace
         std::uint8_t i0, i1, i2, i3;
     };
     static_assert(sizeof(SkinnedPbrVertex) == 68);
+
+    struct PbrDualUvVertex
+    {
+        PbrVertex base;
+        float u1, v1;
+        std::uint32_t padding;
+    };
+    static_assert(sizeof(PbrDualUvVertex) == 60);
+
+    struct SkinnedPbrDualUvVertex
+    {
+        SkinnedPbrVertex base;
+        float u1, v1;
+    };
+    static_assert(sizeof(SkinnedPbrDualUvVertex) == 76);
 
     PbrVertex MakePbrVertex(float x, float y, float u, float v)
     {
@@ -79,6 +96,54 @@ namespace
             vertex.base.nz = 0.8f;
         }
         return result;
+    }
+
+    std::vector<PbrDualUvVertex> RigidDualUvQuad()
+    {
+        std::vector<PbrDualUvVertex> result;
+        for (PbrVertex vertex : RigidQuad())
+        {
+            vertex.u = 0.25f;
+            vertex.v = 0.5f;
+            result.push_back({vertex, 0.75f, 0.5f, 0u});
+        }
+        return result;
+    }
+
+    std::vector<SkinnedPbrDualUvVertex> SkinnedDualUvQuad()
+    {
+        std::vector<SkinnedPbrDualUvVertex> result;
+        for (const PbrDualUvVertex& vertex : RigidDualUvQuad())
+        {
+            result.push_back({
+                {vertex.base, 1.0f, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0},
+                vertex.u1, vertex.v1});
+        }
+        return result;
+    }
+
+    VertexDeclaration RigidDualUvDeclaration()
+    {
+        return VertexDeclaration(60, {
+            {0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0},
+            {12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0},
+            {24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0},
+            {40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0},
+            {48, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1},
+        });
+    }
+
+    VertexDeclaration SkinnedDualUvDeclaration()
+    {
+        return VertexDeclaration(76, {
+            {0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0},
+            {12, VertexElementFormat::Vector3, VertexElementUsage::Normal, 0},
+            {24, VertexElementFormat::Vector4, VertexElementUsage::Tangent, 0},
+            {40, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0},
+            {48, VertexElementFormat::Vector4, VertexElementUsage::BlendWeight, 0},
+            {64, VertexElementFormat::Byte4, VertexElementUsage::BlendIndices, 0},
+            {68, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 1},
+        });
     }
 
     template <typename Effect>
@@ -228,6 +293,11 @@ protected:
             Texture2D::CreateFromPixels(device, 1, 1, blueEmissivePixel);
         Texture2D occlusion = Texture2D::CreateFromPixels(device, 1, 1, occlusionPixel);
         Texture2D normal = Texture2D::CreateFromPixels(device, 1, 1, normalPixel);
+        const std::vector<std::uint8_t> redBluePixels = {
+            255, 0, 0, 255,
+            0, 0, 255, 255,
+        };
+        Texture2D redBlue = Texture2D::CreateFromPixels(device, 2, 1, redBluePixels);
 
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
@@ -281,6 +351,54 @@ protected:
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         ExpectPixel("SkinnedPbrEffect inverse-transpose non-uniform joint normal",
                     Rectangle(sampleX, sampleY, 1, 1), Color(93, 93, 93, 255), 2);
+
+        // GLTF-182/183: UV0 is constant at the red texel and UV1 at the blue texel. Base colour
+        // selects UV0 while emissive independently selects UV1; with both factors at .5 their
+        // linear sum is purple, encoded to byte 188. A renderer that ignores the selector mask,
+        // aliases the two attributes, or applies one global selector produces only red or blue.
+        const auto configureDualUv = [&](auto& effect)
+        {
+            Configure(effect);
+            effect.setTextureProperty(&redBlue);
+            effect.setEmissiveMapProperty(&redBlue);
+            effect.setDiffuseColorProperty(Vector3(0.5f, 0.5f, 0.5f));
+            effect.setAmbientLightColorProperty(Vector3::One);
+            effect.setEmissiveFactorProperty(Vector3(0.5f, 0.5f, 0.5f));
+            effect.setTextureCoordinateSetEXTProperty(0, 0);
+            effect.setTextureCoordinateSetEXTProperty(3, 1);
+        };
+
+        const std::vector<PbrDualUvVertex> rigidDualUv = RigidDualUvQuad();
+        VertexBuffer rigidDualUvBuffer(
+            device, RigidDualUvDeclaration(), static_cast<int>(rigidDualUv.size()),
+            BufferUsage::None);
+        rigidDualUvBuffer.SetDataRaw(
+            rigidDualUv.data(), static_cast<int>(rigidDualUv.size()), 60);
+        device.SetVertexBuffer(&rigidDualUvBuffer);
+        PbrEffect rigidDualUvEffect(device);
+        configureDualUv(rigidDualUvEffect);
+        device.Clear(Color(0, 255, 0, 255));
+        rigidDualUvEffect.Apply();
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        ExpectPixel("PbrEffect independent UV0/UV1 texture slots",
+                    Rectangle(sampleX, sampleY, 1, 1), Color(188, 0, 188, 255), 2);
+
+        const std::vector<SkinnedPbrDualUvVertex> skinnedDualUv = SkinnedDualUvQuad();
+        VertexBuffer skinnedDualUvBuffer(
+            device, SkinnedDualUvDeclaration(), static_cast<int>(skinnedDualUv.size()),
+            BufferUsage::None);
+        skinnedDualUvBuffer.SetDataRaw(
+            skinnedDualUv.data(), static_cast<int>(skinnedDualUv.size()), 76);
+        device.SetVertexBuffer(&skinnedDualUvBuffer);
+        SkinnedPbrEffect skinnedDualUvEffect(device);
+        configureDualUv(skinnedDualUvEffect);
+        skinnedDualUvEffect.SetBoneTransforms({Matrix::getIdentityProperty()});
+        skinnedDualUvEffect.setWeightsPerVertexProperty(1);
+        device.Clear(Color(0, 255, 0, 255));
+        skinnedDualUvEffect.Apply();
+        device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        ExpectPixel("SkinnedPbrEffect independent UV0/UV1 texture slots",
+                    Rectangle(sampleX, sampleY, 1, 1), Color(188, 0, 188, 255), 2);
 
         device.SetVertexBuffer(nullptr);
     }

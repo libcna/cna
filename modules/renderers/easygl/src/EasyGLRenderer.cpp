@@ -4536,6 +4536,20 @@ void main()
             vao.enable_attribute(3);
             vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
             break;
+        case 60:
+            // GLTF-182/183: collision-free rigid PBR dual-UV layout. Bytes 0..47 are the
+            // established stride-48 prefix, UV1 is appended at 48 and bytes 56..59 are padding.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 2, ::easygl::DataType::Float, false, s, (void*)48);
+            break;
         case 52:
             // Task 11.10: this layout is independently duplicated (magic stride 52) in
             // BgfxRenderer.cpp's MakeBgfxLayout and VulkanRenderer.cpp's
@@ -4603,6 +4617,25 @@ void main()
             vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
             vao.enable_attribute(5);
             SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
+            break;
+        case 76:
+            // GLTF-182/183: the stride-68 skinned PBR record with packed UV1 appended at 68.
+            // Keeping the original six locations byte-for-byte stable lets both layouts share
+            // one shader; location 6 is unused/defaulted when an old stride-68 buffer is bound.
+            vao.enable_attribute(0);
+            vao.set_attribute_pointer(0, 3, ::easygl::DataType::Float, false, s, (void*)0);
+            vao.enable_attribute(1);
+            vao.set_attribute_pointer(1, 3, ::easygl::DataType::Float, false, s, (void*)12);
+            vao.enable_attribute(2);
+            vao.set_attribute_pointer(2, 4, ::easygl::DataType::Float, false, s, (void*)24);
+            vao.enable_attribute(3);
+            vao.set_attribute_pointer(3, 2, ::easygl::DataType::Float, false, s, (void*)40);
+            vao.enable_attribute(4);
+            vao.set_attribute_pointer(4, 4, ::easygl::DataType::Float, false, s, (void*)48);
+            vao.enable_attribute(5);
+            SetBoneIndicesAttributePointer(vao, 5, s, (void*)64);
+            vao.enable_attribute(6);
+            vao.set_attribute_pointer(6, 2, ::easygl::DataType::Float, false, s, (void*)68);
             break;
         default:
             // plan_gltf.md GLTF-157: a byte stride does not describe which attributes exist.
@@ -5885,6 +5918,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=1) in vec3 aNormal;\n"
 "layout(location=2) in vec4 aTangent;\n"
 "layout(location=3) in vec2 aUV;\n"
+"layout(location=4) in vec2 aUV1;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
@@ -5895,6 +5929,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
+"out vec2 vUV1;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 "void main(){\n"
@@ -5910,6 +5945,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
 "    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness;\n"
 "    vUV=aUV;\n"
+"    vUV1=aUV1;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
@@ -5921,6 +5957,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
+"in vec2 vUV1;\n"
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -5945,6 +5982,8 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 // already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
+"uniform vec4 uTextureCoordinateSets;\n"
+"uniform float uOcclusionTextureCoordinateSet;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -5977,8 +6016,9 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+"vec2 cnaPbrUV(float setIndex){return mix(vUV,vUV1,setIndex);}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.x),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
@@ -5988,13 +6028,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.y),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
 // merely rescale the whole vector, which normalization then undoes -- the perturbation would not
 // change at all.
 "    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.z),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -6004,13 +6044,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrUV(uOcclusionTextureCoordinateSet),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.w),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
@@ -6053,6 +6093,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6077,6 +6120,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "layout(location=3) in vec2 aUV;\n"
 "layout(location=4) in vec4 aBoneWeights;\n"
 "layout(location=5) in uvec4 aBoneIndices;\n"
+"layout(location=6) in vec2 aUV1;\n"
 CNA_GL_INSTANCE_TRANSFORM_DECL
 CNA_GL_DIRECTION_HANDEDNESS_DECL
 "uniform mat4 uWVP;\n"
@@ -6089,6 +6133,7 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
 "out vec3 vTangent;\n"
 "out float vBitangentSign;\n"
 "out vec2 vUV;\n"
+"out vec2 vUV1;\n"
 "out float vFogFactor;\n"
 "out vec3 vWorldPos;\n"
 CNA_GL_SKIN_NORMAL_DECL
@@ -6114,6 +6159,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "    float instanceHandedness=(uCnaInstanced>0.5)?cnaDirectionHandedness(mat3(cnaInstanceMatrix())):1.0;\n"
 "    vBitangentSign=aTangent.w*cnaDirectionHandedness(worldDirectionMat)*instanceHandedness*cnaDirectionHandedness(skinDirectionMat);\n"
 "    vUV=aUV;\n"
+"    vUV1=aUV1;\n"
 "    vWorldPos=(uWorld*cnaPos).xyz;\n"
 "    vFogFactor=1.0-clamp(dot(cnaPos,uFogVector),0.0,1.0);\n"
 "}\n";
@@ -6125,6 +6171,7 @@ CNA_GL_SKIN_NORMAL_DECL
 "in vec3 vTangent;\n"
 "in float vBitangentSign;\n"
 "in vec2 vUV;\n"
+"in vec2 vUV1;\n"
 "in float vFogFactor;\n"
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
@@ -6148,6 +6195,8 @@ CNA_GL_SKIN_NORMAL_DECL
 // already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
+"uniform vec4 uTextureCoordinateSets;\n"
+"uniform float uOcclusionTextureCoordinateSet;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6178,8 +6227,9 @@ CNA_GL_SRGB_TRANSFER_DECL
 "}\n"
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
+"vec2 cnaPbrUV(float setIndex){return mix(vUV,vUV1,setIndex);}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x));\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.x),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
@@ -6189,13 +6239,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.y),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
 // merely rescale the whole vector, which normalization then undoes -- the perturbation would not
 // change at all.
 "    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(vUV,uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.z),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -6205,13 +6255,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrUV(uOcclusionTextureCoordinateSet),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(vUV,uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrUV(uTextureCoordinateSets.w),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
@@ -6256,6 +6306,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
+        p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
+        p.loc_pbr_occlusiontexcoordset =
+            p.prog.uniform_location("uOcclusionTextureCoordinateSet");
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6386,6 +6439,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             VertexElementUsage::Color, 0, VertexElementFormat::Color, "aColor"};
         static constexpr StockProgramInput kUv{
             VertexElementUsage::TextureCoordinate, 0, VertexElementFormat::Vector2, "aUV"};
+        static constexpr StockProgramInput kUv1{
+            VertexElementUsage::TextureCoordinate, 1, VertexElementFormat::Vector2, "aUV1"};
         static constexpr StockProgramInput kNormal{
             VertexElementUsage::Normal, 0, VertexElementFormat::Vector3, "aNormal"};
         static constexpr StockProgramInput kTangent{
@@ -6402,8 +6457,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
         static constexpr StockProgramInput kSkinned[]        = {kPos, kNormal, kUv, kWeights,
                                                                 kIndices, kColor};
         static constexpr StockProgramInput kPbr[]            = {kPos, kNormal, kTangent, kUv};
+        static constexpr StockProgramInput kPbrDualUv[]      = {kPos, kNormal, kTangent, kUv,
+                                                                kUv1};
         static constexpr StockProgramInput kPbrSkinned[]     = {kPos, kNormal, kTangent, kUv,
                                                                 kWeights, kIndices};
+        static constexpr StockProgramInput kPbrSkinnedDualUv[] = {
+            kPos, kNormal, kTangent, kUv, kWeights, kIndices, kUv1};
 
         const StockProgramInput* inputs = kColored;
         std::size_t count = std::size(kColored);
@@ -6411,9 +6470,25 @@ CNA_GL_RT_SAMPLE_UV_DECL
         switch (SelectStockProgramShape(stride, params))
         {
         case StockProgramShape::PbrSkinned:
-            inputs = kPbrSkinned; count = std::size(kPbrSkinned); name = "pbr_skinned3d"; break;
+            if (stride == 76)
+            {
+                inputs = kPbrSkinnedDualUv; count = std::size(kPbrSkinnedDualUv);
+            }
+            else
+            {
+                inputs = kPbrSkinned; count = std::size(kPbrSkinned);
+            }
+            name = "pbr_skinned3d"; break;
         case StockProgramShape::Pbr:
-            inputs = kPbr; count = std::size(kPbr); name = "pbr3d"; break;
+            if (stride == 60)
+            {
+                inputs = kPbrDualUv; count = std::size(kPbrDualUv);
+            }
+            else
+            {
+                inputs = kPbr; count = std::size(kPbr);
+            }
+            name = "pbr3d"; break;
         case StockProgramShape::SkinnedVertexLit:
             inputs = kSkinned; count = std::size(kSkinned); name = "skinned3d_vertexlit"; break;
         case StockProgramShape::Skinned:
@@ -6733,6 +6808,23 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale);
         if (p.loc_pbr_occlstrength >= 0)
             p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength);
+        if (p.loc_pbr_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_texcoordsets,
+                (mask & (std::uint32_t{1} << 0)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 1)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 2)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 3)) != 0 ? 1.0f : 0.0f);
+        }
+        if (p.loc_pbr_occlusiontexcoordset >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_occlusiontexcoordset,
+                (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
+                    ? 1.0f : 0.0f);
+        }
         if (p.loc_pbr_srgb >= 0)
         {
             p.prog.set_uniform(p.loc_pbr_srgb,
