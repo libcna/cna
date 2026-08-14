@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — QUATERNION COMPLETE THROUGH CBIND-035B3a (2026-08-14)
+## C BINDING / C ABI — QUATERNION AND MATRIX COMPLETE THROUGH CBIND-035B3b (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -75,7 +75,12 @@
 > B3a now maps all 50 remaining Quaternion rows through 28 C operations, including factories,
 > concatenation, inverse, normalized/spherical interpolation and exact strings. Every entry point
 > has strict-C normal, IEEE, alias and failure coverage. The inventory is now 1,344 implemented,
-> 21 partial, 4,980 planned and 70 N/A. CBIND-035B3b Matrix is next.
+> 21 partial, 4,980 planned and 70 N/A. B3b now maps all 98 remaining Matrix rows through 57 C
+> operations: construction, seven direction/translation properties, decomposition, determinant,
+> every factory and complete operator math. Strict-C tests cover row-major layout, optional
+> billboard inputs, valid and singular decomposition/inversion, projection rejection without
+> output mutation, exact strings and all entry points. Parent B3 is closed; the inventory is now
+> 1,442 implemented, 21 partial, 4,882 planned and 70 N/A. CBIND-035B4 Plane/Ray/bounds is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

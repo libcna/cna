@@ -22,6 +22,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiSpriteFont.cpp
     src/CnaCApiInput.cpp
     src/CnaCApiMath.cpp
+    src/CnaCApiMatrix.cpp
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
     src/CnaCApiVectors.cpp
@@ -179,6 +180,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_quaternion_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_quaternion_smoke)
     add_test(NAME CApi_QuaternionSmoke COMMAND cna_c_api_quaternion_smoke)
+
+    add_executable(cna_c_api_matrix_smoke
+        tests/pure_c/MatrixSmoke.c
+    )
+    set_target_properties(cna_c_api_matrix_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_matrix_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_matrix_smoke)
+    add_test(NAME CApi_MatrixSmoke COMMAND cna_c_api_matrix_smoke)
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c

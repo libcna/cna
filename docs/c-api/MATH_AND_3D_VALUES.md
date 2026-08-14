@@ -99,3 +99,17 @@ one fallible result-plus-output C operation. Normalization and inversion preserv
 behavior rather than introducing a C-only zero-length rejection.
 
 Quaternion strings follow the same exact UTF-8 count/copy contract as the vector surfaces.
+
+## Matrix operations
+
+`matrix.h` exposes zero and 16-component construction, Identity, the seven XNA direction and
+translation properties, decomposition/determinant, exact equality/hash/string routes, all
+billboard/rotation/view/projection/scale/shadow/translation/reflection/world factories and every
+arithmetic or quaternion-transform operation. Matrices stay row-major and use the fixed-layout
+`CNA_Matrix` value directly.
+
+Nullable `CNA_Vector3` pointers represent the optional billboard forward vectors. Native argument
+exceptions from perspective factories become `CNA_RESULT_INVALID_ARGUMENT` without changing the
+output. Decomposition reports its native Boolean separately while returning scale/Identity
+rotation/translation even for singular scale; singular inversion retains canonical IEEE
+non-finite components.

@@ -809,6 +809,16 @@
       "tests": "every entry point, overload-equivalent operations, rotation factories, interpolation, IEEE normalization, exact strings, aliasing and null failures in strict-C `QuaternionSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B3a"
+    },
+    {
+      "id": "matrix-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Matrix\\.hpp$",
+      "kinds": ["constant", "constructor", "method", "operator"],
+      "mapping": "`cna_matrix_*` construction, direction/translation properties, decomposition, determinant, member/static/operator math, all factories and exact UTF-8 count/copy operations",
+      "tests": "every entry point, overload-equivalent operations, row-major fields, properties, decomposition/singularity, projection failures, IEEE inversion and exact strings in strict-C `MatrixSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B3b"
     }
   ]
 }
