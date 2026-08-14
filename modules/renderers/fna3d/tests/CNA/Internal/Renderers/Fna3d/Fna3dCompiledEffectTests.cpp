@@ -197,6 +197,10 @@ namespace
         bool includeSampler = false;
         std::vector<SyntheticSamplerState> samplerStates;
         std::uint32_t samplerRegister = 0;
+        /// Names a constant in the shader's constant table that no effect parameter declares.
+        /// MojoShader then fails while it is already several objects into building the effect,
+        /// which is the deterministic mid-construction failure the lifecycle suite needs.
+        bool breakShaderSymbolBinding = false;
     };
 
     std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
@@ -226,7 +230,8 @@ namespace
      * needs a real program even though the shader body itself is trivial. `mov oC0, c0` keeps the
      * generated GLSL/SPIR-V valid on every profile FNA3D can select at runtime.
      */
-    std::vector<std::uint8_t> BuildSyntheticPixelShader(std::uint32_t samplerRegister)
+    std::vector<std::uint8_t> BuildSyntheticPixelShader(std::uint32_t samplerRegister,
+                                                       bool breakSymbolBinding = false)
     {
         constexpr std::uint32_t versionToken = 0xFFFF0200u;
         std::vector<std::uint8_t> ctab;
@@ -274,7 +279,8 @@ namespace
             ctab.push_back(0);
             return offset;
         };
-        const std::uint32_t tintName = appendCtabString("Tint");
+        const std::uint32_t tintName =
+            appendCtabString(breakSymbolBinding ? "NoSuchParameter" : "Tint");
         const std::uint32_t samplerName = appendCtabString("FxSampler");
         const std::uint32_t target = appendCtabString("ps_2_0");
         const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
@@ -538,7 +544,7 @@ namespace
         while ((bytes.size() & 3u) != 0) bytes.push_back(0);
 
         const std::vector<std::uint8_t> shader =
-            BuildSyntheticPixelShader(options.samplerRegister);
+            BuildSyntheticPixelShader(options.samplerRegister, options.breakShaderSymbolBinding);
         AppendUInt32(bytes, pixelShaderObjectIndex);
         AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
         bytes.insert(bytes.end(), shader.begin(), shader.end());
@@ -1494,6 +1500,156 @@ TEST(Fna3dCompiledEffectTest, DeviceDisposalReleasesCompiledEffectBeforeRenderer
     EXPECT_NO_THROW(device.Dispose());
     EXPECT_TRUE(effect->getIsDisposedProperty());
     EXPECT_NO_THROW(effect.reset());
+}
+
+TEST(Fna3dCompiledEffectTest, CompiledEffectSurvivesDeviceReset)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
+    effect.getParametersProperty()["WorldViewProj"]->SetValue(Matrix::getIdentityProperty());
+    effect.getParametersProperty()["DiffuseColor"]->SetValue(Vector4(0.0f, 1.0f, 0.0f, 1.0f));
+    effect.getParametersProperty()["ShaderIndex"]->SetValue(3);
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+
+    PresentationParameters parameters = device.getPresentationParametersProperty().Clone();
+    parameters.setBackBufferWidthProperty(
+        parameters.getBackBufferWidthProperty() / 2 > 0
+            ? parameters.getBackBufferWidthProperty() / 2 : 64);
+    parameters.setBackBufferHeightProperty(
+        parameters.getBackBufferHeightProperty() / 2 > 0
+            ? parameters.getBackBufferHeightProperty() / 2 : 64);
+    ASSERT_NO_THROW(device.Reset(parameters));
+
+    // The native effect belongs to the FNA3D device, which Reset() reconfigures rather than
+    // recreates, so the same instance must still reflect, apply and draw afterwards.
+    ASSERT_EQ(effect.getParametersProperty()["ShaderIndex"]->GetValueInt32(), 3);
+
+    device.setRasterizerStateProperty(RasterizerState::CullNone);
+    device.setDepthStencilStateProperty(DepthStencilState::None);
+    device.Clear(Color::Black);
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+
+    const VertexPositionColor vertices[6] = {
+        { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
+        { Vector3(-1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(-1.0f, 1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, -1.0f, 0.5f), Color::White },
+        { Vector3(1.0f, 1.0f, 0.5f), Color::White },
+    };
+    device.DrawUserPrimitives(PrimitiveType::TriangleList, vertices, 0, 2);
+
+    const auto& viewport = device.getViewportProperty();
+    const Rectangle center(viewport.getWidthProperty() / 2,
+                           viewport.getHeightProperty() / 2, 1, 1);
+    Color pixel(0, 0, 0, 0);
+    device.GetBackBufferData(&center, &pixel, 0, 1);
+    EXPECT_NEAR(pixel.getGProperty(), 255, 2);
+}
+
+TEST(Fna3dCompiledEffectTest, CloneChainsStayIndependentInAnyDisposalOrder)
+{
+    GraphicsDevice device;
+    auto root = std::make_unique<Effect>(device, LoadStockEffect("BasicEffect.fxb"));
+    root->getParametersProperty()["ShaderIndex"]->SetValue(1);
+
+    std::vector<std::unique_ptr<Effect>> chain;
+    Effect* previous = root.get();
+    for (int generation = 0; generation < 4; ++generation)
+    {
+        std::unique_ptr<Effect> next(previous->Clone());
+        next->getParametersProperty()["ShaderIndex"]->SetValue(generation + 2);
+        previous = next.get();
+        chain.push_back(std::move(next));
+    }
+
+    // Each generation copies the values it was cloned from and then diverges independently.
+    EXPECT_EQ(root->getParametersProperty()["ShaderIndex"]->GetValueInt32(), 1);
+    for (std::size_t generation = 0; generation < chain.size(); ++generation)
+    {
+        EXPECT_EQ(chain[generation]->getParametersProperty()["ShaderIndex"]->GetValueInt32(),
+                  static_cast<int>(generation) + 2);
+        EXPECT_NO_THROW(chain[generation]->getCurrentTechniqueProperty()
+                            ->getPassesProperty()[0].Apply());
+    }
+
+    // Disposing the middle of the chain must not disturb either end.
+    chain[1].reset();
+    EXPECT_NO_THROW(root->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    root.reset();
+    EXPECT_NO_THROW(chain[3]->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+    EXPECT_EQ(chain[3]->getParametersProperty()["ShaderIndex"]->GetValueInt32(), 5);
+}
+
+TEST(Fna3dCompiledEffectTest, DisposedCompiledEffectRejectsEveryLaterApply)
+{
+    GraphicsDevice device;
+    Effect effect(device, LoadStockEffect("BasicEffect.fxb"));
+    effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+    effect.Dispose();
+
+    EXPECT_THROW(effect.Apply(), System::ObjectDisposedException);
+    EXPECT_THROW(effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply(),
+                 System::ObjectDisposedException);
+    // Disposal is idempotent, and the device stays usable for a fresh effect.
+    EXPECT_NO_THROW(effect.Dispose());
+    Effect replacement(device, LoadStockEffect("BasicEffect.fxb"));
+    EXPECT_NO_THROW(replacement.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
+}
+
+TEST(Fna3dCompiledEffectTest, RepeatedNativeConstructionFailureLeavesTheDeviceUsable)
+{
+    GraphicsDevice device;
+    SyntheticEffectOptions broken;
+    broken.includeSampler = true;
+    broken.breakShaderSymbolBinding = true;
+    const auto brokenBytes = BuildSyntheticEffect(broken);
+
+    // MojoShader fails after it has already allocated the parse tree and compiled part of the
+    // object table, which is the point where a leak or a double free would show up.
+    for (int attempt = 0; attempt < 32; ++attempt)
+    {
+        SCOPED_TRACE("attempt " + std::to_string(attempt));
+        try
+        {
+            Effect effect(device, brokenBytes);
+            FAIL() << "a shader symbol with no matching effect parameter must be rejected";
+        }
+        catch (const std::exception& error)
+        {
+            EXPECT_NE(std::string(error.what()).find("parameter"), std::string::npos);
+        }
+    }
+
+    SyntheticEffectOptions valid;
+    valid.includeSampler = true;
+    Effect effect(device, BuildSyntheticEffect(valid));
+    EXPECT_NO_THROW(effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply());
+}
+
+TEST(Fna3dCompiledEffectTest, RepeatedCreateApplyDisposeCyclesStayStable)
+{
+    GraphicsDevice device;
+    const auto bytes = LoadStockEffect("SpriteEffect.fxb");
+    for (int cycle = 0; cycle < 24; ++cycle)
+    {
+        SCOPED_TRACE("cycle " + std::to_string(cycle));
+        Effect effect(device, bytes);
+        effect.getParametersProperty()["MatrixTransform"]->SetValue(
+            Matrix::getIdentityProperty());
+        effect.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        std::unique_ptr<Effect> clone(effect.Clone());
+        clone->getCurrentTechniqueProperty()->getPassesProperty()[0].Apply();
+        // The clone is destroyed first on even cycles and last on odd ones.
+        if ((cycle & 1) == 0) clone.reset();
+        effect.Dispose();
+    }
+    Effect survivor(device, bytes);
+    EXPECT_NO_THROW(survivor.getCurrentTechniqueProperty()->getPassesProperty()[0].Apply());
 }
 
 TEST(Fna3dCompiledEffectTest, ContentManagerLoadsXnbEffectAndRendersIt)

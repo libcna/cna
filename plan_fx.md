@@ -29,6 +29,9 @@ Delivered task groups:
 - pass state published through the public `GraphicsDevice` state objects and sampler/texture
   collections exactly as FNA's `Effect.cs` does, instead of into renderer-private caches, with a
   group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
+- lifecycle coverage for device reset, out-of-order clone-chain disposal, disposed-effect
+  rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles
+  (`FX-038`);
 - the same fixture builder extended with a hand-assembled Shader Model 2.0 program and its
   Direct3D 9 constant table, which is what makes MojoShader report sampler state registers, plus
   per-slot sampler conformance for addressing, LOD bias, mip level, anisotropy, the full
@@ -72,8 +75,8 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   an independent normalized FNA oracle (`FX-004`, `FX-005`); the synthetic state-only fixture
   already supplies the remaining deterministic reflection/pass/render-state coverage without a
   proprietary compiler dependency;
-- a reusable coverage-guided fuzz harness, sanitizer/reset stress runs, performance baselines, and
-  full project regressions (`FX-038`, remaining `FX-050`–`FX-054` work);
+- a reusable coverage-guided fuzz harness, sanitizer stress runs, performance baselines, and full
+  project regressions (remaining `FX-050`–`FX-054` work);
 - additional renderer implementations (`FX-060`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
   (`FX-062`) and Vulkan (`FX-064`–`FX-065`). Until each passes the shared contract, its correct
   behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
@@ -437,7 +440,7 @@ must be accepted before a row can close.
 | FX-035 | Prevent `PrepareDrawEXT` from overwriting a compiled pass while preserving vertex/index/stream binding | FX-024, FX-033 | Arbitrary semantics, indexed/non-indexed, multi-stream, and instancing tests render correctly |
 | FX-036 | Enable `CompiledEffects` only for FNA3D and run shared capability/unsupported tests | FX-025, FX-032, FX-033, FX-034, FX-035 | FNA3D is true and every incomplete backend remains false with explicit rejection |
 | FX-037 | Add FNA3D golden-pixel tests for 3D, SpriteBatch, multi-technique, multi-pass, parameters, textures, and pass states | FX-004, FX-036 | Deterministic results match the FNA oracle within documented tolerances |
-| FX-038 | Add FNA3D lifecycle, reset, repeated-clone, and failure-injection tests | FX-019, FX-036 | No leaks, UAFs, stale current effect, or double destruction under sanitizers |
+| FX-038 | Add FNA3D lifecycle, reset, repeated-clone, and failure-injection tests | FX-019, FX-036 | **Done** apart from the sanitizer run tracked by FX-052. Device reset, four-generation clone chains disposed out of order, disposed-effect rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles all pass |
 
 ### Phase E - XNB Content Pipeline
 
