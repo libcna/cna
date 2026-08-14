@@ -86,6 +86,23 @@ typedef struct CNA_StringView {
 } CNA_StringView;
 
 /**
+ * @brief Represents an unpacked 8-bit-per-channel RGBA color value.
+ */
+typedef struct CNA_Color {
+    /** @brief Red channel in the inclusive range 0 through 255. */
+    uint8_t r;
+
+    /** @brief Green channel in the inclusive range 0 through 255. */
+    uint8_t g;
+
+    /** @brief Blue channel in the inclusive range 0 through 255. */
+    uint8_t b;
+
+    /** @brief Alpha channel in the inclusive range 0 through 255. */
+    uint8_t a;
+} CNA_Color;
+
+/**
  * @brief Gets the most recent error information for the calling thread.
  *
  * @param out_info Caller-provided versioned structure to receive the error information.

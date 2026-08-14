@@ -8,5 +8,6 @@
  */
 #include "CNA/C/abi.h"
 #include "CNA/C/core.h"
+#include "CNA/C/runtime.h"
 
 #endif

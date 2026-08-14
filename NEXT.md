@@ -1,21 +1,22 @@
 # NEXT.md
 
-## C BINDING / C ABI — IMPLEMENTATION AUTHORIZED; PHASE B1 COMPLETE (2026-08-14)
+## C BINDING / C ABI — HEADLESS RUNTIME VERTICAL SLICE COMPLETE (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. Phases B0 (`CBIND-001`–`006`) and B1 (`CBIND-007`–`011`) are
-> complete: `docs/c-api/` defines the contract and the opt-in `modules/c-api/` now builds a C17
-> `libcna_c_api` with only public `cna_*` exports plus pure-C compile/link/runtime tests. The work
+> API** through C-native mappings. `CBIND-001`–`020` are complete: `docs/c-api/` defines the
+> contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
+> the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS. The work
 > deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig, Go, Swift, or other
 > language-binding work.
 
-> B2 now has the exception/error, UTF-8, buffer and public-header boundary substrate
-> (`CBIND-012`, `015`, `016`). Its handle ownership and first POD conversion are intentionally
-> completed by the B3 runtime adapter (`CBIND-013`, `014`, `017`–`021`), rather than inventing a
-> synthetic runtime. A machine-checked coverage matrix will prevent untracked public CNA symbols
-> from being omitted.
+> `CBIND-021` was attempted against `SDL_RENDERER` with an available display but the clean build
+> stops in the existing `cna_graphics_core` archive step (`ranlib: libcna_graphics_core.a: No such
+> file`) before C API linkage. Resolve or otherwise validate that native-renderer archive issue,
+> then rerun the same C lifecycle source. B4's borrowed graphics-device capability mapping,
+> `Texture2D`, batched `SpriteBatch` and input snapshots follow; the coverage matrix remains the
+> guard against omitted public CNA symbols.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

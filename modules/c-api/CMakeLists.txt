@@ -13,6 +13,7 @@ endfunction()
 add_library(cna_c_api SHARED
     src/CnaCApi.cpp
     src/CnaCApiDetail.cpp
+    src/CnaCApiRuntime.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)
 
@@ -32,8 +33,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_core)
-cna_c_api_enable_strict_warnings(cna_c_api)
+target_link_libraries(cna_c_api PRIVATE cna_runtime)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -51,6 +51,8 @@ install(EXPORT CNACTargets
 )
 
 if(CNA_BUILD_TESTS)
+    find_package(Threads REQUIRED)
+
     add_custom_target(cna_c_api_header_audit
         COMMAND ${CMAKE_COMMAND}
             -DCNA_C_API_INCLUDE_DIRECTORY=${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -87,6 +89,19 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
+    add_executable(cna_c_api_lifecycle_smoke
+        tests/pure_c/LifecycleSmoke.c
+    )
+    set_target_properties(cna_c_api_lifecycle_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_lifecycle_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_lifecycle_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_lifecycle_smoke)
+    add_test(NAME CApi_LifecycleSmoke COMMAND cna_c_api_lifecycle_smoke)
+
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
     set_target_properties(cna_c_api_header_c PROPERTIES
         C_STANDARD 17
@@ -110,7 +125,6 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    find_package(Threads REQUIRED)
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_handle_registry_test)
     add_test(NAME CApi_HandleRegistry COMMAND cna_c_api_handle_registry_test)

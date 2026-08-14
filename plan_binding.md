@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — Phase B1 completed; Phase B2 in progress (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 HEADLESS vertical slice completed; native-renderer smoke pending (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -174,8 +174,8 @@ any CNA C++ object.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-012 | Implement result and structured-error boundary | ✅ | The thread-local versioned error/query/copy substrate is backed by a reusable exception firewall. It maps allocation, argument/range, I/O, standard and unknown C++ failures to stable results/categories without exposing exception objects; focused tests verify mapping and diagnostic copying. |
-| CBIND-013 | Implement validated handle registry | 🔄 | Internal slot/generation/kind/thread-affinity registry and C++ stale/double-release/reuse tests exist. Runtime ownership and public handle operations arrive with the B3 game/runtime adapter. |
-| CBIND-014 | Implement neutral value and string conversion | 🔄 | UTF-8 string-view validation/copy is implemented and tested, including nullability, overlong encodings and optional embedded-NUL rejection. `CNA_GameTime` and first-slice POD layout land with the B3 runtime adapter; no C POD is reinterpreted as a C++ object. |
+| CBIND-013 | Implement validated handle registry | ✅ | Slot/generation/kind/thread-affinity validation now backs the public owned `CNA_Game` handle as well as focused stale/double-release/reuse tests. The one-active-game state is released only after callback/native teardown; wrong-thread and stale public calls fail safely. |
+| CBIND-014 | Implement neutral value and string conversion | ✅ | UTF-8 string-view validation/copy covers nullability, overlong encodings and optional embedded-NUL rejection. The first vertical slice adds independently laid out/tested `CNA_GameTime` and `CNA_Color` POD values; no C POD is reinterpreted as a C++ object. |
 | CBIND-015 | Implement buffer/count-copy helpers | ✅ | Reusable pointer/count and element-size helpers validate null/zero cases, checked `uint64_t` multiplication and native-size conversion. Focused tests cover zero/null, nonzero-null and overflow; error-copy tests cover undersized capacity with no partial write. |
 | CBIND-016 | Audit the Sharp Runtime boundary | ✅ | `docs/c-api/SHARP_RUNTIME_BOUNDARY.md` records the mapping table. A CMake lexical scanner and strict C17/C++23 compiler gates audit each public header; the pure-C umbrella consumer remains the authoritative boundary test. |
 
@@ -186,11 +186,11 @@ handle, conversion, ownership or exception-escape defect in the exercised paths.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-017 | Design and implement runtime/game creation | ⬜ | Introduce versioned creation/configuration structs and a runtime/game handle model that maps to CNA's actual initialization and compile-time renderer selection. It must report unsupported configuration rather than inventing runtime renderer switching. |
-| CBIND-018 | Implement lifecycle callback bridge | ⬜ | Expose only C callback tables plus context pointers for the approved load/update/draw/unload/exit lifecycle. Borrowed handles passed to callbacks have documented lifetime; callback failures, re-entrancy and exit requests follow B0 exactly. |
-| CBIND-019 | Expose frame timing, clear and window-title minimum | ⬜ | Map `GameTime`, deterministic frame processing/run policy, exit, clear and UTF-8 window title through the C contract. No internal `Game`, `GameWindow`, `System::String` or renderer pointer is exposed. |
-| CBIND-020 | Add C-only headless lifecycle test | ⬜ | A standalone C program creates a deterministic game, receives callbacks, clears a frame, requests exit and tears down under the HEADLESS renderer. It asserts callback order, values, error behavior and no leaked handles. |
-| CBIND-021 | Add native-renderer lifecycle smoke test | ⬜ | Run the same C source under one supported windowed renderer/configuration when the environment permits it. Record renderer-specific skips and never claim pixel validation from a headless-only run. |
+| CBIND-017 | Design and implement runtime/game creation | ✅ | Versioned `CNA_GameCreateInfo`/`CNA_GameCallbacks` create one owned, generation-checked C game over the canonical CNA `Game`. The compile-time renderer remains CNA-owned; no runtime renderer switch is invented. |
+| CBIND-018 | Implement lifecycle callback bridge | ✅ | The copied C callback table covers load/update/draw/unload/exit with a caller context, callback-scoped game handle, `CNA_GameTime` where applicable and copied versioned callback diagnostics. Failure stops the loop and reports `CNA_RESULT_CALLBACK`; run/destroy re-entry is refused. |
+| CBIND-019 | Expose frame timing, clear and window-title minimum | ✅ | `CNA_GameTime`, one-frame/blocking run, exit request, `CNA_Color` clear and UTF-8 title functions adapt canonical `Game`, `GraphicsDevice` and `GameWindow` operations without exposing their C++ types. |
+| CBIND-020 | Add C-only headless lifecycle test | ✅ | `LifecycleSmoke.c` creates, drives, clears, exits and destroys C games under HEADLESS; it tests callback order/values, callback diagnostics, stale handles, wrong-thread rejection and a blocking run path. |
+| CBIND-021 | Add native-renderer lifecycle smoke test | 🔄 | SDL renderer configuration and display availability were verified on 2026-08-14, but its clean build stops before C API linkage at the existing `cna_graphics_core` archive failure (`ranlib: libcna_graphics_core.a: No such file`). The C lifecycle source has therefore not run on a native renderer; HEADLESS remains the only completed execution evidence. |
 
 **B3 gate:** a C application can own its lifecycle, receive callbacks, exercise UTF-8 and error
 conversion, and shut down cleanly without any C++ source or header dependency.
@@ -304,8 +304,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-012`, `CBIND-015` and `CBIND-016` are ✅; `CBIND-013` and
-`CBIND-014` are 🔄; `CBIND-017` through `CBIND-044` are ⬜ **not started**. The exported ABI is
-still experimental `0.1.0` and currently contains only the version and error-query substrate. No
-language-specific binding exists. B3 will complete runtime-owned handles and add the first
-`CNA_GameTime` POD alongside the game lifecycle adapter.
+`CBIND-000` through `CBIND-020` are ✅; `CBIND-021` is 🔄 on an existing native-renderer archive
+build failure; `CBIND-022` through `CBIND-044` are ⬜ **not started**. The exported ABI is still
+experimental `0.1.0`: it contains the version/error substrate and the HEADLESS-tested C game
+lifecycle slice, not complete public CNA coverage. No language-specific binding exists. After the
+native-renderer archive issue is resolved, rerun CBIND-021; B4 2D graphics/input and the complete
+public-surface inventory remain subsequent work.

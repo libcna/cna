@@ -9,11 +9,11 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
-> **C ABI tracking note (2026-08-14):** The experimental C ABI foundation is now implemented in
-> `modules/c-api/` (`CBIND-007`–`011`): version/error-query declarations, a shared library and
-> pure-C smoke tests. It does not yet adapt an XNA/CNA framework type, so this XNA C++ API audit has
-> no additional rows. C API status and the complete-public-surface mapping are tracked in
-> `plan_binding.md` and `docs/c-api/COVERAGE.md`.
+> **C ABI tracking note (2026-08-14):** `modules/c-api/` now has the experimental C17 ABI
+> substrate and a HEADLESS-tested adapter slice for `Game`, `GameTime`, `GameWindow` title and
+> `GraphicsDevice::Clear` (`CBIND-007`–`020`). This does not constitute broad XNA C API coverage:
+> status and the required complete-public-surface mapping are tracked in `plan_binding.md` and
+> `docs/c-api/COVERAGE.md`.
 
 ---
 

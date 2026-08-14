@@ -19,9 +19,10 @@ or content-loaded values to a content manager. The C mapping names that rule per
 must either retain the required parent internally or fail with `CNA_RESULT_INVALID_STATE` after its
 parent is disposed; it must never become an unchecked dangling C++ pointer.
 
-Destroying the runtime invalidates every remaining handle. The runtime shutdown path releases native
-resources in its documented dependency order. C code remains responsible for explicit release before
-shutdown so release failures are observable and leak tests remain meaningful.
+The initial runtime adapter permits one C-owned game. `cna_game_destroy` is its owned-handle release
+operation: it invalidates the game only after exit/unload notification and native disposal complete.
+C code remains responsible for explicit release before shutdown so release failures are observable
+and leak tests remain meaningful.
 
 ## Values, strings and arrays
 

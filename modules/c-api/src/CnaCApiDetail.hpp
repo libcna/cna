@@ -107,6 +107,33 @@ public:
 
     CNA_Result GetKind(CNA_Handle handle, ObjectKind* outKind) const;
 
+    template<typename TObject>
+    CNA_Result Get(
+        const CNA_Handle handle,
+        const ObjectKind expectedKind,
+        std::shared_ptr<TObject>* const outObject) const
+    {
+        if (outObject == nullptr || expectedKind == ObjectKind::Unknown) {
+            return CNA_RESULT_INVALID_ARGUMENT;
+        }
+
+        std::lock_guard lock(mutex_);
+        Slot* slot = nullptr;
+        const CNA_Result result = FindSlotLocked(handle, &slot);
+        if (result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (slot->kind != expectedKind) {
+            return CNA_RESULT_INVALID_HANDLE;
+        }
+        if (slot->creationThread != std::this_thread::get_id()) {
+            return CNA_RESULT_THREAD;
+        }
+
+        *outObject = std::static_pointer_cast<TObject>(slot->object);
+        return CNA_RESULT_SUCCESS;
+    }
+
     CNA_Result Release(CNA_Handle handle);
 
 private:

@@ -2,10 +2,17 @@
 
 ## Callback representation
 
-Callbacks use an explicitly typed C function pointer and a caller-owned `void* context`. Game
-lifecycle callbacks return `CNA_Result`; data arguments are pointers to const C POD structs; CNA
-object handles supplied during a callback are borrowed. Callback declarations document whether the
-context can be null and the exact ownership of every handle passed to them.
+Callbacks use an explicitly typed C function pointer and a caller-owned `void* context`. The first
+implemented callback table is `CNA_GameCallbacks`, copied by `cna_game_create`. Its function
+pointers and context remain caller-owned and must remain valid until `cna_game_destroy` returns.
+The game handle supplied to a lifecycle callback is borrowed for that callback duration; it may be
+used with callback-safe operations but must not be retained or destroyed.
+
+Each game lifecycle callback receives a CNA-initialized `CNA_CallbackError`. If the callback returns
+anything other than `CNA_RESULT_SUCCESS`, it may fill the versioned `message` string view. CNA
+copies valid UTF-8 diagnostic bytes before the callback returns, stops the game at a safe point and
+reports `CNA_RESULT_CALLBACK` to the enclosing C API caller. An invalid, empty or omitted callback
+diagnostic becomes a stable generic callback failure message.
 
 The owner keeps a callback context valid until the associated registration is successfully removed
 or its source object/runtime has finished destruction. CNA does not take ownership of arbitrary
@@ -28,10 +35,11 @@ main-thread-dispatch facility must state queue ownership, completion semantics a
 ## Lifecycle callbacks and re-entrancy
 
 Lifecycle callbacks execute synchronously on the creation thread at CNA's documented safe points.
-Within an update/draw callback, a caller may use the explicitly callback-safe graphics/input
-operations and request loop exit. It must not recursively enter the run/tick loop, destroy the
-active runtime, unregister the currently executing callback, or invoke an operation documented as
-non-reentrant. Such calls return `CNA_RESULT_INVALID_STATE` where CNA can diagnose them.
+The current game callbacks may call `cna_game_request_exit`, `cna_game_clear` and
+`cna_game_set_window_title`; they must not recursively call `cna_game_run`,
+`cna_game_run_one_frame` or `cna_game_destroy`. These non-reentrant calls return
+`CNA_RESULT_INVALID_STATE`. Game timing is non-null only for update and draw; it is null for load,
+unload and exit notifications.
 
 A callback result other than `CNA_RESULT_SUCCESS` is handled as described in
 [`ERRORS.md`](ERRORS.md); C code must return normally. Throwing a C++ exception, `longjmp` across a
@@ -44,6 +52,6 @@ CNA frame or freeing a live callback context is unsupported behavior.
 3. Release the game/runtime handle on its creation thread.
 4. Do not call CNA with any remaining handle after successful shutdown.
 
-Runtime destruction synchronizes callback teardown before it invalidates handles. It then releases
-native resources, records disposal failures through the error contract, and marks the runtime
-closed. A new runtime may be created only after the previous runtime has fully closed.
+`cna_game_destroy` synchronizes callback teardown before it invalidates the game handle. It invokes
+the exit then unload callbacks when they have not already occurred, releases native resources and
+allows a new C-owned game to be created only after the previous handle has fully closed.

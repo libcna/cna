@@ -6,8 +6,20 @@ The final C API covers every public CNA symbol. This matrix is the authoritative
 claim. A row identifies the source C++ type/member/constant/event, its C-native mapping, owning C
 header, implementation/test locations, capability limitations and status.
 
-The matrix is intentionally empty at Phase B0 because no C header exists. Empty rows mean
-**unimplemented**, never implicitly unsupported or complete.
+The matrix began empty at Phase B0. The initial adapter evidence below is deliberately a small
+implemented slice, not a substitute for the complete generated inventory required by `CBIND-033`.
+Any public symbol without a later inventory row remains **unimplemented**, never implicitly
+unsupported or complete.
+
+## Implemented initial adapter slice
+
+| Source header and symbol | C mapping | C header/declaration | Ownership and thread rule | C-only evidence | Status |
+|---|---|---|---|---|---|
+| `Game` constructor, `RunOneFrame`, `Run`, `Exit`, `Dispose` | Owned generation-checked game handle | `runtime.h`: `cna_game_create`, `cna_game_run_one_frame`, `cna_game_run`, `cna_game_request_exit`, `cna_game_destroy` | One active game; creation-thread calls; destroy is non-reentrant | `LifecycleSmoke.c` | Implemented slice |
+| `Game` lifecycle hooks | Copied C callback table and context | `runtime.h`: `CNA_GameCallbacks`, `CNA_CallbackError` | Callback-scoped handle; callback error copied before return | `LifecycleSmoke.c` | Implemented slice |
+| `GameTime` getters | Fixed-layout value snapshot | `runtime.h`: `CNA_GameTime` | Borrowed callback value | `AbiHeaderC.c`, `AbiHeaderCpp.cpp`, `LifecycleSmoke.c` | Implemented slice |
+| `GameWindow::setTitleProperty` | UTF-8 string view | `runtime.h`: `cna_game_set_window_title` | Creation thread; copies text | `LifecycleSmoke.c` | Implemented slice |
+| `GraphicsDevice::Clear(Color)` | `CNA_Color` POD + game operation | `core.h`, `runtime.h`: `CNA_Color`, `cna_game_clear` | Creation thread; callback-safe | `AbiHeaderC.c`, `AbiHeaderCpp.cpp`, `LifecycleSmoke.c` | Implemented slice |
 
 ## Source inventory boundary
 
