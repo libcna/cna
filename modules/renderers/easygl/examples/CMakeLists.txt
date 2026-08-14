@@ -258,6 +258,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-340: an opaque dial must be drawn before the nearer transmission
+        # approximation; the inverse order writes glass depth and hides the dial behind it.
+        cna_easygl_test(cna_test_easygl_gltf_transmission_ordering
+                        easygl_gltf_transmission_ordering_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_TransmissionOrdering
+            COMMAND cna_test_easygl_gltf_transmission_ordering
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # Task 87: RenderTarget2D → texture → readback
         cna_easygl_test(cna_test_easygl_render_target
                         easygl_render_target_test.cpp)

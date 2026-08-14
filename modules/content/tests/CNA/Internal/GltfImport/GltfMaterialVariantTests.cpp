@@ -11,6 +11,7 @@
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "GltfFixtureCorpus.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -27,6 +28,7 @@ using CnaTest::GltfOracle::LoadedFixture;
 using CnaTest::GltfOracle::Path;
 using CnaTest::GltfOracle::Strings;
 using Microsoft::Xna::Framework::Content::ContentManager;
+using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::Model;
@@ -78,6 +80,10 @@ TEST(GltfMaterialVariants, CoreExtractionKeepsTheDefaultAndDecodesEveryMappedMat
     EXPECT_EQ(48, defaultMesh.stride);
     EXPECT_TRUE(variants[0].mesh.usePbr);
     EXPECT_EQ(48, variants[0].mesh.stride);
+    EXPECT_TRUE(variants[0].mesh.transmissionApproximatedEXT);
+    EXPECT_NEAR(0.5f, variants[0].mesh.transmissionFactorEXT, kTolerance);
+    EXPECT_EQ(AlphaModeEXT::Blend, variants[0].mesh.material.alphaMode);
+    EXPECT_NEAR(0.5f, variants[0].mesh.material.baseColorFactor.W, kTolerance);
     EXPECT_FALSE(variants[1].mesh.usePbr);
     EXPECT_TRUE(variants[1].mesh.unlitEXT);
     EXPECT_EQ(32, variants[1].mesh.stride)
@@ -162,6 +168,8 @@ TEST(GltfMaterialVariants, SelectionSwapsCompleteStateAndSparseSelectionRestores
     EXPECT_NEAR(0.05f, blueColor.X, kTolerance);
     EXPECT_NEAR(0.2f, blueColor.Y, kTolerance);
     EXPECT_NEAR(0.9f, blueColor.Z, kTolerance);
+    EXPECT_EQ(AlphaModeEXT::Blend, blue->getAlphaModeEXTProperty());
+    EXPECT_NEAR(0.5f, blue->getAlphaProperty(), kTolerance);
 
     model.setMaterialVariantEXTProperty(1);
     EXPECT_EQ(1, model.getMaterialVariantEXTProperty());

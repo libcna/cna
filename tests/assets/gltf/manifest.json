@@ -1502,6 +1502,8 @@
       ],
       "features": [
         "KHR_materials_variants",
+        "KHR_materials_transmission",
+        "transmission alpha ordering",
         "source-order variant identity",
         "sparse variant mapping",
         "PBR-to-unlit variant",
@@ -3843,18 +3845,18 @@
     },
     {
       "path": "mat-material-variants.expected.json",
-      "bytes": 8546,
-      "sha256": "594ad22372cc1d4804f427bd5aa0f60a6c056e6e795d657a597a969cb20f1799"
+      "bytes": 8913,
+      "sha256": "f749b3380aaef4381aa1a0a24819f1087f3aa1123bc04d3a644f35b8eaf12240"
     },
     {
       "path": "mat-material-variants.glb",
-      "bytes": 1628,
-      "sha256": "8b51cb7677d173c454d7217689de940d36e54697110b41c5c83f898aad3e4ca2"
+      "bytes": 1728,
+      "sha256": "b064032d680e24b7a5737fbb668012a5f61f606c55d1c2362ce02a4123e67899"
     },
     {
       "path": "mat-material-variants.gltf",
-      "bytes": 3135,
-      "sha256": "777858d70054b21c4ba481c6ec416b1fbe302106526e8a9a3e12f5d6a7ecd306"
+      "bytes": 3286,
+      "sha256": "138dff69bd104d71f6a22154898f0d73a66a39cd04bbbd7bc6ee8cc9693eecf1"
     },
     {
       "path": "mat-material-variants.ib.bin",

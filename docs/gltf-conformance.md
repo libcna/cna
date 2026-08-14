@@ -746,11 +746,16 @@ the per-draw determinant sign into `w`, the mirrored placement produced exact bl
 `EasyGL_Gltf_AlphaBlend` adds `mat-factor-only-gold`: its straight gold RGB at alpha 0.5 composites
 over blue to `(128,92,168)` with application-selected `NonPremultiplied`, while `Opaque` and the
 wrong premultiplied preset produce distinct `(255,184,80)` and `(255,184,208)` controls.
+`EasyGL_Gltf_TransmissionOrdering` adds a depth-sensitive two-layer use of
+`mat-material-variants`: the opaque red default stands in for a dial and the nearer blue variant
+authors `KHR_materials_transmission=0.5`. Glass-first hides the later dial and produces
+`(7,26,115)` over black; dial-first followed by straight-alpha glass keeps both authored colours
+visible at `(83,38,127)` on both EasyGL profiles.
 
-What those focused tests do **not** provide is the corpus rung: beyond those eight fixture
+What those focused tests do **not** provide is the corpus rung: beyond those nine fixture
 witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
 tolerance, a reproducible PNG capture path and the independent two-process determinism check.
-Registering eight successful assets as `CnaGltfConformanceL7` would make the ladder look complete
+Registering nine successful assets as `CnaGltfConformanceL7` would make the ladder look complete
 without testing the corpus.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
@@ -894,7 +899,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; texture view without a texture |
 | `mat-alpha-mask-cutoff` | materials | L1, L2, L3 | alphaMode MASK; non-default alphaCutoff; alpha test reaches the shader; no texture maps |
 | `mat-unimplemented-extensions` | materials | L1, L2, L3 | KHR_materials_clearcoat; KHR_materials_sheen; KHR_materials_volume; ignored extension reporting |
-| `mat-material-variants` | materials | L1, L2, L3, L4, L5 | KHR_materials_variants; source-order variant identity; sparse variant mapping; PBR-to-unlit variant; default material reset |
+| `mat-material-variants` | materials | L1, L2, L3, L4, L5 | KHR_materials_variants; KHR_materials_transmission; transmission alpha ordering; source-order variant identity; sparse variant mapping; PBR-to-unlit variant; default material reset |
 | `mat-unlit` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; non-PBR material model; vertex stride 32 |
 | `mat-unlit-vertex-color-alpha` | materials | L1, L2, L3, L4, L5 | KHR_materials_unlit; COLOR_0; translucent baseColorFactor; alphaMode BLEND; non-PBR material model |
 | `mat-specular-glossiness` | materials | L1, L2, L3, L4, L5 | KHR_materials_pbrSpecularGlossiness; archived extension; converted to metallic-roughness; dropped specular tint |

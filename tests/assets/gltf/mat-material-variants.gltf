@@ -4,6 +4,7 @@
     "generator": "CNA gltf_fixtures"
   },
   "extensionsUsed": [
+    "KHR_materials_transmission",
     "KHR_materials_variants",
     "KHR_materials_unlit"
   ],
@@ -100,6 +101,11 @@
         ],
         "metallicFactor": 0.65,
         "roughnessFactor": 0.25
+      },
+      "extensions": {
+        "KHR_materials_transmission": {
+          "transmissionFactor": 0.5
+        }
       }
     },
     {

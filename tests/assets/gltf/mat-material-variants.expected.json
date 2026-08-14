@@ -1,6 +1,6 @@
 {
   "id": "mat-material-variants",
-  "description": "A red default PBR material, a blue PBR variant, an unlit green variant that changes effect class and vertex stride, and a third variant intentionally unmapped on the primitive. Fresh load and sparse selection keep the default; selection by source index swaps the complete part state.",
+  "description": "An opaque red default PBR material, a blue PBR variant with 0.5 KHR_materials_transmission, an unlit green variant that changes effect class and vertex stride, and a third variant intentionally unmapped on the primitive. The first pair provides a licence-clean dial/glass ordering witness; fresh load and sparse selection keep the default, while selection by source index swaps the complete part state.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -30,6 +30,8 @@
     ],
     "features": [
       "KHR_materials_variants",
+      "KHR_materials_transmission",
+      "transmission alpha ordering",
       "source-order variant identity",
       "sparse variant mapping",
       "PBR-to-unlit variant",
@@ -54,6 +56,7 @@
     "bufferCount": 1,
     "bufferByteLength": 78,
     "extensionsUsed": [
+      "KHR_materials_transmission",
       "KHR_materials_variants",
       "KHR_materials_unlit"
     ],
@@ -319,8 +322,11 @@
             0.05,
             0.2,
             0.9,
-            1.0
-          ]
+            0.5
+          ],
+          "alphaMode": "BLEND",
+          "transmissionFactor": 0.5,
+          "transmissionApproximation": "straight alpha = 1 - factor"
         },
         {
           "variant": 1,

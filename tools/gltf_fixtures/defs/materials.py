@@ -895,10 +895,12 @@ def mat_unimplemented_extensions() -> Fixture:
 
 
 def mat_material_variants() -> Fixture:
-    """Two mapped KHR_materials_variants plus one sparse fallback. Owns GLTF-341/342.
+    """Two mapped KHR_materials_variants plus one sparse fallback. Owns GLTF-340--342.
 
-    The default is a red PBR material, variant 0 another PBR material, and variant 1 unlit. The
-    latter deliberately changes the vertex layout from stride 48 to stride 32, proving that
+    The default is an opaque red PBR material, variant 0 a blue PBR material with 0.5 transmission,
+    and variant 1 unlit. The first pair is also the licence-clean GLTF-340 layering witness: render
+    the red surface as a dial, then the blue transmission approximation as nearer glass. The latter
+    variant deliberately changes the vertex layout from stride 48 to stride 32, proving that
     selection swaps the complete part state rather than only an Effect pointer. Variant 2 has no
     mapping on the primitive: selecting it must restore the default, which separates the
     extension's sparse fallback rule from stale state left by the prior selection.
@@ -908,7 +910,9 @@ def mat_material_variants() -> Fixture:
     # Both extensions are required deliberately: the fixture proves CNA claims variants only once
     # the selection semantics and the unlit alternative are both available, rather than merely
     # noticing the mapping and importing the default material.
-    b.declare_extensions(required=["KHR_materials_variants", "KHR_materials_unlit"])
+    b.declare_extensions(
+        used=["KHR_materials_transmission"],
+        required=["KHR_materials_variants", "KHR_materials_unlit"])
     b.add_root_extension("KHR_materials_variants", {
         "variants": [{"name": name} for name in variant_names],
     })
@@ -934,6 +938,12 @@ def mat_material_variants() -> Fixture:
             "baseColorFactor": [0.05, 0.2, 0.9, 1.0],
             "metallicFactor": 0.65,
             "roughnessFactor": 0.25,
+        },
+        # CNA deliberately approximates this as straight alpha 1 - transmissionFactor. Keeping
+        # the authored base alpha at one makes the expected 0.5 exact and gives GLTF-340 a
+        # discriminating framebuffer composition without adding another corpus identity.
+        "extensions": {
+            "KHR_materials_transmission": {"transmissionFactor": 0.5},
         },
     })
     unlit_variant = b.add_material({
@@ -978,12 +988,15 @@ def mat_material_variants() -> Fixture:
     }
     return Fixture(
         id="mat-material-variants", audit_fixture=None, owning_group="materials",
-        description="A red default PBR material, a blue PBR variant, an unlit green variant that "
-                    "changes effect class and vertex stride, and a third variant intentionally "
-                    "unmapped on the primitive. Fresh load and sparse selection keep the default; "
-                    "selection by source index swaps the complete part state.",
+        description="An opaque red default PBR material, a blue PBR variant with 0.5 "
+                    "KHR_materials_transmission, an unlit green variant that changes effect class "
+                    "and vertex stride, and a third variant intentionally unmapped on the "
+                    "primitive. The first pair provides a licence-clean dial/glass ordering "
+                    "witness; fresh load and sparse selection keep the default, while selection "
+                    "by source index swaps the complete part state.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
-        features=["KHR_materials_variants", "source-order variant identity",
+        features=["KHR_materials_variants", "KHR_materials_transmission",
+                  "transmission alpha ordering", "source-order variant identity",
                   "sparse variant mapping", "PBR-to-unlit variant", "default material reset"],
         spec_anchors=["extensions", "metallic-roughness-material"],
         l3={"primitives": [l3_primitive(
@@ -998,7 +1011,9 @@ def mat_material_variants() -> Fixture:
                 "mappings": [
                     {"variant": 0, "material": blue_variant,
                      "effect": "PbrEffect", "vertexStride": 48,
-                     "baseColorFactor": [0.05, 0.2, 0.9, 1.0]},
+                     "baseColorFactor": [0.05, 0.2, 0.9, 0.5],
+                     "alphaMode": "BLEND", "transmissionFactor": 0.5,
+                     "transmissionApproximation": "straight alpha = 1 - factor"},
                     {"variant": 1, "material": unlit_variant,
                      "effect": "BasicEffect", "vertexStride": 32,
                      "baseColorFactor": [0.1, 0.8, 0.2, 0.75]},
