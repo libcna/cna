@@ -45,7 +45,16 @@
           "index": 0,
           "texCoord": 1
         }
-      }
+      },
+      "emissiveTexture": {
+        "index": 0,
+        "texCoord": 0
+      },
+      "emissiveFactor": [
+        0.35,
+        0.2,
+        0.1
+      ]
     }
   ],
   "textures": [

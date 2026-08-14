@@ -111,10 +111,20 @@ namespace CnaTest::GltfOracle
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"TextureCoordinate", 24, 8},
                                  {"BlendWeight", 32, 16}, {"BlendIndices", 48, 4}, {"Color", 52, 4}};
                 break;
+            case 60:
+                layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
+                                 {"TextureCoordinate", 40, 8}, {"TextureCoordinate1", 48, 8},
+                                 {"Padding", 56, 4}};
+                break;
             case 68:
                 layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
                                  {"TextureCoordinate", 40, 8}, {"BlendWeight", 48, 16},
                                  {"BlendIndices", 64, 4}};
+                break;
+            case 76:
+                layout.fields = {{"Position", 0, 12}, {"Normal", 12, 12}, {"Tangent", 24, 16},
+                                 {"TextureCoordinate", 40, 8}, {"BlendWeight", 48, 16},
+                                 {"BlendIndices", 64, 4}, {"TextureCoordinate1", 68, 8}};
                 break;
             default:
                 layout.known = false;

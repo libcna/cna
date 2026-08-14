@@ -124,6 +124,8 @@ namespace CnaTest::GltfOracle
         std::vector<std::array<float, 4>> tangents;
         /** @brief Per-vertex texture coordinates, empty when the layout has no UV slot. */
         std::vector<std::array<float, 2>> texcoords;
+        /** @brief Per-vertex packed UV1 coordinates, empty outside stride 60/76 layouts. */
+        std::vector<std::array<float, 2>> texcoords1;
         /** @brief Per-vertex colours as the bytes actually packed, empty when uncoloured. */
         std::vector<std::array<std::uint8_t, 4>> colors;
         /** @brief Per-vertex blend weights, empty when unskinned. */

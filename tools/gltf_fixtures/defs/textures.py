@@ -147,18 +147,15 @@ def tex_reference_checkerboard() -> Fixture:
 
 
 def uv1_material() -> Fixture:
-    """A base-colour texture selecting TEXCOORD_1 while TEXCOORD_0 also exists.
-
-    The two sets disagree at every vertex. This is the supported half of CNA's documented
-    single-channel policy: one material may select any one authored set, but maps which select
-    different sets cannot coexist without a reported loss (`GLTF-181`/`GLTF-188`).
-    """
+    """Two material maps simultaneously selecting disjoint TEXCOORD_0/1 streams."""
     b = GltfBuilder("uv1-material")
     image = b.add_image(reference_texture(), name="Reference")
     texture = b.add_texture(source=image, name="Uv1Texture")
     material = b.add_material({
         "name": "Uv1Material",
         "pbrMetallicRoughness": {"baseColorTexture": {"index": texture, "texCoord": 1}},
+        "emissiveTexture": {"index": texture, "texCoord": 0},
+        "emissiveFactor": [0.35, 0.2, 0.1],
     })
     mesh = _quad(b, material, "Uv1Quad", texcoords=_QUAD_TEXCOORDS,
                  texcoords1=_QUAD_TEXCOORDS_1)
@@ -167,18 +164,21 @@ def uv1_material() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="uv1-material", audit_fixture=None, owning_group="textures",
-        description="A textured quad with disjoint TEXCOORD_0 and TEXCOORD_1 streams whose "
-                    "base-colour texture explicitly selects set 1. The packed UVs must be set 1, "
-                    "so an importer hard-wired to TEXCOORD_0 disagrees at every vertex.",
+        description="A textured quad with disjoint TEXCOORD_0 and TEXCOORD_1 streams. Its "
+                    "base-colour map selects authored set 1 while its emissive map simultaneously "
+                    "selects set 0, requiring both packed GPU UV channels and per-map selectors.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
         features=["TEXCOORD_0", "TEXCOORD_1", "baseColorTexture.texCoord 1",
-                  "single selected UV channel"],
+                  "emissiveTexture.texCoord 0", "simultaneous dual UV channels"],
         spec_anchors=_SPEC + ["texture-coordinate"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="Uv1Quad", primitive=0, mode=TRIANGLES,
             positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
-            texcoords=_QUAD_TEXCOORDS_1, indices=_QUAD_INDICES,
-            material=_expected_material(material, "Uv1Material", base_color=True))]},
+            texcoords=_QUAD_TEXCOORDS_1, texcoords1=_QUAD_TEXCOORDS,
+            indices=_QUAD_INDICES,
+            material={**_expected_material(material, "Uv1Material", base_color=True),
+                      "emissiveFactor": [0.35, 0.2, 0.1],
+                      "hasEmissiveTexture": True})]},
         l4=world_positions(b, {mesh: list(_QUAD_POSITIONS)}),
     )
 

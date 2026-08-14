@@ -1607,7 +1607,8 @@
         "TEXCOORD_0",
         "TEXCOORD_1",
         "baseColorTexture.texCoord 1",
-        "single selected UV channel"
+        "emissiveTexture.texCoord 0",
+        "simultaneous dual UV channels"
       ],
       "auditFixture": null
     },
@@ -6030,18 +6031,18 @@
     },
     {
       "path": "uv1-material.expected.json",
-      "bytes": 10084,
-      "sha256": "c4312d918efc812e2f4c4b2fa8791d03dc4d6466bf92a1511240f42200c2916f"
+      "bytes": 10617,
+      "sha256": "f313b3395c96697cf437dfc3352934084eb8fc75648107fea60c702130640acc"
     },
     {
       "path": "uv1-material.glb",
-      "bytes": 1764,
-      "sha256": "de158a71a0c2bfdef585c729a061e14f774a19648b04e1026926e88fb431af0f"
+      "bytes": 1840,
+      "sha256": "6410b5f4b43b901458419c34452d3fa62bbca9a807b3515d2b93a84276bdf79c"
     },
     {
       "path": "uv1-material.gltf",
-      "bytes": 2899,
-      "sha256": "951035f55ac27c293a52e6ef8d9f88ff7670aec0c116819296d72972e1afa54f"
+      "bytes": 3051,
+      "sha256": "7616f15a5674a8923e143f7eb7c1f163f7f132eb35caf87c1fb1d6c7732a7019"
     },
     {
       "path": "uv1-material.ib.bin",
@@ -6050,8 +6051,8 @@
     },
     {
       "path": "uv1-material.vb.bin",
-      "bytes": 192,
-      "sha256": "fadf32ea10762b9c9829382a325414401217be300f6ec81a82afa841cf62f5fd"
+      "bytes": 240,
+      "sha256": "0d343e1cad0760a1419810f0be7a4444ae620aefa80605aaa665732ea13adaf8"
     },
     {
       "path": "xf-deep-chain.expected.json",

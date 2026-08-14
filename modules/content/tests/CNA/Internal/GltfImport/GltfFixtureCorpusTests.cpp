@@ -975,6 +975,20 @@ TEST(GltfConformanceL3, SemanticMeshStreamsMatchTheManifest)
                 ExpectComponents(expectedValues, actualValues, field);
             }
 
+            // GLTF-182: only dual-UV fixtures carry this optional L3 field, keeping the other
+            // generated expectations byte-stable while still comparing the second packed stream
+            // component-for-component where the file genuinely samples it.
+            const JsonValue& expectedTexcoords1 = Member(expected, "texcoords1");
+            if (expectedTexcoords1.type == JsonType::Array &&
+                !expectedTexcoords1.arrayValue.empty() &&
+                !IsKnownDefectField(fixture.Expected(), "L3", "texcoords1"))
+            {
+                const std::vector<double> expectedValues = Numbers(expectedTexcoords1);
+                ASSERT_FALSE(expectedValues.empty())
+                    << "texcoords1: manifest values are not numeric";
+                ExpectComponents(expectedValues, Flatten(dump.texcoords1), "texcoords1");
+            }
+
             const std::vector<double> expectedColors = Numbers(Member(expected, "colors"));
             if (!expectedColors.empty() && !IsKnownDefectField(fixture.Expected(), "L3", "colors"))
             {

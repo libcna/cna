@@ -41,8 +41,14 @@ STRIDE_LAYOUTS: dict[int, list[tuple[str, int, int]]] = {
          ("BlendWeight", 32, 16), ("BlendIndices", 48, 4)],
     56: [("Position", 0, 12), ("Normal", 12, 12), ("TextureCoordinate", 24, 8),
          ("BlendWeight", 32, 16), ("BlendIndices", 48, 4), ("Color", 52, 4)],
+    60: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
+         ("TextureCoordinate", 40, 8), ("TextureCoordinate1", 48, 8),
+         ("Padding", 56, 4)],
     68: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
          ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16), ("BlendIndices", 64, 4)],
+    76: [("Position", 0, 12), ("Normal", 12, 12), ("Tangent", 24, 16),
+         ("TextureCoordinate", 40, 8), ("BlendWeight", 48, 16),
+         ("BlendIndices", 64, 4), ("TextureCoordinate1", 68, 8)],
 }
 
 #: What ExtractMesh writes into a slot whose attribute the source file does not author. These are
@@ -117,8 +123,10 @@ def select_stride(primitive: dict[str, Any]) -> int:
     colored = bool(primitive.get("colors"))
     use_pbr = (not colored) and (not non_pbr_model)
     if skinned:
-        return 56 if colored else (68 if use_pbr else 52)
-    return 24 if colored else (48 if use_pbr else 32)
+        return 56 if colored else ((76 if primitive.get("texcoords1") else 68)
+                                   if use_pbr else 52)
+    return 24 if colored else ((60 if primitive.get("texcoords1") else 48)
+                               if use_pbr else 32)
 
 
 def _tangents_for(primitive: dict[str, Any], count: int) -> list[tuple[float, float, float, float]]:
@@ -157,6 +165,7 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
     positions = primitive["positions"]
     normals = primitive.get("normals") or []
     texcoords = primitive.get("texcoords") or []
+    texcoords1 = primitive.get("texcoords1") or []
     colors = primitive.get("colors") or []
     weights = primitive.get("weights") or []
     joints = primitive.get("joints") or []
@@ -176,6 +185,10 @@ def pack_vertex_buffer(primitive: dict[str, Any], stride: int) -> bytes:
                 field = _f32(normals[v] if v < len(normals) else DEFAULT_NORMAL)
             elif name == "TextureCoordinate":
                 field = _f32(texcoords[v] if v < len(texcoords) else DEFAULT_TEXCOORD)
+            elif name == "TextureCoordinate1":
+                field = _f32(texcoords1[v] if v < len(texcoords1) else DEFAULT_TEXCOORD)
+            elif name == "Padding":
+                field = bytes(size)
             elif name == "Color":
                 rgba = list(colors[v]) if v < len(colors) else [0.0, 0.0, 0.0, 1.0]
                 # A VEC3 COLOR_0 has no alpha; the specification's default is fully opaque.

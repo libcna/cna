@@ -621,7 +621,7 @@ namespace CnaTest::GltfOracle
 
         // Slot offsets per the stride ABI (plan_gltf.md §2.3). -1 means "this layout has no such
         // slot", which is itself part of the L3 answer.
-        long long normalOffset = -1, tangentOffset = -1, uvOffset = -1;
+        long long normalOffset = -1, tangentOffset = -1, uvOffset = -1, uv1Offset = -1;
         long long weightOffset = -1, jointOffset = -1, colorOffset = -1;
         switch (mesh.stride)
         {
@@ -632,8 +632,11 @@ namespace CnaTest::GltfOracle
             case 52: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48; break;
             case 56: normalOffset = 12; uvOffset = 24; weightOffset = 32; jointOffset = 48;
                      colorOffset = 52; break;
+            case 60: normalOffset = 12; tangentOffset = 24; uvOffset = 40; uv1Offset = 48; break;
             case 68: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
                      jointOffset = 64; break;
+            case 76: normalOffset = 12; tangentOffset = 24; uvOffset = 40; weightOffset = 48;
+                     jointOffset = 64; uv1Offset = 68; break;
             default: break;
         }
 
@@ -663,6 +666,12 @@ namespace CnaTest::GltfOracle
                 const std::size_t o = base + static_cast<std::size_t>(uvOffset);
                 dump.texcoords.push_back({ReadFloat(mesh.vertexBytes, o),
                                           ReadFloat(mesh.vertexBytes, o + 4)});
+            }
+            if (uv1Offset >= 0)
+            {
+                const std::size_t o = base + static_cast<std::size_t>(uv1Offset);
+                dump.texcoords1.push_back({ReadFloat(mesh.vertexBytes, o),
+                                           ReadFloat(mesh.vertexBytes, o + 4)});
             }
             if (weightOffset >= 0)
             {
@@ -740,6 +749,7 @@ namespace CnaTest::GltfOracle
         out += ",\"normals\":" + FloatArray(dump.normals);
         out += ",\"tangents\":" + FloatArray(dump.tangents);
         out += ",\"texcoords\":" + FloatArray(dump.texcoords);
+        out += ",\"texcoords1\":" + FloatArray(dump.texcoords1);
         out += ",\"colors\":" + ByteArray(dump.colors);
         out += ",\"weights\":" + FloatArray(dump.weights);
         out += ",\"joints\":" + ByteArray(dump.joints);

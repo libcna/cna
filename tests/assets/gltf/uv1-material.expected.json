@@ -1,6 +1,6 @@
 {
   "id": "uv1-material",
-  "description": "A textured quad with disjoint TEXCOORD_0 and TEXCOORD_1 streams whose base-colour texture explicitly selects set 1. The packed UVs must be set 1, so an importer hard-wired to TEXCOORD_0 disagrees at every vertex.",
+  "description": "A textured quad with disjoint TEXCOORD_0 and TEXCOORD_1 streams. Its base-colour map selects authored set 1 while its emissive map simultaneously selects set 0, requiring both packed GPU UV channels and per-map selectors.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -35,7 +35,8 @@
       "TEXCOORD_0",
       "TEXCOORD_1",
       "baseColorTexture.texCoord 1",
-      "single selected UV channel"
+      "emissiveTexture.texCoord 0",
+      "simultaneous dual UV channels"
     ],
     "auditFixture": null
   },
@@ -375,9 +376,9 @@
           "metallicFactor": 1.0,
           "roughnessFactor": 1.0,
           "emissiveFactor": [
-            0.0,
-            0.0,
-            0.0
+            0.35,
+            0.2,
+            0.1
           ],
           "alphaMode": "OPAQUE",
           "alphaCutoff": 0.5,
@@ -386,8 +387,26 @@
           "hasNormalTexture": false,
           "hasMetallicRoughnessTexture": false,
           "hasOcclusionTexture": false,
-          "hasEmissiveTexture": false
-        }
+          "hasEmissiveTexture": true
+        },
+        "texcoords1": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ]
       }
     ]
   },
@@ -459,7 +478,7 @@
       {
         "mesh": 0,
         "primitive": 0,
-        "stride": 48,
+        "stride": 60,
         "vertexCount": 4,
         "fields": [
           {
@@ -481,11 +500,21 @@
             "name": "TextureCoordinate",
             "offset": 40,
             "size": 8
+          },
+          {
+            "name": "TextureCoordinate1",
+            "offset": 48,
+            "size": 8
+          },
+          {
+            "name": "Padding",
+            "offset": 56,
+            "size": 4
           }
         ],
         "vertexBufferFile": "uv1-material.vb.bin",
-        "vertexBufferBytes": 192,
-        "vertexBufferSha256": "fadf32ea10762b9c9829382a325414401217be300f6ec81a82afa841cf62f5fd",
+        "vertexBufferBytes": 240,
+        "vertexBufferSha256": "0d343e1cad0760a1419810f0be7a4444ae620aefa80605aaa665732ea13adaf8",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "uv1-material.ib.bin",

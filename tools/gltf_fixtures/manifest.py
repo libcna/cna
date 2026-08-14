@@ -501,6 +501,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
                  tangents: Sequence[Sequence[float]] | None = None,
                  generated_tangents: Sequence[Sequence[float]] | None = None,
                  texcoords: Sequence[Sequence[float]] | None = None,
+                 texcoords1: Sequence[Sequence[float]] | None = None,
                  colors: Sequence[Sequence[float]] | None = None,
                  joints: Sequence[Sequence[float]] | None = None,
                  authored_joints: Sequence[Sequence[float]] | None = None,
@@ -571,7 +572,7 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         # JOINTS_0 indexes skin.joints[] in the file and the GPU palette after import. Those are
         # intentionally different spaces when BuildSkeleton topologically reorders a skin.
         import_policy["authoredJoints"] = [list(j) for j in authored_joints]
-    return {
+    record = {
         "mesh": mesh,
         "meshName": mesh_name,
         "primitive": primitive,
@@ -594,3 +595,6 @@ def l3_primitive(*, mesh: int, mesh_name: str, primitive: int, mode: int,
         "importPolicy": import_policy,
         "material": material,
     }
+    if texcoords1 is not None:
+        record["texcoords1"] = [list(t) for t in texcoords1]
+    return record

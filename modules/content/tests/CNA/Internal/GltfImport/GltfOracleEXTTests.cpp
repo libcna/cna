@@ -183,6 +183,23 @@ TEST(GltfOracleEXT, DumpMeshOutEXTExposesEverySemanticStreamOfTheSelectedLayout)
     }
 }
 
+TEST(GltfOracleEXT, DumpMeshOutEXTExposesBothPackedUvStreams)
+{
+    const LoadedFixture fixture("uv1-material");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const std::vector<ExtractedPrimitive> extracted = ExtractSceneMeshesEXT(fixture.Data());
+    ASSERT_EQ(1u, extracted.size());
+    ASSERT_TRUE(extracted[0].extracted) << extracted[0].error;
+    const MeshOutDump& dump = extracted[0].dump;
+
+    EXPECT_EQ(60, dump.stride);
+    EXPECT_EQ(dump.vertexCount, dump.texcoords.size());
+    EXPECT_EQ(dump.vertexCount, dump.texcoords1.size());
+    ASSERT_FALSE(dump.texcoords.empty());
+    ASSERT_FALSE(dump.texcoords1.empty());
+    EXPECT_NE(dump.texcoords.front(), dump.texcoords1.front());
+}
+
 // --- L4 world-position oracle -----------------------------------------------------------------
 
 TEST(GltfOracleEXT, EvaluateWorldPositionsEXTReturnsTheManifestValuesForXfIdentity)

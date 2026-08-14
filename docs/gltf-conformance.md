@@ -1320,7 +1320,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `mat-specular-glossiness` | materials | L1, L2, L3, L4, L5 | KHR_materials_pbrSpecularGlossiness; archived extension; converted to metallic-roughness; dropped specular tint |
 | `mat-authored-tangent` | materials | L1, L2, L3, L4, L5 | authored TANGENT; tangent handedness; vertex stride 48 |
 | `tex-reference-checkerboard` | textures | L1, L2, L3, L4, L5 | base-colour texture; image data: URI; sampler NEAREST; CLAMP_TO_EDGE |
-| `uv1-material` | textures | L1, L2, L3, L4, L5 | TEXCOORD_0; TEXCOORD_1; baseColorTexture.texCoord 1; single selected UV channel |
+| `uv1-material` | textures | L1, L2, L3, L4, L5 | TEXCOORD_0; TEXCOORD_1; baseColorTexture.texCoord 1; emissiveTexture.texCoord 0; simultaneous dual UV channels |
 | `uv-out-of-range-clamp` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; CLAMP_TO_EDGE |
 | `uv-out-of-range-wrap` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; REPEAT |
 | `uv-out-of-range-mirror` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; MIRRORED_REPEAT |

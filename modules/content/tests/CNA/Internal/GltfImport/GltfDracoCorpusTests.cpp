@@ -55,6 +55,7 @@ namespace
         EXPECT_EQ(a->dump.normals, b->dump.normals);
         EXPECT_EQ(a->dump.tangents, b->dump.tangents);
         EXPECT_EQ(a->dump.texcoords, b->dump.texcoords);
+        EXPECT_EQ(a->dump.texcoords1, b->dump.texcoords1);
         EXPECT_EQ(a->dump.colors, b->dump.colors);
         EXPECT_EQ(a->dump.joints, b->dump.joints);
         EXPECT_EQ(a->dump.weights, b->dump.weights);
