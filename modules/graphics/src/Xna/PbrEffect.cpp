@@ -64,6 +64,7 @@ namespace Microsoft::Xna::Framework::Graphics
         baseColorTextureIsSrgb_ = src.baseColorTextureIsSrgb_;
         emissiveTextureIsSrgb_  = src.emissiveTextureIsSrgb_;
         encodeOutputToSrgb_     = src.encodeOutputToSrgb_;
+        textureCoordinateSetsEXT_ = src.textureCoordinateSetsEXT_;
 
         DirectionalLight0 = src.DirectionalLight0;
         DirectionalLight1 = src.DirectionalLight1;
@@ -271,6 +272,18 @@ namespace Microsoft::Xna::Framework::Graphics
     void    PbrEffect::setNormalScaleEXTProperty(float v) { normalScale_ = v; }
     float   PbrEffect::getOcclusionStrengthEXTProperty() const { return occlusionStrength_; }
     void    PbrEffect::setOcclusionStrengthEXTProperty(float v) { occlusionStrength_ = v; }
+    const std::array<int, 5>& PbrEffect::getTextureCoordinateSetsEXTProperty() const
+    {
+        return textureCoordinateSetsEXT_;
+    }
+    void PbrEffect::setTextureCoordinateSetEXTProperty(int slot, int set)
+    {
+        if (slot < 0 || slot >= static_cast<int>(textureCoordinateSetsEXT_.size()))
+            throw std::out_of_range("PBR texture-coordinate slot must be in range [0, 4].");
+        if (set < 0 || set > 1)
+            throw std::out_of_range("PBR packed texture-coordinate set must be 0 or 1.");
+        textureCoordinateSetsEXT_[static_cast<std::size_t>(slot)] = set;
+    }
     bool    PbrEffect::getBaseColorTextureIsSrgbEXTProperty() const { return baseColorTextureIsSrgb_; }
     void    PbrEffect::setBaseColorTextureIsSrgbEXTProperty(bool v) { baseColorTextureIsSrgb_ = v; }
     bool    PbrEffect::getEmissiveTextureIsSrgbEXTProperty() const { return emissiveTextureIsSrgb_; }
@@ -374,6 +387,10 @@ namespace Microsoft::Xna::Framework::Graphics
         // is going.
         p.pbrNormalScale       = normalScale_;
         p.pbrOcclusionStrength = occlusionStrength_;
+        p.pbrTextureCoordinateSetMask = 0;
+        for (std::size_t i = 0; i < textureCoordinateSetsEXT_.size(); ++i)
+            if (textureCoordinateSetsEXT_[i] == 1)
+                p.pbrTextureCoordinateSetMask |= std::uint32_t{1} << i;
         p.pbrBaseColorTextureIsSrgb = baseColorTextureIsSrgb_;
         p.pbrEmissiveTextureIsSrgb  = emissiveTextureIsSrgb_;
         p.pbrEncodeOutputToSrgb     = encodeOutputToSrgb_;

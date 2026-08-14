@@ -1029,6 +1029,11 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: occlusion map (R channel, 1=fully lit .. 0=fully occluded), or null
         /// (no occlusion darkening applied).
         const ITextureRenderer* pbrOcclusionMap = nullptr;
+        /// plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
+        /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion); a clear
+        /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
+        /// indices onto these two collision-free renderer channels before filling the effect.
+        std::uint32_t pbrTextureCoordinateSetMask = 0;
         /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrMetallicFactor = 1.0f;

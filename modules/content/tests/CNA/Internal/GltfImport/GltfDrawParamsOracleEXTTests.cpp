@@ -1540,6 +1540,8 @@ TEST(GltfDrawParamsOracleL6, RigidAndSkinnedPbrEffectsGiveEverySharedNameTheSame
         effect.setSpecularColorFactorEXTProperty({0.19f, 0.61f, 1.7f});
         effect.setNormalScaleEXTProperty(0.27f);
         effect.setOcclusionStrengthEXTProperty(0.63f);
+        effect.setTextureCoordinateSetEXTProperty(0, 1);
+        effect.setTextureCoordinateSetEXTProperty(3, 1);
         effect.setBaseColorTextureIsSrgbEXTProperty(false);
         effect.setEmissiveTextureIsSrgbEXTProperty(false);
         effect.setEncodeOutputToSrgbEXTProperty(false);
@@ -1591,6 +1593,9 @@ TEST(GltfDrawParamsOracleL6, RigidAndSkinnedPbrEffectsGiveEverySharedNameTheSame
     EXPECT_FLOAT_EQ(rigidParams.pbrDielectricF90, skinnedParams.pbrDielectricF90);
     EXPECT_FLOAT_EQ(rigidParams.pbrNormalScale, skinnedParams.pbrNormalScale);
     EXPECT_FLOAT_EQ(rigidParams.pbrOcclusionStrength, skinnedParams.pbrOcclusionStrength);
+    EXPECT_EQ(0b01001u, rigidParams.pbrTextureCoordinateSetMask);
+    EXPECT_EQ(rigidParams.pbrTextureCoordinateSetMask,
+              skinnedParams.pbrTextureCoordinateSetMask);
     EXPECT_EQ(rigidParams.pbrBaseColorTextureIsSrgb, skinnedParams.pbrBaseColorTextureIsSrgb);
     EXPECT_EQ(rigidParams.pbrEmissiveTextureIsSrgb, skinnedParams.pbrEmissiveTextureIsSrgb);
     EXPECT_EQ(rigidParams.pbrEncodeOutputToSrgb, skinnedParams.pbrEncodeOutputToSrgb);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
+#include <array>
 #include <memory>
 #include <vector>
 
@@ -243,6 +244,30 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setOcclusionStrengthEXTProperty(float value);
 
         /**
+         * @brief Gets the packed vertex UV channel sampled by each PBR texture slot.
+         *
+         * The five entries are, in order, base colour, normal, metallic-roughness, emissive and
+         * occlusion. Each value is 0 or 1 and selects the matching `TextureCoordinate` usage
+         * index in the current vertex declaration. All entries default to 0.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-182/GLTF-183`). This is
+         * identical to PbrEffect's selector contract so rigid and skinned material paths cannot
+         * silently sample different UV channels.
+         * @return The five per-texture packed UV selectors.
+         */
+        CNAEXT [[nodiscard]] const std::array<int, 5>&
+        getTextureCoordinateSetsEXTProperty() const;
+
+        /**
+         * @brief Selects the packed vertex UV channel for one PBR texture slot.
+         * @param slot Texture slot in [0,4]: base colour, normal, metallic-roughness, emissive,
+         *             then occlusion.
+         * @param set Packed UV channel, either 0 or 1.
+         * @throws std::out_of_range If either argument is outside its documented range.
+         */
+        CNAEXT void setTextureCoordinateSetEXTProperty(int slot, int set);
+
+        /**
          * @brief Whether the bound base-colour texture's samples are sRGB-encoded.
          *
          * @note CNAEXT — not part of the XNA 4.0 API. Identical in meaning to `PbrEffect`'s own:
@@ -416,6 +441,7 @@ namespace Microsoft::Xna::Framework::Graphics
         bool baseColorTextureIsSrgb_ = true;
         bool emissiveTextureIsSrgb_  = true;
         bool encodeOutputToSrgb_     = true;
+        std::array<int, 5> textureCoordinateSetsEXT_{};
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();

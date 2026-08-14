@@ -148,6 +148,25 @@ TEST_F(PbrEffectDefaultsTest, EmissiveFactorDefaultsToZero)
     EXPECT_EQ(fx.getEmissiveFactorProperty(), Vector3::Zero);
 }
 
+TEST_F(PbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAndReachDrawParams)
+{
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{0, 0, 0, 0, 0}));
+
+    fx.setTextureCoordinateSetEXTProperty(0, 1);
+    fx.setTextureCoordinateSetEXTProperty(2, 1);
+    fx.setTextureCoordinateSetEXTProperty(4, 1);
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{1, 0, 1, 0, 1}));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask, 0b10101u);
+
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+}
+
 TEST_F(PbrEffectDefaultsTest, DirectionalLight0DefaultsToDisabled)
 {
     EXPECT_FALSE(fx.DirectionalLight0.getEnabledProperty());
@@ -242,6 +261,7 @@ TEST_F(PbrEffectDefaultsTest, CloneCopiesMaterialState)
     fx.setIorEXTProperty(1.8f);
     fx.setSpecularFactorEXTProperty(0.4f);
     fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
+    fx.setTextureCoordinateSetEXTProperty(3, 1);
 
     auto* cloned = dynamic_cast<PbrEffect*>(fx.Clone());
     ASSERT_NE(cloned, nullptr);
@@ -251,6 +271,8 @@ TEST_F(PbrEffectDefaultsTest, CloneCopiesMaterialState)
     EXPECT_FLOAT_EQ(cloned->getIorEXTProperty(), 1.8f);
     EXPECT_FLOAT_EQ(cloned->getSpecularFactorEXTProperty(), 0.4f);
     EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
+    EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
+              (std::array<int, 5>{0, 0, 0, 1, 0}));
     delete cloned;
 }
 

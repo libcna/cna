@@ -64,6 +64,24 @@ TEST_F(SkinnedPbrEffectDefaultsTest, AmbientLightColorDefaultsToZero)
     EXPECT_EQ(fx.getAmbientLightColorProperty(), Vector3::Zero);
 }
 
+TEST_F(SkinnedPbrEffectDefaultsTest, TextureCoordinateSelectorsDefaultValidateAndReachDrawParams)
+{
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{0, 0, 0, 0, 0}));
+
+    fx.setTextureCoordinateSetEXTProperty(1, 1);
+    fx.setTextureCoordinateSetEXTProperty(3, 1);
+    EXPECT_EQ(fx.getTextureCoordinateSetsEXTProperty(), (std::array<int, 5>{0, 1, 0, 1, 0}));
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask, 0b01010u);
+
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(-1, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(5, 0), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, -1), std::out_of_range);
+    EXPECT_THROW(fx.setTextureCoordinateSetEXTProperty(0, 2), std::out_of_range);
+}
+
 TEST_F(SkinnedPbrEffectDefaultsTest, LightingEnabledIsAlwaysTrue)
 {
     EXPECT_TRUE(fx.getLightingEnabledProperty());
@@ -334,6 +352,7 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     fx.setIorEXTProperty(1.8f);
     fx.setSpecularFactorEXTProperty(0.4f);
     fx.setSpecularColorFactorEXTProperty(Vector3(0.2f, 0.3f, 0.4f));
+    fx.setTextureCoordinateSetEXTProperty(1, 1);
     std::vector<Matrix> bones(SkinnedPbrEffect::MaxBones, Matrix::getIdentityProperty());
     bones[1] = Matrix::CreateTranslation(Vector3(4, 5, 6));
     fx.SetBoneTransforms(bones);
@@ -346,6 +365,8 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     EXPECT_FLOAT_EQ(cloned->getIorEXTProperty(), 1.8f);
     EXPECT_FLOAT_EQ(cloned->getSpecularFactorEXTProperty(), 0.4f);
     EXPECT_EQ(cloned->getSpecularColorFactorEXTProperty(), Vector3(0.2f, 0.3f, 0.4f));
+    EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
+              (std::array<int, 5>{0, 1, 0, 0, 0}));
     const std::vector<Matrix> clonedBones = cloned->GetBoneTransforms(SkinnedPbrEffect::MaxBones);
     EXPECT_EQ(clonedBones[1], Matrix::CreateTranslation(Vector3(4, 5, 6)));
     delete cloned;
