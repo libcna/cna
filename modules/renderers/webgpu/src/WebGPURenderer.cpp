@@ -823,15 +823,19 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
         }
 
-        // pbr3d.wgsl's third (small) uniform buffer: PbrEffect's MetallicFactor/RoughnessFactor,
+        // pbr3d.wgsl's third (small) uniform buffer: PBR factors plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 4>& out, const GpuDrawParams& p)
+        void FillPbrFactors(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
             out[2] = 0.0f;
             out[3] = 0.0f;
+            out[4] = p.alphaTest[0];
+            out[5] = p.alphaTest[1];
+            out[6] = p.alphaTest[2];
+            out[7] = p.alphaTest[3];
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -7303,14 +7307,15 @@ struct VSOut {
         RequireSupportedFillModeEXT(primitive, "ordinary-nonindexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        // Matches VulkanRenderer's own dispatch precedence: alpha test wins over
-        // dual-texture/env-map/skinned/lit-textured; dual-texture wins over env-map/skinned/
+        // PBR owns its glTF MASK coverage; standalone AlphaTestEffect wins only for non-PBR
+        // draws. Dual-texture then wins over env-map/skinned/
         // lit-textured (an AlphaTestEffect or DualTextureEffect draw on a
         // VertexPositionNormalTexture buffer never reaches lit_textured3d -- the normal is simply
         // unread in both cases); env-map wins over lit-textured for the same stride-32 buffer
         // shape (EnvironmentMapEffect's own reflection shader takes over the normal/UV attributes
         // that lit_textured3d.wgsl would otherwise consume for Blinn-Phong lighting).
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
@@ -7397,7 +7402,8 @@ struct VSOut {
         RequireSupportedFillModeEXT(primitive, "ordinary-indexed");
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& webgpuVb = static_cast<const WebGPUVertexBufferRenderer&>(vb);
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsAlphaTest = !params.pbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
         const bool needsUnsupportedEffect = !needsAlphaTest && !needsDualTexture && !needsEnvMap &&
@@ -8465,6 +8471,7 @@ struct LitLightParams {
 
 struct PbrFactors {
     metallicRoughness: vec4f,
+    alphaTest: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8527,6 +8534,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
     let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
+    let useTolerance = pf.alphaTest.y > 0.0;
+    let lessTest = alpha < pf.alphaTest.x;
+    let toleranceTest = abs(alpha - pf.alphaTest.x) < pf.alphaTest.y;
+    let passesAlphaTest = select(lessTest, toleranceTest, useTolerance);
+    let alphaWeight = select(pf.alphaTest.w, pf.alphaTest.z, passesAlphaTest);
+    if (alphaWeight < 0.0) {
+        discard;
+    }
 
     let n0 = normalize(input.worldNormal);
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
@@ -9897,6 +9912,7 @@ struct LitLightParams {
 
 struct PbrFactors {
     metallicRoughness: vec4f,
+    alphaTest: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -9987,6 +10003,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
     let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
+    let useTolerance = pf.alphaTest.y > 0.0;
+    let lessTest = alpha < pf.alphaTest.x;
+    let toleranceTest = abs(alpha - pf.alphaTest.x) < pf.alphaTest.y;
+    let passesAlphaTest = select(lessTest, toleranceTest, useTolerance);
+    let alphaWeight = select(pf.alphaTest.w, pf.alphaTest.z, passesAlphaTest);
+    if (alphaWeight < 0.0) {
+        discard;
+    }
 
     let n0 = normalize(input.worldNormal);
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));

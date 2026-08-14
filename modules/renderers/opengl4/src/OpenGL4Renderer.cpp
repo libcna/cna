@@ -919,6 +919,7 @@ uniform vec3 uLight1Diffuse;
 uniform vec3 uLight2Dir;
 uniform vec3 uLight2Diffuse;
 uniform vec3 uEyePosition;
+uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
 out vec4 fragColor;
 
@@ -951,6 +952,10 @@ void main()
     vec4 baseColorTex = texture(uTexture, vUV);
     vec3 albedo = baseColorTex.rgb * uDiffuseColor.rgb;
     float alpha = baseColorTex.a * uDiffuseColor.a;
+    bool passesAlphaTest = (uAlphaTest.y > 0.0)
+        ? (abs(alpha - uAlphaTest.x) < uAlphaTest.y)
+        : (alpha < uAlphaTest.x);
+    if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;
 
     vec3 N = normalize(vNormal);
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
@@ -3283,6 +3288,10 @@ void main()
             if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
             const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
             if (roughnessLoc >= 0) gl4_glUniform1f(roughnessLoc, params.pbrRoughnessFactor);
+            const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
+            if (alphaTestLoc >= 0)
+                gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],
+                                params.alphaTest[2], params.alphaTest[3]);
             setV3("uLight0Dir", params.light0Dir);
             setV3("uLight0Diffuse", params.light0Diffuse);
             setV3("uLight1Dir", params.light1Dir);

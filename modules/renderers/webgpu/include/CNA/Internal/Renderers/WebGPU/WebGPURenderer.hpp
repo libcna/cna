@@ -2338,18 +2338,15 @@ namespace CNA::Internal::Renderers::WebGPU
         // all yet (see needsUnsupportedEffect's own skinned gate in DrawPrimitivesEx()), so
         // SkinnedPbrEffect (stride 68) is a separate, pre-existing, out-of-scope gap and keeps
         // falling back exactly as it did before. Genuinely new bind-group shapes on both sides:
-        // group 0 needs a THIRD uniform buffer (PbrFactors: metallic/roughness factors -- the
+        // group 0 needs a THIRD uniform buffer (PbrFactors: metallic/roughness + alpha coverage -- the
         // existing 128-byte Uniforms and 272-byte LitLightParams blocks are both already fully
         // packed and are reused verbatim via the existing FillExtUniforms()/
         // FillLitLightUniforms() helpers), and group 1 needs FIVE textures (base color, normal,
         // metallic-roughness, emissive, occlusion) behind one shared sampler, each falling back to
         // a 1x1 default texture (matching EasyGLRenderer's own
         // EnsureDefaultFlatNormalTexture()/EnsureDefaultWhiteTexture() "map absent" convention)
-        // when PbrEffect leaves that map unbound. Fog and alpha-test are deliberately NOT wired
-        // into this shader: every other WebGPU 3D shader already defers fog identically (see
-        // CreateLitTexturedResources()'s own comment), and PbrEffect::FillGpuDrawParams() never
-        // touches GpuDrawParams::alphaTest at all (stays the default always-pass value), so
-        // embedding that branch here would be permanently dead code.
+        // when PbrEffect leaves that map unbound. Fog remains deferred like the other WebGPU 3D
+        // shaders; alpha coverage stays in this PBR shader for glTF MASK draws.
         struct PbrDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -2363,7 +2360,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 4> pbrFactors{};
+            std::array<float, 8> pbrFactors{};
             bool depthTest = false;
             bool depthWrite = false;
             int depthFunc = 3;
@@ -2536,7 +2533,7 @@ namespace CNA::Internal::Renderers::WebGPU
             WGPUPrimitiveTopology topology = WGPUPrimitiveTopology_TriangleList;
             std::array<float, 32> uniforms{};
             std::array<float, 68> lightUniforms{};
-            std::array<float, 4> pbrFactors{};
+            std::array<float, 8> pbrFactors{};
             std::array<float, 4 + 72 * 16> skinningParams{};
             bool depthTest = false;
             bool depthWrite = false;

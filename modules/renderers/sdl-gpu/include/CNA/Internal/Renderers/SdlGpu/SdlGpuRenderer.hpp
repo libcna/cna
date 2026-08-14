@@ -1431,7 +1431,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         // a storage buffer -- both variants share pbrFragmentShader_ unchanged (see
         // pbr_skinned3d.vert.glsl's own doc comment). uniforms/lightUniforms reuse FillExtUniforms/
         // FillLitLightUniforms's/FillSkinnedLightUniforms's existing layouts unchanged; pbrParams
-        // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor).
+        // is the one genuinely new uniform block (MetallicFactor/RoughnessFactor + alpha coverage).
         struct PbrDrawCommand
         {
             std::vector<std::uint8_t> vertexData;
@@ -1445,7 +1445,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
-            std::array<float, 4>  pbrParams{};          ///< PbrParams: metallicFactor, roughnessFactor, pad, pad
+            std::array<float, 8>  pbrParams{};          ///< PbrParams: factors vec4 + alphaTest vec4
             bool skinned = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)

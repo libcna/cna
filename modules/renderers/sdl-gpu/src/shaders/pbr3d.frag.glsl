@@ -52,6 +52,7 @@ layout(set = 3, binding = 2) uniform PbrParams {
     float roughnessFactor;
     float pad0;
     float pad1;
+    vec4 alphaTest;
 } pbrp;
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
@@ -90,6 +91,10 @@ void main() {
     vec4 baseColorTex = texture(uTexture, fragUV);
     vec3 albedo = baseColorTex.rgb * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
+    bool passesAlphaTest = (pbrp.alphaTest.y > 0.0)
+        ? (abs(alpha - pbrp.alphaTest.x) < pbrp.alphaTest.y)
+        : (alpha < pbrp.alphaTest.x);
+    if ((passesAlphaTest ? pbrp.alphaTest.z : pbrp.alphaTest.w) < 0.0) discard;
 
     vec3 N = normalize(fragNormal);
     vec3 T = normalize(fragTangent - N * dot(N, fragTangent));

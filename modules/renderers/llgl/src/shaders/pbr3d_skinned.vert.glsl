@@ -29,6 +29,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 eyePositionWorldPad;
     vec4 fogColor;
     vec4 fogVector;
+    vec4 alphaTest;
 };
 
 layout(std140, binding = 12) uniform BoneBlock

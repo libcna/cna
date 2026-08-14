@@ -1630,17 +1630,19 @@ namespace CNA::Internal::Renderers::DirectX12
         const auto& d3dVb = static_cast<const D3D12VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
-        const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
+        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        const bool needsPbr = params.pbr;
+        const bool needsAlphaTest = !needsPbr &&
+                                    (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         // DX-111 (closing env_map3d): dual_texture3d, skinned3d, and now env_map3d are all real.
         const bool needsDualTex = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap  = params.envMapping  && !needsAlphaTest && !needsDualTex;
         // D3D12 PBR/skinned-vertex-color reconciliation follow-up: PbrEffect/SkinnedPbrEffect --
         // params.skinned further selects Pbr3d vs. PbrSkinned3d below. Priority matches
-        // DirectX11Renderer::DrawPrimitivesExImpl exactly (alpha-test/dual-tex/env-map still
-        // take precedence over PBR here, unlike EasyGLRenderer.cpp's own SelectProgram()
-        // priority -- the canonical D3D11 dispatch order, verified via real GPU-rendered
-        // pixel-exact tests, is what this renderer mirrors rather than re-deriving its own order).
-        const bool needsPbr = params.pbr && !needsAlphaTest && !needsDualTex && !needsEnvMap;
+        // DirectX11Renderer::DrawPrimitivesExImpl exactly. PBR takes priority over the standalone
+        // alpha-test program because the PBR fragment shader now evaluates MASK coverage itself;
+        // dual-texture/env-map remain mutually exclusive effect families chosen afterwards.
         const bool needsSkinned = params.skinned && !needsPbr
                                  && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path, lit
@@ -1981,6 +1983,10 @@ namespace CNA::Internal::Renderers::DirectX12
             perDraw.EmissiveRoughness[1] = params.emissiveColor[1];
             perDraw.EmissiveRoughness[2] = params.emissiveColor[2];
             perDraw.EmissiveRoughness[3] = params.pbrRoughnessFactor;
+            perDraw.AlphaTest[0] = params.alphaTest[0];
+            perDraw.AlphaTest[1] = params.alphaTest[1];
+            perDraw.AlphaTest[2] = params.alphaTest[2];
+            perDraw.AlphaTest[3] = params.alphaTest[3];
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

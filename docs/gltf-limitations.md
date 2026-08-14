@@ -144,9 +144,12 @@ provable, and only the last step is missing.
 | `KHR_materials_specular` factors | `PbrEffect::getSpecularFactorEXTProperty()` / `getSpecularColorFactorEXTProperty()` and `GpuDrawParams::pbrDielectricF0` / `pbrDielectricF90` | EasyGL consumes both endpoints; other PBR renderers still ignore them, and the two texture inputs are separately absent above. | `GLTF-344` |
 
 `alphaMode: MASK` **used** to be in this table and is not any more: the cutoff is fragment-program
-work rather than device state, so `GLTF-372` wired it into `GpuDrawParams::alphaTest` and every PBR
-shader now discards on it. `docs/gltf-api-change-review.md` §1.3 records where the line falls and
-why the other two stay on this side of it.
+work rather than device state. `GLTF-372` wired it into `GpuDrawParams::alphaTest`; the subsequent
+cross-renderer audit in `GLTF-379` found that eight PBR implementations did not consume that vector
+and five renderers instead selected their non-PBR alpha-test program. Both failures are fixed: a
+PBR `MASK` draw stays PBR and every PBR fragment path evaluates the same coverage expression.
+`docs/gltf-api-change-review.md` §1.3 records where the line falls and why the other two stay on this
+side of it; `docs/gltf-renderer-pbr-fallbacks.md` records the renderer matrix and evidence.
 
 ---
 

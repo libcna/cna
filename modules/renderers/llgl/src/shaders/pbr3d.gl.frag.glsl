@@ -21,6 +21,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 eyePositionWorldPad;
     vec4 fogColor;
     vec4 fogVector;
+    vec4 alphaTest;
 };
 
 layout(binding = 2) uniform sampler2D colorMap;
@@ -68,6 +69,10 @@ void main()
     vec4 baseColorTex = texture(colorMap, vTexCoord);
     vec3 albedo = baseColorTex.rgb * diffuseColor.rgb;
     float alpha = baseColorTex.a * diffuseColor.a;
+    bool passesAlphaTest = (alphaTest.y > 0.0)
+        ? (abs(alpha - alphaTest.x) < alphaTest.y)
+        : (alpha < alphaTest.x);
+    if ((passesAlphaTest ? alphaTest.z : alphaTest.w) < 0.0) discard;
 
     vec3 N = normalize(vNormal);
     vec3 T = normalize(vTangent - N * dot(N, vTangent));

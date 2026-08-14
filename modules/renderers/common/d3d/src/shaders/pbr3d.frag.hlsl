@@ -6,15 +6,8 @@
 // convention every other CNA stock effect already uses. Normal mapping via a per-pixel TBN basis
 // built from the vertex tangent (re-orthogonalized against the interpolated normal) and glTF's
 // own bitangent-handedness-sign convention.
-//
-// Deliberate, documented scope cut: EasyGL's own pbr fragment shader also carries an AlphaTest
-// discard branch (uAlphaTest), copied there purely for boilerplate consistency with its sibling
-// shaders -- PbrEffect itself never implements IEffectAlphaTest and its own FillGpuDrawParams()
-// never sets GpuDrawParams::alphaTest away from the default "always pass" {0,0,1,1}, and this
-// renderer's own DrawPrimitivesExImpl dispatch already routes any real AlphaTestEffect draw to the
-// separate alpha_test3d/alpha_test_colored3d variants instead (mutually exclusive with `pbr` in
-// the priority chain), so the branch is unreachable dead code for real PbrEffect usage. Left out
-// here rather than ported unused.
+// glTF MASK coverage belongs to this PBR program, not to the separate AlphaTestEffect path: that
+// path cannot represent the stride-48 tangent frame and would discard the PBR material model.
 
 Texture2D    uTexture                  : register(t0);
 SamplerState uTextureSampler           : register(s0);
@@ -34,6 +27,7 @@ cbuffer PerDraw : register(b0)
     float4 DiffuseColor;
     float4 AmbientMetallic;    // xyz = AmbientColor, w = MetallicFactor
     float4 EmissiveRoughness;  // xyz = EmissiveColor, w = RoughnessFactor
+    float4 AlphaTest;           // reference, tolerance, pass weight, fail weight
 };
 
 cbuffer PbrLights : register(b1)
@@ -88,6 +82,10 @@ float4 main(PSInput input) : SV_Target
     float4 baseColorTex = uTexture.Sample(uTextureSampler, input.UV);
     float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
+    bool passesAlphaTest = (AlphaTest.y > 0.0)
+        ? (abs(alpha - AlphaTest.x) < AlphaTest.y)
+        : (alpha < AlphaTest.x);
+    if ((passesAlphaTest ? AlphaTest.z : AlphaTest.w) < 0.0) discard;
 
     float3 N = normalize(input.Normal);
     float3 T = normalize(input.Tangent.xyz - N * dot(N, input.Tangent.xyz));

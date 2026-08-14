@@ -1282,7 +1282,11 @@ namespace CNA::Internal::Renderers::DirectX11
         const auto& d3dVb = static_cast<const D3D11VertexBufferRenderer&>(vb);
         const std::size_t stride = d3dVb.GetStrideEXT() > 0 ? d3dVb.GetStrideEXT() : 16;
 
-        const bool needsAlphaTest   = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        // A PBR MASK draw keeps the PBR shader and evaluates alpha coverage there. The standalone
+        // AlphaTestEffect path only accepts stride 20/24 and cannot carry a tangent-space basis.
+        const bool needsPbr         = params.pbr;
+        const bool needsAlphaTest   = !needsPbr &&
+                                      (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex     = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap      = params.envMapping  && !needsAlphaTest && !needsDualTex;
         // plan_cnj.md CNB-58 follow-up: PbrEffect/SkinnedPbrEffect -- `params.skinned` further
@@ -1290,7 +1294,6 @@ namespace CNA::Internal::Renderers::DirectX11
         // own `if (params.pbr && params.skinned) ... else if (params.pbr) ...` priority (PBR takes
         // precedence over the plain-skinned bucket so SkinnedPbrEffect draws don't fall through to
         // skinned3d's non-PBR shader).
-        const bool needsPbr         = params.pbr && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsSkinned     = params.skinned && !needsPbr
                                      && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses lit_textured3d (BasicEffect's VertexPositionNormalTexture path,
@@ -1576,6 +1579,10 @@ namespace CNA::Internal::Renderers::DirectX11
             perDraw.EmissiveRoughness[1] = params.emissiveColor[1];
             perDraw.EmissiveRoughness[2] = params.emissiveColor[2];
             perDraw.EmissiveRoughness[3] = params.pbrRoughnessFactor;
+            perDraw.AlphaTest[0] = params.alphaTest[0];
+            perDraw.AlphaTest[1] = params.alphaTest[1];
+            perDraw.AlphaTest[2] = params.alphaTest[2];
+            perDraw.AlphaTest[3] = params.alphaTest[3];
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

@@ -4,7 +4,7 @@
 // Like EnvironmentMapEffect/SkinnedEffect (see env_map3d.vert.glsl/skinned3d.vert.glsl), this does
 // NOT share the common `Transform` uniform block -- PbrEffect's own field set (base colour factor
 // kept independent from alpha per glTF, raw AmbientLightColor rather than pre-folded emissive,
-// metallic/roughness factors, no alpha test) doesn't fit it, and this vertex/fragment pair is
+// metallic/roughness factors, alpha coverage) doesn't fit it, and this vertex/fragment pair is
 // never linked with any other shader here.
 //
 // Needs a `Tangent` vertex element (see MapVertexUsage's own new case) alongside position/normal/
@@ -30,6 +30,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 eyePositionWorldPad;
     vec4 fogColor;             // xyz = FogColor, w = fogEnabled (0/1)
     vec4 fogVector;
+    vec4 alphaTest;            // reference, tolerance, pass weight, fail weight
 };
 
 layout(location = 0) in vec3 position;

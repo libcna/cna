@@ -912,15 +912,18 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
 
-        // pbr3d.frag.glsl's tertiary PbrParams block: MetallicFactor, RoughnessFactor, 2 floats
-        // of padding (not consumed by anything, kept purely for std140 vec4 alignment symmetry
-        // with every other uniform block in this renderer).
-        void FillPbrParams(std::array<float, 4>& out, const GpuDrawParams& p)
+        // pbr3d.frag.glsl's tertiary PbrParams block: one material-factor vec4 followed by the
+        // alpha coverage vector used by glTF MASK draws.
+        void FillPbrParams(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
             out[2] = 0.0f;
             out[3] = 0.0f;
+            out[4] = p.alphaTest[0];
+            out[5] = p.alphaTest[1];
+            out[6] = p.alphaTest[2];
+            out[7] = p.alphaTest[3];
         }
 
         // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::
@@ -5641,17 +5644,18 @@ namespace CNA::Internal::Renderers::SdlGpu
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
-        // Matches VulkanRenderer/WebGPURenderer's own dispatch precedence: alpha
-        // test wins over dual-texture/env-map/pbr/skinned (an AlphaTestEffect draw on any of those
-        // shapes never reaches those shaders); env-map/pbr/skinned win over plain lit_textured3d
-        // (env-map shares stride 32, skinned has its own stride 52/56, pbr its own stride 48/68).
+        // Matches VulkanRenderer/WebGPURenderer's own dispatch precedence: PBR keeps its shader
+        // when MASK coverage is active, while the standalone alpha-test effect still wins over
+        // the other non-PBR effect families. Env-map/PBR/skinned win over plain lit_textured3d
+        // (env-map shares stride 32, skinned has its own stride 52/56, PBR its own stride 48/68).
         // needsPbr is checked (and excluded from needsSkinned) before needsSkinned since
         // SkinnedPbrEffect::FillGpuDrawParams() sets BOTH params.pbr and params.skinned -- the PBR
         // shader variant, not the plain SkinnedEffect one, must win for that combination.
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsPbr = params.pbr;
+        const bool needsAlphaTest = !needsPbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsPbr = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.pbr;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {
@@ -5704,10 +5708,11 @@ namespace CNA::Internal::Renderers::SdlGpu
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         const auto& sdlGpuVb = static_cast<const SdlGpuVertexBufferRenderer&>(vb);
         const std::size_t stride = sdlGpuVb.Stride();
-        const bool needsAlphaTest = params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f;
+        const bool needsPbr = params.pbr;
+        const bool needsAlphaTest = !needsPbr &&
+                                    (params.alphaTest[2] < 0.0f || params.alphaTest[3] < 0.0f);
         const bool needsDualTexture = !needsAlphaTest && params.dualTexture;
         const bool needsEnvMap = !needsAlphaTest && !needsDualTexture && params.envMapping;
-        const bool needsPbr = !needsAlphaTest && !needsDualTexture && !needsEnvMap && params.pbr;
         const bool needsSkinned = !needsAlphaTest && !needsDualTexture && !needsEnvMap && !needsPbr && params.skinned;
         if (needsAlphaTest && (stride == 20 || stride == 24 || stride == 32) && params.texture0 != nullptr)
         {

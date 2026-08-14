@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-373: discriminating real-pixel proof of all five PBR texture bindings.
+// plan_gltf.md GLTF-373/379: discriminating real-pixel proof of all five PBR texture bindings
+// and of glTF MASK coverage staying inside both rigid and skinned PBR programs.
 //
 // This source deliberately uses only the PBR contract shared by every renderer: no output sRGB
 // transfer, normalScale, occlusionStrength, or other later shader-semantic extensions. Five solid
@@ -11,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -148,6 +150,41 @@ namespace
         // in a linear UNORM framebuffer, versus 79 at the geometric normal.
         drawAndExpect("normal map -> slot 1", Color(35, 35, 35, 255), 2);
     }
+
+    template <typename Effect>
+    void RunAlphaMaskCases(CNA::Examples::PixelTestGame& test,
+                           GraphicsDevice& device,
+                           Effect& effect,
+                           Texture2D& belowCutoff,
+                           Texture2D& aboveCutoff,
+                           int sampleX,
+                           int sampleY,
+                           const char* prefix)
+    {
+        effect.DirectionalLight0.setEnabledProperty(false);
+        effect.setNormalMapProperty(nullptr);
+        effect.setMetallicRoughnessMapProperty(nullptr);
+        effect.setEmissiveMapProperty(nullptr);
+        effect.setOcclusionMapProperty(nullptr);
+        effect.setAmbientLightColorProperty(Vector3::One);
+        effect.setEmissiveFactorProperty(Vector3::Zero);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setAlphaModeEXTProperty(AlphaModeEXT::Mask);
+        effect.setAlphaCutoffEXTProperty(0.5f);
+
+        const auto drawAndExpect = [&](const char* caseName, Texture2D& texture,
+                                       const Color& expected)
+        {
+            device.Clear(Color(0, 255, 0, 255));
+            effect.setTextureProperty(&texture);
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            const std::string label = std::string(prefix) + " " + caseName;
+            test.ExpectPixel(label.c_str(), Rectangle(sampleX, sampleY, 1, 1), expected, 0);
+        };
+        drawAndExpect("MASK discards alpha below cutoff", belowCutoff, Color(0, 255, 0, 255));
+        drawAndExpect("MASK keeps alpha above cutoff", aboveCutoff, Color(255, 0, 0, 255));
+    }
 }
 
 class PbrTextureSlotMappingTest final : public CNA::Examples::PixelTestGame
@@ -165,6 +202,7 @@ protected:
         };
         Texture2D white = texture({255, 255, 255, 255});
         Texture2D redBaseColor = texture({255, 0, 0, 255});
+        Texture2D redBelowCutoff = texture({255, 0, 0, 64});
         Texture2D metallicRoughness = texture({0, 255, 0, 255});
         Texture2D blueEmissive = texture({0, 0, 255, 255});
         Texture2D occlusion = texture({64, 128, 192, 255});
@@ -182,6 +220,8 @@ protected:
         Configure(rigidEffect);
         RunSlotCases(*this, device, rigidEffect, white, redBaseColor, metallicRoughness,
                      blueEmissive, occlusion, normal, sampleX, sampleY, "PbrEffect");
+        RunAlphaMaskCases(*this, device, rigidEffect, redBelowCutoff, redBaseColor,
+                          sampleX, sampleY, "PbrEffect");
 
         const std::vector<SkinnedPbrVertex> skinned = SkinnedQuad();
         VertexBuffer skinnedBuffer(device, static_cast<int>(skinned.size()));
@@ -194,6 +234,8 @@ protected:
         skinnedEffect.setWeightsPerVertexProperty(1);
         RunSlotCases(*this, device, skinnedEffect, white, redBaseColor, metallicRoughness,
                      blueEmissive, occlusion, normal, sampleX, sampleY, "SkinnedPbrEffect");
+        RunAlphaMaskCases(*this, device, skinnedEffect, redBelowCutoff, redBaseColor,
+                          sampleX, sampleY, "SkinnedPbrEffect");
 
         device.SetVertexBuffer(nullptr);
     }

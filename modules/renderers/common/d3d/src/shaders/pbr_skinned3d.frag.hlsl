@@ -23,6 +23,7 @@ cbuffer PerDraw : register(b0)
     float4 DiffuseColor;
     float4 AmbientMetallic;
     float4 EmissiveRoughness;
+    float4 AlphaTest;
 };
 
 cbuffer PbrLights : register(b2)
@@ -75,6 +76,10 @@ float4 main(PSInput input) : SV_Target
     float4 baseColorTex = uTexture.Sample(uTextureSampler, input.UV);
     float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
+    bool passesAlphaTest = (AlphaTest.y > 0.0)
+        ? (abs(alpha - AlphaTest.x) < AlphaTest.y)
+        : (alpha < AlphaTest.x);
+    if ((passesAlphaTest ? AlphaTest.z : AlphaTest.w) < 0.0) discard;
 
     float3 N = normalize(input.Normal);
     float3 T = normalize(input.Tangent.xyz - N * dot(N, input.Tangent.xyz));

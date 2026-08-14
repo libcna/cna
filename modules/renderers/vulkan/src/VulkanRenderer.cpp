@@ -4632,11 +4632,11 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // Shared fill for pbr3d.vert/frag.glsl's and pbr3d_skinned.vert/frag.glsl's identical
-    // PbrParams UBO layout (48 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
+    // PbrParams UBO layout (52 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
     // DiffuseColor (base color factor), and AmbientColor are NOT here -- they travel through the
     // 128-byte PC via FillExtPushConst instead (reused unchanged for PbrEffect/SkinnedPbrEffect,
     // same field semantics).
-    void VulkanRenderer::FillPbrUboData(float (&out)[48], const GpuDrawParams& p,
+    void VulkanRenderer::FillPbrUboData(float (&out)[52], const GpuDrawParams& p,
                                                 float weightsPerVertex)
     {
         out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.f;
@@ -4656,6 +4656,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // view-space fog. Zero when disabled, (0,0,0,1) for the fogStart==fogEnd degenerate case.
         out[44] = p.fogVector[0]; out[45] = p.fogVector[1];
         out[46] = p.fogVector[2]; out[47] = p.fogVector[3];
+        out[48] = p.alphaTest[0]; out[49] = p.alphaTest[1];
+        out[50] = p.alphaTest[2]; out[51] = p.alphaTest[3];
     }
 
     void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
@@ -6687,7 +6689,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = pbrUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 192; // 48 floats -- see pbrUboData's own layout comment
+        bufInfo.range  = 208; // 52 floats -- see pbrUboData's own layout comment
 
         VkWriteDescriptorSet writes[6]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -6947,7 +6949,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo paramsBufInfo{};
         paramsBufInfo.buffer = pbrSkinnedUBO_[frameIdx];
         paramsBufInfo.offset = 0;
-        paramsBufInfo.range  = 192; // 48 floats
+        paramsBufInfo.range  = 208; // 52 floats
 
         VkWriteDescriptorSet writes[7]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -8069,9 +8071,9 @@ namespace CNA::Internal::Renderers::Vulkan
                         uint32_t pbrOff = 0;
                         const uint32_t pbrSlot = pbrSkinnedUBOSlot++;
                         pbrOff = pbrSlot * kPbrSkinnedUBOStride;
-                        if (pbrOff + 192 <= kPbrSkinnedUBOStride * kPbrSkinnedUBOMaxDraws) {
+                        if (pbrOff + 208 <= kPbrSkinnedUBOStride * kPbrSkinnedUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(pbrSkinnedUBOPtr_[currentFrame_]) + pbrOff,
-                                        draw.pbrUboData, 192);
+                                        draw.pbrUboData, 208);
                         }
                         const uint32_t dynOffsets[2] = { boneOff, pbrOff };
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -8085,9 +8087,9 @@ namespace CNA::Internal::Renderers::Vulkan
                     if (draw.pbrDescSet != VK_NULL_HANDLE && pbrUBOPtr_[currentFrame_]) {
                         const uint32_t slot   = pbrUBOSlot++;
                         const uint32_t uboOff = slot * kPbrUBOStride;
-                        if (uboOff + 192 <= kPbrUBOStride * kPbrUBOMaxDraws) {
+                        if (uboOff + 208 <= kPbrUBOStride * kPbrUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(pbrUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.pbrUboData, 192);
+                                        draw.pbrUboData, 208);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutPbr3D_, 0, 1,
@@ -9720,10 +9722,11 @@ namespace CNA::Internal::Renderers::Vulkan
         const std::size_t stride = vb.GetStride() > 0 ? vb.GetStride() : 20;
         const uint32_t drawCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
 
-        const bool needsAlphaTest  = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        const bool needsPbr        = params.pbr;
+        const bool needsAlphaTest  = !needsPbr &&
+                                     (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex    = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap     = params.envMapping  && !needsAlphaTest && !needsDualTex;
-        const bool needsPbr        = params.pbr         && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsSkinned    = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         // stride==32 always uses the lit-textured shader (BasicEffect's VertexPositionNormalTexture
         // path, lit or not — the shader itself branches on lightingEnabled), unless another
@@ -9977,10 +9980,11 @@ namespace CNA::Internal::Renderers::Vulkan
         const uint32_t indexCount = static_cast<uint32_t>(VertexCountForPrimitives(primitive, primitiveCount));
         const int vertexCount     = vb.GetVertexCount();
 
-        const bool needsAlphaTest = (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
+        const bool needsPbr       = params.pbr;
+        const bool needsAlphaTest = !needsPbr &&
+                                    (params.alphaTest[3] < 0.0f || params.alphaTest[2] < 0.0f);
         const bool needsDualTex   = params.dualTexture && !needsAlphaTest;
         const bool needsEnvMap    = params.envMapping  && !needsAlphaTest && !needsDualTex;
-        const bool needsPbr       = params.pbr         && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsSkinned   = params.skinned     && !needsAlphaTest && !needsDualTex && !needsEnvMap;
         const bool needsLitTextured = (stride == 32) && !needsAlphaTest && !needsDualTex
                                      && !needsEnvMap && !needsSkinned && !needsPbr;

@@ -423,6 +423,94 @@ namespace
            R"(Texture2D<float4> occlusionMap : register(t6))"}}},
     }};
 
+    struct RendererAlphaAudit
+    {
+        const char* name;
+        // A renderer passes only when the PBR draw uploads the four-component XNA alpha-test
+        // encoding and the PBR fragment path itself consumes it. Merely having a separate
+        // AlphaTestEffect shader is deliberately insufficient: glTF MASK materials must retain
+        // their PBR vertex layout, material maps and BRDF while rejecting uncovered fragments.
+        std::array<const char*, 4> evidence;
+    };
+
+    constexpr std::array<RendererAlphaAudit, 15> kAlphaAudits{{
+        {"bgfx", {{
+            R"(bgfx::setUniform(alphaTestUnif_, params.alphaTest))",
+            R"(BindPbrTextures(params); SubmitViewProgram(pbr3DProgram_);)",
+            R"(float at = (u_alphaTest.y > 0.0))",
+            R"(if (at < 0.0) discard;)"}}},
+        {"diligent", {{
+            R"(constants.alphaTest[component] = params->alphaTest[component])",
+            R"(psOut.Color = FinishPixel(float4(ambient + Lo + emissive, alpha), psIn.FogKeep))",
+            R"(float weight = passesAlphaTest ? g_AlphaTest.z : g_AlphaTest.w)",
+            R"(if (weight < 0.0) discard;)"}}},
+        {"directx9", {{
+            R"(TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AlphaTest", params.alphaTest))",
+            R"(float4 AlphaTest : register(c11))",
+            R"(float alphaTestResult = (AlphaTest.y > 0.0))",
+            R"(clip(alphaTestResult))"}}},
+        {"directx11", {{
+            R"(const bool needsPbr = params.pbr; const bool needsAlphaTest = !needsPbr)",
+            R"(perDraw.AlphaTest[0] = params.alphaTest[0])",
+            R"(bool passesAlphaTest = (AlphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? AlphaTest.z : AlphaTest.w) < 0.0) discard;)"}}},
+        {"directx12", {{
+            R"(const bool needsPbr = params.pbr; const bool needsAlphaTest = !needsPbr)",
+            R"(perDraw.AlphaTest[0] = params.alphaTest[0])",
+            R"(bool passesAlphaTest = (AlphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? AlphaTest.z : AlphaTest.w) < 0.0) discard;)"}}},
+        {"easygl", {{
+            R"(p.prog.set_uniform(p.loc_alphatest, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
+            R"("uniform vec4 uAlphaTest;\n")",
+            R"(float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w))",
+            R"("    if(_at<0.0)discard;\n")"}}},
+        {"llgl", {{
+            R"(uniforms[84] = params.alphaTest[0])",
+            R"(vec4 alphaTest;)",
+            R"(bool passesAlphaTest = (alphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? alphaTest.z : alphaTest.w) < 0.0) discard;)"}}},
+        {"magnum", {{
+            R"(program.SetVector4(program.LocationOf("uAlphaTest"), Mg::Vector4{params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]}))",
+            R"(source += "    fragColor = vec4(ambient + reflected + emissive, alpha);\n"; source += kAlphaTestFragmentTerm;)",
+            R"(float cnaAlphaTest = (uAlphaTest.y > 0.0))",
+            R"(if (cnaAlphaTest < 0.0) discard;)"}}},
+        {"metal", {{
+            R"(std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest)))",
+            R"(float4 c = float4(ambient + Lo + emissive, alpha))",
+            R"(cna_alpha_test_fails(c.a, pu.alphaTest))",
+            R"(discard_fragment())"}}},
+        {"opengl2", {{
+            R"(if (params) std::memcpy(alphaTest, params->alphaTest, sizeof(alphaTest)))",
+            R"(glUniform4fv(glGetUniformLocation(program, "uAlphaTest"), 1, alphaTest))",
+            R"(gl_FragData[0]=vec4(ambient+Lo+emissive,alpha))",
+            R"(if(_at<0.0)discard)"}}},
+        {"opengl4", {{
+            R"(OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_)",
+            R"(gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1], params.alphaTest[2], params.alphaTest[3]))",
+            R"(bool passesAlphaTest = (uAlphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? uAlphaTest.z : uAlphaTest.w) < 0.0) discard;)"}}},
+        {"sdl-gpu", {{
+            R"(out[4] = p.alphaTest[0])",
+            R"(const bool needsAlphaTest = !needsPbr)",
+            R"(bool passesAlphaTest = (pbrp.alphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? pbrp.alphaTest.z : pbrp.alphaTest.w) < 0.0) discard;)"}}},
+        {"vulkan", {{
+            R"(out[48] = p.alphaTest[0])",
+            R"(const bool needsAlphaTest = !needsPbr)",
+            R"(bool passesAlphaTest = (pbr.alphaTest.y > 0.0))",
+            R"(if ((passesAlphaTest ? pbr.alphaTest.z : pbr.alphaTest.w) < 0.0) discard;)"}}},
+        {"webgpu", {{
+            R"(out[4] = p.alphaTest[0])",
+            R"(const bool needsAlphaTest = !params.pbr)",
+            R"(let alphaWeight = select(pf.alphaTest.w, pf.alphaTest.z, passesAlphaTest))",
+            R"(if (alphaWeight < 0.0) { discard;)"}}},
+        {"wicked", {{
+            R"(std::copy_n(params->alphaTest, 4, constants.alphaTest))",
+            R"(const float selected = (cb.alphaTest.y > 0.0f))",
+            R"((alpha < cb.alphaTest.x) ? cb.alphaTest.z : cb.alphaTest.w)",
+            R"(clip(selected))"}}},
+    }};
+
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
@@ -595,4 +683,21 @@ TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepTheSameFive
         "@group(1) @binding(3) var metallicRoughnessTex: texture_2d<f32>; "
         "@group(1) @binding(4) var emissiveTex: texture_2d<f32>; "
         "@group(1) @binding(5) var occlusionTex: texture_2d<f32>;")), 2u);
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheAlphaCoverageVector)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererAlphaAudit& audit : kAlphaAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        for (const char* evidence : audit.evidence)
+        {
+            EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+                << "missing PBR alpha-coverage evidence: " << evidence;
+        }
+    }
 }

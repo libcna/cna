@@ -42,6 +42,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 emissive_roughness;
     vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector
+    vec4 alphaTest;
 } pbr;
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
@@ -69,6 +70,10 @@ void main() {
     vec4 baseColorTex = texture(uTexture, vUV);
     vec3 albedo = baseColorTex.rgb * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
+    bool passesAlphaTest = (pbr.alphaTest.y > 0.0)
+        ? (abs(alpha - pbr.alphaTest.x) < pbr.alphaTest.y)
+        : (alpha < pbr.alphaTest.x);
+    if ((passesAlphaTest ? pbr.alphaTest.z : pbr.alphaTest.w) < 0.0) discard;
     vec3 N = normalize(vNormal);
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;

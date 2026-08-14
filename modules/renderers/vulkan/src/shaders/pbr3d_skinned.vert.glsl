@@ -47,6 +47,7 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 emissive_roughness;     // xyz = EmissiveFactor, w = RoughnessFactor
     vec4 fogColorEnabled;        // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010)
     vec4 fogVector;              // REMED-GFX-010: FNA fog vector (xyz + w)
+    vec4 alphaTest;              // reference, tolerance, pass weight, fail weight
 } pbr;
 
 void main() {

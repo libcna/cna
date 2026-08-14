@@ -32,12 +32,52 @@ requires every mapping fragment above and checks the separately stored D3D9, sha
 Vulkan rigid/skinned shader files independently; the two inline EasyGL/WebGPU variants must each
 contain their complete declaration set.
 
-`EasyGL_Pbr_TextureSlots` and `Vulkan_Pbr_TextureSlots` add independent real-pixel evidence. Each
-runs ten cases (five maps × rigid/skinned) with semantic sentinel texels: red base colour, green
+`EasyGL_Pbr_TextureSlots` and `Vulkan_Pbr_TextureSlots` add independent real-pixel evidence. Their
+texture-slot portion runs ten cases each (five maps × rigid/skinned) with semantic sentinel texels: red base colour, green
 metallic-roughness (`G=1`, `B=0`), blue emissive, channel-asymmetric occlusion and a tilted normal.
 The linearly rendered expected bytes are analytically stated in the test; a swap cannot pass by
 showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers the
 EasyGL-only output-transfer and scalar semantics at the same binding boundary.
+
+## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
+
+The effect boundary carries one four-component alpha-test vector. `MASK` maps to
+`{cutoff, 0, -1, +1}` and `OPAQUE`/`BLEND` to the never-discard value `{0, 0, +1, +1}`. Every PBR
+fragment path chooses component `z` when `sampledAlpha < x` (or, when `y > 0`, when the alpha is
+within tolerance `y` of `x`), otherwise component `w`, and discards when the selected value is
+negative. A masked PBR draw must remain on the PBR path: routing it to a generic alpha-test effect
+loses the PBR material and, on some APIs, selects a vertex layout that does not match the PBR buffer.
+
+The first cross-renderer pass found both kinds of deviation. DirectX 11/12, LLGL, OpenGL 4, SDL GPU,
+Vulkan, WebGPU and Wicked did not consume the vector in their PBR fragment program (DirectX 11/12
+are two renderers sharing one shader source). DirectX 11/12, SDL GPU, Vulkan and WebGPU additionally
+gave their generic alpha-test path priority over PBR. The corrected per-renderer transport is:
+
+| Renderer | PBR alpha-test transport and consumption |
+|---|---|
+| Bgfx | existing PBR uniform and fragment discard |
+| Diligent | existing shared per-draw constants and `FinishPixel` coverage test |
+| DirectX 9 | existing pixel constant `c11` and fragment discard |
+| DirectX 11 / 12 | `D3DPbrPerDrawConstants::AlphaTest` at byte 176 (`b0`), consumed by both rigid and skinned PBR fragments; PBR wins effect selection |
+| EasyGL | existing `uAlphaTest` uniform and fragment discard |
+| LLGL | final `vec4` of the 88-float PBR parameter block, consumed by both API shader variants |
+| Magnum | existing `uAlphaTest` uniform and shared fragment coverage term |
+| Metal | existing `PbrUniforms::alphaTest` and fragment discard |
+| OpenGL 2 | existing `uAlphaTest` uniform and fragment discard |
+| OpenGL 4 | `uAlphaTest` uniform uploaded by the PBR bind path and consumed by its fragment shader |
+| SDL GPU | second `vec4` of `PbrParams`, consumed by the PBR fragment shader; PBR wins effect selection |
+| Vulkan | final `vec4` of the 208-byte PBR UBO (dynamic stride 256), consumed by rigid and skinned fragments; PBR wins effect selection |
+| WebGPU | second `vec4` of `PbrFactors`, consumed by rigid and skinned WGSL fragments; PBR wins effect selection |
+| Wicked | existing `cb.alphaTest` now consumed by `PbrPS` |
+
+`GltfRendererPbrFallbackPolicy.EveryPbrShaderConsumesTheAlphaCoverageVector` is an ordinary,
+source-based inventory gate over all 15 renderer implementations, including separately stored rigid
+and skinned variants. Vulkan adds four real-pixel cases (discarding and surviving texels, each rigid
+and skinned) to its ten texture-slot cases. Those 14 cases pass on llvmpipe. The changed shader
+sources also compile in the native OpenGL 4, SDL GPU, Vulkan, LLGL and WebGPU backend targets and in
+the MinGW DirectX 11/12 targets; Wicked's extracted `PbrPS` compiles to Vulkan SPIR-V. These checks
+prove this alpha-coverage slice of `GLTF-379`; the remaining §21.1 semantics still require the full
+matrix.
 
 `PbrEffect` and `SkinnedPbrEffect` shaders sample five textures unconditionally. A missing glTF map
 therefore cannot mean “leave the slot unbound”; every PBR renderer must bind a semantic identity:

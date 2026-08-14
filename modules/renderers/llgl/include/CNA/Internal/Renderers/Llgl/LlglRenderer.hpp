@@ -2170,10 +2170,10 @@ namespace CNA::Internal::Renderers::Llgl
         /// only `params.boneCount` entries (the rest stay zeroed, matching a disabled/unused bone
         /// slot the shader never indexes into since `boneCount` bounds every real index).
         static void FillSkinnedBoneData(float (&bones)[72 * 16], const GpuDrawParams& params);
-        /// Fills one PbrEffect draw's own 336-byte uniform block (84 floats -- see
+        /// Fills one PbrEffect draw's own 352-byte uniform block (88 floats -- see
         /// shaders/pbr3d.vert.glsl's PbrParams for the byte layout). `params` is never null here
         /// (only called when `pbr` is set).
-        static void FillPbrUniforms(float (&uniforms)[84], const float matrix[16],
+        static void FillPbrUniforms(float (&uniforms)[88], const float matrix[16],
                                     const GpuDrawParams& params);
         /// Creates the 1x1 default white texture and 1x1 default flat-normal texture
         /// (RGBA (128,128,255,255), decoding to tangent-space (0,0,1)) PbrEffect draws sample

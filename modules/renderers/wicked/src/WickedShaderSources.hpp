@@ -449,6 +449,11 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     const float3 ambient = cb.ambient.rgb * albedo * occlusion;
     const float3 emissive = cb.emissive.rgb * emissiveMap.Sample(sampler0, input.uv).rgb;
 
+    const float selected = (cb.alphaTest.y > 0.0f)
+        ? ((abs(alpha - cb.alphaTest.x) < cb.alphaTest.y) ? cb.alphaTest.z : cb.alphaTest.w)
+        : ((alpha < cb.alphaTest.x) ? cb.alphaTest.z : cb.alphaTest.w);
+    clip(selected);
+
     float3 rgb = ambient + Lo + emissive;
     if (cb.fogColor.w != 0.0f)
     {
