@@ -3154,8 +3154,12 @@ void main()
         prog_env_mapped_.reset_no_gl();
         prog_skinned_.reset_no_gl();
         prog_skinned_vertexlit_.reset_no_gl();
+        prog_pbr_.reset_no_gl();
+        prog_pbr_skinned_.reset_no_gl();
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
+        default_flat_normal_texture_.reset_handle_no_gl();
+        default_flat_normal_texture_ready_ = false;
 
         // 2. Destroy and recreate the SDL GL context.
         if (gl_context)
@@ -3169,8 +3173,17 @@ void main()
             throw std::runtime_error(std::string("SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
         SDL_GL_MakeCurrent(window, gl_context);
 
-        // 3. Reload GL function pointers and increment context generation.
-        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+        // 3. Reload GL function pointers and increment context generation. `easygl::Device` is
+        // already initialized and its initialize() method is deliberately one-shot, so calling
+        // it here returns without touching meta-gl. Context loss invalidated meta-gl's function
+        // table above; the next GL wrapper would consequently call std::terminate(). Reload the
+        // context-facing table directly while retaining Device's context-independent facade.
+        if (!metagl::LoadCurrentContext(
+                reinterpret_cast<metagl::GlGetProcAddressFn>(SDL_GL_GetProcAddress)))
+        {
+            throw std::runtime_error(
+                "meta-gl failed to reload GL entry points after debug context loss");
+        }
 #if defined(CNA_GL_PROFILE_OPENGL33)
         EnableVertexProgramPointSize();
 #endif
@@ -5065,6 +5078,7 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "in vec3 vWorldPos;\n"
 "uniform sampler2D uTexture;\n"
 "uniform vec4 uDiffuseColor;\n"
+"uniform float uLightingEnabled;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
@@ -5084,17 +5098,24 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
 "void main(){\n"
-"    vec3 N=normalize(vNormal);\n"
-"    vec3 E=normalize(uEyePosition-vWorldPos);\n"
-"    float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
-"    float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
-"    float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"    vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
-"    vec3 litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
-"    vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
-"    vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
-"    vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"    vec3 specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+// XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
+// through the lit math here: an unlit vertex at the default eye position makes normalize(0)
+// undefined, and NaN*zero is still NaN, turning the otherwise-correct diffuse result black.
+"    vec3 litRGB=uDiffuseColor.rgb;\n"
+"    vec3 specularRGB=vec3(0.0);\n"
+"    if(uLightingEnabled>0.5){\n"
+"        vec3 N=normalize(vNormal);\n"
+"        vec3 E=normalize(uEyePosition-vWorldPos);\n"
+"        float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
+"        float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
+"        float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
+"        vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+"        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
+"        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
+"        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
+"        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
+"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
 "    float _at=(uAlphaTest.y>0.0)?((abs(FragColor.a-uAlphaTest.x)<uAlphaTest.y)?uAlphaTest.z:uAlphaTest.w):((FragColor.a<uAlphaTest.x)?uAlphaTest.z:uAlphaTest.w);\n"
@@ -5108,6 +5129,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
         prog_lit_textured_.loc_diffuse     = prog_lit_textured_.prog.uniform_location("uDiffuseColor");
+        prog_lit_textured_.loc_lighting_enabled = prog_lit_textured_.prog.uniform_location("uLightingEnabled");
         prog_lit_textured_.loc_ambient     = prog_lit_textured_.prog.uniform_location("uAmbientColor");
         prog_lit_textured_.loc_l0dir       = prog_lit_textured_.prog.uniform_location("uLight0Dir");
         prog_lit_textured_.loc_l0diff      = prog_lit_textured_.prog.uniform_location("uLight0Diffuse");
@@ -6479,6 +6501,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
             p.prog.set_uniform(p.loc_diffuse,
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]);
+        if (p.loc_lighting_enabled >= 0)
+            p.prog.set_uniform(p.loc_lighting_enabled, params.lightingEnabled ? 1.0f : 0.0f);
 
         // VertexColorEnabled gate (colored3D / BasicEffect no-texture path only — Task 364).
         if (p.loc_vertexcolor >= 0)

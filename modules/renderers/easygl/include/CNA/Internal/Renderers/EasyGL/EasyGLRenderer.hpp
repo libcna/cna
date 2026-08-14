@@ -632,6 +632,7 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_world         = -1;  ///< mat4 full world matrix (env map shader)
             int loc_diffuse       = -1;
             int loc_ambient       = -1;
+            int loc_lighting_enabled = -1;  ///< BasicEffect unlit-vs-lit shader branch
             int loc_l0dir         = -1;
             int loc_l0diff        = -1;
             int loc_l1dir         = -1;  ///< BasicEffect.DirectionalLight1 (lit shader only)

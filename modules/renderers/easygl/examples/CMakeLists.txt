@@ -230,6 +230,20 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-439: retain one loaded glTF model across EasyGL's real desktop GL
+        # context destroy/recreate cycle, then draw the same imported buffers and texture again.
+        cna_easygl_test(cna_test_easygl_gltf_context_loss
+                        easygl_gltf_context_loss_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_ContextLoss
+            COMMAND cna_test_easygl_gltf_context_loss
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            # Unlike screenshot tests that exercise the X11 presenter, this case exercises GL
+            # resource lifetime only. SDL's offscreen driver gives it a real Mesa context while
+            # keeping the regression runnable on Linux builders that do not expose an X server.
+            # Do not force a software device: EGL rejects that override when SDL explicitly
+            # selected another device, which crashes before the test reaches context recovery.
+            ENVIRONMENT "SDL_VIDEODRIVER=offscreen")
+
         # plan_gltf.md GLTF-189: CLAMP/REPEAT/MIRRORED_REPEAT from three generated assets,
         # applied through ModelMeshPart's public per-slot sampler contract before Model::Draw.
         cna_easygl_test(cna_test_easygl_gltf_sampler_wrap
