@@ -826,7 +826,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 8>& out, const GpuDrawParams& p)
+        void FillPbrFactors(std::array<float, 12>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -836,6 +836,10 @@ namespace CNA::Internal::Renderers::WebGPU
             out[5] = p.alphaTest[1];
             out[6] = p.alphaTest[2];
             out[7] = p.alphaTest[3];
+            out[8] = p.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+            out[11] = 0.0f;
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -8472,6 +8476,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
+    srgbFlags: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8514,6 +8519,18 @@ fn directionHandedness(m: mat3x3f) -> f32 {
     return output;
 }
 
+fn srgbToLinear(c: vec3f) -> vec3f {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(lo, hi, c >= vec3f(0.04045));
+}
+
+fn linearToSrgb(c: vec3f) -> vec3f {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - vec3f(0.055);
+    return select(lo, hi, c >= vec3f(0.0031308));
+}
+
 fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
@@ -8535,7 +8552,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
-    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
+    let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
     let useTolerance = pf.alphaTest.y > 0.0;
     let lessTest = alpha < pf.alphaTest.x;
@@ -8580,9 +8598,13 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
+    let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    return vec4f(ambient + lo + emissive, alpha);
+    let linearRgb = ambient + lo + emissive;
+    let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
+    return vec4f(outputRgb, alpha);
 }
 )WGSL";
 
@@ -8608,8 +8630,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains two vec4 values (metallicRoughness + alphaTest).
-        uboEntries[2].buffer.minBindingSize = 8 * sizeof(float);
+        // PbrFactors contains three vec4 values (metallicRoughness + alphaTest + sRGB flags).
+        uboEntries[2].buffer.minBindingSize = 12 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
@@ -9935,6 +9957,7 @@ struct LitLightParams {
 struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
+    srgbFlags: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -10022,6 +10045,18 @@ fn pbrDirectionHandedness(m: mat3x3f) -> f32 {
     return output;
 }
 
+fn srgbToLinear(c: vec3f) -> vec3f {
+    let lo = c / 12.92;
+    let hi = pow((c + vec3f(0.055)) / 1.055, vec3f(2.4));
+    return select(lo, hi, c >= vec3f(0.04045));
+}
+
+fn linearToSrgb(c: vec3f) -> vec3f {
+    let lo = c * 12.92;
+    let hi = 1.055 * pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.4)) - vec3f(0.055);
+    return select(lo, hi, c >= vec3f(0.0031308));
+}
+
 fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
@@ -10043,7 +10078,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
 
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
     let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
-    let albedo = baseColorSample.rgb * u.diffuseColor.rgb;
+    let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
+    let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
     let useTolerance = pf.alphaTest.y > 0.0;
     let lessTest = alpha < pf.alphaTest.x;
@@ -10085,9 +10121,13 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
+    let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
-    return vec4f(ambient + lo + emissive, alpha);
+    let linearRgb = ambient + lo + emissive;
+    let outputRgb = select(linearRgb, linearToSrgb(linearRgb), pf.srgbFlags.z > 0.5);
+    return vec4f(outputRgb, alpha);
 }
 )WGSL";
 
@@ -10113,8 +10153,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains two vec4 values (metallicRoughness + alphaTest).
-        uboEntries[2].buffer.minBindingSize = 8 * sizeof(float);
+        // PbrFactors contains three vec4 values (metallicRoughness + alphaTest + sRGB flags).
+        uboEntries[2].buffer.minBindingSize = 12 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;

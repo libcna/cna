@@ -153,6 +153,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     cna_register_renderer_test(NAME WebGPU_Pbr3D COMMAND cna_test_webgpu_pbr3d
         TIMEOUT 30 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-213: exact mid-grey sRGB transfer and linear base+emissive composition, repeated on
+    # both rigid and identity-skinned WebGPU PBR pipelines.
+    cna_webgpu_test(cna_test_webgpu_pbr_srgb_transfer
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
+    target_link_libraries(cna_test_webgpu_pbr_srgb_transfer PRIVATE SDL3::SDL3)
+    cna_register_renderer_test(NAME WebGPU_Pbr_SrgbTransfer COMMAND cna_test_webgpu_pbr_srgb_transfer
+        TIMEOUT 60 LABELS "WebGPU" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_cnj.md Phase 14J WebGPU counterpart: skinned3d.wgsl family / GetOrCreatePipelineSkinned3D
     # / SkinnedEffect (strides 52/56, both PreferPerPixelLighting variants, VertexColorEnabled) --
     # closes this renderer's pre-existing "no skinning shader at all" gap.
