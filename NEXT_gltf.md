@@ -9,9 +9,9 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **442 closed (`✔` 273, `✅` 169),
-  10 `⬜` remaining.** The other 8 carry a deliberate partial marker: 1 `🔬` (investigation, no
-  implementation owed) and 7 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **448 closed (`✔` 276, `✅` 172),
+  6 `⬜` remaining.** The other 6 carry a deliberate partial marker: 1 `🔬` (investigation, no
+  implementation owed) and 5 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
 - **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
   Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
   workflow also runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
@@ -58,6 +58,7 @@ Expected as of this writing:
 | `*Gltf*`, HEADLESS without Draco | **539 tests: 538 passed, 1 opt-in skip**; the ten-test difference is the real decoder/encoder evidence, while the unavailable-path checks still run |
 | conformance ladder, Draco `ON` / `OFF` | **10/10 passed** / **10/10 passed** |
 | pinned reference renderer subset | **12/12 passed**; minimum foreground IoU 0.999579, coverage ratio 0.999891–1.000422, worst foreground RGB MAE 67.60 |
+| final pinned viewer retake | **14/14 rows, 15/15 cases passed** through two byte-identical viewer captures plus the exact viewer camera in the Khronos renderer; report in `docs/gltf-viewer-retake-report.json` |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -127,9 +128,11 @@ asserts the copy. The packed GPU layouts are `BuiltInVertexStreams.hpp`'s stream
 public `VertexPosition*` types (`sizeof(VertexPositionColor)` is 40, not 16).
 
 **New public API is gated.** `docs/gltf-api-change-review.md` is `GLTF-025`'s record; the standing
-default is *no new public glTF API*. Anything additive goes through §1 with its shape justified, and
-every internal report (`NodeGraphReportEXT`, `SkinReportEXT`, `MorphReportEXT`, `LightReportEXT`,
-`AnimationReportEXT`) is deliberately internal because `GLTF-034`'s public report is deferred there.
+default is *no new public glTF API*. Anything additive goes through §1 with its shape justified.
+The owner explicitly reopened `GLTF-034` after naming the viewer as its first consumer, so public
+`GltfImportReportEXT` now survives both direct and offline loads and is exposed by `Model`; its
+computation-oriented source reports (`NodeGraphReportEXT`, `SkinReportEXT`, `MorphReportEXT`,
+`LightReportEXT`, `AnimationReportEXT`) remain internal.
 
 **Stage commits by explicit name.** `CLAUDE.md` forbids `git add -A` / `git add .` — this repo
 routinely carries unrelated local changes.
@@ -166,31 +169,29 @@ narrower than the old table implied:
 
 | Boundary | Rows | Note |
 |---|---|---|
-| **whole-corpus L7 harness/policy** | `GLTF-009`, `244`, `384`–`387`, `390`, `391` | The independent 12-asset reference subset is green and has a committed report. Turning that into a corpus-wide, multi-renderer CTest rung still needs golden storage/update policy and per-renderer tolerances. DIRECTX11 additionally needs Windows CI. |
-| **format/shader breadth** | `GLTF-182`, `183`, `344` | A second UV stream plus per-map selection is an ABI/shader change. `KHR_materials_specular` remains partial only for its two textures; factors and colour are already carried and rendered. |
-| **final viewer matrix** | `GLTF-429`, `432` | The viewer is writable and its direct/offline/reference captures work; explicit imported-camera selection is now closed too. The exact fourteen-row record is incomplete, especially the fetch-on-demand ≥50 MB case, so §27.1 row 20 remains partial. |
-| **milestone chain** | `GLTF-449`, `458`–`460` | These are intentionally gated by the remaining technical rows; do not change `FUTURE.md` or declare either milestone early. |
+| **format/material breadth** | `GLTF-182`, `183`, `244`, `344` | §27.1 row 7 is the current CORE blocker: CNA can choose either authored UV set as one baked stream, but cannot carry both simultaneously for maps selecting different sets. `KHR_materials_specular` remains partial only for its two texture inputs. `GLTF-244` still requires its full material matrix at L7 on two rasterisers. |
+| **renderer/platform residue** | `GLTF-379`, `385`–`387` | The seven completed semantic-audit slices stay recorded under the investigation row. Vulkan, DirectX11/DXVK and SOFTWARE have strong numerical/native evidence, but no renderer-specific whole-corpus L7 capture/tolerance policy. |
+| **milestone chain** | `GLTF-449`, `458`–`460` | `FUTURE.md` correctly remains CURRENT/in progress. Do not declare CORE while row 7 is partial, then evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
 
 ## Suggested next clusters
 
 Ordered by value, not by number. Rewritten 2026-08-14 after the 145-asset corpus, vendored Draco,
 viewer integration and pinned reference subset became green.
 
-1. **Finish `GLTF-429`'s exact fourteen-row viewer record.** Reuse `--reference-capture` and the
-   now-working direct/offline paths, fill the missing morph/external/full-PBR rows explicitly, then
-   fetch (do not commit) a licensed ≥50 MB model for row 14. Close `GLTF-432` only after README and
-   viewer plan name the final results.
-2. **Promote the proven 12-asset method into `GLTF-009`/`244`/`390`/`391`.** Keep L0–L6 first,
-   decide which PNG evidence is committed, define update/review mechanics, then add L7 last in the
-   conformance label. Do not generalise the current EasyGL-vs-Khronos RGB threshold to other
-   renderers without measuring them.
-3. **Implement the shared UV2 foundation (`GLTF-182`/`183`) before the remaining
+1. **Implement the shared UV2 foundation (`GLTF-182`/`183`) before the remaining
    `KHR_materials_specular` textures (`GLTF-344`).** Both specular textures can choose their own
    `texCoord`, so implementing them first would create exactly the per-map hardcoding these rows
-   exist to avoid.
-4. **Finish renderer/platform residue (`GLTF-384`–`387`)** once the L7 rung exists. OPENGLES3 and
-   Vulkan already pass L0–L6; DIRECTX11 requires Windows CI, and SOFTWARE needs the same image
-   protocol rather than a renderer-specific substitute.
+   exist to avoid. Revisit `GLTF-181`'s former single-channel decision explicitly: its runtime
+   warning remains honest evidence, but it cannot make a requirement for simultaneous UV0/UV1 green.
+2. **Complete the two-renderer material raster gate (`GLTF-244`).** Reuse the final viewer harness
+   and keep numerical L6 first; define the second renderer's measured pixel policy instead of
+   copying EasyGL's tolerances without evidence.
+3. **Finish the remaining `KHR_materials_specular` texture inputs (`GLTF-344`)** on top of the
+   per-map UV selector, with the specular scalar texture kept linear and the colour texture decoded
+   from sRGB.
+4. **Finish renderer/platform residue (`GLTF-379`, `385`–`387`)** with explicit renderer-specific
+   image evidence or a documented release-boundary decision; do not turn existing L1–L6/native
+   success into an unstated L7 claim.
 5. **Only then close the milestone chain** (`GLTF-449`, `458`–`460`). `FUTURE.md` must continue to
    say the campaign is in progress until every §27.1 row is green.
 
@@ -245,6 +246,8 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 | `scripts/regenerate-gltf-goldens.sh` | Regenerate the corpus, verify it, decode any binary golden that moved, and (`--determinism`) prove two processes emit the same bytes. |
 | `scripts/gltf-renderer-parity.sh` | Compare two build directories; fails on any L1–L5 difference, tolerates only `SKIPPED`-vs-`OK`. |
 | `scripts/gltf-reference-renderer-compare.py` | Reproduce the 12-asset OPENGLES3-vs-pinned-Khronos capture and metric report. |
+| `scripts/gltf-viewer-retake.py` | Reproduce the final pinned 14-row/15-case Gate C viewer retake. |
+| `docs/gltf-viewer-retake-report.json` | Committed Gate C provenance, per-process hashes, camera records and comparison metrics. |
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |
 | `docs/gltf-performance.md` | Phase 22's measurements and the decision each led to — the parse/cache costs, the 4× unpack ceiling, the 2× morph duplication, the occlusion codec. Reproduce with `--gtest_filter='GltfPerformance.*' --gtest_output=xml:`. |
 | `docs/gltf-limitations.md` | The inverse: what cannot be carried, what is approximated, and the report field that names each loss. Its §1 is generated from the extension registry and its report fields are checked against the header — see `GltfLimitationsDoc`. |

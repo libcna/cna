@@ -134,16 +134,17 @@ their independent UV and colour-space rules (`GLTF-344`).
 
 ---
 
-## 4. Carried but not applied
+## 4. Carried by CNA, applied by the application
 
-State that survives import intact and reaches the effect, where nothing yet acts on it. This is a
-narrower category than "unsupported", and keeping it separate is the point: the data is present and
-provable, and only the last step is missing.
+State that survives import intact and reaches the effect, while CNA deliberately leaves the final
+per-draw device choice to the application. This is narrower than "unsupported": the data and the
+consumer path are both proven, but `Model::Draw` does not silently mutate global state or invent a
+transparent sort order.
 
-| State | Where it lives | What is missing | Task |
+| State | Where it lives | Required application action | Task |
 |---|---|---|---|
-| `alphaMode: BLEND` | `PbrEffect::getAlphaModeEXTProperty()` | `BlendState` and back-to-front draw ordering, which in XNA are per-draw device state the application sets. CNA does not sort by default. | `GLTF-230` |
-| `doubleSided` | `PbrEffect::getDoubleSidedEXTProperty()` | `RasterizerState::CullMode`, per-draw device state for the same reason. | `GLTF-231`, `GLTF-230` |
+| `alphaMode: BLEND` | `PbrEffect::getAlphaModeEXTProperty()` | Select `BlendState::NonPremultiplied` and issue transparent parts back-to-front. CNA does not sort by default. `EasyGL_Gltf_AlphaBlend` proves the real imported material against Opaque and premultiplied controls on OPENGLES2/3. | `GLTF-230` |
+| `doubleSided` | `PbrEffect::getDoubleSidedEXTProperty()` | Select `RasterizerState::CullNone`; otherwise keep the glTF front-face state (reversed for mirrored placement). The same test proves a back-facing imported triangle is culled by the single-sided control and visible under the property-derived state on OPENGLES2/3. | `GLTF-231`, `GLTF-230` |
 
 `alphaMode: MASK` **used** to be in this table and is not any more: the cutoff is fragment-program
 work rather than device state. `GLTF-372` wired it into `GpuDrawParams::alphaTest`; the subsequent
