@@ -180,16 +180,148 @@ namespace
         return offset;
     }
 
+    /** @brief One sampler-state assignment written into the fixture's sampler parameter. */
+    struct SyntheticSamplerState
+    {
+        std::uint32_t type;
+        std::uint32_t valueBits;
+        bool isFloat = false;
+    };
+
+    /** @brief What the synthetic conformance fixture should contain. */
+    struct SyntheticEffectOptions
+    {
+        std::vector<SyntheticRenderState> renderStates;
+        /// Adds an FxTexture parameter, an FxSampler parameter and a real Shader Model 2.0
+        /// pixel-shader object, which is what makes MojoShader report sampler state registers.
+        bool includeSampler = false;
+        std::vector<SyntheticSamplerState> samplerStates;
+        std::uint32_t samplerRegister = 0;
+    };
+
+    std::uint32_t AppendObjectType(std::vector<std::uint8_t>& bytes,
+                                   MOJOSHADER_symbolType type,
+                                   std::uint32_t nameOffset,
+                                   std::uint32_t semanticOffset)
+    {
+        const auto offset = static_cast<std::uint32_t>(bytes.size() - 8);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(type));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(MOJOSHADER_SYMCLASS_OBJECT));
+        AppendUInt32(bytes, nameOffset);
+        AppendUInt32(bytes, semanticOffset);
+        AppendUInt32(bytes, 0); // elements
+        return offset;
+    }
+
+    void AppendUInt16(std::vector<std::uint8_t>& bytes, std::uint32_t value)
+    {
+        bytes.push_back(static_cast<std::uint8_t>(value));
+        bytes.push_back(static_cast<std::uint8_t>(value >> 8));
+    }
+
+    /**
+     * Assembles a Shader Model 2.0 pixel-shader program, including the Direct3D 9 constant table
+     * its Effect Framework container is reflected from. MojoShader derives every
+     * MOJOSHADER_samplerStateRegister from those CTAB symbols, so a sampler conformance fixture
+     * needs a real program even though the shader body itself is trivial. `mov oC0, c0` keeps the
+     * generated GLSL/SPIR-V valid on every profile FNA3D can select at runtime.
+     */
+    std::vector<std::uint8_t> BuildSyntheticPixelShader(std::uint32_t samplerRegister)
+    {
+        constexpr std::uint32_t versionToken = 0xFFFF0200u;
+        std::vector<std::uint8_t> ctab;
+        AppendUInt32(ctab, 28);           // 0  sizeof(D3DXSHADER_CONSTANTTABLE)
+        AppendUInt32(ctab, 0);            // 4  Creator, patched below
+        AppendUInt32(ctab, versionToken); // 8  Version -- must equal the shader version token
+        AppendUInt32(ctab, 2);            // 12 Constants
+        AppendUInt32(ctab, 28);           // 16 ConstantInfo offset
+        AppendUInt32(ctab, 0);            // 20 Flags
+        AppendUInt32(ctab, 0);            // 24 Target, patched below
+
+        const auto constantInfo = static_cast<std::uint32_t>(ctab.size());
+        for (int i = 0; i < 2; ++i)
+        {
+            AppendUInt32(ctab, 0); // Name, patched below
+            AppendUInt16(ctab, 0); // RegisterSet, patched below
+            AppendUInt16(ctab, 0); // RegisterIndex, patched below
+            AppendUInt16(ctab, 1); // RegisterCount
+            AppendUInt16(ctab, 0); // Reserved
+            AppendUInt32(ctab, 0); // TypeInfo, patched below
+            AppendUInt32(ctab, 0); // DefaultValue
+        }
+
+        const auto tintType = static_cast<std::uint32_t>(ctab.size());
+        AppendUInt16(ctab, MOJOSHADER_SYMCLASS_VECTOR);
+        AppendUInt16(ctab, MOJOSHADER_SYMTYPE_FLOAT);
+        AppendUInt16(ctab, 1); // rows
+        AppendUInt16(ctab, 4); // columns
+        AppendUInt16(ctab, 1); // elements
+        AppendUInt16(ctab, 0); // struct members
+        AppendUInt32(ctab, 0); // struct member info
+
+        const auto samplerType = static_cast<std::uint32_t>(ctab.size());
+        AppendUInt16(ctab, MOJOSHADER_SYMCLASS_OBJECT);
+        AppendUInt16(ctab, MOJOSHADER_SYMTYPE_SAMPLER2D);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 1);
+        AppendUInt16(ctab, 0);
+        AppendUInt32(ctab, 0);
+
+        const auto appendCtabString = [&ctab](const std::string& value) {
+            const auto offset = static_cast<std::uint32_t>(ctab.size());
+            ctab.insert(ctab.end(), value.begin(), value.end());
+            ctab.push_back(0);
+            return offset;
+        };
+        const std::uint32_t tintName = appendCtabString("Tint");
+        const std::uint32_t samplerName = appendCtabString("FxSampler");
+        const std::uint32_t target = appendCtabString("ps_2_0");
+        const std::uint32_t creator = appendCtabString("CNA synthetic conformance fixture");
+        while ((ctab.size() & 3u) != 0) ctab.push_back(0);
+
+        PatchUInt32(ctab, 4, creator);
+        PatchUInt32(ctab, 24, target);
+        PatchUInt32(ctab, constantInfo, tintName);
+        ctab[constantInfo + 4] = 2; // RegisterSet: float
+        ctab[constantInfo + 6] = 0; // RegisterIndex c0
+        PatchUInt32(ctab, constantInfo + 12, tintType);
+        PatchUInt32(ctab, constantInfo + 20, samplerName);
+        ctab[constantInfo + 24] = 3; // RegisterSet: sampler
+        ctab[constantInfo + 26] = static_cast<std::uint8_t>(samplerRegister);
+        PatchUInt32(ctab, constantInfo + 32, samplerType);
+
+        std::vector<std::uint8_t> shader;
+        AppendUInt32(shader, versionToken);
+        AppendUInt32(shader, 0x0000FFFEu |
+                                 ((1u + static_cast<std::uint32_t>(ctab.size() / 4)) << 16));
+        AppendUInt32(shader, 0x42415443u); // 'CTAB'
+        shader.insert(shader.end(), ctab.begin(), ctab.end());
+
+        // mov oC0, c0 -- one destination and one source token.
+        constexpr std::uint32_t colorOut = 8;
+        constexpr std::uint32_t constantRegister = 2;
+        const auto registerBits = [](std::uint32_t type) {
+            return ((type & 0x7u) << 28) | ((type >> 3) << 11);
+        };
+        AppendUInt32(shader, 0x00000001u | (2u << 24));
+        AppendUInt32(shader, 0x80000000u | registerBits(colorOut) | (0xFu << 16));
+        AppendUInt32(shader, 0x80000000u | registerBits(constantRegister) | (0xE4u << 16));
+        AppendUInt32(shader, 0x0000FFFFu);
+        return shader;
+    }
+
     /**
      * Builds a small Effect Framework 9.1 container directly from the documented layout consumed
-     * by CNA's pinned MojoShader. It deliberately contains no shader objects: MojoShader permits
-     * state-only passes, which makes this a deterministic conformance fixture for public
-     * reflection, exact pass identity, and every render-state translation without redistributing
-     * a proprietary compiler or compiler-produced program.
+     * by CNA's pinned MojoShader. State-only passes make it a deterministic conformance fixture
+     * for public reflection, exact pass identity, and every render-state translation without
+     * redistributing a proprietary compiler or compiler-produced program; requesting a sampler
+     * additionally emits a hand-assembled Shader Model 2.0 program so the sampler-state
+     * translation can be observed too.
      */
-    std::vector<std::uint8_t> BuildSyntheticConformanceEffect(
-        const std::vector<SyntheticRenderState>& renderStates)
+    std::vector<std::uint8_t> BuildSyntheticEffect(const SyntheticEffectOptions& options)
     {
+        const std::vector<SyntheticRenderState>& renderStates = options.renderStates;
         std::vector<std::uint8_t> bytes;
         AppendUInt32(bytes, 0xFEFF0901u);
         AppendUInt32(bytes, 0); // structure offset, patched below
@@ -213,6 +345,8 @@ namespace
         const std::uint32_t firstPass = AppendEffectString(bytes, "P0");
         const std::uint32_t statePass = AppendEffectString(bytes, "StatePass");
         const std::uint32_t secondPass = AppendEffectString(bytes, "P1");
+        const std::uint32_t textureName = AppendEffectString(bytes, "FxTexture");
+        const std::uint32_t samplerName = AppendEffectString(bytes, "FxSampler");
 
         const std::uint32_t unnamedIntType =
             AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, empty, empty);
@@ -236,6 +370,14 @@ namespace
             AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, qualityName, empty);
         const std::uint32_t passTagType =
             AppendScalarType(bytes, MOJOSHADER_SYMTYPE_INT, passTagName, empty);
+        const std::uint32_t textureType =
+            AppendObjectType(bytes, MOJOSHADER_SYMTYPE_TEXTURE2D, textureName, empty);
+        const std::uint32_t samplerType =
+            AppendObjectType(bytes, MOJOSHADER_SYMTYPE_SAMPLER2D, samplerName, empty);
+        const std::uint32_t stateTextureType =
+            AppendObjectType(bytes, MOJOSHADER_SYMTYPE_TEXTURE2D, empty, empty);
+        const std::uint32_t pixelShaderType =
+            AppendObjectType(bytes, MOJOSHADER_SYMTYPE_PIXELSHADER, empty, empty);
 
         const std::uint32_t gainValue = AppendValueBits(bytes, FloatBits(0.25f));
         const std::uint32_t tintValue =
@@ -255,12 +397,48 @@ namespace
         for (const auto& state : renderStates)
             stateValueOffsets.push_back(AppendValueBits(bytes, state.valueBits));
 
+        // Object indices: 0 stays unused (the Effect Framework reserves it), 1 is the texture
+        // whose name the sampler maps to, 2 is the pixel-shader program.
+        constexpr std::uint32_t textureObjectIndex = 1;
+        constexpr std::uint32_t pixelShaderObjectIndex = 2;
+        std::uint32_t textureValue = 0;
+        std::uint32_t samplerValue = 0;
+        std::uint32_t pixelShaderValue = 0;
+        if (options.includeSampler)
+        {
+            textureValue = AppendValueBits(bytes, textureObjectIndex);
+            pixelShaderValue = AppendValueBits(bytes, pixelShaderObjectIndex);
+            const std::uint32_t samplerTextureValue =
+                AppendValueBits(bytes, textureObjectIndex);
+            std::vector<std::uint32_t> samplerValueOffsets;
+            samplerValueOffsets.reserve(options.samplerStates.size());
+            for (const auto& state : options.samplerStates)
+                samplerValueOffsets.push_back(AppendValueBits(bytes, state.valueBits));
+
+            samplerValue = static_cast<std::uint32_t>(bytes.size() - 8);
+            AppendUInt32(bytes, static_cast<std::uint32_t>(options.samplerStates.size() + 1));
+            // The texture assignment always comes first: it is what binds the reflected
+            // FxTexture parameter to this sampler register.
+            AppendUInt32(bytes, MOJOSHADER_SAMP_TEXTURE);
+            AppendUInt32(bytes, 0); // ignored legacy field
+            AppendUInt32(bytes, stateTextureType);
+            AppendUInt32(bytes, samplerTextureValue);
+            for (std::size_t i = 0; i < options.samplerStates.size(); ++i)
+            {
+                AppendUInt32(bytes, options.samplerStates[i].type);
+                AppendUInt32(bytes, 0); // ignored legacy field
+                AppendUInt32(bytes, options.samplerStates[i].isFloat
+                                          ? unnamedFloatType : unnamedIntType);
+                AppendUInt32(bytes, samplerValueOffsets[i]);
+            }
+        }
+
         const auto structureOffset = static_cast<std::uint32_t>(bytes.size() - 8);
         PatchUInt32(bytes, 4, structureOffset);
-        AppendUInt32(bytes, 5); // parameters
+        AppendUInt32(bytes, options.includeSampler ? 7 : 5); // parameters
         AppendUInt32(bytes, 2); // techniques
         AppendUInt32(bytes, 0); // ignored legacy count
-        AppendUInt32(bytes, 0); // objects
+        AppendUInt32(bytes, options.includeSampler ? 3 : 0); // objects
 
         AppendUInt32(bytes, gainType);
         AppendUInt32(bytes, gainValue);
@@ -289,6 +467,19 @@ namespace
         AppendUInt32(bytes, 0); // flags
         AppendUInt32(bytes, 0); // annotations
 
+        if (options.includeSampler)
+        {
+            AppendUInt32(bytes, textureType);
+            AppendUInt32(bytes, textureValue);
+            AppendUInt32(bytes, 0); // flags
+            AppendUInt32(bytes, 0); // annotations
+
+            AppendUInt32(bytes, samplerType);
+            AppendUInt32(bytes, samplerValue);
+            AppendUInt32(bytes, 0); // flags
+            AppendUInt32(bytes, 0); // annotations
+        }
+
         AppendUInt32(bytes, firstTechnique);
         AppendUInt32(bytes, 1); // annotations
         AppendUInt32(bytes, 2); // passes
@@ -301,7 +492,8 @@ namespace
 
         AppendUInt32(bytes, statePass);
         AppendUInt32(bytes, 1); // annotations
-        AppendUInt32(bytes, static_cast<std::uint32_t>(renderStates.size()));
+        AppendUInt32(bytes, static_cast<std::uint32_t>(renderStates.size()) +
+                                (options.includeSampler ? 1u : 0u));
         AppendUInt32(bytes, passTagType);
         AppendUInt32(bytes, passTagValue);
         for (std::size_t i = 0; i < renderStates.size(); ++i)
@@ -312,6 +504,13 @@ namespace
                                       ? unnamedFloatType : unnamedIntType);
             AppendUInt32(bytes, stateValueOffsets[i]);
         }
+        if (options.includeSampler)
+        {
+            AppendUInt32(bytes, MOJOSHADER_RS_PIXELSHADER);
+            AppendUInt32(bytes, 0); // ignored legacy field
+            AppendUInt32(bytes, pixelShaderType);
+            AppendUInt32(bytes, pixelShaderValue);
+        }
 
         AppendUInt32(bytes, secondTechnique);
         AppendUInt32(bytes, 0); // annotations
@@ -320,9 +519,38 @@ namespace
         AppendUInt32(bytes, 0); // annotations
         AppendUInt32(bytes, 0); // states
 
-        AppendUInt32(bytes, 0); // small objects
+        if (!options.includeSampler)
+        {
+            AppendUInt32(bytes, 0); // small objects
+            AppendUInt32(bytes, 0); // large objects
+            return bytes;
+        }
+
+        AppendUInt32(bytes, 2); // small objects
         AppendUInt32(bytes, 0); // large objects
+
+        // Object 1 carries only the name of the texture the sampler maps to.
+        const std::string mappedTexture = "FxTexture";
+        AppendUInt32(bytes, textureObjectIndex);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(mappedTexture.size() + 1));
+        bytes.insert(bytes.end(), mappedTexture.begin(), mappedTexture.end());
+        bytes.push_back(0);
+        while ((bytes.size() & 3u) != 0) bytes.push_back(0);
+
+        const std::vector<std::uint8_t> shader =
+            BuildSyntheticPixelShader(options.samplerRegister);
+        AppendUInt32(bytes, pixelShaderObjectIndex);
+        AppendUInt32(bytes, static_cast<std::uint32_t>(shader.size()));
+        bytes.insert(bytes.end(), shader.begin(), shader.end());
         return bytes;
+    }
+
+    std::vector<std::uint8_t> BuildSyntheticConformanceEffect(
+        const std::vector<SyntheticRenderState>& renderStates)
+    {
+        SyntheticEffectOptions options;
+        options.renderStates = renderStates;
+        return BuildSyntheticEffect(options);
     }
 
     std::vector<SharpRuntime::bytecs> LoadStockEffect(const char* name)
@@ -749,6 +977,247 @@ TEST(Fna3dCompiledEffectTest, CompiledPassPublishesRenderStatesThroughGraphicsDe
     EXPECT_EQ(static_cast<int>(blend.getColorWriteChannelsProperty()), 5);
     EXPECT_EQ(blend.getMultiSampleMaskProperty(), 0x0F0F0F0F);
     EXPECT_EQ(blend.getBlendFactorProperty(), Color(0x10, 0x20, 0x30, 0x40));
+}
+
+namespace
+{
+    /** @brief Applies the sampler-bearing fixture's state pass and returns the device's slot. */
+    Microsoft::Xna::Framework::Graphics::SamplerState ApplySyntheticSampler(
+        GraphicsDevice& device, const std::vector<SyntheticSamplerState>& states,
+        std::uint32_t samplerRegister = 0)
+    {
+        SyntheticEffectOptions options;
+        options.includeSampler = true;
+        options.samplerStates = states;
+        options.samplerRegister = samplerRegister;
+        Effect effect(device, BuildSyntheticEffect(options));
+        effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+        return device.getSamplerStatesProperty()[static_cast<int>(samplerRegister)];
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerFixtureReflectsTextureParameterAndHidesTheSampler)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    SyntheticEffectOptions options;
+    options.includeSampler = true;
+    GraphicsDevice device;
+    Effect effect(device, BuildSyntheticEffect(options));
+
+    // XNA exposes the texture parameter but never the sampler or shader objects behind it.
+    const auto& parameters = effect.getParametersProperty();
+    ASSERT_NE(parameters["FxTexture"], nullptr);
+    EXPECT_EQ(parameters["FxTexture"]->getParameterTypeProperty(),
+              EffectParameterType::Texture2D);
+    EXPECT_EQ(parameters["FxSampler"], nullptr);
+    EXPECT_EQ(parameters.getCountProperty(), 6);
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerAddressingStatesReachTheDeviceSamplerSlot)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    const SamplerState applied = ApplySyntheticSampler(device, {
+        {MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_MIRROR},
+        {MOJOSHADER_SAMP_ADDRESSV, MOJOSHADER_TADDRESS_CLAMP},
+        {MOJOSHADER_SAMP_ADDRESSW, MOJOSHADER_TADDRESS_WRAP},
+    });
+    EXPECT_EQ(applied.getAddressUProperty(), TextureAddressMode::Mirror);
+    EXPECT_EQ(applied.getAddressVProperty(), TextureAddressMode::Clamp);
+    EXPECT_EQ(applied.getAddressWProperty(), TextureAddressMode::Wrap);
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerLodAndAnisotropyStatesReachTheDeviceSamplerSlot)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    const SamplerState applied = ApplySyntheticSampler(device, {
+        {MOJOSHADER_SAMP_MIPMAPLODBIAS, FloatBits(-1.5f), true},
+        {MOJOSHADER_SAMP_MAXMIPLEVEL, 3},
+        {MOJOSHADER_SAMP_MAXANISOTROPY, 8},
+    });
+    EXPECT_FLOAT_EQ(applied.getMipMapLevelOfDetailBiasProperty(), -1.5f);
+    EXPECT_EQ(applied.getMaxMipLevelProperty(), 3);
+    EXPECT_EQ(applied.getMaxAnisotropyProperty(), 8);
+}
+
+TEST(Fna3dCompiledEffectTest, EveryFilterComponentCombinationCollapsesLikeFna)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    // FNA folds the three Direct3D 9 filter axes into XNA's eight aggregate TextureFilter
+    // values, treating an anisotropic component as its linear equivalent.
+    struct Expectation
+    {
+        std::uint32_t mag;
+        std::uint32_t min;
+        std::uint32_t mip;
+        TextureFilter expected;
+    };
+    const Expectation expectations[] = {
+        {MOJOSHADER_TEXTUREFILTER_POINT, MOJOSHADER_TEXTUREFILTER_POINT,
+         MOJOSHADER_TEXTUREFILTER_NONE, TextureFilter::Point},
+        {MOJOSHADER_TEXTUREFILTER_POINT, MOJOSHADER_TEXTUREFILTER_POINT,
+         MOJOSHADER_TEXTUREFILTER_LINEAR, TextureFilter::PointMipLinear},
+        {MOJOSHADER_TEXTUREFILTER_POINT, MOJOSHADER_TEXTUREFILTER_LINEAR,
+         MOJOSHADER_TEXTUREFILTER_POINT, TextureFilter::MinLinearMagPointMipPoint},
+        {MOJOSHADER_TEXTUREFILTER_POINT, MOJOSHADER_TEXTUREFILTER_ANISOTROPIC,
+         MOJOSHADER_TEXTUREFILTER_LINEAR, TextureFilter::MinLinearMagPointMipLinear},
+        {MOJOSHADER_TEXTUREFILTER_LINEAR, MOJOSHADER_TEXTUREFILTER_POINT,
+         MOJOSHADER_TEXTUREFILTER_POINT, TextureFilter::MinPointMagLinearMipPoint},
+        {MOJOSHADER_TEXTUREFILTER_LINEAR, MOJOSHADER_TEXTUREFILTER_POINT,
+         MOJOSHADER_TEXTUREFILTER_LINEAR, TextureFilter::MinPointMagLinearMipLinear},
+        {MOJOSHADER_TEXTUREFILTER_LINEAR, MOJOSHADER_TEXTUREFILTER_LINEAR,
+         MOJOSHADER_TEXTUREFILTER_POINT, TextureFilter::LinearMipPoint},
+        {MOJOSHADER_TEXTUREFILTER_ANISOTROPIC, MOJOSHADER_TEXTUREFILTER_ANISOTROPIC,
+         MOJOSHADER_TEXTUREFILTER_ANISOTROPIC, TextureFilter::Linear},
+    };
+
+    for (const Expectation& expectation : expectations)
+    {
+        SCOPED_TRACE("mag=" + std::to_string(expectation.mag) +
+                     " min=" + std::to_string(expectation.min) +
+                     " mip=" + std::to_string(expectation.mip));
+        GraphicsDevice device;
+        const SamplerState applied = ApplySyntheticSampler(device, {
+            {MOJOSHADER_SAMP_MAGFILTER, expectation.mag},
+            {MOJOSHADER_SAMP_MINFILTER, expectation.min},
+            {MOJOSHADER_SAMP_MIPFILTER, expectation.mip},
+        });
+        EXPECT_EQ(applied.getFilterProperty(), expectation.expected);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, PartialFilterAssignmentStartsFromTheSelectedSamplerState)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    device.getSamplerStatesProperty()[0] = SamplerState::PointClamp;
+
+    // Only the magnification axis is assigned, so the other two keep the game's own selection.
+    const SamplerState applied = ApplySyntheticSampler(device, {
+        {MOJOSHADER_SAMP_MAGFILTER, MOJOSHADER_TEXTUREFILTER_LINEAR},
+    });
+    EXPECT_EQ(applied.getFilterProperty(), TextureFilter::MinPointMagLinearMipPoint);
+    EXPECT_EQ(applied.getAddressUProperty(), TextureAddressMode::Clamp);
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerStatesApplyToTheExactRegisterTheShaderDeclared)
+{
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    const SamplerState applied = ApplySyntheticSampler(device, {
+        {MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_MIRROR},
+    }, 2);
+    EXPECT_EQ(applied.getAddressUProperty(), TextureAddressMode::Mirror);
+    // Neighbouring slots must be untouched.
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressUProperty(),
+              SamplerState::LinearWrap.getAddressUProperty());
+    EXPECT_EQ(device.getSamplerStatesProperty()[1].getAddressUProperty(),
+              SamplerState::LinearWrap.getAddressUProperty());
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerTextureAssignmentBindsTheReflectedTextureParameter)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.samplerStates = {{MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_CLAMP}};
+    Effect effect(device, BuildSyntheticEffect(options));
+
+    Texture2D texture(device, 2, 2);
+    const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
+    texture.SetData(pixels, 4);
+    effect.getParametersProperty()["FxTexture"]->SetValue(&texture);
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+
+    // FNA binds a sampler's texture from the reflected texture parameter, never by guessing a
+    // uniform name, and publishes it through the device's own texture collection.
+    EXPECT_EQ(device.getTexturesProperty()[0], &texture);
+}
+
+TEST(Fna3dCompiledEffectTest, SamplerWithoutTextureValueLeavesTheBoundTextureAlone)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    Texture2D selected(device, 2, 2);
+    const Color pixels[4] = {Color::Blue, Color::Blue, Color::Blue, Color::Blue};
+    selected.SetData(pixels, 4);
+    device.getTexturesProperty()(0, &selected);
+
+    // The effect's own FxTexture parameter is never assigned, so FNA leaves slot 0 as-is.
+    ApplySyntheticSampler(device, {{MOJOSHADER_SAMP_ADDRESSV, MOJOSHADER_TADDRESS_MIRROR}});
+    EXPECT_EQ(device.getTexturesProperty()[0], &selected);
+    EXPECT_EQ(device.getSamplerStatesProperty()[0].getAddressVProperty(),
+              TextureAddressMode::Mirror);
+}
+
+TEST(Fna3dCompiledEffectTest, UnsupportedSamplerAddressingIsRejectedByName)
+{
+    GraphicsDevice device;
+    try
+    {
+        ApplySyntheticSampler(device, {
+            {MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_BORDER},
+        });
+        FAIL() << "Border addressing has no XNA 4.0 SamplerState representation";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("Border and MirrorOnce"), std::string::npos);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, UnsupportedSamplerStateIsRejectedByToken)
+{
+    GraphicsDevice device;
+    try
+    {
+        ApplySyntheticSampler(device, {{MOJOSHADER_SAMP_SRGBTEXTURE, 1}});
+        FAIL() << "an unknown Effect Framework sampler state must never be ignored";
+    }
+    catch (const std::runtime_error& error)
+    {
+        EXPECT_NE(std::string(error.what()).find("unsupported sampler state 15"),
+                  std::string::npos);
+    }
+}
+
+TEST(Fna3dCompiledEffectTest, ClonedSamplerEffectKeepsItsOwnTextureBinding)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    SyntheticEffectOptions options;
+    options.includeSampler = true;
+    options.samplerStates = {{MOJOSHADER_SAMP_ADDRESSU, MOJOSHADER_TADDRESS_CLAMP}};
+    Effect effect(device, BuildSyntheticEffect(options));
+
+    Texture2D first(device, 2, 2);
+    Texture2D second(device, 2, 2);
+    const Color pixels[4] = {Color::White, Color::White, Color::White, Color::White};
+    first.SetData(pixels, 4);
+    second.SetData(pixels, 4);
+    effect.getParametersProperty()["FxTexture"]->SetValue(&first);
+
+    std::unique_ptr<Effect> clone(effect.Clone());
+    clone->getParametersProperty()["FxTexture"]->SetValue(&second);
+
+    effect.getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    EXPECT_EQ(device.getTexturesProperty()[0], &first);
+    clone->getTechniquesProperty()[0].getPassesProperty()[1].Apply();
+    EXPECT_EQ(device.getTexturesProperty()[0], &second);
 }
 
 TEST(Fna3dCompiledEffectTest, CompiledPassLeavesUnassignedStateGroupsSelected)

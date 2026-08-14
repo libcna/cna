@@ -26,6 +26,14 @@ Delivered task groups:
   defaults, scalar/vector/matrix/array reflection, annotations, two techniques, three exact passes,
   all supported FNA render-state tokens, the unknown-token policy, clone isolation, and a
   blend-factor pixel oracle (partial `FX-004`, `FX-022`, and `FX-037`);
+- pass state published through the public `GraphicsDevice` state objects and sampler/texture
+  collections exactly as FNA's `Effect.cs` does, instead of into renderer-private caches, with a
+  group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
+- the same fixture builder extended with a hand-assembled Shader Model 2.0 program and its
+  Direct3D 9 constant table, which is what makes MojoShader report sampler state registers, plus
+  per-slot sampler conformance for addressing, LOD bias, mip level, anisotropy, the full
+  filter-component collapse table, exact register targeting, reflected texture binding, clone
+  isolation, and both rejection policies (`FX-023`, `FX-034`, more of `FX-004`);
 - canonical bounded `EffectReader`, replacement of the unsupported placeholder, and negative
   payload tests, plus an end-to-end ContentManager/XNB/render pixel test (`FX-040`–`FX-043`);
 - dedicated false-by-default capability gating for every non-FNA3D renderer and bounded common,
@@ -64,9 +72,8 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   an independent normalized FNA oracle (`FX-004`, `FX-005`); the synthetic state-only fixture
   already supplies the remaining deterministic reflection/pass/render-state coverage without a
   proprietary compiler dependency;
-- broader sampler/texture conformance, a reusable coverage-guided fuzz harness, sanitizer/reset
-  stress runs, performance baselines, and full project regressions (`FX-023`, `FX-038`, remaining
-  `FX-050`–`FX-054` work);
+- a reusable coverage-guided fuzz harness, sanitizer/reset stress runs, performance baselines, and
+  full project regressions (`FX-038`, remaining `FX-050`–`FX-054` work);
 - additional renderer implementations (`FX-060`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
   (`FX-062`) and Vulkan (`FX-064`–`FX-065`). Until each passes the shared contract, its correct
   behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
@@ -414,7 +421,7 @@ must be accepted before a row can close.
 | FX-020 | Implement exact compiled `EffectPass::Apply` ordering and define compiled `Effect::Apply` as current-technique pass 0 | FX-015, FX-018 | Hook/order tests and multi-pass runtime mock tests match FNA |
 | FX-021 | Synchronize only dirty parameters/textures before native pass application | FX-016, FX-020 | Mock counters prove correct first upload, no redundant upload, and subview invalidation |
 | FX-022 | Implement complete neutral-to-CNA blend/depth/stencil/rasterizer state translation | FX-002, FX-020 | Table-driven tests cover every supported legacy render-state token and unknown-token policy |
-| FX-023 | Implement texture/sampler state translation without mutating shared immutable state objects | FX-017, FX-020 | Per-slot oracle tests cover filters, addressing, LOD/bias, anisotropy, and texture changes |
+| FX-023 | Implement texture/sampler state translation without mutating shared immutable state objects | FX-017, FX-020 | **Done.** Per-slot tests cover every filter-component combination, addressing, LOD bias, mip level, anisotropy, exact register targeting, reflected texture binding, and clone isolation |
 | FX-024 | Integrate compiled selection/disposal with `GraphicsDevice` and every primitive draw entry point | FX-013, FX-019, FX-020 | Draws cannot use stale runtimes and stock application cannot overwrite compiled passes |
 | FX-025 | Integrate compiled effects into SpriteBatch Begin/flush/end behavior | FX-024 | SpriteBatch pixel tests pass across multiple flushes and texture switches |
 
