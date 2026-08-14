@@ -506,7 +506,7 @@ under `GLTF-009`.
 
 ---
 
-### 1.9 A second UV channel — `GLTF-181`, and the shape of every "new stride" refusal
+### 1.9 A second UV channel — `GLTF-181` … `GLTF-183`
 
 **Problem.** Each of a glTF material's five texture references independently selects its own
 `TEXCOORD` set. CNA's PBR effects sample all five from **one** shared channel — the one the base
@@ -514,24 +514,65 @@ colour names — so a material whose maps disagree renders some of them from the
 been *detected* since CNB-97 (`MeshOut::pbrUv2Mismatch`) and, until now, reported only by the
 offline tool: the runtime path was silently wrong on exactly the same file.
 
-**Decision: the single-channel limit stands, and is reported on both paths.** What supporting a
-second channel actually costs, since `GLTF-181` asks for it in those terms:
+**The original decision was to keep the single-channel limit and report it on both paths. It is
+reversed by the final CORE audit:** §27.1 row 7 explicitly requires `TEXCOORD_0/1` to decode
+exactly, so a reported wrong sample cannot make the milestone green. The earlier cost analysis was
+right; the conclusion no longer satisfies the release gate.
 
-* **Vertex stride.** A second `vec2` takes the unskinned PBR layout from 48 to **56** and the
-  skinned one from 68 to **76**. 56 is *already taken* — it is the skinned+coloured layout — so
-  this is not an additive change but a collision in the exact dispatch space
-  `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp` exists to police. Resolving it means either
-  renumbering an existing layout or abandoning stride-keyed dispatch.
+**Vertex shape.** A second `vec2` naturally takes the unskinned PBR layout from 48 to 56 bytes, but
+56 already identifies skinned+colour. The adopted layout is therefore:
+
+* rigid PBR: the complete 48-byte record as a binary-compatible prefix, UV1 at byte 48, four
+  deterministic zero padding bytes, stride **60**;
+* skinned PBR: the complete 68-byte record as a binary-compatible prefix, UV1 at byte 68, stride
+  **76**.
+
+Padding is intentional ABI state, not accidental alignment. It preserves one meaning per stride,
+does not renumber any existing layout, and lets renderers continue rejecting an unknown stride
+rather than interpreting 56 differently depending on the currently bound effect.
+
+**Runtime-effect shape.** The five PBR maps still need independent selection after import. The
+following identical CNAEXT members are approved on `PbrEffect` and `SkinnedPbrEffect`:
+
+```cpp
+CNAEXT [[nodiscard]] const std::array<int, 5>&
+    getTextureCoordinateSetsEXTProperty() const;                // default {0,0,0,0,0}
+CNAEXT void setTextureCoordinateSetEXTProperty(int slot, int set); // slot 0..4, set 0..1
+```
+
+Slot order is the established material order used by sampler state and `GpuDrawParams`: base
+colour, normal, metallic-roughness, emissive, occlusion. An array is preferred to ten parallel
+properties: these are one repeated mapping, both effect classes must clone it identically, and a
+renderer consumes it as one five-bit selector mask. Invalid slot or set values throw
+`std::out_of_range`; accepting set 2 would promise a third vertex attribute that no adopted layout
+carries.
+
+**Why not internal.** The selectors are runtime shader state. Keeping them only on `MeshOut` would
+lose them at the same effect boundary `GLTF-183` is meant to test, and a non-glTF caller binding
+textures to the public PBR effects must be able to say which of its two vertex attributes each map
+uses. The source-set-to-GPU-channel remapping remains internal; callers see only the two attributes
+their vertex declaration exposes.
+
+**What the original cost analysis correctly predicted:**
+
 * **Shader.** A second attribute, a second varying, and per-map channel selection — five maps × two
-  sets — so either five uniforms or a bitfield, in both PBR programs.
+  sets — represented as one five-bit mask, in both PBR programs.
 * **Renderers.** An input layout and a shader variant on each, the same blast radius that decided
-  §1.7 against colour-space option A.
+  §1.7 against colour-space option A. This cost is now paid because CORE explicitly requires it.
 
-Against that: **no corpus asset uses a second UV set**, and CNA already knows when one is present.
-The honest trade is to keep the limit and make it loud, which is what §1.5, §1.6 and `GLTF-241`
-each concluded in their own way — a limitation that names itself is a different thing from a bug.
+**Compatibility.** Additive public surface and additive vertex layouts. Defaults select attribute
+0 for all maps, exactly the old shaders' behaviour. Existing 48/68-byte assets, old `.cnj` files
+and callers that never configure the new property remain byte- and behaviour-compatible. The
+offline format writes the five-value array only when one entry selects channel 1.
 
-**No API change.** The detection already exists; only the reporting moved.
+**Migration.** None for existing content. A hand-authored 60/76-byte vertex buffer binds
+`TextureCoordinate` usage indices 0 and 1 and sets the affected map slots before drawing.
+
+**Test.** `GltfUvChannel.TwoSampledTexcoordSetsAreBothPackedExactlyAndMappedPerTexture` uses
+disjoint values at every vertex and proves the two streams, source-set mapping and deterministic
+padding. `GLTF-183` adds direct/offline L6 selector parity and a framebuffer witness whose two
+textures cannot produce the expected image when either map samples the other channel. The old
+`uv-set-mismatch` diagnostic remains only for a third distinct set beyond the adopted two.
 
 ### 1.10 An authored tangent basis with nowhere to live — `GLTF-086`
 
