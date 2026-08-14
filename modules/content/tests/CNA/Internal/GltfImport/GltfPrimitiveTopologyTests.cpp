@@ -116,6 +116,22 @@ namespace
 })";
     }
 
+    std::string DracoQuadWithMode(int mode)
+    {
+        std::string json = QuadWithMode(
+            ", \"mode\": " + std::to_string(mode) +
+            ", \"extensions\": { \"KHR_draco_mesh_compression\": { "
+            "\"bufferView\": 0, \"attributes\": { \"POSITION\": 0 } } }");
+        const std::string asset = "\"asset\": { \"version\": \"2.0\" },";
+        const std::size_t at = json.find(asset);
+        if (at != std::string::npos)
+        {
+            json.insert(at + asset.size(),
+                        "\n  \"extensionsUsed\": [ \"KHR_draco_mesh_compression\" ],");
+        }
+        return json;
+    }
+
     struct Parsed
     {
         cgltf_data* data = nullptr;
@@ -431,46 +447,89 @@ TEST(GltfPrimitiveTopology, AModeOutsideTheSpecifiedRangeIsRejectedRatherThanAss
 
 // --- plan_gltf.md GLTF-080: topology and Draco cannot disagree -------------------------------------
 
-// Draco's mesh encoder is a TRIANGLE encoder -- a decoded draco::Mesh has a face list and nothing
-// else -- so a primitive declaring KHR_draco_mesh_compression together with a line or point mode is
-// a contradiction the file cannot mean. Refused rather than silently drawn as triangles.
+// KHR_draco_mesh_compression normatively permits exactly TRIANGLES and TRIANGLE_STRIP. That is
+// narrower than core glTF's three triangle-producing topologies: TRIANGLE_FAN is invalid too.
+// Refused rather than silently drawn as triangles.
 //
-// Asserted against the classification table rather than a fixture, because the corpus has no Draco
-// asset and building one needs libdraco at generation time: what is checkable without it is that
-// the refusal covers exactly the non-triangle modes and no others, which is the whole content of
-// the rule.
+// Asserted both as a complete classification partition and through five parsed extension-bearing
+// primitives. Building a valid compressed payload needs libdraco at generation time, but rejecting
+// a forbidden source mode is intentionally earlier than decoding and needs no such dependency.
 TEST(GltfPrimitiveTopology, DracoIsRefusedForEveryModeItCannotEncode)
 {
     using CNA::Internal::GltfImport::PrimitiveTopology;
-    using CNA::Internal::GltfImport::ProducesTriangles;
+    using CNA::Internal::GltfImport::IsDracoTopologyAllowedEXT;
 
-    // The three triangle modes are exactly what Draco can encode; the four others are exactly what
-    // it cannot. Stating both halves is what makes this a partition rather than a list.
-    const PrimitiveTopology triangleModes[] = {
+    const PrimitiveTopology allowedModes[] = {
         PrimitiveTopology::Triangles, PrimitiveTopology::TriangleStrip,
-        PrimitiveTopology::TriangleFan,
     };
-    const PrimitiveTopology nonTriangleModes[] = {
+    const PrimitiveTopology refusedModes[] = {
         PrimitiveTopology::Points, PrimitiveTopology::Lines,
         PrimitiveTopology::LineLoop, PrimitiveTopology::LineStrip,
+        PrimitiveTopology::TriangleFan,
     };
 
-    for (const PrimitiveTopology topology : triangleModes)
+    for (const PrimitiveTopology topology : allowedModes)
     {
-        EXPECT_TRUE(ProducesTriangles(topology))
-            << "a triangle mode is not classified as producing triangles, so a Draco primitive "
-               "declaring it would be refused";
+        EXPECT_TRUE(IsDracoTopologyAllowedEXT(topology))
+            << PrimitiveTopologyName(topology) << " is permitted by the extension";
     }
-    for (const PrimitiveTopology topology : nonTriangleModes)
+    for (const PrimitiveTopology topology : refusedModes)
     {
-        EXPECT_FALSE(ProducesTriangles(topology))
-            << "a non-triangle mode is classified as producing triangles, so a Draco primitive "
-               "declaring it would be accepted and silently drawn as triangles";
+        EXPECT_FALSE(IsDracoTopologyAllowedEXT(topology))
+            << PrimitiveTopologyName(topology) << " is not permitted by the extension";
     }
 
     // And the two sets together are every mode there is -- so the rule has no gap for a mode to
     // fall through.
-    EXPECT_EQ(7u, std::size(triangleModes) + std::size(nonTriangleModes));
+    EXPECT_EQ(7u, std::size(allowedModes) + std::size(refusedModes));
+}
+
+TEST(GltfPrimitiveTopology, InvalidDracoModesAreRejectedBeforeDecoderAvailabilityMatters)
+{
+    const int refusedModes[] = {0, 1, 2, 3, 6};
+    for (const int mode : refusedModes)
+    {
+        SCOPED_TRACE(std::string("mode ") + std::to_string(mode));
+        ScratchDir dir;
+        const Parsed parsed(DracoQuadWithMode(mode), dir.path());
+        ASSERT_NE(nullptr, parsed.data);
+        ASSERT_TRUE(parsed.data->meshes[0].primitives[0].has_draco_mesh_compression);
+
+        try
+        {
+            (void)ExtractMesh(parsed.data, parsed.data->meshes[0].primitives[0],
+                              "DracoQuad", nullptr, 1.0f);
+            FAIL() << "an invalid Draco mode reached import";
+        }
+        catch (const std::runtime_error& error)
+        {
+            const std::string message = error.what();
+            EXPECT_NE(std::string::npos,
+                      message.find("permits only TRIANGLES or TRIANGLE_STRIP"))
+                << message;
+        }
+    }
+}
+
+TEST(GltfPrimitiveTopology, DecodedDracoStripFacesAreNotConvertedAsASecondStrip)
+{
+    // A decoded draco::Mesh exposes explicit faces. These two face triples describe a quad. If
+    // they were re-read as one six-index TRIANGLE_STRIP, conversion would invent four overlapping
+    // triangles instead of preserving these two.
+    const std::vector<std::uint32_t> decodedFaces = {0, 1, 2, 0, 2, 3};
+    EXPECT_EQ(decodedFaces,
+              NormalizeTriangleIndicesEXT(
+                  decodedFaces, PrimitiveTopology::TriangleStrip, true));
+
+    const auto ordinaryStrip = NormalizeTriangleIndicesEXT(
+        std::vector<std::uint32_t>{0, 1, 2, 3}, PrimitiveTopology::TriangleStrip, false);
+    EXPECT_EQ(std::vector<std::uint32_t>({0, 1, 2, 2, 1, 3}), ordinaryStrip)
+        << "an ordinary glTF strip still needs its normal conversion";
+
+    EXPECT_THROW(
+        (void)NormalizeTriangleIndicesEXT(
+            decodedFaces, PrimitiveTopology::TriangleFan, true),
+        std::runtime_error);
 }
 
 // --- GLTF-081 / GLTF-082: conversion must not disturb the vertices, and must say it happened ----

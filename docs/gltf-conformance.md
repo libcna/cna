@@ -970,6 +970,14 @@ recovery by semantic and set. `FindDracoUniqueIdEXT` first checks the complete a
 and element alignment, so a future cgltf representation change fails closed rather than performing
 undefined pointer subtraction or selecting a plausible but wrong Draco attribute (`GLTF-359`).
 
+Draco topology is a separate exact partition (`GLTF-080`, `GLTF-362`). The extension permits only
+`TRIANGLES` and `TRIANGLE_STRIP`; the other five core modes, including `TRIANGLE_FAN`, are rejected
+with that restriction named before decoder availability is consulted. A decoded `draco::Mesh`
+already exposes explicit face triples, so CNA preserves that triangle list for either permitted
+source mode. It must not feed the triples through ordinary strip conversion a second time. The
+19-case `GltfPrimitiveTopology` suite includes the full seven-mode partition, five real parsed
+early-rejection cases and a discriminating two-face strip/list normalization check.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a

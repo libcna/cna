@@ -193,6 +193,11 @@ difference between a limitation and a bug.
 | `KHR_draco_mesh_compression` | `libdraco` present at configure time (`CNA_DRACO_AVAILABLE`) | The extension is **not claimed**, so a file requiring it is refused by name, and a Draco-compressed primitive throws at import rather than producing empty geometry. |
 | L7 image comparison | A renderer with a real 3D pipeline | The `STUB` renderer reports `GraphicsCapability::ThreeD == false` and the tests that need pixels skip rather than pass vacuously (`GLTF-009`). |
 
+Regardless of decoder availability, the Draco extension's primitive-mode restriction is enforced
+before decoding: only `TRIANGLES` and `TRIANGLE_STRIP` are accepted. `POINTS`, all three line modes
+and `TRIANGLE_FAN` are rejected with the allowed modes named; decoded strip connectivity is taken
+from Draco's explicit face list and is not reinterpreted as a second strip (`GLTF-080`, `GLTF-362`).
+
 ---
 
 ## What this file is not

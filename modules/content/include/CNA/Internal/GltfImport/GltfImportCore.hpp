@@ -424,10 +424,9 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief The topology `indexBytes` is actually in, after any import-time conversion.
          *
-         * Always `Triangles` on a `MeshOut` that `ExtractMesh` returned, and that is a guarantee
-         * rather than a coincidence: a triangle strip or fan is converted to a triangle list here
-         * (plan_gltf.md §10.1, `GLTF-072`) and every remaining topology is rejected. Compare with
-         * @ref sourceTopology to see whether a conversion happened.
+         * Triangle strips/fans become `Triangles`; a line loop becomes `LineStrip`; point, line
+         * list and line strip modes stay themselves. Compare with @ref sourceTopology to see
+         * whether an exact import-time conversion happened.
          */
         PrimitiveTopology topology = PrimitiveTopology::Triangles;
         /**
@@ -1358,13 +1357,9 @@ namespace CNA::Internal::GltfImport
      * topologies through every renderer — it is provable at L3 and L5, needs no renderer change,
      * and cannot regress an existing renderer (plan_gltf.md §10.1).
      *
-     * The line and point topologies are read, classified and **rejected with a named error**
-     * rather than reinterpreted. They decode perfectly well; what they lack is a draw path, since
-     * every loader still computes a triangle-list primitive count. Giving them one is `GLTF-073`
-     * (a real `PrimitiveType` on `ModelMeshPart`) plus `GLTF-078` (a topology-aware primitive
-     * count), and for points also `GLTF-077` (whether a point list is CNAEXT-supported or an
-     * explicit per-renderer rejection). Importing them before that would move the original defect
-     * from the import layer to the draw layer rather than fixing it.
+     * All seven core glTF modes import. Triangle strips/fans and line loops take the exact
+     * conversions documented by `GLTF-072`/`GLTF-076`; the remaining modes retain their source
+     * topology and use the topology-aware draw/count paths from `GLTF-073`/`GLTF-078`.
      *
      * @note CNAEXT — not part of the XNA 4.0 API.
      *
@@ -1377,14 +1372,22 @@ namespace CNA::Internal::GltfImport
      * @brief True for the three modes whose primitives are triangles (§3.7.2.1).
      *
      * `TRIANGLES`, `TRIANGLE_STRIP` and `TRIANGLE_FAN`; false for the points and the three line
-     * modes. Exported rather than file-local because two rules now depend on the same partition:
-     * strip/fan conversion (`GLTF-072`) and the refusal of a Draco primitive that declares a mode
-     * Draco's triangle-only encoder cannot mean (`GLTF-080`).
+     * modes. This is the core-glTF conversion partition (`GLTF-072`); Draco's narrower, normative
+     * two-mode partition is @ref IsDracoTopologyAllowedEXT (`GLTF-080`, `GLTF-362`).
      *
      * @param topology The classified topology.
      * @return True when the mode's primitives are triangles.
      */
     bool ProducesTriangles(PrimitiveTopology topology);
+
+    /**
+     * @brief Whether KHR_draco_mesh_compression permits this primitive mode.
+     *
+     * The extension's normative restriction is narrower than @ref ProducesTriangles: only
+     * TRIANGLES and TRIANGLE_STRIP are legal. TRIANGLE_FAN is a triangle topology in core glTF,
+     * but is not a legal Draco primitive mode.
+     */
+    [[nodiscard]] bool IsDracoTopologyAllowedEXT(PrimitiveTopology topology);
 
     /**
      * @brief Rewrites a strip's or fan's index list as an equivalent triangle list (§3.7.2.1).
@@ -1411,6 +1414,18 @@ namespace CNA::Internal::GltfImport
      */
     std::vector<std::uint32_t> ConvertToTriangleList(const std::vector<std::uint32_t>& indices,
                                                      PrimitiveTopology topology);
+
+    /**
+     * @brief Normalizes a triangle topology after its index source has been decoded.
+     *
+     * A regular glTF strip/fan still carries its authored run and needs conversion. A decoded
+     * `draco::Mesh`, however, exposes an explicit three-indices-per-face list even when the source
+     * primitive declared TRIANGLE_STRIP; treating that list as another strip corrupts geometry.
+     */
+    std::vector<std::uint32_t> NormalizeTriangleIndicesEXT(
+        const std::vector<std::uint32_t>& indices,
+        PrimitiveTopology sourceTopology,
+        bool decodedDracoFaceList);
 
     /**
      * @brief How many primitives an index run of a given topology describes (§12.3, `GLTF-078`).

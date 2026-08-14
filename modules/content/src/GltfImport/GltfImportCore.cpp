@@ -1938,14 +1938,44 @@ namespace CNA::Internal::GltfImport
     }
 
     /// Whether a topology describes triangles at all -- and therefore whether it has a
-    /// triangle-list equivalent to be converted into (GLTF-072), and whether Draco's triangle-only
-    /// encoder could have produced it (GLTF-080). Two rules on one partition, which is why this is
-    /// declared in the header rather than kept local.
+    /// triangle-list equivalent to be converted into (GLTF-072). KHR_draco_mesh_compression has a
+    /// narrower mode restriction; IsDracoTopologyAllowedEXT owns that separate partition.
     bool ProducesTriangles(PrimitiveTopology topology)
     {
         return topology == PrimitiveTopology::Triangles
             || topology == PrimitiveTopology::TriangleStrip
             || topology == PrimitiveTopology::TriangleFan;
+    }
+
+    bool IsDracoTopologyAllowedEXT(PrimitiveTopology topology)
+    {
+        // KHR_draco_mesh_compression, "Restrictions on geometry type": exactly these two. A fan
+        // produces triangles too, but the extension does not permit encoding one.
+        return topology == PrimitiveTopology::Triangles
+            || topology == PrimitiveTopology::TriangleStrip;
+    }
+
+    std::vector<std::uint32_t> NormalizeTriangleIndicesEXT(
+        const std::vector<std::uint32_t>& indices,
+        PrimitiveTopology sourceTopology,
+        bool decodedDracoFaceList)
+    {
+        if (decodedDracoFaceList)
+        {
+            if (!IsDracoTopologyAllowedEXT(sourceTopology))
+            {
+                throw std::runtime_error(
+                    std::string("KHR_draco_mesh_compression does not permit primitive mode ") +
+                    PrimitiveTopologyName(sourceTopology) +
+                    "; only TRIANGLES and TRIANGLE_STRIP are valid.");
+            }
+            // DecodeDracoPrimitiveEXT returns draco::Mesh, whose connectivity is exposed as
+            // explicit faces. Flattening each face emits a triangle LIST regardless of whether
+            // the source declared a list or strip. Running strip conversion over those triples
+            // would invent overlapping triangles that were never in the mesh.
+            return indices;
+        }
+        return ConvertToTriangleList(indices, sourceTopology);
     }
 
     std::vector<std::uint32_t> CloseLineLoop(const std::vector<std::uint32_t>& indices,
@@ -2008,20 +2038,18 @@ namespace CNA::Internal::GltfImport
                 "5, 6) are supported; nothing is silently reinterpreted as a triangle list.");
         }
 
-        // plan_gltf.md GLTF-080: Draco's mesh encoder is a TRIANGLE encoder -- a decoded
-        // draco::Mesh has a face list and nothing else -- so a Draco primitive declaring a line or
-        // point mode is a contradiction the file cannot mean. Refused rather than silently drawn
-        // as triangles, and checked BEFORE decoding so the diagnostic names the contradiction
-        // instead of some later symptom of it. Independent of whether this build has libdraco: the
-        // file is self-contradictory either way.
-        if (prim.has_draco_mesh_compression && !ProducesTriangles(sourceTopology))
+        // GLTF-080/GLTF-362: the extension's normative restriction is exactly TRIANGLES or
+        // TRIANGLE_STRIP. That is narrower than "produces triangles": core glTF's TRIANGLE_FAN is
+        // not legal here either. Refuse before decoding, independently of decoder availability, so
+        // the diagnostic names the file-format contradiction instead of a later libdraco symptom.
+        if (prim.has_draco_mesh_compression && !IsDracoTopologyAllowedEXT(sourceTopology))
         {
             throw std::runtime_error(
                 "Primitive '" + name + "' declares mode " +
                 std::string(PrimitiveTopologyName(sourceTopology)) +
-                " together with KHR_draco_mesh_compression, which encodes triangles only. The two "
-                "cannot both be true, so the primitive is refused rather than drawn as something "
-                "the file did not ask for (plan_gltf.md GLTF-080).");
+                " together with KHR_draco_mesh_compression, whose specification permits only "
+                "TRIANGLES or TRIANGLE_STRIP. The primitive is refused before decoding rather "
+                "than drawn as another topology (plan_gltf.md GLTF-080/GLTF-362).");
         }
 
 #ifdef CNA_DRACO_AVAILABLE
@@ -2559,7 +2587,8 @@ namespace CNA::Internal::GltfImport
         // reinterpretation this whole track removed.
         if (ProducesTriangles(sourceTopology))
         {
-            indices = ConvertToTriangleList(indices, sourceTopology);
+            indices = NormalizeTriangleIndicesEXT(
+                indices, sourceTopology, prim.has_draco_mesh_compression != 0);
         }
 
         const std::vector<float> positions = unpackSemantic(cgltf_attribute_type_position, 0, posAcc, 3, "POSITION");
