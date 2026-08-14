@@ -776,6 +776,9 @@ namespace
     // consumes all RGB before the [0,1] -> [-1,1] remap. The count distinguishes backends with
     // separately stored rigid/skinned fragments (and LLGL's GL/Vulkan sources plus its embedded
     // generated GL copy) from those whose one fragment program is shared by both vertex paths.
+    // EasyGL constructs legacy and dual-UV programs from the same two rigid/skinned builders, so
+    // its evidence deliberately includes the selected-UV variable rather than pretending the
+    // final shader still contains a hard-coded vUV expression.
     constexpr std::array<RendererPbrChannelAudit, 15> kPbrChannelAudits{{
         {"bgfx",
          "texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0",
@@ -803,10 +806,10 @@ namespace
          "mr.b * AmbientMetallic.w",
          "uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r", 2},
         {"easygl",
-         "texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0",
+         "texture(uNormalMap,cnaSampleUV(\" + normalUv + \",uRtFlipV.y)).rgb*2.0-1.0",
          "mr.g*uRoughnessFactor",
          "mr.b*uMetallicFactor",
-         "texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r", 2},
+         "texture(uOcclusionMap,cnaSampleUV(\" + occlusionUv + \",uRtFlipVHi.x)).r", 2},
         {"llgl",
          ".rgb * 2.0 - 1.0",
          "mr.g * roughnessWeightsPad.x",
@@ -1144,6 +1147,22 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
             EXPECT_EQ(audit.shaderCopies, CountOccurrences(source, Normalize(evidence)))
                 << "wrong or missing packed-channel evidence: " << evidence;
         }
+    }
+
+    // EasyGL is currently the renderer that closes GLTF-182/183 at L7. Lock the slot-to-selector
+    // mapping in both its rigid and skinned builders as well as the generic packed-channel math
+    // above: exchanging normal and MR selectors would retain the correct .rgb/.g/.b expressions
+    // while sampling the wrong authored coordinate stream.
+    const std::string easy = RendererSlotText(renderers, "easygl");
+    for (const char* selector : {
+             "baseUv = dualUv ? \"cnaPbrUV(uTextureCoordinateSets.x)\" : \"vUV\"",
+             "normalUv = dualUv ? \"cnaPbrUV(uTextureCoordinateSets.y)\" : \"vUV\"",
+             "mrUv = dualUv ? \"cnaPbrUV(uTextureCoordinateSets.z)\" : \"vUV\"",
+             "emissiveUv = dualUv ? \"cnaPbrUV(uTextureCoordinateSets.w)\" : \"vUV\"",
+             "dualUv ? \"cnaPbrUV(uOcclusionTextureCoordinateSet)\" : \"vUV\""})
+    {
+        EXPECT_EQ(2u, CountOccurrences(easy, Normalize(selector)))
+            << "EasyGL rigid/skinned PBR builders must agree on selector: " << selector;
     }
 }
 
