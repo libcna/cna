@@ -951,7 +951,7 @@ index 036f18d..e785971 100644
          }
      effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
 diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
-index 5d5999b..d4dff88 100644
+index 5d5999b..4d330d6 100644
 --- a/profiles/mojoshader_profile_spirv.c
 +++ b/profiles/mojoshader_profile_spirv.c
 @@ -668,8 +668,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
@@ -984,3 +984,101 @@ index 5d5999b..d4dff88 100644
      #define TYPE_LOAD_OFFSET ctx->spirv.patch_table.attrib_type_load_offsets[r->usage][r->index]
  
      next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
+@@ -821,9 +831,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+ 
+     uint32 id_src = r->spirv.iddecl;
+     SpirvResult result;
++    result.tid = 0;
++    result.id = 0;
+     if (regtype == REG_TYPE_SAMPLER)
+     {
++        // Untrusted bytecode can read a sampler register the shader never declared. -CNA
+         RegisterList *sreg = reglist_find(&ctx->samplers, REG_TYPE_SAMPLER, r->regnum);
++        if (sreg == NULL)
++        {
++            fail(ctx, "Shader reads an undeclared sampler register.");
++            return result;
++        } // if
+         result.tid = spv_image_from_texturetype(ctx, (TextureType)sreg->index);
+     } // if
+     else if (regtype == REG_TYPE_CONSTBOOL)
+@@ -862,7 +880,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+         return result;
+     } // if
+ 
+-    assert(id_src);
++    if (id_src == 0)
++    {
++        // No declaration id means the register was never declared, or its declaration was
++        // already refused; either way there is nothing to load from. -CNA
++        fail(ctx, "Shader reads a register that was never declared.");
++        return result;
++    } // if
+     result.id = spv_bumpid(ctx);
+ 
+     push_output(ctx, &ctx->mainline);
+@@ -928,12 +952,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+     if (no_swizzle(swizzle) && writemask_xyzw(writemask))
+         return arg;
+ 
+-    assert(arg.tid != 0);
+-    assert(writemask == 1
+-        || writemask == 3
+-        || writemask == 7
+-        || writemask == 15
+-    );
++    // Every one of these came from parsed shader bytecode: a load that was already refused
++    // leaves tid zero, and a write mask is whatever the destination token said. -CNA
++    if (arg.tid == 0)
++    {
++        fail(ctx, "Swizzle of a value that could not be loaded.");
++        return arg;
++    } // if
++    if ((writemask != 1) && (writemask != 3) && (writemask != 7) && (writemask != 15))
++    {
++        fail(ctx, "Unsupported write mask in swizzle.");
++        return arg;
++    } // if
+ 
+     SpirvTypeIdx sti_arg = STI_VOID;
+     for (i = STI_CORE_START_; i < STI_CORE_END_; i++)
+@@ -944,7 +974,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+             break;
+         } // if
+     } // for
+-    assert(sti_arg != STI_VOID);
++    if (sti_arg == STI_VOID)
++    {
++        fail(ctx, "Swizzle of a value with an unknown type.");
++        return arg;
++    } // if
+ 
+     // We should not leave any value undefined, as it may end up used (eg. dot
+     // product), which will make everything relying on it's result undefined.
+@@ -969,9 +1003,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+             break;
+ 
+         default:
+-            failf(ctx, "Unexpected write mask in swizzle: 0x%X");
+-            assert(0);
+-            break;
++            failf(ctx, "Unexpected write mask in swizzle: 0x%X", writemask);
++            return arg;
+     } // switch
+ 
+     SpirvTypeIdx sti_result = spv_change_base_type_vec_dim(sti_arg, resdim);
+@@ -2867,7 +2900,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
+ {
+     SpirvResult result;
+ 
+-    assert(src0.tid == src1.tid);
++    // Operand types come from parsed bytecode, and either source may already have been refused,
++    // which leaves its type id zero. -CNA
++    if ((src0.tid == 0) || (src0.tid != src1.tid))
++    {
++        fail(ctx, "Dot product operands do not share a type.");
++        return;
++    } // if
+ 
+     result.tid = spv_get_type(ctx, STI_FLOAT);
+     result.id = spv_bumpid(ctx);

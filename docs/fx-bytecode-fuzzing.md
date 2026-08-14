@@ -120,6 +120,9 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_effects.c` `MOJOSHADER_compileEffect` | Parameter, technique and object counts read from the file, used both to size allocations and to bound the loops that fill them, with no bound and no overflow check on the size multiplication |
 | `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Its local `COPY_STRING` dereferenced without a NULL check, unlike the file's other one -- and `readstring` returns NULL for a zero-length string, which is ordinary content rather than hostile content |
 | `mojoshader.c` `parse_preshader` | The array-register bound added earlier was written as `(count * 2) + 5 > tokcount`, which wraps for a 32-bit count from the file and let an absurd one through into an allocation |
+| `mojoshader_profile_spirv.c` `spv_loadreg` | Dereferenced the result of `reglist_find` for a sampler register the shader never declared, and asserted rather than failed when a register had no declaration id |
+| `mojoshader_profile_spirv.c` `spv_swizzle` | Asserted on a zero type id, on a write mask outside the four legal values, and on a type it could not classify -- all three come straight from a destination token |
+| `mojoshader_profile_spirv.c` `emit_SPIRV_dotproduct` | Asserted that both operands share a type; either can be a value whose load was already refused |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
@@ -145,10 +148,10 @@ itself is stale. Reproduce with:
 ./cna_compiled_effect_fuzzer --campaign fx-corpus 28000 0x4658534F414B
 ```
 
-**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign stops much earlier, in the SPIR-V
-emitter's own asserts (`spv_loadreg`, and others behind it). That emitter validates untrusted
-shader bytecode with `assert()` throughout, so hardening it is a systematic pass of its own rather
-than a handful of checks. Reproduce by dropping `FNA3D_FORCE_DRIVER=OpenGL`.
+**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign now completes 3,000 iterations clean,
+up from stopping at iteration 100. That emitter still validates untrusted shader bytecode with
+`assert()` in about fifty places, so the ones fixed so far are the ones a campaign actually
+reached; expect more as it runs longer. Reproduce by dropping `FNA3D_FORCE_DRIVER=OpenGL`.
 
 Neither is a CNA defect, but both are reachable through CNA's public API, which is why the porter
 guide states the trust boundary plainly instead of promising safe failure.
