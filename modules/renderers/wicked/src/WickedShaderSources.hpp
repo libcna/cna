@@ -261,6 +261,37 @@ void SkinVertex(float3 position, float3 normal, float4 weights, uint4 indices,
     }
 }
 
+float3 BlendSkinColumn(uint column, float4 weights, uint4 indices)
+{
+    const float weightsPerVertex = bones.skinParams.x;
+    float3 result = bones.boneColumns[indices.x * 4 + column].xyz * weights.x;
+    if (weightsPerVertex >= 2.0f)
+        result += bones.boneColumns[indices.y * 4 + column].xyz * weights.y;
+    if (weightsPerVertex >= 4.0f)
+        result += bones.boneColumns[indices.z * 4 + column].xyz * weights.z
+                + bones.boneColumns[indices.w * 4 + column].xyz * weights.w;
+    return result;
+}
+
+// GLTF-264: PBR normals follow the inverse transpose of the complete weighted skin matrix. The
+// cofactor columns avoid reconstructing/inverting an HLSL matrix and retain a finite direct-
+// transform fallback for nearly singular blends.
+float3 ApplySkinNormal(float3 normal, float4 weights, uint4 indices)
+{
+    const float3 c0 = BlendSkinColumn(0, weights, indices);
+    const float3 c1 = BlendSkinColumn(1, weights, indices);
+    const float3 c2 = BlendSkinColumn(2, weights, indices);
+    const float3 co0 = cross(c1, c2);
+    const float3 co1 = cross(c2, c0);
+    const float3 co2 = cross(c0, c1);
+    const float determinant = dot(c0, co0);
+    const float3 transformed = co0 * normal.x + co1 * normal.y + co2 * normal.z;
+    const float3 direct = c0 * normal.x + c1 * normal.y + c2 * normal.z;
+    return abs(determinant) > 1e-6f
+        ? transformed * (determinant < 0.0f ? -1.0f : 1.0f)
+        : direct;
+}
+
 VSOut FillSkinned(float3 position, float3 normal, float2 uv, float4 weights, uint4 indices)
 {
     float3 skinnedPosition;
@@ -369,6 +400,7 @@ PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
     float3 skinnedPosition;
     float3 skinnedNormal;
     SkinVertex(position, normal, blendWeights, blendIndices, skinnedPosition, skinnedNormal);
+    skinnedNormal = ApplySkinNormal(normal, blendWeights, blendIndices);
 
     float3 skinnedTangent;
     float3 ignoredNormal;

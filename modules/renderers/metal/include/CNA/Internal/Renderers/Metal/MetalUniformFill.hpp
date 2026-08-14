@@ -89,7 +89,12 @@ namespace CNA::Internal::Renderers::Metal
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
     // as-is -- the fragment-side uniforms are identical between skinned and unskinned PBR).
     /** @brief CPU mirror of the skinned-PBR shader's transform and skinning constants. */
-    struct MetalSkinnedPbrTransform { float wvp[16]; float world[16]; float skinParams[4]; };
+    struct MetalSkinnedPbrTransform {
+        float wvp[16];
+        float world[16];
+        float normalCol0[4], normalCol1[4], normalCol2[4];
+        float skinParams[4];
+    };
 
     // plan_metal.md METAL-38-47: fills LitTransform/LitUniforms from GpuDrawParams, field-for-field
     // matching EasyGLRenderer::BindDrawParams()'s own real mapping (ground truth, ported not
@@ -297,6 +302,9 @@ namespace CNA::Internal::Renderers::Metal
         FillMetalPbrUniforms(unusedT, pu, wvp, params);
         std::memcpy(t.wvp, wvp.m, sizeof(t.wvp));
         std::memcpy(t.world, params.worldColMajor, sizeof(t.world));
+        std::memcpy(t.normalCol0, unusedT.normalCol0, sizeof(t.normalCol0));
+        std::memcpy(t.normalCol1, unusedT.normalCol1, sizeof(t.normalCol1));
+        std::memcpy(t.normalCol2, unusedT.normalCol2, sizeof(t.normalCol2));
         t.skinParams[0]=(float)params.weightsPerVertex; t.skinParams[1]=t.skinParams[2]=t.skinParams[3]=0;
     }
 }

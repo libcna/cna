@@ -360,6 +360,13 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             {
                 source += "uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "];\n";
                 source += "uniform int uWeightsPerVertex;\n";
+                source += "vec3 cnaSkinNormal(mat3 m,vec3 n){\n";
+                source += "    vec3 c0=m[0],c1=m[1],c2=m[2];\n";
+                source += "    vec3 co0=cross(c1,c2),co1=cross(c2,c0),co2=cross(c0,c1);\n";
+                source += "    float det=dot(c0,co0);\n";
+                source += "    vec3 transformed=mat3(co0,co1,co2)*n;\n";
+                source += "    return (abs(det)>1e-6)?transformed*sign(det):m*n;\n";
+                source += "}\n";
             }
             source += "out vec3 vNormal;\n";
             source += "out vec3 vTangent;\n";
@@ -379,7 +386,7 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
                 source += "    vec4 cnaPosition = cnaInstancePosition(skin * vec4(aPosition, 1.0));\n";
                 // The tangent frame is skinned too: leaving it in bind pose would light a deformed
                 // surface with the normal map of an undeformed one.
-                source += "    vec3 skinnedNormal = mat3(skin) * aNormal;\n";
+                source += "    vec3 skinnedNormal = cnaSkinNormal(mat3(skin), aNormal);\n";
                 source += "    float skinnedNormalLength = length(skinnedNormal);\n";
                 source += "    vec3 boneNormal = (skinnedNormalLength > 1e-6)\n";
                 source += "        ? (skinnedNormal / skinnedNormalLength) : aNormal;\n";

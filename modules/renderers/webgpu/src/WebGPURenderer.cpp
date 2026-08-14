@@ -8605,7 +8605,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        uboEntries[2].buffer.minBindingSize = 16;
+        // PbrFactors contains two vec4 values (metallicRoughness + alphaTest).
+        uboEntries[2].buffer.minBindingSize = 8 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
@@ -9081,6 +9082,21 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     return skinMat;
 }
 
+fn skinNormal(m: mat3x3f, n: vec3f) -> vec3f {
+    let c0 = m[0];
+    let c1 = m[1];
+    let c2 = m[2];
+    let co0 = cross(c1, c2);
+    let co1 = cross(c2, c0);
+    let co2 = cross(c0, c1);
+    let det = dot(c0, co0);
+    let transformed = mat3x3f(co0, co1, co2) * n;
+    if (abs(det) > 1e-6) {
+        return transformed * select(-1.0, 1.0, det >= 0.0);
+    }
+    return m * n;
+}
+
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
@@ -9094,7 +9110,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // Variant A), so any rotated or non-uniformly-scaled skinned model was lit as if World were
     // identity. The fragment stage re-normalizes worldNormal.
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
-    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
+    output.worldNormal = normalize(normalMatrix * skinNormal(skinMat3, input.normal));
     output.worldPos = (lp.world * skinnedPos).xyz;
     return output;
 }
@@ -9961,6 +9977,21 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     return skinMat;
 }
 
+fn pbrSkinNormal(m: mat3x3f, n: vec3f) -> vec3f {
+    let c0 = m[0];
+    let c1 = m[1];
+    let c2 = m[2];
+    let co0 = cross(c1, c2);
+    let co1 = cross(c2, c0);
+    let co2 = cross(c0, c1);
+    let det = dot(c0, co0);
+    let transformed = mat3x3f(co0, co1, co2) * n;
+    if (abs(det) > 1e-6) {
+        return transformed * select(-1.0, 1.0, det >= 0.0);
+    }
+    return m * n;
+}
+
 @vertex fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     let skinMat = skinMatrix(input.blendWeight, input.blendIndices);
@@ -9975,7 +10006,7 @@ fn skinMatrix(blendWeight: vec4f, blendIndices: vec4<u32>) -> mat4x4f {
     // transpose. The tangent stays on raw worldMat3: tangents transform as directions, not as
     // normals (glTF convention, unchanged).
     let normalMatrix = mat3x3f(lp.normalMatrixCol0.xyz, lp.normalMatrixCol1.xyz, lp.normalMatrixCol2.xyz);
-    output.worldNormal = normalize(normalMatrix * (skinMat3 * input.normal));
+    output.worldNormal = normalize(normalMatrix * pbrSkinNormal(skinMat3, input.normal));
     output.worldTangent = worldMat3 * (skinMat3 * input.tangent.xyz);
     output.bitangentSign = input.tangent.w;
     output.worldPos = (lp.world * skinnedPos).xyz;
@@ -10074,7 +10105,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        uboEntries[2].buffer.minBindingSize = 16;
+        // PbrFactors contains two vec4 values (metallicRoughness + alphaTest).
+        uboEntries[2].buffer.minBindingSize = 8 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;

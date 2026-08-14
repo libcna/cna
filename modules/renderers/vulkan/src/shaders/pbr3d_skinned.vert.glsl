@@ -51,6 +51,14 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 pbrMapScales;           // x = normal scale, y = occlusion strength
 } pbr;
 
+vec3 cnaSkinNormal(mat3 m, vec3 n) {
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
+
 void main() {
     float weightsPerVertex = pbr.fogColorEnabled.w; // REMED-GFX-010: alongside the fog vector
     mat4 skinMat = bb.bones[aBoneIndices.x] * aBoneWeights.x;
@@ -70,7 +78,7 @@ void main() {
     // mul(normal, WorldInverseTranspose) under non-uniform scale. It also contradicted this
     // renderer's own unskinned pbr3d.vert.glsl, which already uses the inverse transpose.
     mat3 worldNormalMat = transpose(inverse(mat3(pbr.world)));
-    vNormal = normalize(worldNormalMat * (skinNormalMat * aNormal));
+    vNormal = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, aNormal));
     // Tangent stays on raw World: tangents transform as directions, not as normals (glTF
     // convention, and unchanged from the previous behaviour).
     vTangent = mat3(pbr.world) * (skinNormalMat * aTangent.xyz);

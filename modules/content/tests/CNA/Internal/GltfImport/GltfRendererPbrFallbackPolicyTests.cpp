@@ -804,4 +804,73 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
                 << "missing PBR map-scalar evidence: " << evidence;
         }
     }
+
+    // Rigid and skinned WebGPU pipelines share the same two-vec4 PbrFactors ABI. The old 16-byte
+    // minimum accepted the first vector but caused Dawn to reject both pipelines as soon as the
+    // alpha-coverage vector made the WGSL structure 32 bytes.
+    const std::string webgpu = RendererSlotText(renderers, "webgpu");
+    const std::string pbrFactorsSize = Normalize(
+        "uboEntries[2].buffer.minBindingSize = 8 * sizeof(float)");
+    std::size_t pbrFactorsSizeCount = 0;
+    for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
+         at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
+        ++pbrFactorsSizeCount;
+    EXPECT_EQ(2u, pbrFactorsSizeCount)
+        << "both WebGPU PBR pipeline layouts must expose the complete 32-byte factors block";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)
+{
+    struct Audit
+    {
+        const char* name;
+        const char* evidence;
+    };
+    constexpr std::array<Audit, 15> audits{{
+        {"bgfx", "cnaSkinNormal(skinDirectionMat, a_normal)"},
+        {"diligent", "CnaSkinNormal(skinNormalMat, vsIn.Normal)"},
+        {"directx9", "CnaSkinNormal(skinNormalMat, vin.Normal)"},
+        {"directx11", "CnaSkinNormal(skinNormalMat, input.Normal)"},
+        {"directx12", "CnaSkinNormal(skinNormalMat, input.Normal)"},
+        {"easygl", "cnaSkinNormal(skinDirectionMat,aNormal)"},
+        {"llgl", "cnaSkinNormal(skinNormalMat, normal)"},
+        {"magnum", "cnaSkinNormal(mat3(skin), aNormal)"},
+        {"metal", "normalMat * boneNormal"},
+        {"opengl2", "uNormalMatrix*cnaSkinNormal(skinMat3,aNormal)"},
+        {"opengl4", "cnaSkinNormal(mat3(skinMat), aNormal)"},
+        {"sdl-gpu", "cnaSkinNormal(skinNormalMat, inNormal)"},
+        {"vulkan", "cnaSkinNormal(skinNormalMat, aNormal)"},
+        {"webgpu", "normalMatrix * pbrSkinNormal(skinMat3, input.normal)"},
+        {"wicked", "ApplySkinNormal(normal, blendWeights, blendIndices)"},
+    }};
+
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const Audit& audit : audits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.evidence)))
+            << "missing skinned-PBR inverse-transpose evidence: " << audit.evidence;
+    }
+
+    // WebGPU also has a stock SkinnedEffect WGSL program with an intentionally identical helper.
+    // Scope this assertion to CreateSkinnedPbrResources so that fixing only the stock program
+    // cannot satisfy the PBR audit (the first implementation of this gate made exactly that
+    // mistake).
+    const std::string webgpu = Normalize(ReadFile(
+        renderers / "webgpu" / "src" / "WebGPURenderer.cpp"));
+    const std::string beginMarker = Normalize(
+        "void WebGPURenderer::CreateSkinnedPbrResources()");
+    const std::string endMarker = Normalize(
+        "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D");
+    const std::size_t begin = webgpu.find(beginMarker);
+    const std::size_t end = webgpu.find(endMarker, begin);
+    ASSERT_NE(std::string::npos, begin);
+    ASSERT_NE(std::string::npos, end);
+    const std::string skinnedPbr = webgpu.substr(begin, end - begin);
+    EXPECT_NE(std::string::npos, skinnedPbr.find(Normalize(
+        "normalMatrix * pbrSkinNormal(skinMat3, input.normal)")))
+        << "WebGPU's actual SkinnedPbrEffect WGSL must inverse-transpose the joint matrix";
 }

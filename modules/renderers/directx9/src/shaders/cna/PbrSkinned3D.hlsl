@@ -75,6 +75,16 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0, c1, c2) / det;
 }
 
+float3 CnaSkinNormal(float3x3 m, float3 n)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float det = dot(m[0], c0);
+    float3 transformed = mul(n, float3x3(c0, c1, c2));
+    return abs(det) > 1e-6 ? transformed * sign(det) : mul(n, m);
+}
+
 VSOutput VSPbrSkinned3D(VSInput vin)
 {
     VSOutput vout;
@@ -91,12 +101,12 @@ VSOutput VSPbrSkinned3D(VSInput vin)
 
     float3 skinnedPos = mul(float4(vin.Position, 1.0), skinning);
     float3x3 skinNormalMat = (float3x3)skinning;
-    float3 skinnedNormal = mul(vin.Normal, skinNormalMat);
+    float3 skinnedNormal = CnaSkinNormal(skinNormalMat, vin.Normal);
     float3 skinnedTangent = mul(vin.Tangent.xyz, skinNormalMat);
 
     vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj);
-    // REMED-GFX-006 (Variant B): normal takes World's inverse-transpose (correct under non-uniform
-    // scale), not raw World. Tangent stays on raw World (tangents transform as directions).
+    // GLTF-264/REMED-GFX-006: inverse-transpose both the blended joint matrix and World. Tangent
+    // stays on their raw direction matrices.
     vout.Normal = normalize(mul(skinnedNormal, InverseTranspose3x3((float3x3)World)));
     vout.TangentWS = float4(mul(skinnedTangent, (float3x3)World), vin.Tangent.w);
     vout.UV = vin.UV;

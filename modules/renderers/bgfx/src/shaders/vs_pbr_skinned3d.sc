@@ -19,6 +19,23 @@ uniform vec4 u_fogParams;
 uniform vec4 u_depthBias;
 uniform vec4 u_weightsPerVertex;
 
+// GLTF-264: normals follow the inverse transpose of the complete blended joint matrix. shaderc's
+// cross-platform dialect has no reliable inverse(mat3), so use the cofactor columns. Normalizing
+// later cancels |determinant|; its sign preserves mirrored-joint orientation. A nearly singular
+// blend retains the historical direct transform as a finite fallback.
+vec3 cnaSkinNormal(mat3 m, vec3 n)
+{
+    vec3 c0 = m[0];
+    vec3 c1 = m[1];
+    vec3 c2 = m[2];
+    vec3 co0 = cross(c1, c2);
+    vec3 co1 = cross(c2, c0);
+    vec3 co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mul(mat3(co0, co1, co2), n);
+    return abs(det) > 1e-6 ? transformed * (det < 0.0 ? -1.0 : 1.0) : mul(m, n);
+}
+
 void main()
 {
     // Task 895: FNA's real Skin(vin, boneCount) only sums the first WeightsPerVertex (1, 2, or 4)
@@ -33,9 +50,8 @@ void main()
     // Task 767: RasterizerState.DepthBias emulation (see vs_colored3d.sc for the full comment).
     gl_Position.z += u_depthBias.x * gl_Position.w;
 
-    vec3 skinnedNormal = skinMat[0].xyz * a_normal.x
-                        + skinMat[1].xyz * a_normal.y
-                        + skinMat[2].xyz * a_normal.z;
+    mat3 skinDirectionMat = mat3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
+    vec3 skinnedNormal = cnaSkinNormal(skinDirectionMat, a_normal);
     // REMED-GFX-006: the normal uses the World inverse-transpose (audit Variant B fix -- was raw
     // World, correct only under rotation/uniform scale, wrong under non-uniform scale). FNA's
     // WorldInverseTranspose, supplied CPU-side as u_normalMatrix (bgfx's shaderc has no in-shader
@@ -44,9 +60,7 @@ void main()
     // to them.
     v_normal = normalize(mul(u_normalMatrix, skinnedNormal));
 
-    vec3 skinnedTangent = skinMat[0].xyz * a_tangent.x
-                         + skinMat[1].xyz * a_tangent.y
-                         + skinMat[2].xyz * a_tangent.z;
+    vec3 skinnedTangent = mul(skinDirectionMat, a_tangent.xyz);
     v_tangent = vec4(mul(u_world, vec4(skinnedTangent, 0.0)).xyz, a_tangent.w);
 
     v_texcoord0 = a_texcoord0;

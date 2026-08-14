@@ -297,9 +297,12 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.fogColorEnabled[i], referencePu.fogColorEnabled[i], kEps);
     }
 
-    // SkinnedPbrTransform's own fields: wvp/world copied verbatim, plus skinParams (which plain
-    // PbrTransform has no equivalent of).
+    // SkinnedPbrTransform's own fields: wvp/world and the world inverse-transpose copied from the
+    // rigid PBR fill, plus skinParams (which plain PbrTransform has no equivalent of).
     ExpectWvpAndWorldCopiedVerbatim(t.wvp, t.world, wvp, p);
+    ExpectVec4Eq(t.normalCol0, referenceT.normalCol0[0], referenceT.normalCol0[1], referenceT.normalCol0[2], referenceT.normalCol0[3]);
+    ExpectVec4Eq(t.normalCol1, referenceT.normalCol1[0], referenceT.normalCol1[1], referenceT.normalCol1[2], referenceT.normalCol1[3]);
+    ExpectVec4Eq(t.normalCol2, referenceT.normalCol2[0], referenceT.normalCol2[1], referenceT.normalCol2[2], referenceT.normalCol2[3]);
     ExpectVec4Eq(t.skinParams, 2,0,0,0);
 }
 

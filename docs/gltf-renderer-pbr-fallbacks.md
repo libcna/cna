@@ -114,6 +114,40 @@ four discriminating cases to its ten slot and four MASK cases: strength .5 with 
 of the tilted sample's byte 35. Each case runs on rigid and skinned PBR, and all 18 cases pass on
 llvmpipe. EasyGL's independent material-map test retains its wider three-value scalar sweeps.
 
+## Skinned PBR normal matrices (`GLTF-264`, `GLTF-379`)
+
+A skinned normal cannot use the same palette 3x3 as a position or tangent when a joint has
+non-uniform scale. It must use the inverse transpose of the blended palette matrix, followed by the
+world inverse transpose. The audit found that EasyGL already did this after `GLTF-264`, but every
+other skinned PBR implementation still applied the palette 3x3 directly. The corrected paths are:
+
+| Renderer | Skinned-normal transform |
+|---|---|
+| Bgfx | cofactor/inverse-transpose helper, then the existing world normal matrix |
+| Diligent | HLSL row-vector cofactor helper, then `g_NormalMatrix` |
+| DirectX 9 | HLSL row-vector cofactor helper, then the existing world inverse transpose |
+| DirectX 11 / 12 | shared HLSL row-vector cofactor helper, then the per-draw normal matrix |
+| EasyGL | existing GLSL ES 1.00-compatible cofactor helper for stock and PBR programs |
+| LLGL | cofactor helper in both GLSL shader variants, then the world normal matrix |
+| Magnum | generated GLSL cofactor helper, then `uNormalMatrix` |
+| Metal | MSL cofactor helper plus three newly transported world-normal columns |
+| OpenGL 2 | cofactor helper followed by `uNormalMatrix`, replacing the raw world 3x3 |
+| OpenGL 4 | cofactor helper followed by the existing world normal matrix |
+| SDL GPU | GLSL cofactor helper followed by the world normal matrix |
+| Vulkan | GLSL cofactor helper followed by the world normal matrix |
+| WebGPU | WGSL cofactor helper followed by the world normal matrix; both 32-byte `PbrFactors` bind-group declarations now advertise their full minimum size |
+| Wicked | reconstructs the blended palette columns and applies the cofactor transform before the world normal matrix |
+
+All helpers preserve the determinant sign, and keep the renderer's existing direct-transform
+fallback for a near-singular palette. Tangents remain ordinary directions; TBN construction
+re-orthogonalises them against the corrected normal. The source inventory test
+`EverySkinnedPbrShaderInverseTransposesTheJointMatrix` covers all 15 implementations and every
+separately stored shader variant. Vulkan's real-pixel case uses joint scale `[1,2,1]` and authored
+normal `(0,.6,.8)`: the corrected inverse transpose renders byte 28, while the former direct
+transform would be approximately 66. The expanded Vulkan executable passes 6/6 cases; WebGPU's
+rigid and skinned PBR executables each pass 5/5 under the native backend, and the regenerated D3D9
+shader passes its 6/6 WineD3D pixel suite.
+
 `PbrEffect` and `SkinnedPbrEffect` shaders sample five textures unconditionally. A missing glTF map
 therefore cannot mean “leave the slot unbound”; every PBR renderer must bind a semantic identity:
 

@@ -538,14 +538,18 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     return c;
 }
 
-// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82): combines cna_skin_common's real GPU-skinning
-// blend (position+normal+tangent all transformed by the same per-vertex weighted bone matrix sum,
-// mat3(skinMat) directly -- no separate inverse-transpose normal-matrix step, matching
-// SkinnedEffect's own established precedent, not PBR's unskinned inverse-transpose path) with
-// cna_f3d_pbr's existing fragment shader unchanged -- both emit/consume the same VPbrOut, so no new
-// fragment shader is needed, only a new vertex shader producing that same interpolant struct.
-struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 skinParams; }; // skinParams.x = weightsPerVertex
+// CNAEXT SkinnedPbrEffect (plan_metal.md METAL-82, GLTF-264): GPU skinning plus the same PBR
+// interpolants as cna_v3d_pbr. Normals use inverse-transpose joint and world matrices while
+// tangents remain ordinary directions.
+struct SkinnedPbrTransform { float4x4 wvp; float4x4 world; float4 normalCol0; float4 normalCol1; float4 normalCol2; float4 skinParams; }; // skinParams.x = weightsPerVertex
 struct VSkinnedPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; float4 boneWeights [[attribute(4)]]; uchar4 boneIndices [[attribute(5)]]; };
+float3 cna_skin_normal(float3x3 m, float3 n) {
+    float3 c0=m[0], c1=m[1], c2=m[2];
+    float3 co0=cross(c1,c2), co1=cross(c2,c0), co2=cross(c0,c1);
+    float det=dot(c0,co0);
+    float3 transformed=float3x3(co0,co1,co2)*n;
+    return (abs(det)>1e-6) ? transformed*((det<0.0)?-1.0:1.0) : m*n;
+}
 vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant SkinnedPbrTransform& t [[buffer(1)]], constant PbrUniforms& pu [[buffer(2)]], constant float4x4* bones [[buffer(3)]]) {
     VPbrOut o;
     int weightsPerVertex = int(t.skinParams.x);
@@ -555,9 +559,11 @@ vertex VPbrOut cna_v3d_skinned_pbr(VSkinnedPbrIn in [[stage_in]], constant Skinn
     float4 skinnedPos = skinMat * float4(in.position, 1.0);
     o.position = t.wvp * skinnedPos;
     float3x3 skinMat3 = float3x3(skinMat[0].xyz, skinMat[1].xyz, skinMat[2].xyz);
-    float3 skinnedNormal = skinMat3 * in.normal;
+    float3 skinnedNormal = cna_skin_normal(skinMat3, in.normal);
     float skinnedNormalLen = length(skinnedNormal);
-    o.normal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3 boneNormal = (skinnedNormalLen > 1e-6) ? (skinnedNormal / skinnedNormalLen) : in.normal;
+    float3x3 normalMat = float3x3(t.normalCol0.xyz, t.normalCol1.xyz, t.normalCol2.xyz);
+    o.normal = normalize(normalMat * boneNormal);
     // Not renormalized here (matches the unskinned cna_v3d_pbr's own o.tangent = world3*tangent.xyz,
     // which is also left unnormalized) -- cna_f3d_pbr's Gram-Schmidt orthogonalization against the
     // interpolated normal already renormalizes it per-pixel regardless.

@@ -210,6 +210,57 @@ class VulkanPbrEffectHandDerivedTest : public Game
         return got;
     }
 
+    // GLTF-264: the joint scale must affect the normal through inverse-transpose, not through the
+    // position/direction matrix. This is deliberately separate from the identity-bone smoke above.
+    Color renderSkinnedPbrNonUniformJointNormal(GraphicsDevice& dev, Texture2D& albedoTex)
+    {
+        SkinnedPbrEffect fx(dev);
+        fx.setTextureProperty(&albedoTex);
+        fx.setNormalMapProperty(nullptr);
+        fx.setMetallicFactorProperty(0.0f);
+        fx.setRoughnessFactorProperty(1.0f);
+        fx.setAmbientLightColorProperty(Vector3::Zero);
+        fx.DirectionalLight0.setEnabledProperty(true);
+        fx.DirectionalLight0.setDirectionProperty(Vector3(0.0f, -1.0f, 0.0f));
+        fx.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+        fx.DirectionalLight1.setEnabledProperty(false);
+        fx.DirectionalLight2.setEnabledProperty(false);
+        fx.setWorldProperty(Matrix::getIdentityProperty());
+        fx.setViewProperty(Matrix::CreateLookAt(
+            Vector3(0.0f, 0.0f, 3.0f), Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
+        fx.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
+            MathHelper::PiOver4, 1.0f, 0.1f, 100.0f));
+        fx.SetBoneTransforms({Matrix::CreateScale(1.0f, 2.0f, 1.0f)});
+        fx.setWeightsPerVertexProperty(1);
+
+        auto verts = MakeQuad<SkinnedPbrGpuVertex>();
+        for (auto& vertex : verts)
+        {
+            vertex.nx = 0.0f; vertex.ny = 0.6f; vertex.nz = 0.8f;
+            vertex.w0 = 1.0f; vertex.w1 = vertex.w2 = vertex.w3 = 0.0f;
+            vertex.i0 = vertex.i1 = vertex.i2 = vertex.i3 = 0;
+        }
+        VertexBuffer vb(dev, static_cast<int>(verts.size()));
+        vb.SetDataRaw(verts.data(), static_cast<int>(verts.size()),
+                      static_cast<int>(sizeof(SkinnedPbrGpuVertex)));
+
+        Color got(0, 0, 0, 0);
+        for (int i = 0; i < 20; ++i)
+        {
+            dev.Clear(Color(0, 255, 0, 255));
+            dev.SetDepthTestEnabled(false);
+            dev.setBlendStateProperty(BlendState::Opaque);
+            dev.setRasterizerStateProperty(RasterizerState::CullNone);
+            dev.SetVertexBuffer(&vb);
+            fx.Apply();
+            dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            got = readCenter(dev);
+            if (got.getRProperty() != 0 || got.getGProperty() != 0 || got.getBProperty() != 0)
+                break;
+        }
+        return got;
+    }
+
 protected:
     void Draw(const GameTime&) override
     {
@@ -260,6 +311,14 @@ protected:
         const Color d = renderSkinnedPbrIdentity(dev, whiteTex);
         check(matches(d, a, 10),
               "(d) SkinnedPbrEffect identity bone reproduces PbrEffect (a)'s own value", d, "== (a)");
+
+        // Inverse-transpose(S[1,2,1]) sends (0,.6,.8) to normalize(0,.3,.8). With L=+Y,
+        // V=+Z and rough dielectric PBR this shader's linear output is 0.10886 -> byte 28. The
+        // former direct joint transform normalized (0,1.2,.8) and produced about byte 66.
+        const Color e = renderSkinnedPbrNonUniformJointNormal(dev, whiteTex);
+        check(matches(e, Color(28, 28, 28, 255), 4),
+              "(e) SkinnedPbrEffect inverse-transposes a non-uniform joint normal", e,
+              "(28,28,28), not the old direct-transform (~66)");
 
         std::printf("\nResult: %d/%d PASS\n", pass_, pass_ + fail_);
         Exit();

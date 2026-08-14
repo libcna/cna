@@ -43,6 +43,15 @@ layout(location = 3) out float vBitangentSign;
 layout(location = 4) out vec3  vWorldPos;
 layout(location = 5) out float vFogFactor;
 
+vec3 cnaSkinNormal(mat3 m, vec3 n)
+{
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
+
 void main()
 {
     float weightsPerVertex = roughnessWeightsPad.y;
@@ -56,7 +65,7 @@ void main()
 
     mat3 skinNormalMat = mat3(skinMat);
     mat3 worldNormalMat = transpose(inverse(mat3(worldMatrix)));
-    vNormal        = normalize(worldNormalMat * (skinNormalMat * normal));
+    vNormal        = normalize(worldNormalMat * cnaSkinNormal(skinNormalMat, normal));
     vTangent       = mat3(worldMatrix) * (skinNormalMat * tangent.xyz);
     vBitangentSign = tangent.w;
     vWorldPos      = (worldMatrix * skinnedPos).xyz;

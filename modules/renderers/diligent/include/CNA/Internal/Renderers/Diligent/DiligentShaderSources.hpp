@@ -359,6 +359,18 @@ float3x3 InverseTranspose3x3(float3x3 m)
     return float3x3(c0 * invDeterminant, c1 * invDeterminant, c2 * invDeterminant);
 }
 
+float3 CnaSkinNormal(float3x3 m, float3 n)
+{
+    float3 c0 = cross(m[1], m[2]);
+    float3 c1 = cross(m[2], m[0]);
+    float3 c2 = cross(m[0], m[1]);
+    float determinant = dot(m[0], c0);
+    float3 transformed = mul(n, float3x3(c0, c1, c2));
+    return abs(determinant) > 1e-6
+        ? transformed * sign(determinant)
+        : mul(n, m);
+}
+
 // A disabled light's direction is left at exactly (0,0,0) by the effect layer (see this file's own
 // note on that convention); plain normalize() of a zero-length vector is undefined/NaN, which would
 // otherwise poison the whole per-light sum through dot()/max() once every enabled light's own math
@@ -680,14 +692,11 @@ void main(in VSInput vsIn, out PSInput psIn)
 
     psIn.Pos = mul(skinnedPos, g_WorldViewProj);
 
-    // Same composition kSkinnedVertexHlsl already uses: the skin matrix's own 3x3 applied first,
-    // then the inverse-transpose of World (not a full inverse-transpose of skin*World) -- a
-    // documented simplification shared with this renderer's own unskinned-lit skinning path.
-    // InverseTranspose3x3() comes from kVertexLightingHlsl (always prepended to every vertex
-    // shader), the same helper kSkinnedVertexHlsl itself already uses.
+    // GLTF-264: inverse-transpose the complete blended joint matrix before composing it with
+    // World's inverse-transpose. Tangents remain ordinary directions on both matrices.
     float3x3 skinNormalMat = float3x3(skin[0].xyz, skin[1].xyz, skin[2].xyz);
     float3x3 worldNormalMat = InverseTranspose3x3(float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz));
-    psIn.Normal = normalize(mul(mul(vsIn.Normal, skinNormalMat), worldNormalMat));
+    psIn.Normal = normalize(mul(CnaSkinNormal(skinNormalMat, vsIn.Normal), worldNormalMat));
     psIn.Tangent = float4(mul(mul(vsIn.Tangent.xyz, skinNormalMat), float3x3(g_World[0].xyz, g_World[1].xyz, g_World[2].xyz)), vsIn.Tangent.w);
 
     psIn.UV       = vsIn.UV;

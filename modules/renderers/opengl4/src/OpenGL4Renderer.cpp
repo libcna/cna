@@ -870,6 +870,14 @@ out float vBitangentSign;
 out vec2 vUV;
 out vec3 vWorldPos;
 out float vFogFactor;
+vec3 cnaSkinNormal(mat3 m, vec3 n)
+{
+    vec3 c0 = m[0], c1 = m[1], c2 = m[2];
+    vec3 co0 = cross(c1, c2), co1 = cross(c2, c0), co2 = cross(c0, c1);
+    float det = dot(c0, co0);
+    vec3 transformed = mat3(co0, co1, co2) * n;
+    return abs(det) > 1e-6 ? transformed * sign(det) : m * n;
+}
 void main()
 {
     mat4 skinMat = uBones[aBoneIndices.x] * aBoneWeights.x;
@@ -882,7 +890,7 @@ void main()
     }
     vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
     gl_Position = uWorldViewProj * skinnedPos;
-    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+    vec3 skinnedNormal = cnaSkinNormal(mat3(skinMat), aNormal);
     vec3 skinnedTangent = mat3(skinMat) * aTangent.xyz;
     mat3 normalMatrix = transpose(inverse(mat3(uWorld)));
     vNormal = normalMatrix * skinnedNormal;
