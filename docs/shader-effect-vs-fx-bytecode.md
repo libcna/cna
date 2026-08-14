@@ -10,6 +10,10 @@ for one never implies support for the other.
 
 The six stock effects remain portable CNA APIs and do not require either custom-effect capability.
 
+The full porter-facing guide to the compiled path -- loading, reflection, parameters, passes, pass
+state, samplers, clone, lifetime, the renderer matrix, every error message, and XNA-to-CNA
+migration -- is [`fx-compiled-effects.md`](fx-compiled-effects.md).
+
 ## Compiled effects on FNA3D
 
 FNA3D already owns the MojoShader integration used by FNA. CNA uses that same device-local path to

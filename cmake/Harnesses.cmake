@@ -312,3 +312,12 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         endif()
     endif()
 endif()
+
+# --- plan_fx.md FX-053: compiled Effect Framework performance baseline ---
+# Measures construction, clone, dirty upload, clean apply and draw so the immutable-artifact-cache
+# question is decided on numbers. Manually invoked and never registered with ctest: wall-clock
+# timings on a shared machine are a baseline to compare, not a pass/fail signal.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_compiled_effect_benchmark tools/graphics/compiled_effect_benchmark.cpp)
+    target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+endif()

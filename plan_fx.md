@@ -29,6 +29,9 @@ Delivered task groups:
 - pass state published through the public `GraphicsDevice` state objects and sampler/texture
   collections exactly as FNA's `Effect.cs` does, instead of into renderer-private caches, with a
   group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
+- porter-facing documentation covering the whole compiled path, its error table, and the
+  dependency/licence notices, plus a fuzzing guide (`FX-055`, `docs/fx-compiled-effects.md`,
+  `docs/fx-bytecode-fuzzing.md`);
 - a libFuzzer/AFL++ entry point covering construction, reflection, clone, technique/pass
   application and post-source-destruction clone use, which also builds as a standalone corpus
   replayer in any configuration, plus the deterministic in-build mutation corpus extended from
@@ -464,8 +467,8 @@ must be accepted before a row can close.
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | Clean supported-platform sanitizer reports |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | Baselines recorded; any cache preserves per-instance mutable isolation |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | No unexplained regression from the develop baseline |
-| FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | A porter can identify, load, inspect, apply, clone, and troubleshoot an effect |
-| FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | No contradictory active plan remains |
+| FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
+| FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | **Done.** `docs/fx-bytecode-support-plan.md` and `docs/shader-effect-vs-fx-bytecode.md` carry supersession banners and point at the current guide; `plan_graphics.md` Phase 74 keeps its original rows and adds a row-by-row disposition (obsolete / delivered / re-scoped / carried forward) so none of them can be picked up again |
 | FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | All FNA3D MVP exit criteria in section 10 pass |
 
 ### Phase G - Additional renderer waves
