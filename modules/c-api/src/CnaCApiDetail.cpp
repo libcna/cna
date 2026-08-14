@@ -31,13 +31,138 @@ const LastError& GetLastError() noexcept
 void SetLastError(
     const CNA_Result result,
     const CNA_ErrorCategory category,
-    const char* const message,
-    const uint64_t messageByteLength) noexcept
+    const std::string_view message) noexcept
 {
     lastError.result = result;
     lastError.category = category;
-    lastError.message = message == nullptr ? "" : message;
-    lastError.messageByteLength = message == nullptr ? 0U : messageByteLength;
+    try {
+        if (message.empty()) {
+            lastError.message.clear();
+        } else {
+            lastError.message.assign(message.data(), message.size());
+        }
+    } catch (...) {
+        lastError.message.clear();
+    }
+}
+
+CNA_Result Fail(
+    const CNA_Result result,
+    const CNA_ErrorCategory category,
+    const std::string_view message) noexcept
+{
+    SetLastError(result, category, message);
+    return result;
+}
+
+CNA_Result ValidateStringView(
+    const CNA_StringView value,
+    const bool rejectEmbeddedNul) noexcept
+{
+    if (value.data == nullptr) {
+        return value.byte_length == 0U ? CNA_RESULT_SUCCESS : CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    const auto* bytes = reinterpret_cast<const unsigned char*>(value.data);
+    for (uint64_t index = 0U; index < value.byte_length;) {
+        const unsigned char first = bytes[index];
+        if (first <= 0x7FU) {
+            if (rejectEmbeddedNul && first == 0U) {
+                return CNA_RESULT_ENCODING;
+            }
+            ++index;
+            continue;
+        }
+
+        uint64_t continuationCount = 0U;
+        if (first >= 0xC2U && first <= 0xDFU) {
+            continuationCount = 1U;
+        } else if (first >= 0xE0U && first <= 0xEFU) {
+            continuationCount = 2U;
+        } else if (first >= 0xF0U && first <= 0xF4U) {
+            continuationCount = 3U;
+        } else {
+            return CNA_RESULT_ENCODING;
+        }
+
+        if (continuationCount > value.byte_length - index - 1U) {
+            return CNA_RESULT_ENCODING;
+        }
+
+        const unsigned char second = bytes[index + 1U];
+        if ((second & 0xC0U) != 0x80U ||
+            (first == 0xE0U && second < 0xA0U) ||
+            (first == 0xEDU && second > 0x9FU) ||
+            (first == 0xF0U && second < 0x90U) ||
+            (first == 0xF4U && second > 0x8FU)) {
+            return CNA_RESULT_ENCODING;
+        }
+
+        for (uint64_t continuationIndex = 2U;
+             continuationIndex <= continuationCount;
+             ++continuationIndex) {
+            if ((bytes[index + continuationIndex] & 0xC0U) != 0x80U) {
+                return CNA_RESULT_ENCODING;
+            }
+        }
+        index += continuationCount + 1U;
+    }
+
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CopyStringView(
+    const CNA_StringView value,
+    const bool rejectEmbeddedNul,
+    std::string* const outValue) noexcept
+{
+    if (outValue == nullptr) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    const CNA_Result validationResult = ValidateStringView(value, rejectEmbeddedNul);
+    if (validationResult != CNA_RESULT_SUCCESS) {
+        return validationResult;
+    }
+
+    try {
+        outValue->assign(value.data == nullptr ? "" : value.data, value.byte_length);
+    } catch (const std::bad_alloc&) {
+        return CNA_RESULT_OUT_OF_MEMORY;
+    } catch (...) {
+        return CNA_RESULT_INTERNAL;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result ValidateBuffer(const void* const data, const uint64_t count) noexcept
+{
+    return data == nullptr && count != 0U ? CNA_RESULT_INVALID_ARGUMENT : CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CheckedElementByteCount(
+    const void* const data,
+    const uint64_t elementCount,
+    const uint64_t elementByteSize,
+    std::size_t* const outByteCount) noexcept
+{
+    if (outByteCount == nullptr || elementByteSize == 0U) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    if (const CNA_Result pointerResult = ValidateBuffer(data, elementCount);
+        pointerResult != CNA_RESULT_SUCCESS) {
+        return pointerResult;
+    }
+    if (elementCount > std::numeric_limits<uint64_t>::max() / elementByteSize) {
+        return CNA_RESULT_OVERFLOW;
+    }
+
+    const uint64_t byteCount = elementCount * elementByteSize;
+    if (byteCount > std::numeric_limits<std::size_t>::max()) {
+        return CNA_RESULT_OVERFLOW;
+    }
+    *outByteCount = static_cast<std::size_t>(byteCount);
+    return CNA_RESULT_SUCCESS;
 }
 
 CNA_Result HandleRegistry::Create(

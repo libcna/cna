@@ -30,7 +30,7 @@ CNA_Result cna_error_get_last_info(CNA_ErrorInfo* const outInfo)
     const CNA::C::Detail::LastError& lastError = CNA::C::Detail::GetLastError();
     outInfo->result = lastError.result;
     outInfo->category = lastError.category;
-    outInfo->message_byte_length = lastError.messageByteLength;
+    outInfo->message_byte_length = lastError.message.size();
     return CNA_RESULT_SUCCESS;
 }
 
@@ -40,7 +40,7 @@ CNA_Result cna_error_get_last_message_size(uint64_t* const outBytes)
         return CNA_RESULT_INVALID_ARGUMENT;
     }
 
-    *outBytes = CNA::C::Detail::GetLastError().messageByteLength;
+    *outBytes = CNA::C::Detail::GetLastError().message.size();
     return CNA_RESULT_SUCCESS;
 }
 
@@ -54,13 +54,13 @@ CNA_Result cna_error_copy_last_message(
     }
 
     const CNA::C::Detail::LastError& lastError = CNA::C::Detail::GetLastError();
-    *outBytes = lastError.messageByteLength;
-    if (capacity < lastError.messageByteLength) {
+    *outBytes = lastError.message.size();
+    if (capacity < lastError.message.size()) {
         return CNA_RESULT_BUFFER_TOO_SMALL;
     }
 
-    if (lastError.messageByteLength != 0U) {
-        std::memcpy(destination, lastError.message, lastError.messageByteLength);
+    if (!lastError.message.empty()) {
+        std::memcpy(destination, lastError.message.data(), lastError.message.size());
     }
     return CNA_RESULT_SUCCESS;
 }

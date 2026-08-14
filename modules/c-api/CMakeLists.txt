@@ -2,6 +2,14 @@
 
 include(GNUInstallDirs)
 
+function(cna_c_api_enable_strict_warnings target)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+endfunction()
+
 add_library(cna_c_api SHARED
     src/CnaCApi.cpp
     src/CnaCApiDetail.cpp
@@ -25,6 +33,7 @@ target_include_directories(cna_c_api
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
 target_link_libraries(cna_c_api PRIVATE cna_core)
+cna_c_api_enable_strict_warnings(cna_c_api)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -42,6 +51,18 @@ install(EXPORT CNACTargets
 )
 
 if(CNA_BUILD_TESTS)
+    add_custom_target(cna_c_api_header_audit
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INCLUDE_DIRECTORY=${CMAKE_CURRENT_SOURCE_DIR}/include
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckPublicHeaders.cmake
+        VERBATIM
+    )
+    add_test(NAME CApi_HeaderAudit
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INCLUDE_DIRECTORY=${CMAKE_CURRENT_SOURCE_DIR}/include
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckPublicHeaders.cmake
+    )
+
     add_executable(cna_c_api_abi_smoke
         tests/pure_c/AbiSmoke.c
     )
@@ -51,6 +72,7 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_link_libraries(cna_c_api_abi_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_abi_smoke)
     add_test(NAME CApi_AbiSmoke COMMAND cna_c_api_abi_smoke)
 
     add_executable(cna_c_api_error_smoke
@@ -62,6 +84,7 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_link_libraries(cna_c_api_error_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
 
     add_library(cna_c_api_header_c OBJECT tests/pure_c/AbiHeaderC.c)
@@ -71,9 +94,13 @@ if(CNA_BUILD_TESTS)
         C_EXTENSIONS OFF
     )
     target_include_directories(cna_c_api_header_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_dependencies(cna_c_api_header_c cna_c_api_header_audit)
+    cna_c_api_enable_strict_warnings(cna_c_api_header_c)
 
     add_library(cna_c_api_header_cpp OBJECT tests/cpp/AbiHeaderCpp.cpp)
     target_include_directories(cna_c_api_header_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    add_dependencies(cna_c_api_header_cpp cna_c_api_header_audit)
+    cna_c_api_enable_strict_warnings(cna_c_api_header_cpp)
 
     add_executable(cna_c_api_handle_registry_test
         tests/cpp/HandleRegistryTest.cpp
@@ -85,5 +112,18 @@ if(CNA_BUILD_TESTS)
     )
     find_package(Threads REQUIRED)
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_handle_registry_test)
     add_test(NAME CApi_HandleRegistry COMMAND cna_c_api_handle_registry_test)
+
+    add_executable(cna_c_api_boundary_detail_test
+        tests/cpp/BoundaryDetailTest.cpp
+        src/CnaCApi.cpp
+        src/CnaCApiDetail.cpp
+    )
+    target_include_directories(cna_c_api_boundary_detail_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)
+    add_test(NAME CApi_BoundaryDetail COMMAND cna_c_api_boundary_detail_test)
 endif()

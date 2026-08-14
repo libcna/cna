@@ -2,9 +2,9 @@
 
 ## Status
 
-The native C API is in design-to-implementation transition. The contract in this directory is
-binding on its implementation; no public C header or binary ABI has been released yet. The first
-implementation will advertise ABI `0.1.0` and remains experimental until the release gate in
+The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
+the ABI/error substrate only; no XNA/CNA framework type is adapted yet. The contract in this
+directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
 
 ## Purpose

@@ -173,11 +173,11 @@ any CNA C++ object.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-012 | Implement result and structured-error boundary | 🔄 | `CNA_Result`, error categories, versioned `CNA_ErrorInfo`, thread-local query/copy APIs and C smoke coverage exist. The reusable exception firewall will be added before the first CNA C++ operation is exposed. |
+| CBIND-012 | Implement result and structured-error boundary | ✅ | The thread-local versioned error/query/copy substrate is backed by a reusable exception firewall. It maps allocation, argument/range, I/O, standard and unknown C++ failures to stable results/categories without exposing exception objects; focused tests verify mapping and diagnostic copying. |
 | CBIND-013 | Implement validated handle registry | 🔄 | Internal slot/generation/kind/thread-affinity registry and C++ stale/double-release/reuse tests exist. Runtime ownership and public handle operations arrive with the B3 game/runtime adapter. |
-| CBIND-014 | Implement neutral value and string conversion | ⬜ | Add only approved POD values (including `CNA_GameTime`, geometry/math and color representations needed by the first vertical slice) plus UTF-8 conversion. Test byte layout and semantic conversion independently; never reinterpret a C struct as a C++ XNA object. |
-| CBIND-015 | Implement buffer/count-copy helpers | ⬜ | Provide reusable checked conversion and query/copy helpers for fixed-width counts, pointer ranges and destination capacity. Test zero length, null-with-zero, null-with-nonzero, undersized capacity, oversized values and all integer-overflow paths. |
-| CBIND-016 | Audit the Sharp Runtime boundary | ⬜ | Produce `docs/c-api/SHARP_RUNTIME_BOUNDARY.md` with a C++/Sharp Runtime → C ABI mapping table for strings, exceptions, collections, spans, time, streams, tasks and delegates. Add a header scanner plus C compiler gate that rejects forbidden surface tokens. |
+| CBIND-014 | Implement neutral value and string conversion | 🔄 | UTF-8 string-view validation/copy is implemented and tested, including nullability, overlong encodings and optional embedded-NUL rejection. `CNA_GameTime` and first-slice POD layout land with the B3 runtime adapter; no C POD is reinterpreted as a C++ object. |
+| CBIND-015 | Implement buffer/count-copy helpers | ✅ | Reusable pointer/count and element-size helpers validate null/zero cases, checked `uint64_t` multiplication and native-size conversion. Focused tests cover zero/null, nonzero-null and overflow; error-copy tests cover undersized capacity with no partial write. |
+| CBIND-016 | Audit the Sharp Runtime boundary | ✅ | `docs/c-api/SHARP_RUNTIME_BOUNDARY.md` records the mapping table. A CMake lexical scanner and strict C17/C++23 compiler gates audit each public header; the pure-C umbrella consumer remains the authoritative boundary test. |
 
 **B2 gate:** all common contracts have focused C and C++ tests, and sanitizers find no invalid
 handle, conversion, ownership or exception-escape defect in the exercised paths.
@@ -304,7 +304,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-011` are ✅; `CBIND-012` and `CBIND-013` are 🔄; `CBIND-014` through
-`CBIND-044` are ⬜ **not started**. The exported ABI is still experimental `0.1.0` and currently
-contains only the version and error-query substrate. No language-specific binding exists. Phase B2
-continues with conversion helpers, exception translation and a public-header leakage checker.
+`CBIND-000` through `CBIND-012`, `CBIND-015` and `CBIND-016` are ✅; `CBIND-013` and
+`CBIND-014` are 🔄; `CBIND-017` through `CBIND-044` are ⬜ **not started**. The exported ABI is
+still experimental `0.1.0` and currently contains only the version and error-query substrate. No
+language-specific binding exists. B3 will complete runtime-owned handles and add the first
+`CNA_GameTime` POD alongside the game lifecycle adapter.

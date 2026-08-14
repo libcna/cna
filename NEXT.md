@@ -11,9 +11,11 @@
 > deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig, Go, Swift, or other
 > language-binding work.
 
-> Next action: finish B2 (`CBIND-012`–`016`): exception translation, handle/runtime ownership,
-> value/string conversion, checked buffer helpers and the public-header leakage checker. A
-> machine-checked coverage matrix will prevent untracked public CNA symbols from being omitted.
+> B2 now has the exception/error, UTF-8, buffer and public-header boundary substrate
+> (`CBIND-012`, `015`, `016`). Its handle ownership and first POD conversion are intentionally
+> completed by the B3 runtime adapter (`CBIND-013`, `014`, `017`–`021`), rather than inventing a
+> synthetic runtime. A machine-checked coverage matrix will prevent untracked public CNA symbols
+> from being omitted.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
