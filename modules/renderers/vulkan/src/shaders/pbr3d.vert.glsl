@@ -46,6 +46,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector (xyz + w)
     vec4 alphaTest;             // reference, tolerance, pass weight, fail weight
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
+    vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
 } pbr;
 
 float cnaDirectionHandedness(mat3 m) {

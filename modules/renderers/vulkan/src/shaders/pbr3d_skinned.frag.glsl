@@ -42,7 +42,20 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector
     vec4 alphaTest;
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
+    vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
 } pbr;
+
+vec3 CnaSrgbToLinear(vec3 c) {
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 CnaLinearToSrgb(vec3 c) {
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 
 vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic) {
     vec3 H = normalize(V + L);
@@ -64,7 +77,8 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
 
 void main() {
     vec4 baseColorTex = texture(uTexture, vUV);
-    vec3 albedo = baseColorTex.rgb * pc.diffuseColor.rgb;
+    vec3 baseColor = mix(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), pbr.srgbFlags.x);
+    vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
     bool passesAlphaTest = (pbr.alphaTest.y > 0.0)
         ? (abs(alpha - pbr.alphaTest.x) < pbr.alphaTest.y)
@@ -89,7 +103,12 @@ void main() {
     float occlusionSample = texture(uOcclusionMap, vUV).r;
     float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
-    vec3 emissive = pbr.emissive_roughness.xyz * texture(uEmissiveMap, vUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, vUV).rgb;
+    emissiveSample = mix(emissiveSample, CnaSrgbToLinear(emissiveSample), pbr.srgbFlags.y);
+    vec3 emissive = pbr.emissive_roughness.xyz * emissiveSample;
     outColor = vec4(ambient + Lo + emissive, alpha);
-    outColor.rgb = mix(pbr.fogColorEnabled.xyz, outColor.rgb, vFogFactor);
+    vec3 fogLinear = mix(pbr.fogColorEnabled.xyz,
+                         CnaSrgbToLinear(pbr.fogColorEnabled.xyz), pbr.srgbFlags.z);
+    outColor.rgb = mix(fogLinear, outColor.rgb, vFogFactor);
+    outColor.rgb = mix(outColor.rgb, CnaLinearToSrgb(outColor.rgb), pbr.srgbFlags.z);
 }

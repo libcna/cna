@@ -49,6 +49,7 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 fogVector;              // REMED-GFX-010: FNA fog vector (xyz + w)
     vec4 alphaTest;              // reference, tolerance, pass weight, fail weight
     vec4 pbrMapScales;           // x = normal scale, y = occlusion strength
+    vec4 srgbFlags;              // x = decode base, y = decode emissive, z = encode output
 } pbr;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {

@@ -125,12 +125,23 @@ class VulkanPbrEffectHandDerivedTest : public Game
              * Matrix::CreatePerspectiveFieldOfView(MathHelper::PiOver4, 1.0f, 0.1f, 100.0f);
     }
 
+    template <typename Effect>
+    void UseLinearTransferForAnalyticCases(Effect& effect)
+    {
+        // These pre-existing witnesses derive and compare the shader's linear BRDF value. Keep
+        // that contract explicit now that Vulkan honors the public glTF colour-space controls.
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(false);
+    }
+
     // Renders one quad with PbrEffect and returns the centre pixel.
     Color renderPbr(GraphicsDevice& dev, Texture2D& albedoTex,
                      float metallic, float roughness,
                      const Vector3& light0Dir, const Vector3& light0Diffuse)
     {
         PbrEffect fx(dev);
+        UseLinearTransferForAnalyticCases(fx);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(metallic);
@@ -172,6 +183,7 @@ class VulkanPbrEffectHandDerivedTest : public Game
     Color renderSkinnedPbrIdentity(GraphicsDevice& dev, Texture2D& albedoTex)
     {
         SkinnedPbrEffect fx(dev);
+        UseLinearTransferForAnalyticCases(fx);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(0.0f);
@@ -215,6 +227,7 @@ class VulkanPbrEffectHandDerivedTest : public Game
     Color renderSkinnedPbrNonUniformJointNormal(GraphicsDevice& dev, Texture2D& albedoTex)
     {
         SkinnedPbrEffect fx(dev);
+        UseLinearTransferForAnalyticCases(fx);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(nullptr);
         fx.setMetallicFactorProperty(0.0f);
@@ -267,6 +280,7 @@ class VulkanPbrEffectHandDerivedTest : public Game
                                         Texture2D& positiveYNormal)
     {
         PbrEffect fx(dev);
+        UseLinearTransferForAnalyticCases(fx);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(&positiveYNormal);
         fx.setMetallicFactorProperty(0.0f);
@@ -311,6 +325,7 @@ class VulkanPbrEffectHandDerivedTest : public Game
                                                Texture2D& positiveYNormal)
     {
         SkinnedPbrEffect fx(dev);
+        UseLinearTransferForAnalyticCases(fx);
         fx.setTextureProperty(&albedoTex);
         fx.setNormalMapProperty(&positiveYNormal);
         fx.setMetallicFactorProperty(0.0f);
