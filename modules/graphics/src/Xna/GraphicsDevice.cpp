@@ -103,6 +103,46 @@ namespace Microsoft::Xna::Framework::Graphics
             );
         }
 
+        /// plan_runtimerenderer.md RTR-P8-5: a documented debug facility for verifying that a
+        /// configured fallback chain actually works, without having to break a driver to find out.
+        ///
+        /// CNA_DEBUG_UNAVAILABLE_RENDERERS is a comma-separated list of renderer names to treat as
+        /// though their availability probe had failed. It sits alongside the renderer-specific
+        /// debug variables this project already has (CNA_BGFX_TRACE_*, CNA_LLGL_DEBUG) and the
+        /// existing DebugSimulateContextLoss() channel: a deliberate, named test seam rather than
+        /// something the resolution path does on its own.
+        [[nodiscard]] bool isDebugForcedUnavailable(std::string_view rendererName)
+        {
+            const char* raw = SDL_getenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            if (raw == nullptr || *raw == '\0')
+                return false;
+
+            std::string_view remaining(raw);
+            while (!remaining.empty())
+            {
+                const std::size_t comma = remaining.find(',');
+                std::string_view entry = remaining.substr(0, comma);
+                remaining = comma == std::string_view::npos ? std::string_view()
+                                                            : remaining.substr(comma + 1);
+
+                while (!entry.empty() && entry.front() == ' ')
+                    entry.remove_prefix(1);
+                while (!entry.empty() && entry.back() == ' ')
+                    entry.remove_suffix(1);
+
+                if (entry.size() == rendererName.size()
+                    && std::equal(entry.begin(), entry.end(), rendererName.begin(),
+                                  [](char a, char b) {
+                                      return std::toupper(static_cast<unsigned char>(a))
+                                          == std::toupper(static_cast<unsigned char>(b));
+                                  }))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
         /// compiled-in set. The generated registry translation unit publishes that set into the
         /// selection layer before main() runs, so by the time anything here asks, the answer is real.
@@ -2325,6 +2365,15 @@ namespace Microsoft::Xna::Framework::Graphics
                     continue;
                 }
                 discardOwnedWindow();
+            }
+
+            if (isDebugForcedUnavailable(candidate->name))
+            {
+                CNA::GraphicsRendererSelectionAccessEXT::RecordFallback(
+                    GraphicsRendererFallbackRecord{
+                        candidateType, GraphicsRendererFallbackReason::ProbeUnavailable,
+                        "forced unavailable by CNA_DEBUG_UNAVAILABLE_RENDERERS"});
+                continue;
             }
 
             if (!candidate->isAvailable())

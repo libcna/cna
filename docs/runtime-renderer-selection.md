@@ -202,7 +202,25 @@ Not every pair of renderers can be linked into one binary. Incompatible combinat
 
 | Set | Status |
 |---|---|
-| `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime |
+| `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
+
+Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
+238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
+function-pointer call per `GraphicsDevice` construction and none per frame.
+
+### Verifying a fallback chain
+
+`CNA_DEBUG_UNAVAILABLE_RENDERERS` is a comma-separated list of renderer names to treat as though
+their availability probe had failed. It exists so a configured fallback chain can be verified
+without breaking a driver to do it:
+
+```bash
+CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame     # forces the chain's next entry
+```
+
+It sits alongside the renderer-specific debug variables this project already has
+(`CNA_BGFX_TRACE_*`, `CNA_LLGL_DEBUG`) — a named test seam, not something the resolution path does
+on its own.
 
 ---
 

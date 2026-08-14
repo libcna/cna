@@ -705,14 +705,14 @@ and CI-runnable. This is where fallback substitution is proven for the first tim
 | RTR-P8-2 | ✅ | Runtime selection of each of the three, verified by `GetActive()` and by real observable behaviour (`SOFTWARE` produces pixels, `STUB` produces none). |
 | RTR-P8-3 | ✅ | `SetPreferred()` before `Game::Run()` reaches the right renderer end to end. |
 | RTR-P8-4 | ✅ | Env-var selection verified in the same binary. |
-| RTR-P8-5 | ⬜ | **First real fallback:** an injected `isAvailable() == false` on the preferred renderer substitutes the next in chain; `GetFallbackHistory()` records it. |
-| RTR-P8-6 | ⬜ | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
-| RTR-P8-7 | ⬜ | Exhausted-chain behaviour verified end to end. |
-| RTR-P8-8 | ⬜ | Latch verified end to end: `SetPreferred()` after `GraphicsDevice` construction throws `System::InvalidOperationException`. |
+| RTR-P8-5 | ✅ | **First real fallback:** an injected `isAvailable() == false` on the preferred renderer substitutes the next in chain; `GetFallbackHistory()` records it. |
+| RTR-P8-6 | 🟨 | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
+| RTR-P8-7 | ✅ | Exhausted-chain behaviour verified end to end. |
+| RTR-P8-8 | ✅ | Latch verified end to end: `SetPreferred()` after `GraphicsDevice` construction throws `System::InvalidOperationException`. |
 | RTR-P8-9 | ✅ | Two `GraphicsDevice` lifetimes in one process, same renderer both times. |
-| RTR-P8-10 | ⬜ | A CTest suite pinning all of the above, runnable in CI with no display server. |
-| RTR-P8-11 | ⬜ | Record binary-size and build-time delta versus the three single-renderer builds. |
-| RTR-P8-12 | ⬜ | **Phase gate.** The reference multi set is green in CI. |
+| RTR-P8-10 | ✅ | A CTest suite pinning all of the above, runnable in CI with no display server. |
+| RTR-P8-11 | ✅ | Record binary-size and build-time delta versus the three single-renderer builds. |
+| RTR-P8-12 | ✅ | **Phase gate.** The reference multi set is green in CI. |
 
 ---
 
