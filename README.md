@@ -101,7 +101,7 @@ ctest --test-dir build --output-on-failure
   loaders are held to identical output by a per-fixture parity sweep.
 - Geometry, PBR materials, skinning, animation (LINEAR/STEP/CUBICSPLINE), morph targets, cameras and
   punctual lights all import. What that costs is stated rather than implied: XNA's model is four
-  joint influences and three directional lights, one UV channel, and one colour channel — glTF data
+  joint influences and three directional lights, two sampled UV channels, and one colour channel — glTF data
   beyond those is **counted and reported**, never silently dropped.
 - Correctness is held by a **generated 145-asset conformance corpus**: the exact L0–L6 numerical
   ladder covers container, accessor, semantic mesh, world geometry, packed GPU bytes and bound

@@ -169,20 +169,19 @@ narrower than the old table implied:
 
 | Boundary | Rows | Note |
 |---|---|---|
-| **format/material breadth** | `GLTF-182`, `183`, `244`, `344` | §27.1 row 7 is the current CORE blocker: CNA can choose either authored UV set as one baked stream, but cannot carry both simultaneously for maps selecting different sets. `KHR_materials_specular` remains partial only for its two texture inputs. `GLTF-244` still requires its full material matrix at L7 on two rasterisers. |
+| **format/material breadth** | `GLTF-184`, `244`, `344` | §27.1 row 7 is green: strides 60/76 carry two sampled UV sets, direct/offline selectors agree, and EasyGL OPENGLES2/3 plus the pinned Khronos comparison prove the image. Per-map `KHR_texture_transform` matrices and the two `KHR_materials_specular` texture inputs remain. `GLTF-244` still requires its full material matrix at L7 on two rasterisers. |
 | **renderer/platform residue** | `GLTF-379`, `385`–`387` | The seven completed semantic-audit slices stay recorded under the investigation row. Vulkan, DirectX11/DXVK and SOFTWARE have strong numerical/native evidence, but no renderer-specific whole-corpus L7 capture/tolerance policy. |
-| **milestone chain** | `GLTF-449`, `458`–`460` | `FUTURE.md` correctly remains CURRENT/in progress. Do not declare CORE while row 7 is partial, then evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
+| **milestone chain** | `GLTF-449`, `458`–`460` | All 20 §27.1 rows are now green, so `GLTF-458` is ready for an evidence-backed declaration and `FUTURE.md` update. Evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
 
 ## Suggested next clusters
 
 Ordered by value, not by number. Rewritten 2026-08-14 after the 145-asset corpus, vendored Draco,
 viewer integration and pinned reference subset became green.
 
-1. **Implement the shared UV2 foundation (`GLTF-182`/`183`) before the remaining
-   `KHR_materials_specular` textures (`GLTF-344`).** Both specular textures can choose their own
-   `texCoord`, so implementing them first would create exactly the per-map hardcoding these rows
-   exist to avoid. Revisit `GLTF-181`'s former single-channel decision explicitly: its runtime
-   warning remains honest evidence, but it cannot make a requirement for simultaneous UV0/UV1 green.
+1. **Finish per-map `KHR_texture_transform` state (`GLTF-184`) on the landed UV2 foundation.**
+   Strides 60/76 and the five map selectors are green; the remaining loss is a different transform
+   per texture reference. Move it to renderer-consumed PBR state, keep legacy 48/68 behaviour
+   stable, and retire the named baking diagnostic only after the L7 witness passes.
 2. **Complete the two-renderer material raster gate (`GLTF-244`).** Reuse the final viewer harness
    and keep numerical L6 first; define the second renderer's measured pixel policy instead of
    copying EasyGL's tolerances without evidence.
@@ -192,8 +191,9 @@ viewer integration and pinned reference subset became green.
 4. **Finish renderer/platform residue (`GLTF-379`, `385`–`387`)** with explicit renderer-specific
    image evidence or a documented release-boundary decision; do not turn existing L1–L6/native
    success into an unstated L7 claim.
-5. **Only then close the milestone chain** (`GLTF-449`, `458`–`460`). `FUTURE.md` must continue to
-   say the campaign is in progress until every §27.1 row is green.
+5. **Declare CORE now, then close the remaining milestone chain in order** (`GLTF-449`,
+   `458`–`460`). CORE and ROBUST are separate gates: the optional-extension and cross-renderer
+   residue above does not reopen a green §27.1 row, but it still blocks the broader ROBUST claim.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
@@ -245,7 +245,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 | `cmake/UnitTests.cmake` | `CNA_GLTF_CONFORMANCE_RUNGS` — the ladder's single source of truth (10 rungs since the `Perf` one joined). |
 | `scripts/regenerate-gltf-goldens.sh` | Regenerate the corpus, verify it, decode any binary golden that moved, and (`--determinism`) prove two processes emit the same bytes. |
 | `scripts/gltf-renderer-parity.sh` | Compare two build directories; fails on any L1–L5 difference, tolerates only `SKIPPED`-vs-`OK`. |
-| `scripts/gltf-reference-renderer-compare.py` | Reproduce the 12-asset OPENGLES3-vs-pinned-Khronos capture and metric report. |
+| `scripts/gltf-reference-renderer-compare.py` | Reproduce the 13-asset OPENGLES3-vs-pinned-Khronos capture and metric report. |
 | `scripts/gltf-viewer-retake.py` | Reproduce the final pinned 14-row/15-case Gate C viewer retake. |
 | `docs/gltf-viewer-retake-report.json` | Committed Gate C provenance, per-process hashes, camera records and comparison metrics. |
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |

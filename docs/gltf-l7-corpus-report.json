@@ -5,9 +5,9 @@
     "GLTF-390",
     "GLTF-391"
   ],
-  "capturedOn": "2026-08-14",
+  "capturedOn": "2026-08-15",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "dd61d4b5c2b38702e6d1dccd8fe90c1b7df726b6ee070bcadd035202b3ebd035",
+  "corpusManifestSha256": "853043837d19af5d5d56e8ad93be0f6a812640afb2e81390da75f9bad749ae86",
   "distinctAssetCount": 145,
   "capturedAssetCount": 137,
   "rejectedAssetCount": 8,
@@ -15,9 +15,9 @@
   "rendererEnvironment": [
     "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
   ],
-  "cnaCommit": "70b26f62900056196383c3d814803e7bae7d556b",
-  "viewerCommit": "f32d1f136c74ed1508d4887952bf5a7a3d3b8b40",
-  "viewerExecutableSha256": "4b2c94e3b20f209227d1080e25fc4aed87323bd3808de001effadd8085056159",
+  "cnaCommit": "88b9c8da0b99c1e4d6ff62893b77380dc33f2c17",
+  "viewerCommit": "3cd89e9deddf4903f0c766c75c75ba367a4d0749",
+  "viewerExecutableSha256": "6e36391becfc950f79e62a71293642367e3b8533498966051d16826392a810ce",
   "capture": {
     "processesPerAsset": 2,
     "resolution": [
@@ -2132,12 +2132,12 @@
     {
       "id": "uv1-material",
       "source": "uv1-material.gltf",
-      "sourceSha256": "951035f55ac27c293a52e6ef8d9f88ff7670aec0c116819296d72972e1afa54f",
+      "sourceSha256": "7616f15a5674a8923e143f7eb7c1f163f7f132eb35caf87c1fb1d6c7732a7019",
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/uv1-material.png",
-      "goldenPngSha256": "edd6b162ae179a0d1f8df6ccfe831f51ed18a3fe1cbabca9eb316e0f5075da5a",
-      "twoProcessPngSha256": "edd6b162ae179a0d1f8df6ccfe831f51ed18a3fe1cbabca9eb316e0f5075da5a",
+      "goldenPngSha256": "f088ec7ad3f6b6c7ba401b822309ac6170069b2a1f77e3663892105192e45d25",
+      "twoProcessPngSha256": "f088ec7ad3f6b6c7ba401b822309ac6170069b2a1f77e3663892105192e45d25",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,

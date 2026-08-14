@@ -1078,9 +1078,10 @@ features remain owned by their numerical diagnostics rather than being reclassif
 
 ### 5.4 Pinned reference-renderer subset (`GLTF-411`)
 
-The supplementary reference comparison is now executed over 12 generated assets: JSON and GLB,
+The supplementary reference comparison is now executed over 13 generated assets: JSON and GLB,
 ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
-unlit and textured materials, normalized vertex colour, and the pinned-Draco path. Reproduce it
+unlit and textured materials, normalized vertex colour, independent UV0/UV1 map selection, and the
+pinned-Draco path. Reproduce it
 after building the detached renderer and the OPENGLES3 viewer:
 
 ```bash
@@ -1091,7 +1092,7 @@ python3 scripts/gltf-reference-renderer-compare.py \
   --output /tmp/cna-gltf-reference-results
 ```
 
-The run of 2026-08-14 passed all 12. The minimum non-clear-mask intersection-over-union was
+The run of 2026-08-15 passed all 13. The minimum non-clear-mask intersection-over-union was
 **0.999579** (only ten edge pixels differed in the common triangle cases); foreground coverage
 ranged from **0.999891 to 1.000422**. RGB is not required to be byte-identical because the two
 applications deliberately use independent fixed light rigs and only the Khronos renderer applies
@@ -1099,7 +1100,10 @@ its PBR Neutral tone map. It is still gated: the intersection RGB mean absolute 
 most **80**, while the largest healthy result was **67.60**. The first run exposed why that second
 gate matters: EasyGL's shared lit program evaluated specular math even for an unlit BasicEffect,
 `normalize(0)` contaminated the triangle with NaNs and produced black at RGB MAE **189.33**. The
-shader now branches before lighting math and the origin-vertex GPU regression is 5/5 green.
+shader now branches before lighting math and the origin-vertex GPU regression is 5/5 green. The
+new `uv1-material` cross-check passes at IoU **0.999847**, coverage **0.999934** and RGB MAE
+**22.63**, independently confirming that base colour and emissive maps can select different packed
+UV channels.
 
 Foreground means a pixel differs from the transparent clear `(0,0,0,0)`, not alpha ≥ a threshold.
 For glTF `OPAQUE`, vertex/material alpha is ignored for compositing; interpreting that ignored
@@ -1107,7 +1111,7 @@ destination channel as geometry made `normalized-u8-color` look half absent whil
 coverage was pixel-aligned. Alpha differences remain in the report as diagnostics. PNGs stay
 disposable; [`gltf-reference-comparison.json`](gltf-reference-comparison.json) retains every asset,
 camera, state, environment, input/output hash and metric needed to audit the result without adding
-an external renderer or browser to CNA's CI/runtime dependency graph. This 12-asset cross-check is
+an external renderer or browser to CNA's CI/runtime dependency graph. This 13-asset cross-check is
 the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 

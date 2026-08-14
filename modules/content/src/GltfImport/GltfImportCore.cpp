@@ -1095,8 +1095,8 @@ namespace CNA::Internal::GltfImport
             AddImportDiagnosticEXT(
                 destination, "texture-transform-unbaked",
                 GltfImportDiagnosticKindEXT::DroppedData,
-                "Only one texture transform can be baked into CNA's shared UV channel; these "
-                "maps use the base-colour coordinates instead of their own.",
+                "CNA carries two sampled UV channels but no per-map texture-transform state; "
+                "these maps are sampled without their own transform.",
                 mesh.unbakedTextureTransformsEXT.size(), 0.0, subject,
                 mesh.unbakedTextureTransformsEXT);
         }

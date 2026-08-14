@@ -3061,8 +3061,8 @@ namespace Microsoft::Xna::Framework::Content
                                    "the single factor."
                                  : ""));
                     }
-                    // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable
-                    // transform, so every other map's is silently the base colour's.
+                    // plan_gltf.md GLTF-184/GLTF-336: two sampled UV channels now exist, but no
+                    // per-map transform state does, so every differing transform remains named.
                     if (!meshOut.unbakedTextureTransformsEXT.empty())
                     {
                         std::string maps;
@@ -3074,9 +3074,9 @@ namespace Microsoft::Xna::Framework::Content
                         CNA::Logger::Warn(
                             "glTF file '" + path + "': primitive '" + meshOut.name +
                             "' declares a KHR_texture_transform on " + maps +
-                            " that differs from the base colour's. CNA bakes exactly one transform "
-                            "into its single UV channel, so those maps are sampled with the base "
-                            "colour's coordinates instead of their own (GLTF-184).");
+                            " that differs from the reference transform. CNA carries two sampled "
+                            "UV channels but no per-map transform state, so those maps are sampled "
+                            "without their own transform (GLTF-184).");
                     }
                     // plan_gltf.md GLTF-173: normals CNA derived rather than the file authoring
                     // them. Only reported when the derivation had to approximate -- a faceted mesh
@@ -3182,7 +3182,8 @@ namespace Microsoft::Xna::Framework::Content
                     {
                         CNA::Logger::Warn(
                             "glTF file '" + path + "': primitive '" + meshOut.name +
-                            "' authors TANGENT, but only the PBR vertex layouts (strides 48 and 68) "
+                            "' authors TANGENT, but only the PBR vertex layouts (strides "
+                            "48/60 and 68/76) "
                             "have a tangent slot and this primitive uses stride " +
                             std::to_string(meshOut.stride) +
                             ", so the authored tangent basis is discarded (GLTF-086).");

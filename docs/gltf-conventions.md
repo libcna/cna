@@ -249,30 +249,29 @@ single root name table preserves identity. The reader captures linked records as
 does not expose them as additional `ModelMeshPart`s. Thus direct glTF and offline conversion have
 one selection contract, including mappings that cross PBR and unlit layouts.
 
-## `KHR_texture_transform`: baked, not shader-side
+## `KHR_texture_transform`: transition to per-map shader state
 
 `plan_gltf.md` `GLTF-186`. The extension gives each texture reference its own offset/rotation/scale
-on the UV set it samples. There are two places to apply it, and CNA **bakes it into the UV channel
-at import**. That is a decision with a real cost, so it is recorded rather than left implicit.
+on the UV set it samples. CNA currently **bakes one reference transform into imported coordinates**.
+That remains compatible for materials whose sampled maps share one transform, but it is no longer
+the final design now that two packed UV channels exist.
 
-**Why baking.** CNA's PBR effects sample every map from one shared UV channel (`GLTF-181`). A
-shader-side transform needs a per-map transform *uniform* and a per-map UV *stream* to apply it to
-— the second of which does not exist and would be a new vertex stride (`GLTF-182`). Baking needs
-neither: the coordinates in the vertex buffer are already the transformed ones, and every renderer
-draws the file correctly with no shader change at all. For the overwhelmingly common case — a
-material whose maps all share one `texCoord` and one transform — baking is exactly equivalent and
-free.
+**Why baking was chosen.** Before `GLTF-182`/`183`, CNA's PBR effects sampled every map from one
+shared UV channel. A shader-side transform needed both per-map uniforms and a second UV stream;
+the latter did not exist. Baking needed neither and was exactly equivalent for the common case in
+which all sampled maps share one `texCoord` and one transform.
 
-**What it costs.** Baking is destructive, and it loses precisely one case: two maps sharing a
-`texCoord` with *different* transforms. One transform can be baked; the other map is then sampled
-with the first one's coordinates. CNA bakes the **base colour's** transform and records every map
-that wanted a different one in `MeshOut::unbakedTextureTransformsEXT`, which both loaders report by
-name (`GLTF-184`). It is a wrong image, and it is a *named* wrong image.
+**Current cost.** Baking is destructive. Two maps may select either packed UV channel correctly and
+still require different transforms; without per-map shader matrices, only the reference transform
+can be represented. CNA records every map that wanted a different one in
+`MeshOut::unbakedTextureTransformsEXT`, which both loaders report by name (`GLTF-184`). It is a
+wrong image, but a named one.
 
-**What would change the decision.** A second UV channel (`GLTF-182`) makes per-map transforms
-expressible, at which point the transform belongs in the shader and this baking — and the report
-that goes with it — should be removed rather than kept alongside. Until then, baking is the only
-one of the two that renders anything at all.
+**Adopted completion.** `GLTF-182`/`183` added strides 60/76 and five independent map selectors, so
+the missing prerequisite is now present. Per-map transforms belong in PBR shader state; `GLTF-184`
+owns that implementation and its L7 witness. Once every PBR renderer consumes the state, import-time
+baking and `unbakedTextureTransformsEXT` should be retired together rather than kept as competing
+paths.
 
 ## Texture mipmaps are role-aware or absent (`GLTF-206`)
 

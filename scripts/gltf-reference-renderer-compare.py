@@ -39,6 +39,7 @@ ASSETS = (
     "draco-triangle.gltf",
     "non-indexed-triangles.gltf",
     "normalized-u8-color.gltf",
+    "uv1-material.gltf",
     "glb-basic.glb",
 )
 IDENTITY = (1.0, 0.0, 0.0, 0.0,

@@ -488,7 +488,8 @@ namespace
                             : ""));
                 }
 
-                // plan_gltf.md GLTF-184/GLTF-336: one UV channel means one bakeable transform.
+                // plan_gltf.md GLTF-184/GLTF-336: two sampled UV channels now exist, but no
+                // per-map transform state does, so every differing transform remains named.
                 if (!meshOut.unbakedTextureTransformsEXT.empty())
                 {
                     std::string maps;
@@ -499,9 +500,9 @@ namespace
                     }
                     warnings.push_back(
                         "Primitive '" + partName + "' declares a KHR_texture_transform on " + maps +
-                        " that differs from the base colour's; CNA bakes exactly one transform into "
-                        "its single UV channel, so those maps are sampled with the base colour's "
-                        "coordinates instead of their own.");
+                        " that differs from the reference transform; CNA carries two sampled UV "
+                        "channels but no per-map transform state, so those maps are sampled "
+                        "without their own transform.");
                 }
 
                 // plan_gltf.md GLTF-173: computed normals that had to be averaged rather than

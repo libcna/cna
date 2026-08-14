@@ -576,7 +576,7 @@ textures cannot produce the expected image when either map samples the other cha
 
 ### 1.10 An authored tangent basis with nowhere to live — `GLTF-086`
 
-**Problem.** Only strides 48 and 68 carry a tangent, and those are exactly the PBR layouts. A file
+**Problem.** Only PBR strides 48/60 and 68/76 carry a tangent. A file
 that authored `TANGENT` on any other primitive had it dropped in silence.
 
 **Decision: reported, because it cannot be carried.** Unlike the material properties `GLTF-219`

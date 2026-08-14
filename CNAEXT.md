@@ -141,10 +141,10 @@ loss at run time — is `docs/gltf-limitations.md`.
 | Multiple skins | ✅ | `Model::getSkinsEXTProperty()` exposes every independent glTF `ModelSkinEXT` with its `SkinningData` and exact mesh set. The first skin remains on `Model::Tag` for compatibility; bind-pose application and effect caching keep each palette isolated. |
 | Topology: `TRIANGLE_STRIP`, `TRIANGLE_FAN`, `LINE_LOOP` | ✅ | Converted to lists at import, exactly (same triangles, same winding); the source mode is carried so the conversion is checkable. `LINES`/`LINE_STRIP`/`POINTS` keep their own `PrimitiveTypeEXT`. |
 | Missing `NORMAL` | ✅ | A real geometric normal is computed per face; a vertex shared between differently-oriented faces is averaged rather than duplicated, and the count is reported. |
-| Tangents | ⚠️ | Generated (angle-weighted) when absent. An **authored** `TANGENT` is carried only at the PBR strides 48 and 68 — no other vertex layout has a tangent slot — and is otherwise dropped and reported. EasyGL's PBR vertex programs preserve its `w` and multiply the per-draw world/instance/skinning determinant sign under mirrors (`GLTF-175`/`176`). |
+| Tangents | ⚠️ | Generated (angle-weighted) when absent. An **authored** `TANGENT` is carried only at the PBR strides 48/60 and 68/76 — no other vertex layout has a tangent slot — and is otherwise dropped and reported. EasyGL's PBR vertex programs preserve its `w` and multiply the per-draw world/instance/skinning determinant sign under mirrors (`GLTF-175`/`176`). |
 | `COLOR_0` vertex colours | ⚠️ | Carried, but not alongside a tangent: a primitive with `COLOR_0` **and** a metallic-roughness material imports through `BasicEffect` with its colours and **without** its material, because no layout carries both and no PBR shader reads a colour stream. Reported, not silent. |
 | `COLOR_1` and beyond | ❌ | XNA's layouts carry exactly one colour channel. Counted. |
-| `TEXCOORD_1` (second UV set) | ❌ | Both PBR effects sample every map from one shared UV channel. A map selecting another set is sampled with the base colour's coordinates, and named. |
+| `TEXCOORD_1` (second sampled UV set) | ✅ | PBR strides 60/76 carry two authored sets simultaneously and each of the five material maps selects its own packed channel. A material sampling a third distinct authored set falls back to packed channel 0 and is named in `uvSetMismatchedMapsEXT`. EasyGL OPENGLES2/3 is framebuffer-verified with independent base-colour and emissive coordinates. |
 | PBR materials — factors + 5 maps | ✅ | `baseColorFactor`, `metallic`, `roughness`, `emissive`, `normalTexture.scale`, `occlusionTexture.strength` all reach `PbrEffect`/`SkinnedPbrEffect`; asserted at the effect boundary (L6) over the whole corpus, not only at import. |
 | `alphaMode` | ⚠️ | `MASK` is **applied** — the cutoff reaches `GpuDrawParams::alphaTest` and every PBR shader discards on it. `BLEND` is carried and **application-applied**: select `BlendState::NonPremultiplied` (PBR emits straight RGB) and draw transparent parts back-to-front. `Model::Draw` preserves state/source order and does not sort. The full path is framebuffer-verified by `EasyGL_Gltf_AlphaBlend` on OPENGLES2/3. |
 | `doubleSided` | ⚠️ | Carried and **application-applied**: select `RasterizerState::CullNone` when the effect property is true; otherwise retain the glTF front-face state, reversing it for mirrored placement. `Model::Draw` preserves caller state. A real imported back face plus its culling control are framebuffer-verified by `EasyGL_Gltf_AlphaBlend` on OPENGLES2/3; `docs/gltf-api-change-review.md` §1.4 records why this remains explicit application policy. |
@@ -153,7 +153,7 @@ loss at run time — is `docs/gltf-limitations.md`.
 | Morph targets | ✅ | CPU-blended (`MorphTargetDataEXT`, `MorphWeightTrackEXT`). Position, normal and tangent xyz deltas travel both direct glTF and offline `.cnj`; the base tangent's handedness remains unchanged. The sidecar keeps its old position/normal prefix and adds tangent data in a backward-compatible versioned trailer (`GLTF-289`). |
 | Cameras | ✅ | `Model::CamerasEXT` / `ModelCameraEXT` — a property rather than `Tag`, which `SkinningData` and `ModelAnimationsEXT` already contend for. Perspective, orthographic and the view matrix all match the specification's own formulae; an absent `aspectRatio` is flagged rather than guessed. |
 | Lights — `KHR_lights_punctual` | ⚠️ | Up to **three** directional lights, which is XNA's whole lighting model. Point and spot lights become directional lights aimed at the origin; ranges and cone angles are ignored; out-of-gamut intensity clamps. Every one of those is counted. |
-| `KHR_texture_transform` | ⚠️ | Applied with the specification's formula, baked into the one shared UV channel. A second, different transform on another map cannot be baked and is named. |
+| `KHR_texture_transform` | ⚠️ | Applied with the specification's formula, but CNA still bakes one reference transform into packed coordinates and carries no per-map transform uniforms. A map declaring a different transform is named; shader-side completion is `GLTF-184`. |
 | `KHR_materials_emissive_strength` | ✅ | Applied on the PBR path (a non-PBR material has no emissive term to scale). |
 | `KHR_materials_unlit` | ⚠️ | `LightingEnabled = false` on `BasicEffect`. `SkinnedEffect` has no such flag — real XNA's has none either — so a skinned unlit material is approximated. |
 | `KHR_materials_transmission` | ⚠️ | Approximated as `alpha = 1 - transmissionFactor`; explicitly not physical, and **not claimed**, so a file that *requires* it is refused rather than drawn as tinted alpha. The caller owns opaque-first/back-to-front ordering and selects straight-alpha `BlendState::NonPremultiplied` (`GLTF-340`). |
@@ -179,8 +179,9 @@ refusal is a `std::runtime_error` naming the file and the problem.
 entries, while dropped/approximation helpers sum occurrence counts.
 
 **Vertex formats (CNAEXT):** `VertexPositionNormalTangentTexture` (stride 48, tangent as `vec4` with
-glTF bitangent‑handedness sign in `w`), `VertexPositionNormalTangentTextureSkinned` (stride 68), and
-the stride‑56 skinned+color layout used by `SkinnedEffect.VertexColorEnabled` (CNAEXT field). Which
+glTF bitangent‑handedness sign in `w`), `VertexPositionNormalTangentTextureSkinned` (stride 68),
+their internal dual-UV extensions at strides 60/76, and the stride‑56 skinned+color layout used by
+`SkinnedEffect.VertexColorEnabled` (CNAEXT field). Which
 layout a primitive lands on — and therefore what it can carry — is a table, not a rule spread across
 the loaders: `CNA::Internal::Graphics::InferredLayoutForStride`.
 

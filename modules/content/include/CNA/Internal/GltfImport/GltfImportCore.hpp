@@ -639,18 +639,16 @@ namespace CNA::Internal::GltfImport
         /**
          * @brief Maps whose `KHR_texture_transform` could not be applied (`GLTF-184`/`GLTF-336`).
          *
-         * The transform is **baked into the UV data** at import, and there is exactly one UV
-         * channel to bake it into — so exactly one transform can be honoured, and CNA honours the
-         * base colour's. Any other map declaring a *different* transform is sampled with the base
-         * colour's texture coordinates instead of its own, which for a tiled normal map or a
-         * rotated emissive mask is a visible mis-registration.
+         * The transform is **baked into UV data** at import. Although PBR layouts can now carry two
+         * sampled coordinate channels, they carry no per-map transform matrices, so only one
+         * reference transform can be honoured. Any other map declaring a *different* transform is
+         * sampled without its own transform, which for a tiled normal map or a rotated emissive
+         * mask is a visible mis-registration.
          *
-         * Distinct from `GLTF-181`'s single-UV-channel limit, and the difference decides how
-         * expensive the real fix is: a second UV *channel* needs a vertex attribute, so a new
-         * stride, and the stride it needs is already taken. A per-map *transform* needs only a
-         * uniform — the shared UV transformed in the shader before each sample — so no ABI and no
-         * `VertexDeclaration` change, just a shader and uniform change in every renderer with a
-         * PBR program.
+         * Distinct from the now-closed `GLTF-182` dual-channel task: a per-map transform needs
+         * effect/GPU state and shader consumption rather than another vertex attribute. `GLTF-184`
+         * owns that remaining transition and retires this diagnostic once all PBR renderers apply
+         * the state.
          *
          * Empty for the ordinary case: no transforms at all, or every map sharing one.
          */
