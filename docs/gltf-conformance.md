@@ -910,6 +910,15 @@ witnesses, generated fixtures still need fixed camera/light rigs, a documented p
 tolerance, a reproducible PNG capture path and the independent two-process determinism check.
 Registering nine successful assets as `CnaGltfConformanceL7` would make the ladder look complete
 without testing the corpus.
+
+The existing EasyGL golden tolerances cannot simply be promoted into that missing policy. They
+range from exact byte equality to 60 levels per channel and preserve the predicates of unrelated
+legacy renderer tests; they are scene-specific discrimination margins, not measured renderer
+variance against the pinned glTF reference. `scripts/xna-diff.py` already supplies the required
+mechanics (separate RGB/alpha limits, an absolute bad-pixel budget and a bad-pixel ratio), but no
+number becomes a glTF acceptance threshold until two independent captures establish determinism
+and a corpus/reference delta report justifies it. `GLTF-390` therefore remains an evidence task,
+not a request to choose the largest tolerance already present in the repository.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.

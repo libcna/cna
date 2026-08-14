@@ -1388,6 +1388,16 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
     EXPECT_NE(std::string::npos, d3d11.find(
         "casePrimitiveType::PointListEXT:returnD3D11_PRIMITIVE_TOPOLOGY_POINTLIST;"));
 
+    const std::string pointSuite = Normalize(ReadFile(
+        RepositoryRoot() / "modules" / "graphics" / "tests" / "Microsoft" / "Xna" /
+        "Framework" / "Graphics" / "PointListPrimitiveTests.cpp"));
+    for (const std::string_view renderer : {"DIRECTX9", "DIRECTX10", "DIRECTX11"})
+    {
+        EXPECT_NE(std::string::npos, pointSuite.find(
+            "defined(CNA_RENDERER_" + std::string(renderer) + ")"))
+            << renderer << " must remain in the shared point framebuffer suite";
+    }
+
     // D3D12's current PSO cache fixes PrimitiveTopologyType to TRIANGLE. Mapping IA topology to
     // POINTLIST/LINELIST/LINESTRIP would therefore trade an approximation for a validation error.
     // Its honest contract is a named refusal, reached by all four ordinary/instanced native paths.
