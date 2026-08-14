@@ -24,6 +24,13 @@ set_target_properties(cna_c_api PROPERTIES
     VISIBILITY_INLINES_HIDDEN YES
 )
 
+if(UNIX AND NOT APPLE)
+    target_link_options(cna_c_api PRIVATE
+        "LINKER:--exclude-libs,ALL"
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/CnaCApiExports.map"
+    )
+endif()
+
 target_compile_definitions(cna_c_api PRIVATE CNA_C_API_BUILD)
 target_include_directories(cna_c_api
     PUBLIC
@@ -52,6 +59,15 @@ install(EXPORT CNACTargets
 
 if(CNA_BUILD_TESTS)
     find_package(Threads REQUIRED)
+
+    if(UNIX AND NOT APPLE)
+        add_test(NAME CApi_Exports
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_C_API_LIBRARY=$<TARGET_FILE:cna_c_api>
+                -DCNA_C_API_NM=${CMAKE_NM}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckElfExports.cmake
+        )
+    endif()
 
     add_custom_target(cna_c_api_header_audit
         COMMAND ${CMAKE_COMMAND}

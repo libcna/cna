@@ -1,0 +1,6 @@
+CNA_C_API_0.1 {
+    global:
+        cna_*;
+    local:
+        *;
+};
