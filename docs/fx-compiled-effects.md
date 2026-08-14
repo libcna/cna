@@ -24,9 +24,9 @@ The binary is untrusted input. It is bounded at 64 MiB, its reflected object gra
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
 **Trust boundary.** That holds for CNA's own code and for the parser paths CNA has hardened, but
-not yet for arbitrary hostile content: the pinned MojoShader's preshader interpreter still has
-reachable out-of-bounds reads that a fuzz campaign finds, and CNA carries fixes only for what has
-been found so far. Treat compiled effects the way you would treat any other native-parsed asset --
+not yet for arbitrary hostile content: a fuzz campaign still reaches a wild read in the pinned
+MojoShader's shader-array selection path after a few thousand mutations, and CNA carries fixes
+only for what has been found so far. Treat compiled effects the way you would treat any other native-parsed asset --
 ship your own, do not load one a user supplied. `plan_fx.md` FX-051 and
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) track the remaining exposure.
 

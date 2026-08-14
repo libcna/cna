@@ -95,8 +95,8 @@ the campaign.
 
 Every finding was in the pinned MojoShader, none in CNA. Each is now fixed by
 `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`, and each fix was confirmed by
-the campaign running measurably deeper afterwards (first crash at iteration 0, then 100, 300, 500,
-700, 1200, 3700, 4000).
+the campaign running measurably deeper afterwards: the first crash moved from iteration 0 to 100,
+300, 500, 700, 1,200, 3,700, 4,000 and finally past 6,000.
 
 | Site | Defect |
 |---|---|
@@ -108,15 +108,25 @@ the campaign running measurably deeper afterwards (first crash at iteration 0, t
 | `mojoshader.c` `parse_preshader` | Instruction count used to allocate and zero a buffer *before* the block-size check that bounds it |
 | `mojoshader.c` `parse_preshader` | `assert()` on a constant-table symbol in the wrong register set, and an unbounded array-register count allocated before validation -- upstream's other FIXME |
 | `mojoshader_effects.c` `MOJOSHADER_effectCommitChanges` | Shader-array selector used as an unchecked index into a parameter's values and then into the object table, and register copies unbounded by the preshader's register file |
+| `mojoshader_effects.c` `run_preshader` | Every literal, input, output and temp index in the preshader interpreter guarded only by asserts; the output register span was not even reported to it, so a one-float selector output could be written past |
+| `mojoshader_effects.c` `copy_parameter_data` | Destination register index never bounded against the register file it writes into, and the int/bool files written through NULL when a preshader's float-only file was the target |
+| `mojoshader_effects.c` `MOJOSHADER_effectBeginPass` | A pass's shader object index taken from parsed content with no range check, and no check that the object is a shader at all -- `MOJOSHADER_effectObject` is a union, so a string or sampler object read as a shader yields garbage pointers |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
 
 ## Exposure that remains
 
-The campaign now reaches roughly iteration 4,000 before an out-of-bounds read inside
-`run_preshader`, MojoShader's preshader *interpreter*. That code needs its own systematic bounds
-pass, which is a larger change than the targeted parser fixes above.
+The campaign now reaches roughly iteration 6,400 before a wild read inside
+`MOJOSHADER_effectCommitChanges`'s shader-array selection path. Reproduce it with
+
+```sh
+./cna_compiled_effect_fuzzer --campaign fx-corpus 6500 0x4658465556555A
+```
+
+Narrowing it further needs a debugger on the failing candidate; the index and pointer guards that
+were obvious from reading the code are already in place, so the next step is inspection rather
+than another round of reasoning about the source.
 
 So the honest statement is: **CNA's own compiled-effect code is clean under ASan, UBSan and LSan,
 and the parser paths reached so far are hardened, but CNA cannot yet promise that arbitrary
