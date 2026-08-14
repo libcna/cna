@@ -2462,8 +2462,18 @@ namespace Microsoft::Xna::Framework::Graphics
                     presentationParameters_.getMultiSampleCountProperty()));
             if (!rendererStartupNameLogged_)
             {
-                std::cout << "CNA: graphics renderer: "
-                          << CNA::getCurrentGraphicsRendererName() << std::endl;
+                // plan_runtimerenderer.md RTR-P7-10: the ACTIVE renderer, not the compile-time
+                // one. In a multi-renderer build those differ, and printing the compile-time name
+                // would misreport every runtime selection -- which is exactly the situation this
+                // line exists to make visible.
+                std::cout << "CNA: graphics renderer: " << descriptor.name;
+                if (CNA::GraphicsRendererSelection::GetAvailable().size() > 1)
+                {
+                    std::cout << " (selected at runtime from "
+                              << CNA::GraphicsRendererSelection::GetAvailable().size()
+                              << " compiled in)";
+                }
+                std::cout << std::endl;
                 rendererStartupNameLogged_ = true;
             }
         }

@@ -145,13 +145,49 @@ and its multisample reconstruction path legitimately rebuild the same renderer o
 
 ---
 
+## Building with several renderers
+
+```bash
+cmake -S . -B cmake-build-multi -G Ninja \
+      -DCNA_GRAPHICS_RENDERER=HEADLESS \
+      -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB"
+```
+
+`CNA_GRAPHICS_RENDERER` keeps its meaning: it names the **default** renderer, the one used when
+nothing selects another at runtime. It must be a member of `CNA_GRAPHICS_RENDERERS`.
+
+Leaving `CNA_GRAPHICS_RENDERERS` unset is single-renderer mode, unchanged in every respect.
+
+### What multi-renderer mode changes
+
+Only the default renderer's `CNA_RENDERER_<X>` macro is defined project-wide; each family's own
+macro is private to that family's target. This keeps the compile-time accessors
+(`getCurrentGraphicsRendererType()`) and the existing renderer-gated tests and examples meaningful —
+they all describe the **default**. Making the test corpus itself renderer-agnostic is a separate
+piece of work (`plan_runtimerenderer.md` phase P9).
+
+`CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in.
+
 ## Renderer combinations
 
 Not every pair of renderers can be linked into one binary. Incompatible combinations are rejected at
-**configure time with a reason**, never left to surface as a link error.
+**configure time with a reason**, never left to surface as a link error. The rules live in
+`cmake/RendererCombinations.cmake` and are kept in step with this table by
+`scripts/check_renderer_combinations.py`.
 
-*(The full conflict matrix lands with the multi-renderer CMake mode; see `plan_runtimerenderer.md`
-phase P6.)*
+| Combination | Why it is refused |
+|---|---|
+| `PORTABLEGL` + any real-OpenGL renderer | PORTABLEGL is a single-header C library that **defines** the global `gl*` symbols (`glClear`, `glDrawArrays`, …). Linking it beside a renderer that calls the real OpenGL of the same names is a duplicate-symbol error. |
+| `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
+| Two of `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` | All five are served by the shared **EasyGL** implementation, whose GL profile is still a compile-time choice. Lifting this is phase P11. |
+| Renderers from different **platform** partitions | Windows-only (the DirectX family, `GLIDE`, `GDI`, `DIRECT2D`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
+| `GLIDE` + anything | GLIDE pins the build to the native 32-bit x86 Glide ABI. |
+
+### Verified combinations
+
+| Set | Status |
+|---|---|
+| `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime |
 
 ---
 

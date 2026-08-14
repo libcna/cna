@@ -649,30 +649,30 @@ The first phase that changes the build model.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P6-1 | ⬜ | Add `CNA_GRAPHICS_RENDERERS` (semicolon list). When set, `CNA_GRAPHICS_RENDERER` names the *default* preferred renderer and must be a member of the list. |
-| RTR-P6-2 | ⬜ | Define `CNA_MULTI_RENDERER` globally when the list has more than one entry. |
-| RTR-P6-3 | ⬜ | Convert `RENDERER_TARGET` (scalar) to `CNA_RENDERER_TARGETS` (list) — **128 references across 40+ files**; split into reviewable batches by module. |
-| RTR-P6-4 | ⬜ | Convert `add_compile_definitions(CNA_RENDERER_<X>)` to per-target `target_compile_definitions(... PRIVATE ...)` for every family. |
-| RTR-P6-5 | ⬜ | Rework `modules/renderers/CMakeLists.txt`'s single `CNA_SELECTED_RENDERER` dispatch into a loop over the selected family list. |
-| RTR-P6-6 | ⬜ | Rework `cna_add_renderer()` / `cna_renderer_common_setup()` to take the family's own target name instead of reading the global `${RENDERER_TARGET}`. |
-| RTR-P6-7 | ⬜ | `modules/graphics/CMakeLists.txt` — link every selected renderer target, preserving the declared archive cycles. |
+| RTR-P6-1 | ✅ | Add `CNA_GRAPHICS_RENDERERS` (semicolon list). When set, `CNA_GRAPHICS_RENDERER` names the *default* preferred renderer and must be a member of the list. |
+| RTR-P6-2 | ✅ | Define `CNA_MULTI_RENDERER` globally when the list has more than one entry. |
+| RTR-P6-3 | 🟨 | Convert `RENDERER_TARGET` (scalar) to `CNA_RENDERER_TARGETS` (list) — **128 references across 40+ files**; split into reviewable batches by module. |
+| RTR-P6-4 | ✅ | Convert `add_compile_definitions(CNA_RENDERER_<X>)` to per-target `target_compile_definitions(... PRIVATE ...)` for every family. |
+| RTR-P6-5 | ✅ | Rework `modules/renderers/CMakeLists.txt`'s single `CNA_SELECTED_RENDERER` dispatch into a loop over the selected family list. |
+| RTR-P6-6 | 🟨 | Rework `cna_add_renderer()` / `cna_renderer_common_setup()` to take the family's own target name instead of reading the global `${RENDERER_TARGET}`. |
+| RTR-P6-7 | ✅ | `modules/graphics/CMakeLists.txt` — link every selected renderer target, preserving the declared archive cycles. |
 | RTR-P6-8 | ⬜ | Third-party configure functions (`cna_configure_webgpu`, `cna_configure_magnum`, `cna_configure_diligent`, `cna_configure_wicked`, `cna_configure_sokol`, `cna_configure_llgl`, `cna_configure_fna3d`, `cna_configure_openvg`, `cna_configure_portablegl`, Skia, Blend2D) must be callable in combination without clobbering each other's cache variables. |
-| RTR-P6-9 | ⬜ | Extend `cmake/RendererRegistry.cmake` to emit an N-entry table. |
-| RTR-P6-10 | ⬜ | **Conflict matrix at configure time** (design decision 11) — reject with a specific message, never a link error: |
-| RTR-P6-11 | ⬜ |  · `PORTABLEGL` together with any real-GL family (`easygl`, `opengl1`, `opengl2`, `opengl4`, `opengles1`, `openvg`, `magnum`, `sokol` on GL) — global `gl*` symbol collision |
-| RTR-P6-12 | ⬜ |  · `GDI` together with `SOFTWARE` — the `CNA_SOFTWARE_2D_ONLY` re-compilation is an ODR violation |
-| RTR-P6-13 | ⬜ |  · two GL profile identities from the shared `easygl` target (until P11) |
-| RTR-P6-14 | ⬜ |  · any two families whose platform gates disagree (Windows-only + Emscripten-only, etc.) |
-| RTR-P6-15 | ⬜ |  · `GLIDE` with anything (32-bit-only ABI, `CMAKE_SIZEOF_VOID_P EQUAL 4`) |
-| RTR-P6-16 | ⬜ | Document every rejected combination and its reason in `docs/runtime-renderer-selection.md` — a user hitting one must be able to look it up. |
-| RTR-P6-17 | ⬜ | Preserve every existing per-renderer platform `FATAL_ERROR` in the list form (each member is gated individually). |
-| RTR-P6-18 | ⬜ | `scripts/check_renderer_identities.py` still passes: 46 identities, unchanged (design decision 10). |
-| RTR-P6-19 | ⬜ | New `scripts/check_renderer_combinations.py` — mechanically verifies the conflict matrix in CMake matches the documented table, the same registry-gate shape as `check_renderer_identities.py`. |
-| RTR-P6-20 | ⬜ | Verify build-directory discipline: multi builds go into a stable in-repo `cmake-build-multi/`, per `CLAUDE.md` — no new per-combination directories. |
+| RTR-P6-9 | ✅ | Extend `cmake/RendererRegistry.cmake` to emit an N-entry table. |
+| RTR-P6-10 | ✅ | **Conflict matrix at configure time** (design decision 11) — reject with a specific message, never a link error: |
+| RTR-P6-11 | ✅ |  · `PORTABLEGL` together with any real-GL family (`easygl`, `opengl1`, `opengl2`, `opengl4`, `opengles1`, `openvg`, `magnum`, `sokol` on GL) — global `gl*` symbol collision |
+| RTR-P6-12 | ✅ |  · `GDI` together with `SOFTWARE` — the `CNA_SOFTWARE_2D_ONLY` re-compilation is an ODR violation |
+| RTR-P6-13 | ✅ |  · two GL profile identities from the shared `easygl` target (until P11) |
+| RTR-P6-14 | ✅ |  · any two families whose platform gates disagree (Windows-only + Emscripten-only, etc.) |
+| RTR-P6-15 | ✅ |  · `GLIDE` with anything (32-bit-only ABI, `CMAKE_SIZEOF_VOID_P EQUAL 4`) |
+| RTR-P6-16 | ✅ | Document every rejected combination and its reason in `docs/runtime-renderer-selection.md` — a user hitting one must be able to look it up. |
+| RTR-P6-17 | ✅ | Preserve every existing per-renderer platform `FATAL_ERROR` in the list form (each member is gated individually). |
+| RTR-P6-18 | ✅ | `scripts/check_renderer_identities.py` still passes: 46 identities, unchanged (design decision 10). |
+| RTR-P6-19 | ✅ | New `scripts/check_renderer_combinations.py` — mechanically verifies the conflict matrix in CMake matches the documented table, the same registry-gate shape as `check_renderer_identities.py`. |
+| RTR-P6-20 | ✅ | Verify build-directory discipline: multi builds go into a stable in-repo `cmake-build-multi/`, per `CLAUDE.md` — no new per-combination directories. |
 | RTR-P6-21 | ⬜ | Measure and record multi-build cost (configure time, build time at `-j3`, binary size) for the P8 reference set, so the cost of the mode is documented rather than discovered. |
-| RTR-P6-22 | ⬜ | `CMakePresets.json` — one preset for the reference multi set. |
-| RTR-P6-23 | ⬜ | Confirm single-renderer configures are **bit-identical** to before P6 (same defines, same targets, same link line). |
-| RTR-P6-24 | ⬜ | **Phase gate.** Single-renderer builds unchanged; a two-entry multi build configures, builds and links. |
+| RTR-P6-22 | ✅ | `CMakePresets.json` — one preset for the reference multi set. |
+| RTR-P6-23 | ✅ | Confirm single-renderer configures are **bit-identical** to before P6 (same defines, same targets, same link line). |
+| RTR-P6-24 | ✅ | **Phase gate.** Single-renderer builds unchanged; a two-entry multi build configures, builds and links. |
 
 ---
 
@@ -689,7 +689,7 @@ The first phase that changes the build model.
 | RTR-P7-7 | ⬜ | `modules/renderers/fna3d/examples/fna3d_smoke_test.cpp:74` — its `static_assert` must be guarded for multi mode. |
 | RTR-P7-8 | ⬜ | `GraphicsRendererCompileDefinitionTests.cpp:172` — the `EXPECT_EQ(enabled, 1)` assertion becomes "exactly one in single mode, at least one in multi mode". |
 | RTR-P7-9 | ⬜ | `tests/modules/probe_core.cpp` uses `getCurrentGraphicsRendererType()` — update the minimal-link probe. |
-| RTR-P7-10 | ⬜ | The startup log line in `createRenderer()` (`GraphicsDevice.cpp:2435`) must print the **active** renderer, and in multi mode also how it was chosen (default / API / env / fallback). |
+| RTR-P7-10 | ✅ | The startup log line in `createRenderer()` (`GraphicsDevice.cpp:2435`) must print the **active** renderer, and in multi mode also how it was chosen (default / API / env / fallback). |
 | RTR-P7-11 | ⬜ | **Phase gate.** Both modes report identity correctly; no `constexpr` regression in single mode. |
 
 ---
@@ -701,15 +701,15 @@ and CI-runnable. This is where fallback substitution is proven for the first tim
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P8-1 | ⬜ | Configure and build `-DCNA_GRAPHICS_RENDERERS="STUB;HEADLESS;SOFTWARE"`. |
-| RTR-P8-2 | ⬜ | Runtime selection of each of the three, verified by `GetActive()` and by real observable behaviour (`SOFTWARE` produces pixels, `STUB` produces none). |
-| RTR-P8-3 | ⬜ | `SetPreferred()` before `Game::Run()` reaches the right renderer end to end. |
-| RTR-P8-4 | ⬜ | Env-var selection verified in the same binary. |
+| RTR-P8-1 | ✅ | Configure and build `-DCNA_GRAPHICS_RENDERERS="STUB;HEADLESS;SOFTWARE"`. |
+| RTR-P8-2 | ✅ | Runtime selection of each of the three, verified by `GetActive()` and by real observable behaviour (`SOFTWARE` produces pixels, `STUB` produces none). |
+| RTR-P8-3 | ✅ | `SetPreferred()` before `Game::Run()` reaches the right renderer end to end. |
+| RTR-P8-4 | ✅ | Env-var selection verified in the same binary. |
 | RTR-P8-5 | ⬜ | **First real fallback:** an injected `isAvailable() == false` on the preferred renderer substitutes the next in chain; `GetFallbackHistory()` records it. |
 | RTR-P8-6 | ⬜ | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
 | RTR-P8-7 | ⬜ | Exhausted-chain behaviour verified end to end. |
 | RTR-P8-8 | ⬜ | Latch verified end to end: `SetPreferred()` after `GraphicsDevice` construction throws `System::InvalidOperationException`. |
-| RTR-P8-9 | ⬜ | Two `GraphicsDevice` lifetimes in one process, same renderer both times. |
+| RTR-P8-9 | ✅ | Two `GraphicsDevice` lifetimes in one process, same renderer both times. |
 | RTR-P8-10 | ⬜ | A CTest suite pinning all of the above, runnable in CI with no display server. |
 | RTR-P8-11 | ⬜ | Record binary-size and build-time delta versus the three single-renderer builds. |
 | RTR-P8-12 | ⬜ | **Phase gate.** The reference multi set is green in CI. |

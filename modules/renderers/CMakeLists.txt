@@ -19,6 +19,13 @@ target_link_libraries(cna_renderer_common INTERFACE cna_build_flags)
 # reverse edges into the framework modules.
 function(cna_renderer_common_setup)
     target_link_libraries(${RENDERER_TARGET} PUBLIC cna_renderer_common)
+    # plan_runtimerenderer.md RTR-P6-4: this family's own identity macro, on this family's target.
+    # Its sources guard on it (#ifdef CNA_RENDERER_SOFTWARE inside SoftwareRenderer.cpp, and so on),
+    # and in a multi-renderer build it must NOT be visible project-wide -- only the default's is.
+    if(CNA_RENDERER_TARGET_DEFINE)
+        string(REPLACE "," ";" _cna_target_defines "${CNA_RENDERER_TARGET_DEFINE}")
+        target_compile_definitions(${RENDERER_TARGET} PRIVATE ${_cna_target_defines})
+    endif()
     cna_link_sharp_runtime(${RENDERER_TARGET} PUBLIC)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
         target_include_directories(${RENDERER_TARGET} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -55,6 +62,14 @@ endfunction()
 
 get_filename_component(CNA_SELECTED_RENDERER "${RENDERER_DIR}" NAME)
 
+# plan_runtimerenderer.md phase P6: every selected family, not only the default one. In
+# single-renderer mode this list has exactly one entry and equals CNA_SELECTED_RENDERER.
+set(CNA_SELECTED_RENDERER_FAMILIES)
+foreach(_cna_renderer_dir IN LISTS CNA_RENDERER_DIRS)
+    get_filename_component(_cna_renderer_family "${_cna_renderer_dir}" NAME)
+    list(APPEND CNA_SELECTED_RENDERER_FAMILIES "${_cna_renderer_family}")
+endforeach()
+
 # metal and glide keep unconditional header-interface targets: their policy suites in
 # modules/renderers/{metal,glide}/tests are deliberately host-portable and compile into the
 # CnaTests corpus on every renderer (see the suites' own header comments), so their
@@ -77,9 +92,34 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     add_subdirectory(software)
 endif()
 
-if(NOT CNA_SELECTED_RENDERER STREQUAL "metal" AND NOT CNA_SELECTED_RENDERER STREQUAL "glide")
-    add_subdirectory(${CNA_SELECTED_RENDERER})
-endif()
+# plan_runtimerenderer.md phase P6: each family's own CMakeLists.txt guards on
+# `CNA_GRAPHICS_RENDERER STREQUAL "<ITS IDENTITY>"` and defines `${RENDERER_TARGET}`. Both of those
+# are scalars naming the DEFAULT renderer, so entering a non-default family's directory without
+# re-establishing them would either skip its block entirely or make it redefine the default's
+# target. Re-point both per family instead; in single-renderer mode this loop runs once with the
+# values it already had.
+set(_cna_saved_graphics_renderer "${CNA_GRAPHICS_RENDERER}")
+set(_cna_saved_renderer_target "${RENDERER_TARGET}")
+
+list(LENGTH CNA_SELECTED_RENDERER_FAMILIES _cna_family_count)
+math(EXPR _cna_family_last "${_cna_family_count} - 1")
+foreach(_cna_family_index RANGE ${_cna_family_last})
+    list(GET CNA_SELECTED_RENDERER_FAMILIES ${_cna_family_index} _cna_renderer_family)
+    list(GET CNA_RENDERER_IDENTITIES ${_cna_family_index} _cna_renderer_identity)
+    list(GET CNA_RENDERER_TARGETS ${_cna_family_index} _cna_renderer_target)
+    list(GET CNA_RENDERER_TARGET_DEFINES ${_cna_family_index} _cna_renderer_target_define)
+
+    set(CNA_GRAPHICS_RENDERER "${_cna_renderer_identity}")
+    set(RENDERER_TARGET "${_cna_renderer_target}")
+    set(CNA_RENDERER_TARGET_DEFINE "${_cna_renderer_target_define}")
+
+    if(NOT _cna_renderer_family STREQUAL "metal" AND NOT _cna_renderer_family STREQUAL "glide")
+        add_subdirectory(${_cna_renderer_family})
+    endif()
+endforeach()
+
+set(CNA_GRAPHICS_RENDERER "${_cna_saved_graphics_renderer}")
+set(RENDERER_TARGET "${_cna_saved_renderer_target}")
 
 # plan_svg_dom.md SHARED-HOOK REQUIREMENT: SVG_DOM (like HTML_DOM/CANVAS) is Emscripten-only, so
 # its own modules/renderers/svg-dom/CMakeLists.txt -- which defines its native host-side contract
