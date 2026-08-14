@@ -1059,6 +1059,9 @@ namespace CNA::Internal::Renderers::Magnum
                 params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f});
+            program.SetVector4(program.LocationOf("uDielectricFresnel"), Mg::Vector4{
+                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                params.pbrDielectricF0[2], params.pbrDielectricF90});
             program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{
                 params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]});
             program.SetVector3(program.LocationOf("uEmissiveColor"), Mg::Vector3{

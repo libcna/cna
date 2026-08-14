@@ -181,9 +181,6 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform mat4 uWorld;\n";
             source += "uniform mat3 uNormalMatrix;\n";
             source += "uniform vec4 uFogVector;\n";
-            source += "float cnaDirectionHandedness(mat3 m){\n";
-            source += "    return dot(m[0],cross(m[1],m[2]))<0.0?-1.0:1.0;\n";
-            source += "}\n";
             source += "out vec4 vColor;\n";
             source += "out vec2 vTexCoord;\n";
             source += "out vec3 vNormal;\n";
@@ -237,7 +234,6 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             }
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
-            source += "uniform vec3 uSrgb;\n";
             source += "uniform float uVertexColorEnabled;\n";
             source += "uniform float uTextureEnabled;\n";
             source += "uniform float uLightingEnabled;\n";
@@ -360,6 +356,9 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform mat4 uWorld;\n";
             source += "uniform mat3 uNormalMatrix;\n";
             source += "uniform vec4 uFogVector;\n";
+            source += "float cnaDirectionHandedness(mat3 m){\n";
+            source += "    return dot(m[0],cross(m[1],m[2]))<0.0?-1.0:1.0;\n";
+            source += "}\n";
             if (skinned)
             {
                 source += "uniform mat4 uBones[" + std::to_string(kMagnumMaxBones) + "];\n";
@@ -449,6 +448,8 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform vec3 uEyePosition;\n";
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
+            source += "uniform vec3 uSrgb;\n";
+            source += "uniform vec4 uDielectricFresnel;\n";
             // Unit 4 (the occlusion map) needs a fifth flag, which does not fit in uRtFlipV's four
             // components -- this is the only program that samples that far.
             source += "uniform vec4 uRtFlipVHi;\n";
@@ -468,7 +469,7 @@ vec3 cnaLinearToSrgb(vec3 c){
     return mix(lo, hi, step(vec3(0.0031308), c));
 }
 vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
-                 vec3 albedo, vec3 f0, float roughness, float metallic){
+                 vec3 albedo, vec3 f0, vec3 f90, float roughness, float metallic){
     vec3 halfway = normalize(view + light);
     float nDotL = max(dot(normal, light), 0.0);
     float nDotV = max(dot(normal, view), 1e-4);
@@ -480,7 +481,7 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
     float k = (roughness + 1.0);
     k = k * k / 8.0;
     float geometry = (nDotV / (nDotV * (1.0 - k) + k)) * (nDotL / (nDotL * (1.0 - k) + k));
-    vec3 fresnel = f0 + (vec3(1.0) - f0) * pow(clamp(1.0 - vDotH, 0.0, 1.0), 5.0);
+    vec3 fresnel = f0 + (f90 - f0) * pow(clamp(1.0 - vDotH, 0.0, 1.0), 5.0);
     vec3 specular = (distribution * geometry * fresnel) / max(4.0 * nDotV * nDotL, 1e-4);
     vec3 diffuse = albedo * (1.0 - metallic);
     return ((vec3(1.0) - fresnel) * diffuse / 3.14159265 + specular) * lightColor * nDotL;
@@ -508,13 +509,14 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "    float roughness = clamp(metallicRoughness.g * uRoughnessFactor, 0.045, 1.0);\n";
             source += "    float metallic = clamp(metallicRoughness.b * uMetallicFactor, 0.0, 1.0);\n";
             source += "    vec3 view = normalize(uEyePosition - vWorldPosition);\n";
-            source += "    vec3 f0 = mix(vec3(0.04), albedo, metallic);\n";
+            source += "    vec3 f0 = mix(uDielectricFresnel.xyz, albedo, metallic);\n";
+            source += "    vec3 f90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic);\n";
             source += "    vec3 reflected = cnaPbrLight(shadingNormal, view, normalize(-uLight0Dir),\n";
-            source += "                                 uLight0Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                                 uLight0Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight1Dir),\n";
-            source += "                                 uLight1Diffuse, albedo, f0, roughness, metallic)\n";
+            source += "                                 uLight1Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight2Dir),\n";
-            source += "                                 uLight2Diffuse, albedo, f0, roughness, metallic);\n";
+            source += "                                 uLight2Diffuse, albedo, f0, f90, roughness, metallic);\n";
             source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
             source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";
             source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";

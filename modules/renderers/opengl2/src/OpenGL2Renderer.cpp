@@ -2337,12 +2337,13 @@ namespace CNA::Internal::Renderers::OpenGL2
             "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
             "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
             "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;uniform vec3 uSrgb;"
+            "uniform vec4 uDielectricFresnel;"
             "vec3 cnaSrgbToLinear(vec3 c){vec3 lo=c/12.92;vec3 hi=pow((c+0.055)/1.055,vec3(2.4));"
             "return mix(lo,hi,step(vec3(0.04045),c));}"
             "vec3 cnaLinearToSrgb(vec3 c){vec3 lo=c*12.92;"
             "vec3 hi=1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-0.055;"
             "return mix(lo,hi,step(vec3(0.0031308),c));}"
-            "vec3 PbrLight(vec3 N,vec3 V,vec3 L,vec3 lightColor,vec3 albedo,vec3 F0,float roughness,float metallic){"
+            "vec3 PbrLight(vec3 N,vec3 V,vec3 L,vec3 lightColor,vec3 albedo,vec3 F0,vec3 F90,float roughness,float metallic){"
             "vec3 H=normalize(V+L);"
             "float NdotL=max(dot(N,L),0.0);float NdotV=max(dot(N,V),1e-4);"
             "float NdotH=max(dot(N,H),0.0);float VdotH=max(dot(V,H),0.0);"
@@ -2351,7 +2352,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             "float D=a2/(3.14159265*dTerm*dTerm+1e-7);"
             "float k=(roughness+1.0);k=k*k/8.0;"
             "float G=(NdotV/(NdotV*(1.0-k)+k))*(NdotL/(NdotL*(1.0-k)+k));"
-            "vec3 F=F0+(vec3(1.0)-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);"
+            "vec3 F=F0+(F90-F0)*pow(clamp(1.0-VdotH,0.0,1.0),5.0);"
             "vec3 specular=(D*G*F)/max(4.0*NdotV*NdotL,1e-4);"
             "vec3 diffuseColor=albedo*(1.0-metallic);"
             "vec3 kd=vec3(1.0)-F;"
@@ -2373,11 +2374,12 @@ namespace CNA::Internal::Renderers::OpenGL2
             "float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);"
             "float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);"
             "vec3 V=normalize(uEyePosition-vWorldPos);"
-            "vec3 F0=mix(vec3(0.04),albedo,metallic);"
+            "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);"
+            "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);"
             "vec3 Lo=vec3(0.0);"
-            "Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);"
-            "Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);"
-            "Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);"
+            "Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);"
             "float occlusionSample=texture2D(uOcclusionMap,vTex).r;"
             "float occlusion=1.0+uOcclusionStrength*(occlusionSample-1.0);"
             "vec3 ambient=uAmbientColor*albedo*occlusion;"
@@ -3242,6 +3244,9 @@ namespace CNA::Internal::Renderers::OpenGL2
                             params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                             params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
                             params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f);
+                glUniform4f(glGetUniformLocation(program, "uDielectricFresnel"),
+                            params->pbrDielectricF0[0], params->pbrDielectricF0[1],
+                            params->pbrDielectricF0[2], params->pbrDielectricF90);
             }
         }
 

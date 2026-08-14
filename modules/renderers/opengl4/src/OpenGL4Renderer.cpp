@@ -955,9 +955,25 @@ uniform vec3 uLight2Diffuse;
 uniform vec3 uEyePosition;
 uniform vec4 uAlphaTest;
 uniform vec3 uFogColor;
+uniform vec3 uSrgb;
+uniform vec4 uDielectricFresnel;
 out vec4 fragColor;
 
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic)
+vec3 cnaSrgbToLinear(vec3 c)
+{
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c)
+{
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
+
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic)
 {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -973,7 +989,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
 
-    vec3 F = F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
 
     vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     vec3 diffuseColor = albedo * (1.0 - metallic);
@@ -1005,12 +1021,13 @@ void main()
     float metallic = clamp(mr.b * uMetallicFactor, 0.0, 1.0);
 
     vec3 V = normalize(uEyePosition - vWorldPos);
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    vec3 F0 = mix(uDielectricFresnel.xyz, albedo, metallic);
+    vec3 F90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic);
 
     vec3 Lo = vec3(0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight0Dir), uLight0Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, F90, roughness, metallic);
 
     float occlusionSample = texture(uOcclusionMap, vUV).r;
     float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
@@ -3339,6 +3356,11 @@ void main()
                                 params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                                 params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
                                 params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f);
+            const int dielectricFresnelLoc = prog.UniformLocation("uDielectricFresnel");
+            if (dielectricFresnelLoc >= 0)
+                gl4_glUniform4f(dielectricFresnelLoc,
+                                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                                params.pbrDielectricF0[2], params.pbrDielectricF90);
             const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0)
                 gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],

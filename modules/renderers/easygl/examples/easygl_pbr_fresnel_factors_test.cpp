@@ -10,7 +10,6 @@
 
 #include "common/PixelTestGame.hpp"
 
-#include "Microsoft/Xna/Framework/MathHelper.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
@@ -67,6 +66,16 @@ namespace
     PbrVertex MakePbrVertex(float x, float y, float u, float v)
     {
         return {x, y, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, u, v};
+    }
+
+    PbrVertex MakeGrazingPbrVertex(float x, float y, float u, float v)
+    {
+        // N=(.995,0,.0995), V=(0,0,1), and the matching light below make H=N while
+        // NdotV=NdotL=.0995. Keeping the camera head-on avoids backend projection-convention
+        // differences in what is intentionally a material, not camera, witness.
+        return {x, y, 0.0f,
+                0.9950372f, 0.0f, 0.0995037f,
+                0.0f, 1.0f, 0.0f, 1.0f, u, v};
     }
 
     SkinnedPbrVertex MakeSkinnedPbrVertex(float x, float y, float u, float v)
@@ -184,20 +193,14 @@ protected:
         // substantial (1-VdotH)^5 term. A shader that uploads xyz but still hardcodes F90=1
         // would render both passes identically around encoded value 34.
         const std::vector<PbrVertex> grazing =
-            TwoQuads<PbrVertex>(-1.0f, 0.0f, 1.0f, MakePbrVertex);
+            TwoQuads<PbrVertex>(-1.0f, 0.0f, 1.0f, MakeGrazingPbrVertex);
         VertexBuffer grazingBuffer(device, static_cast<int>(grazing.size()));
         grazingBuffer.SetDataRaw(grazing.data(), static_cast<int>(grazing.size()),
                                  static_cast<int>(sizeof(PbrVertex)));
         device.SetVertexBuffer(&grazingBuffer);
 
-        const Vector3 grazingEye(3.0f, 0.0f, 0.3f);
-        rigidEffect.setViewProperty(Matrix::CreateLookAt(
-            grazingEye, Vector3::Zero, Vector3(0.0f, 1.0f, 0.0f)));
-        rigidEffect.setProjectionProperty(Matrix::CreatePerspectiveFieldOfView(
-            MathHelper::PiOver4,
-            static_cast<float>(width) / static_cast<float>(viewport.getHeightProperty()),
-            0.1f, 10.0f));
-        Vector3 grazingDirection(1.0f, 0.0f, -0.1f);
+        // Direction is -L, with L reflecting V=(0,0,1) about the tilted normal above.
+        Vector3 grazingDirection(-0.2f, 0.0f, 0.98f);
         grazingDirection.Normalize();
         rigidEffect.DirectionalLight0.setDirectionProperty(grazingDirection);
 

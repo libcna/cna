@@ -140,6 +140,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "OPENGL4")
     cna_register_renderer_test(NAME OpenGL4_PbrEffect COMMAND cna_test_opengl4_pbreffect
         TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
+    # repeated on both rigid and identity-skinned OpenGL4 PBR programs.
+    cna_opengl4_test(cna_test_opengl4_pbr_fresnel_factors
+                     ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME OpenGL4_Pbr_FresnelFactors COMMAND cna_test_opengl4_pbr_fresnel_factors
+        TIMEOUT 60 LABELS "OpenGL4" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_opengl4.md GL4-24: real GL_SAMPLES_PASSED occlusion queries.
     cna_opengl4_test(cna_test_opengl4_occlusionquery opengl4_occlusionquery_test.cpp)
     cna_register_renderer_test(NAME OpenGL4_OcclusionQuery COMMAND cna_test_opengl4_occlusionquery

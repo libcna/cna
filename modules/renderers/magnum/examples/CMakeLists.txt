@@ -74,6 +74,15 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
         LABELS "GraphicsSmoke;Magnum")
 
+    # GLTF-343/344: IOR-derived dielectric F0 and factor-only KHR_materials_specular F0/F90,
+    # repeated on both rigid and identity-skinned Magnum PBR programs.
+    cna_magnum_test(cna_test_magnum_pbr_fresnel_factors
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME Magnum_Pbr_FresnelFactors
+        COMMAND cna_test_magnum_pbr_fresnel_factors
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}"
+        LABELS "GraphicsSmoke;Magnum")
+
     # plan_magnum.md MAGNUM-57: a draw reusing a cached vertex array must still land where its own
     # base vertex and index offset say, not where the draw that populated the cache did.
     cna_magnum_test(cna_test_magnum_meshcache magnum_meshcache_test.cpp)
