@@ -233,6 +233,25 @@ _Static_assert(CNA_CURVE_CONTINUITY_SMOOTH == UINT32_C(0) &&
                    CNA_CURVE_TANGENT_LINEAR == UINT32_C(1) &&
                    CNA_CURVE_TANGENT_SMOOTH == UINT32_C(2),
                "CNA curve identities must remain stable");
+_Static_assert(sizeof(CNA_PackedVectorFormat) == sizeof(uint32_t) &&
+                   CNA_PACKED_VECTOR_FORMAT_ALPHA8 == UINT32_C(0) &&
+                   CNA_PACKED_VECTOR_FORMAT_BGR565 == UINT32_C(1) &&
+                   CNA_PACKED_VECTOR_FORMAT_BGRA4444 == UINT32_C(2) &&
+                   CNA_PACKED_VECTOR_FORMAT_BGRA5551 == UINT32_C(3) &&
+                   CNA_PACKED_VECTOR_FORMAT_BYTE4 == UINT32_C(4) &&
+                   CNA_PACKED_VECTOR_FORMAT_HALF_SINGLE == UINT32_C(5) &&
+                   CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR2 == UINT32_C(6) &&
+                   CNA_PACKED_VECTOR_FORMAT_HALF_VECTOR4 == UINT32_C(7) &&
+                   CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE2 == UINT32_C(8) &&
+                   CNA_PACKED_VECTOR_FORMAT_NORMALIZED_BYTE4 == UINT32_C(9) &&
+                   CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT2 == UINT32_C(10) &&
+                   CNA_PACKED_VECTOR_FORMAT_NORMALIZED_SHORT4 == UINT32_C(11) &&
+                   CNA_PACKED_VECTOR_FORMAT_RG32 == UINT32_C(12) &&
+                   CNA_PACKED_VECTOR_FORMAT_RGBA1010102 == UINT32_C(13) &&
+                   CNA_PACKED_VECTOR_FORMAT_RGBA64 == UINT32_C(14) &&
+                   CNA_PACKED_VECTOR_FORMAT_SHORT2 == UINT32_C(15) &&
+                   CNA_PACKED_VECTOR_FORMAT_SHORT4 == UINT32_C(16),
+               "CNA packed-vector identities must remain stable");
 _Static_assert(sizeof(CNA_Point) == 8U && sizeof(CNA_Vector4) == 16U &&
                    sizeof(CNA_Quaternion) == 16U && _Alignof(CNA_Point) == 4U &&
                    _Alignof(CNA_Vector4) == 4U && _Alignof(CNA_Quaternion) == 4U,

@@ -244,7 +244,7 @@ mechanical wrapper.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
-| CBIND-035B | Complete math, geometry and packed-value operations | 🟨 | Map every remaining public math and PackedVector constructor, method, operator, constant and collection behavior to C-native value/bulk operations with numeric edge-case tests. Work is decomposed into CBIND-035B1–B7 below; this row becomes complete only after all seven slices and every corresponding inventory row are closed. |
+| CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ⬜ | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
@@ -261,7 +261,7 @@ mechanical wrapper.
 | CBIND-035B4 | Complete planes, rays and bounding-volume operations | ✅ | `geometry.h` maps every remaining Plane, Ray, BoundingBox, BoundingSphere and BoundingFrustum row through C-native values, explicit optional hits and caller-capacity corners. Strict-C HEADLESS/SDL_RENDERER and ASan+UBSan tests cover every exported operation, including atomic capacity/failure paths and the canonical unsupported boundary-ray case. Completed as CBIND-035B4a–B4d. |
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ✅ | `curve.h` maps all 60 Curve, CurveKey and CurveKeyCollection rows through fixed values and validated handles without leaking C++ containers. Ordered collection mutation, retained mutable key views, all loop/evaluation/tangent behavior and lifetime/error boundaries are covered in strict C under both backends and ASan+UBSan. Completed as CBIND-035B5a–B5c. |
 | CBIND-035B6 | Complete Color operations and named constants | ✅ | `color.h` and `named_colors.h` map the complete 175-row Color header through the four-byte POD, direct channels, 24 operations and 141 directly usable named value expressions. Every packed value is checked independently and all value/error behavior passes strict C under both backends and ASan+UBSan. Completed as CBIND-035B6a–B6b. |
-| CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
+| CBIND-035B7 | Complete PackedVector operations and close math coverage | ✅ | `packed_vectors.h` maps all 132 remaining concrete PackedVector, HalfTypeHelper and IPackedVector rows through 17 stable format identities, four generic format-tagged pack/unpack/equality operations and three half conversions. Raw/default constructors remain direct fixed-width values; specialized scalar/Vector2 routes collapse to the matching generic output. Integer formats reject non-finite consumed components before native conversion, half formats preserve IEEE special values, and narrower raw values reject upper bits without output mutation. `PackedVectorSmoke.c` covers every operation and format under both backends and ASan+UBSan; C/C++ assertions freeze every identity. This closes parent CBIND-035B. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -368,8 +368,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034` and slice `CBIND-035A` are ✅; parent `CBIND-035` is 🟨 and
-`CBIND-035B` through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034` and slices `CBIND-035A`–`CBIND-035B` are ✅; parent `CBIND-035`
+is 🟨 and `CBIND-035C` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -395,5 +395,7 @@ parent B5; the current snapshot is 1,637 implemented, 21 partial, 4,687 planned 
 applicable. CBIND-035B6a completes the remaining 25 non-constant Color rows; the current snapshot
 is 1,662 implemented, 21 partial, 4,662 planned and 70 not applicable, with CBIND-035B6b named
 Color constants next. CBIND-035B6b completes all 141 named Color rows and closes parent B6; the
-current snapshot is 1,803 implemented, 21 partial, 4,521 planned and 70 not applicable, with
-CBIND-035B7 PackedVector operations next.
+snapshot becomes 1,803 implemented, 21 partial, 4,521 planned and 70 not applicable. CBIND-035B7
+completes all 132 remaining PackedVector/HalfTypeHelper/interface rows and closes parent B; the
+current snapshot is 1,935 implemented, 21 partial, 4,389 planned and 70 not applicable, with
+CBIND-035C texture, buffer and vertex-resource coverage next.

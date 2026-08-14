@@ -741,6 +741,36 @@
       "task": "CBIND-035A"
     },
     {
+      "id": "packed-vector-operations",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)::(?:get|set)PackedValueProperty$).*$",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "fixed-width raw storage selected by `CNA_PackedVectorFormat` plus `cna_packed_vector_pack`, `cna_packed_vector_unpack`, `cna_packed_vector_equals` and `cna_packed_vector_not_equals`; component/default/raw constructors and specialized scalar/Vector2 conversions collapse to the corresponding format route or direct raw value",
+      "tests": "all 17 formats, exact packed bits, native unpack semantics, equality/inequality, storage-width validation, finite/infinite boundaries, null and failure atomicity in strict-C `PackedVectorSmoke.c`, plus C/C++ identity assertions",
+      "status": "implemented",
+      "task": "CBIND-035B7"
+    },
+    {
+      "id": "half-type-helper-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper\\.hpp$",
+      "kinds": ["struct", "method"],
+      "mapping": "stateless `cna_half_from_single`, `cna_half_from_single_bits` and `cna_half_to_single` IEEE 754 conversion operations",
+      "tests": "exact binary16/binary32 conversion, NaN, infinity and null-output cases in strict-C `PackedVectorSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B7"
+    },
+    {
+      "id": "packed-vector-interface-routes",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector\\.hpp$",
+      "kinds": ["struct", "method", "destructor"],
+      "mapping": "format-tagged fixed-width raw values plus generic pack/unpack operations provide the non-generic and typed storage routes without a C-owned polymorphic object or destructor",
+      "tests": "every format through generic pack/unpack and direct raw storage, storage-width validation and C/C++ format identity assertions",
+      "status": "implemented",
+      "task": "CBIND-035B7"
+    },
+    {
       "id": "point-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Point\\.hpp$",

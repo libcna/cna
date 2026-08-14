@@ -19,8 +19,8 @@ future CBIND-035C/F work.
 
 The 17 `CNA_Packed*` names are raw unsigned storage aliases with the same 8-, 16-, 32- or 64-bit
 width as the corresponding public PackedVector value. They represent packed-value get/set storage
-without exposing C++ interfaces. Construction, float conversion, equality, hashing and formatting
-remain CBIND-035B work.
+without exposing C++ interfaces. `packed_vectors.h` now adds the complete format-tagged operation
+surface described below.
 
 ## Stable identities
 
@@ -36,10 +36,10 @@ numeric ordinals. These values have no handles, allocation or thread affinity. P
 unrecognized numeric identity to a future fallible operation will be rejected by that operation;
 declaring the identity itself does not advertise renderer support.
 
-The generated coverage inventory maps only source types, directly represented fields/properties
-and enum identities to this foundation. Constructors, named constants, methods, operators,
-collections, intersections, transforms and packed conversions remain explicitly planned rather
-than being inferred from binary layout compatibility.
+The generated coverage inventory maps source types, directly represented fields/properties and
+enum identities to this foundation. Later headers map constructors, named constants, methods,
+operators, collections, intersections, transforms and packed conversions explicitly rather than
+inferring them from binary layout compatibility.
 
 ## Point and Rectangle operations
 
@@ -212,3 +212,21 @@ copies are caller-capacity operations and never partially write. `named_colors.h
 named colors as directly usable `CNA_COLOR_*` value
 expression. Their RGBA channels are compiled in strict C17 and C++23, and the strict-C suite
 independently verifies every canonical AABBGGRR packed value.
+
+## PackedVector operations
+
+`packed_vectors.h` assigns stable `CNA_PackedVectorFormat` identities to all 17 concrete formats.
+The generic `cna_packed_vector_pack` and `cna_packed_vector_unpack` operations combine that format
+with the fixed-width raw aliases, covering component/vector constructors, `PackFromVector4`,
+`ToVector4`, Alpha8's scalar alpha route, HalfSingle's scalar route and HalfVector2's Vector2 route
+without exposing a C++ interface object. Default and raw constructors are the zero/raw C values.
+Equality and inequality use the same format-tagged representation.
+
+Inputs and outputs remain caller-owned. Unpack and comparison reject bits above an 8-, 16- or
+32-bit format's real storage width and never truncate silently. Integer-backed formats reject a
+non-finite component only when that component is actually consumed, preventing undefined native
+float-to-integer conversion; the three half formats preserve IEEE NaN, infinity and signed zero.
+The three `cna_half_*` helpers expose the native float, binary32-bit-pattern and binary16 conversion
+routes directly. Strict-C tests cover exact packed bits and unpacked values for every format,
+half special values, format/width validation, equality and failure atomicity; C17/C++23 header
+tests freeze all format ordinals.

@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — COMPLETE COLOR API THROUGH CBIND-035B6b (2026-08-15)
+## C BINDING / C ABI — COMPLETE MATH AND PACKED VALUES THROUGH CBIND-035B7 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -114,8 +114,13 @@
 > CBIND-035B6b maps all 141 named colors to directly usable C17/C++23 `CNA_COLOR_*` value
 > expressions. The strict-C test independently checks every expression against its canonical
 > AABBGGRR packed literal, and public headers compile in both language modes. Parent B6 is closed;
-> the inventory is now 1,803 implemented, 21 partial, 4,521 planned and 70 N/A. CBIND-035B7
-> PackedVector operations are next.
+> the inventory is now 1,803 implemented, 21 partial, 4,521 planned and 70 N/A. CBIND-035B7 maps
+> all 132 remaining concrete PackedVector, HalfTypeHelper and IPackedVector rows through 17 stable
+> format identities, four generic pack/unpack/equality operations and three half conversions.
+> Exact packed bits for every format, half NaN/infinity/signed-zero behavior, storage-width and
+> output-atomicity failures are covered in strict C, with C/C++ identity assertions. Parent
+> CBIND-035B is closed; the inventory is now 1,935 implemented, 21 partial, 4,389 planned and 70
+> N/A. CBIND-035C texture, buffer and vertex-resource coverage is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -10,6 +10,7 @@
 #include "CNA/C/core.h"
 #include "CNA/C/color.h"
 #include "CNA/C/math_values.h"
+#include "CNA/C/packed_vectors.h"
 #include "CNA/C/math.h"
 #include "CNA/C/vectors.h"
 #include "CNA/C/quaternion.h"
