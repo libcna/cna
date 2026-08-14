@@ -29,6 +29,10 @@ Delivered task groups:
 - pass state published through the public `GraphicsDevice` state objects and sampler/texture
   collections exactly as FNA's `Effect.cs` does, instead of into renderer-private caches, with a
   group the pass never assigned left as the game selected it (`FX-022`, `FX-024`);
+- a libFuzzer/AFL++ entry point covering construction, reflection, clone, technique/pass
+  application and post-source-destruction clone use, which also builds as a standalone corpus
+  replayer in any configuration, plus the deterministic in-build mutation corpus extended from
+  construction only to that same full surface (`FX-051`);
 - lifecycle coverage for device reset, out-of-order clone-chain disposal, disposed-effect
   rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles
   (`FX-038`);
@@ -456,7 +460,7 @@ must be accepted before a row can close.
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
-| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Sustained sanitizer fuzz run has no crash, leak, timeout, or unbounded allocation |
+| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness and corpus **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`); the sustained coverage-guided campaign under ASan/UBSan is still to run |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | Clean supported-platform sanitizer reports |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | Baselines recorded; any cache preserves per-instance mutable isolation |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | No unexplained regression from the develop baseline |

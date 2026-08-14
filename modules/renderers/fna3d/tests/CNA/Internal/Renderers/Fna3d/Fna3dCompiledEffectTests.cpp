@@ -691,6 +691,51 @@ namespace
         return description.str();
     }
 
+    /**
+     * Walks every public surface a compiled effect exposes: reflection, annotations, array
+     * elements, structure members, technique/pass selection, application and an independent
+     * clone. Shared by the deterministic mutation corpus and mirrors what
+     * tools/graphics/compiled_effect_fuzzer.cpp does for a coverage-guided campaign.
+     */
+    void ExerciseCompiledEffectSurface(Effect& effect)
+    {
+        using Microsoft::Xna::Framework::Graphics::EffectParameter;
+        const auto walk = [](const EffectParameter& parameter, int depth, auto& self) -> void {
+            if (depth > 8) return;
+            (void) parameter.getNameProperty();
+            (void) parameter.getSemanticProperty();
+            (void) parameter.getRowCountProperty();
+            (void) parameter.getColumnCountProperty();
+            const auto& annotations = parameter.getAnnotationsProperty();
+            for (int i = 0; i < annotations.getCountProperty(); ++i)
+                (void) annotations[i].getNameProperty();
+            const auto& elements = parameter.getElementsProperty();
+            for (int i = 0; i < elements.getCountProperty(); ++i)
+                self(elements[i], depth + 1, self);
+            const auto& members = parameter.getStructureMembersProperty();
+            for (int i = 0; i < members.getCountProperty(); ++i)
+                self(members[i], depth + 1, self);
+        };
+
+        auto& parameters = effect.getParametersProperty();
+        for (int i = 0; i < parameters.getCountProperty(); ++i) walk(parameters[i], 0, walk);
+
+        auto& techniques = effect.getTechniquesProperty();
+        for (int i = 0; i < techniques.getCountProperty(); ++i)
+        {
+            effect.setCurrentTechniqueProperty(&techniques[i]);
+            auto& passes = techniques[i].getPassesProperty();
+            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass].Apply();
+        }
+
+        std::unique_ptr<Effect> clone(effect.Clone());
+        if (clone && clone->getCurrentTechniqueProperty() != nullptr)
+        {
+            auto& passes = clone->getCurrentTechniqueProperty()->getPassesProperty();
+            for (int pass = 0; pass < passes.getCountProperty(); ++pass) passes[pass].Apply();
+        }
+    }
+
     void RunEffectMutationCorpus(GraphicsDevice& device,
                                  const std::vector<std::uint8_t>& seed,
                                  std::uint64_t randomSeed, int iterations)
@@ -710,6 +755,9 @@ namespace
             try
             {
                 Effect effect(device, mutated);
+                // Constructing is only half the attack surface: reflection, clone, technique
+                // selection and pass application all read the same parsed graph.
+                ExerciseCompiledEffectSurface(effect);
                 ++completed;
             }
             catch (const std::bad_alloc&)

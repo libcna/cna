@@ -284,3 +284,31 @@ if(CNA_SKIA_GANESH_BUILD_DIR)
         SDL3::SDL3
     )
 endif()
+
+# --- plan_fx.md FX-051: compiled Effect Framework fuzz harness ---
+# One entry point covering construction, reflection, clone, technique/pass selection, apply and
+# disposal of an untrusted compiled effect binary. Built by default in its standalone replay
+# shape, which is how a committed corpus is exercised and how a campaign's crashing input is
+# reproduced; CNA_FX_FUZZER_ENTRY_POINT=ON drops main() so clang's libFuzzer (or AFL++ in its
+# libFuzzer compatibility mode) can own the loop instead. Not registered as a ctest test: it
+# needs a real graphics device and a corpus path, and the deterministic corpus that does run on
+# every build lives in the FNA3D compiled-effect suite.
+if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
+    option(CNA_FX_FUZZER_ENTRY_POINT
+           "Build the compiled-effect fuzz harness for libFuzzer/AFL++ instead of standalone replay"
+           OFF)
+    add_executable(cna_compiled_effect_fuzzer tools/graphics/compiled_effect_fuzzer.cpp)
+    target_link_libraries(cna_compiled_effect_fuzzer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
+    if(CNA_FX_FUZZER_ENTRY_POINT)
+        target_compile_definitions(cna_compiled_effect_fuzzer PRIVATE CNA_FX_FUZZER_ENTRY_POINT)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_link_options(cna_compiled_effect_fuzzer PRIVATE -fsanitize=fuzzer)
+        else()
+            # AFL++'s afl-clang-lto/afl-gcc-fast supply their own driver, so a missing libFuzzer
+            # is only fatal when nothing else provides main().
+            message(WARNING
+                "CNA: CNA_FX_FUZZER_ENTRY_POINT=ON without clang -- the fuzz driver must be "
+                "supplied by the toolchain (for example AFL++) or the link will fail.")
+        endif()
+    endif()
+endif()
