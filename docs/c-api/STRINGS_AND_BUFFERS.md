@@ -72,6 +72,11 @@ adapter copies each command into native `Rectangle`, `Vector2`, `Color` and Spri
 neither the caller's array nor any C layout is retained. Native deferred queues hold their texture
 resources through `End`, not the caller's command storage.
 
+Keyboard pressed-key enumeration follows the same count/copy rule. A 256-bit POD snapshot is the
+source, keys are emitted in ascending numeric order, and insufficient capacity reports the exact
+count without writing a prefix. Repeated per-key checks are local snapshot operations rather than
+repeated calls into the platform input backend.
+
 ## Collections
 
 No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.

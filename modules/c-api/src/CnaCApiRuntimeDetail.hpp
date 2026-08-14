@@ -20,6 +20,8 @@ struct BorrowedGraphicsDevice final {
 
 [[nodiscard]] HandleRegistry& GetRuntimeHandles() noexcept;
 
+[[nodiscard]] CNA_Result ValidateActiveGameHandle(CNA_Handle handle);
+
 [[nodiscard]] CNA_Result GetBorrowedGraphicsDevice(
     CNA_Handle handle,
     std::shared_ptr<BorrowedGraphicsDevice>* outGraphicsDevice);

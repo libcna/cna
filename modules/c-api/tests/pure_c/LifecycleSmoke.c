@@ -18,11 +18,13 @@ typedef struct LifecycleState {
     uint64_t renderer_name_bytes;
     CNA_Handle texture;
     CNA_Handle sprite_batch;
+    uint32_t pressed_key_count;
 } LifecycleState;
 
 typedef struct WrongThreadState {
     CNA_Handle game;
     CNA_Result result;
+    CNA_Result keyboard_result;
 } WrongThreadState;
 
 static int set_title_on_wrong_thread(void* context)
@@ -32,6 +34,10 @@ static int set_title_on_wrong_thread(void* context)
     state->result = cna_game_set_window_title(
         state->game,
         (CNA_StringView){title, sizeof(title) - 1U});
+    CNA_KeyboardState keyboard_state = {
+        sizeof(CNA_KeyboardState), UINT32_C(1), {0U, 0U, 0U, 0U}
+    };
+    state->keyboard_result = cna_keyboard_get_state(state->game, &keyboard_state);
     return 0;
 }
 
@@ -209,7 +215,6 @@ static CNA_Result on_update(
     CNA_CallbackError* out_error)
 {
     LifecycleState* const state = (LifecycleState*)context;
-    (void)game;
     (void)out_error;
     if (game_time == 0 || game_time->elapsed_game_time_ticks <= 0) {
         return CNA_RESULT_INVALID_STATE;
@@ -219,6 +224,17 @@ static CNA_Result on_update(
     } else if (state->lifecycle_stage != 2) {
         return CNA_RESULT_INVALID_STATE;
     }
+    CNA_KeyboardState keyboard_state = {
+        sizeof(CNA_KeyboardState), UINT32_C(1), {0U, 0U, 0U, 0U}
+    };
+    uint32_t pressed_key_count = 0U;
+    if (cna_keyboard_get_state(game, &keyboard_state) != CNA_RESULT_SUCCESS ||
+        cna_keyboard_state_get_pressed_key_count(&keyboard_state, &pressed_key_count) !=
+            CNA_RESULT_SUCCESS ||
+        pressed_key_count > 256U) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->pressed_key_count = pressed_key_count;
     ++state->update_count;
     state->saw_time = 1;
     return CNA_RESULT_SUCCESS;
@@ -390,6 +406,45 @@ static CNA_GameCreateInfo make_create_info(
 int main(void)
 {
     LifecycleState state = {0};
+    CNA_KeyboardState synthetic_keyboard = {
+        sizeof(CNA_KeyboardState),
+        UINT32_C(1),
+        {
+            UINT64_C(0),
+            UINT64_C(1) << (CNA_KEY_A - UINT32_C(64)),
+            UINT64_C(0),
+            UINT64_C(1) << (CNA_KEY_OEM_CLEAR - UINT32_C(192))
+        }
+    };
+    CNA_Bool key_state = CNA_FALSE;
+    uint32_t synthetic_key_count = 0U;
+    CNA_Key copied_keys[2] = {UINT32_MAX, UINT32_MAX};
+    if (cna_keyboard_state_is_key_down(&synthetic_keyboard, CNA_KEY_A, &key_state) !=
+            CNA_RESULT_SUCCESS ||
+        key_state != CNA_TRUE ||
+        cna_keyboard_state_is_key_up(&synthetic_keyboard, CNA_KEY_B, &key_state) !=
+            CNA_RESULT_SUCCESS ||
+        key_state != CNA_TRUE ||
+        cna_keyboard_state_is_key_down(&synthetic_keyboard, UINT32_C(256), &key_state) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_get_pressed_key_count(
+            &synthetic_keyboard,
+            &synthetic_key_count) != CNA_RESULT_SUCCESS ||
+        synthetic_key_count != 2U ||
+        cna_keyboard_state_copy_pressed_keys(
+            &synthetic_keyboard,
+            copied_keys,
+            1U,
+            &synthetic_key_count) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        synthetic_key_count != 2U || copied_keys[0] != UINT32_MAX ||
+        cna_keyboard_state_copy_pressed_keys(
+            &synthetic_keyboard,
+            copied_keys,
+            2U,
+            &synthetic_key_count) != CNA_RESULT_SUCCESS ||
+        copied_keys[0] != CNA_KEY_A || copied_keys[1] != CNA_KEY_OEM_CLEAR) {
+        return 11;
+    }
     CNA_GameCallbacks callbacks = {
         sizeof(CNA_GameCallbacks),
         UINT32_C(1),
@@ -415,12 +470,15 @@ int main(void)
         graphics_device != CNA_INVALID_HANDLE) {
         return 2;
     }
-    WrongThreadState wrong_thread_state = {game, CNA_RESULT_SUCCESS};
+    WrongThreadState wrong_thread_state = {
+        game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
+    };
     thrd_t wrong_thread;
     int wrong_thread_return = 0;
     if (thrd_create(&wrong_thread, set_title_on_wrong_thread, &wrong_thread_state) != thrd_success ||
         thrd_join(wrong_thread, &wrong_thread_return) != thrd_success ||
-        wrong_thread_return != 0 || wrong_thread_state.result != CNA_RESULT_THREAD) {
+        wrong_thread_return != 0 || wrong_thread_state.result != CNA_RESULT_THREAD ||
+        wrong_thread_state.keyboard_result != CNA_RESULT_THREAD) {
         return 3;
     }
     if (cna_game_set_window_title(game, (CNA_StringView){"C API title", 11U}) != CNA_RESULT_SUCCESS ||

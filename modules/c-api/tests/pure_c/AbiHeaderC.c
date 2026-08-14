@@ -58,3 +58,10 @@ _Static_assert(sizeof(CNA_SpriteBatchBeginInfo) == 16U,
                "CNA_SpriteBatchBeginInfo layout must remain stable");
 _Static_assert(sizeof(CNA_SpriteCommand) == 72U,
                "CNA_SpriteCommand layout must remain stable");
+_Static_assert(sizeof(CNA_Key) == sizeof(uint32_t),
+               "CNA_Key must have a fixed-width representation");
+_Static_assert(CNA_KEY_NONE == UINT32_C(0) && CNA_KEY_A == UINT32_C(65) &&
+                   CNA_KEY_F24 == UINT32_C(135) && CNA_KEY_OEM_CLEAR == UINT32_C(254),
+               "Representative CNA keyboard identities must remain stable");
+_Static_assert(sizeof(CNA_KeyboardState) == 40U,
+               "CNA_KeyboardState layout must remain stable");

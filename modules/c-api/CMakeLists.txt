@@ -14,6 +14,7 @@ add_library(cna_c_api SHARED
     src/CnaCApi.cpp
     src/CnaCApiDetail.cpp
     src/CnaCApiGraphics.cpp
+    src/CnaCApiInput.cpp
     src/CnaCApiRuntime.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)
@@ -82,6 +83,20 @@ if(CNA_BUILD_TESTS)
             -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckPublicHeaders.cmake
     )
 
+    add_custom_target(cna_c_api_key_identity_audit
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INPUT_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/input.h
+            -DCNA_NATIVE_KEYS_HEADER=${PROJECT_SOURCE_DIR}/modules/input/include/Microsoft/Xna/Framework/Input/Keys.hpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckKeyIdentities.cmake
+        VERBATIM
+    )
+    add_test(NAME CApi_KeyIdentities
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_C_API_INPUT_HEADER=${CMAKE_CURRENT_SOURCE_DIR}/include/CNA/C/input.h
+            -DCNA_NATIVE_KEYS_HEADER=${PROJECT_SOURCE_DIR}/modules/input/include/Microsoft/Xna/Framework/Input/Keys.hpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckKeyIdentities.cmake
+    )
+
     add_executable(cna_c_api_abi_smoke
         tests/pure_c/AbiSmoke.c
     )
@@ -132,11 +147,13 @@ if(CNA_BUILD_TESTS)
     )
     target_include_directories(cna_c_api_header_c PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_dependencies(cna_c_api_header_c cna_c_api_header_audit)
+    add_dependencies(cna_c_api_header_c cna_c_api_key_identity_audit)
     cna_c_api_enable_strict_warnings(cna_c_api_header_c)
 
     add_library(cna_c_api_header_cpp OBJECT tests/cpp/AbiHeaderCpp.cpp)
     target_include_directories(cna_c_api_header_cpp PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_dependencies(cna_c_api_header_cpp cna_c_api_header_audit)
+    add_dependencies(cna_c_api_header_cpp cna_c_api_key_identity_audit)
     cna_c_api_enable_strict_warnings(cna_c_api_header_cpp)
 
     add_executable(cna_c_api_handle_registry_test

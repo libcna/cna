@@ -48,6 +48,11 @@ handle, retained after the callback and used later on the same creation/graphics
 handles do not inherit the callback's generation lifetime; they instead follow explicit destroy
 and child-before-game ordering.
 
+`cna_keyboard_get_state` also accepts the active game handle and performs a fresh capture on this
+same creation thread; it is valid inside update/draw callbacks and at other safe points while the
+game handle is live. The resulting `CNA_KeyboardState` is an independent POD value. Its query and
+count/copy helpers touch no runtime state and may inspect a copied snapshot on any thread.
+
 A callback result other than `CNA_RESULT_SUCCESS` is handled as described in
 [`ERRORS.md`](ERRORS.md); C code must return normally. Throwing a C++ exception, `longjmp` across a
 CNA frame or freeing a live callback context is unsupported behavior.

@@ -10,5 +10,6 @@
 #include "CNA/C/core.h"
 #include "CNA/C/runtime.h"
 #include "CNA/C/graphics.h"
+#include "CNA/C/input.h"
 
 #endif

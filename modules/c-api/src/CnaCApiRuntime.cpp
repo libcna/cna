@@ -303,6 +303,12 @@ HandleRegistry& GetRuntimeHandles() noexcept
     return GetRuntimeState().handles;
 }
 
+CNA_Result ValidateActiveGameHandle(const CNA_Handle handle)
+{
+    std::shared_ptr<CGame> game;
+    return GetGame(handle, &game);
+}
+
 CNA_Result GetBorrowedGraphicsDevice(
     const CNA_Handle handle,
     std::shared_ptr<BorrowedGraphicsDevice>* const outGraphicsDevice)
