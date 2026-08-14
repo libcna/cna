@@ -77,13 +77,19 @@ namespace CNA::Internal::Renderers::DirectX12
         {
             switch (pt)
             {
-            case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-            case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
-            case PrimitiveType::LineList:      return D3D_PRIMITIVE_TOPOLOGY_LINELIST;
-            case PrimitiveType::LineStrip:     return D3D_PRIMITIVE_TOPOLOGY_LINESTRIP;
-            case PrimitiveType::PointListEXT:
-                throw std::runtime_error(
-                    "DirectX12 renderer does not support PrimitiveType::PointListEXT: its "
+                case PrimitiveType::TriangleList:  return D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+                case PrimitiveType::TriangleStrip: return D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+                case PrimitiveType::LineList:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::LineList: its "
+                        "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::LineStrip:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::LineStrip: its "
+                        "pipeline-state cache is currently fixed to triangle topology");
+                case PrimitiveType::PointListEXT:
+                    throw std::runtime_error(
+                        "DirectX12 renderer does not support PrimitiveType::PointListEXT: its "
                     "pipeline-state cache is currently fixed to triangle topology");
             }
             throw std::runtime_error(
@@ -1401,7 +1407,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        // GLTF-394: reject PointListEXT before target/layout/PSO work can mask the real reason.
+        // GLTF-394: reject line/point topology before target/layout/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // DX-111: colored3d (stride 16, unlit vertex-color) is the only real D3D12 draw pipeline so
         // far -- mirrors D3D11's own DX-61 scope exactly (same shader variant, same DXBC bytecode,
@@ -1514,7 +1520,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount)
     {
-        // GLTF-394: reject PointListEXT before target/layout/PSO work can mask the real reason.
+        // GLTF-394: reject line/point topology before target/layout/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // DX-111: indexed counterpart of DrawColoredPrimitives above -- same colored3d-only scope.
         if (!boundColorResource_)
@@ -1624,7 +1630,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, const GpuDrawParams& params)
     {
-        // GLTF-394: reject PointListEXT before declaration/target/PSO work can mask the reason.
+        // GLTF-394: reject line/point topology before declaration/target/PSO work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // REMED-GFX-DECL-GUARD: before any D3D12_INPUT_LAYOUT_DESC is built and before any draw is
         // issued. This renderer selects that layout from the shared D3DCommon stride table
@@ -2472,7 +2478,7 @@ namespace CNA::Internal::Renderers::DirectX12
         const Matrix& world, const Matrix& view, const Matrix& projection,
         PrimitiveType primitive, int primitiveCount, int instanceCount, const GpuDrawParams& params)
     {
-        // GLTF-394: reject PointListEXT before fallback/stream/target work can mask the reason.
+        // GLTF-394: reject line/point topology before fallback/stream/target work can mask the reason.
         const D3D12_PRIMITIVE_TOPOLOGY nativeTopology = ToD3D12Topology(primitive);
         // Matches DirectX11Renderer::DrawInstancedPrimitivesEx's own fallback -- no per-instance
         // VB means this isn't really an instanced draw at all.

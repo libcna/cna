@@ -12,6 +12,7 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <string_view>
 
 #include <gtest/gtest.h>
 
@@ -1388,13 +1389,22 @@ TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSub
         "casePrimitiveType::PointListEXT:returnD3D11_PRIMITIVE_TOPOLOGY_POINTLIST;"));
 
     // D3D12's current PSO cache fixes PrimitiveTopologyType to TRIANGLE. Mapping IA topology to
-    // POINTLIST alone would therefore trade a triangle approximation for a validation error. Its
-    // honest contract is a named refusal, reached by all four ordinary/instanced native paths.
+    // POINTLIST/LINELIST/LINESTRIP would therefore trade an approximation for a validation error.
+    // Its honest contract is a named refusal, reached by all four ordinary/instanced native paths.
     const std::string d3d12 = RendererText(renderers / "directx12");
-    EXPECT_NE(std::string::npos, d3d12.find("casePrimitiveType::PointListEXT:"));
-    EXPECT_NE(std::string::npos, d3d12.find(
-        "DirectX12rendererdoesnotsupportPrimitiveType::PointListEXT:"));
+    for (const std::string_view topology : {"LineList", "LineStrip", "PointListEXT"})
+    {
+        EXPECT_NE(std::string::npos, d3d12.find(
+            "casePrimitiveType::" + std::string(topology) + ":"));
+        EXPECT_NE(std::string::npos, d3d12.find(
+            "DirectX12rendererdoesnotsupportPrimitiveType::" +
+            std::string(topology) + ":"));
+    }
     EXPECT_EQ(4u, CountOccurrences(d3d12, "ToD3D12Topology(primitive)"));
     EXPECT_EQ(std::string::npos, d3d12.find(
         "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
+    EXPECT_EQ(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineList:returnD3D_PRIMITIVE_TOPOLOGY_LINELIST;"));
+    EXPECT_EQ(std::string::npos, d3d12.find(
+        "casePrimitiveType::LineStrip:returnD3D_PRIMITIVE_TOPOLOGY_LINESTRIP;"));
 }

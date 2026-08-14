@@ -164,9 +164,9 @@ explicit 32-bit route.
 The Direct3D comparison audit found the remaining silent point-topology defaults. D3D9's five draw
 implementations and the D3D10/D3D11 count/native mappers now select their APIs' real point-list
 topologies. D3D12 does not pretend: its current pipeline-state cache fixes
-`PrimitiveTopologyType` to `TRIANGLE`, so all four draw paths reject `PointListEXT` at entry with
-`DirectX12 renderer does not support PrimitiveType::PointListEXT` before target, layout or PSO
-validation can obscure the cause. `GltfRendererPointTopologyPolicy` locks those dispositions from
+`PrimitiveTopologyType` to `TRIANGLE`, so all four draw paths reject `LineList`, `LineStrip` and
+`PointListEXT` at entry with `DirectX12 renderer does not support PrimitiveType::<name>` before
+target, layout or PSO validation can obscure the cause. `GltfRendererPointTopologyPolicy` locks those dispositions from
 the renderer sources; D3D9, D3D10 and D3D11 additionally participate in the shared point framebuffer
 suite. No Direct3D mapper retains an unnamed default that can turn a future topology into a
 triangle list.
