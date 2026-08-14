@@ -10,8 +10,8 @@ session needs to start work without re-deriving the state.
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
 - **Working document:** `plan_gltf.md`, 460 numbered rows. **404 closed (`✔` 258, `✅` 146),
-  42 `⬜` remaining.** The other 14 carry a deliberate partial marker: 6 `🔬` (investigation, no
-  implementation owed), 6 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
+  41 `⬜` remaining.** The other 15 carry a deliberate partial marker: 6 `🔬` (investigation, no
+  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
@@ -50,6 +50,7 @@ Expected as of this writing:
 | pinned Khronos Validator | **262 valid, 20 expected-invalid, 42 warnings** |
 | `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **493 passed, 27 skipped** / **520 passed, 0 skipped** / **520 passed, 0 skipped** |
 | `*Gltf*` on `VULKAN` / `DIRECTX11` | **520 passed, 0 skipped** / **493 passed, 1 symlink skip** (26 POSIX tool cases are not registered on Windows) |
+| `*Gltf*` on `SOFTWARE` | **520 passed, 0 skipped**; its first run found and fixed the optional-base-map and 48/56/68-byte layout boundary |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures

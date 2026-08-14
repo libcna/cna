@@ -123,9 +123,14 @@ rather than always passing.
 
 - **`TriangleList` only.** `TriangleStrip`/`LineList`/`LineStrip`/`PointListEXT` all throw a clear
   "only TriangleList is supported in v1" error rather than silently misrendering.
-- **Vertex strides 16/20/24/32/52** (`VertexPositionColor`/`VertexPositionTexture`/
-  `VertexPositionColorTexture`/`VertexPositionNormalTexture`/`VertexPositionNormalTextureSkinned`).
-  Any other stride throws a clear "unsupported vertex stride" error.
+- **Vertex strides 16/20/24/32/48/52/56/68.** These are the complete canonical CNA table,
+  including rigid PBR, coloured-skinned and skinned-PBR records. Tangents are consumed at their
+  declared offsets but remain shading-inert because this CPU renderer does not evaluate a
+  tangent-space PBR normal map. Any other stride throws a clear "unsupported vertex stride" error.
+- **An unbound optional base texture is white.** `PbrEffect`, `SkinnedPbrEffect` and
+  `SkinnedEffect` deliberately keep their textured program selected with no base map; SOFTWARE
+  preserves the vertex/factor colour in that case, matching the white fallback used by native
+  shader renderers. A missing second DualTexture map or environment cube remains a clear error.
 - **No per-light diffuse lighting, no fog.** `BasicEffect`'s `EnableDefaultLighting()`/fog
   properties (and the equivalent lighting inputs on `EnvironmentMapEffect`/`SkinnedEffect`) have no
   effect on this renderer's output — only `VertexColorEnabled`, `TextureEnabled`/`Texture`, and

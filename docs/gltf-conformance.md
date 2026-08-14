@@ -927,6 +927,18 @@ loader/upload boundary, not corpus L7 pixels. It also exposed and fixed two host
 RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder
 traceability accepts the platform-excluded tool suite only while its source still declares it.
 
+`GLTF-387` adds the CPU SOFTWARE rasteriser as a fifth independent boundary. Its first complete
+run was 519/520 and exposed a gap hidden by every prior configuration: SOFTWARE rejected a stock
+PBR/Skinned draw whose optional base map was absent before it could validate the vertex record,
+then lacked the glTF-era 48/56/68-byte layouts behind that guard. An absent optional base map now
+uses the same white identity fallback as the shader renderers, while missing mandatory
+DualTexture/environment maps still refuse. SOFTWARE consumes all eight canonical CNA strides and
+the seven-fixture native draw sweep reaches rigid PBR, coloured skinning and skinned PBR. The
+rerun is **520/520 with no skips** and the ten-rung L0–L6/tool ladder is 10/10. Focused ordinary
+target/backbuffer cull, depth/depth-bias and stride-52 skinning pixels are green; the broader
+winding control separately found a pre-existing blank readback on a 4x-MSAA target, recorded under
+`GLTF-395` rather than misclassified as an importer or stride failure. Corpus-wide L7 remains open.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
