@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-224..227/264: real EasyGL pixel checks for material-map semantics and the
-// skinned PBR joint normal matrix.
+// plan_gltf.md GLTF-224..227/264/373: real pixel checks for all five PBR material-map bindings,
+// their channel semantics, and the skinned PBR joint normal matrix.
 //
-// Two one-pixel textures are deliberately channel-asymmetric. Occlusion (64,128,192) makes the
-// required red-channel read distinguishable from green or blue. Normal (255,128,191) decodes to
+// The one-pixel textures are deliberately semantic sentinels. Base colour is red, emissive is
+// blue, and metallic-roughness is green (G=roughness=1, B=metallic=0); a swapped binding therefore
+// cannot accidentally sample the same useful channels. Occlusion (64,128,192) makes the required
+// red-channel read distinguishable from green or blue. Normal (255,128,191) decodes to
 // approximately (1,0,.498), so scaling tangent-space X/Y only changes the normalized direction;
 // scaling all three components would leave every scale case identical.
 
@@ -101,6 +103,9 @@ namespace
                      GraphicsDevice& device,
                      Effect& effect,
                      Texture2D& white,
+                     Texture2D& redBaseColor,
+                     Texture2D& metallicRoughness,
+                     Texture2D& blueEmissive,
                      Texture2D& occlusion,
                      Texture2D& normal,
                      int sampleX,
@@ -116,8 +121,47 @@ namespace
             test.ExpectPixel(label.c_str(), Rectangle(sampleX, sampleY, 1, 1), expected, tolerance);
         };
 
-        effect.setTextureProperty(&white);
+        effect.setTextureProperty(&redBaseColor);
         effect.setNormalMapProperty(nullptr);
+        effect.setMetallicRoughnessMapProperty(nullptr);
+        effect.setEmissiveMapProperty(nullptr);
+        effect.setOcclusionMapProperty(nullptr);
+        effect.setAmbientLightColorProperty(Vector3::One);
+        effect.setEmissiveFactorProperty(Vector3::Zero);
+        effect.DirectionalLight0.setEnabledProperty(false);
+
+        // Base colour is the only non-white source in this ambient-only case. Sampling any other
+        // map at unit 0 loses the red sentinel.
+        drawAndExpect("base-color map is unit 0", Color(255, 0, 0, 255), 0);
+
+        // Emissive is standalone in the glTF equation: with ambient and all lights zero, blue can
+        // only come from EmissiveMap. Primary colours are invariant under both linear and sRGB
+        // transfer, so this also stays a pure slot test.
+        effect.setTextureProperty(&white);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        effect.setEmissiveMapProperty(&blueEmissive);
+        effect.setEmissiveFactorProperty(Vector3::One);
+        drawAndExpect("emissive map is unit 3", Color(0, 0, 255, 255), 0);
+
+        // Metallic-roughness (0,255,0) means roughness=1 and metallic=0. With a red albedo and
+        // N=V=L=+Z, the exact production BRDF is red=(.97/pi), green=blue=(.01/pi), which encodes
+        // to about (151,11,11). Sampling the white fallback (metallic=1) instead is about
+        // (80,0,0), so a lost/swapped unit is strongly separated.
+        effect.setTextureProperty(&redBaseColor);
+        effect.setEmissiveMapProperty(nullptr);
+        effect.setEmissiveFactorProperty(Vector3::Zero);
+        effect.setMetallicRoughnessMapProperty(&metallicRoughness);
+        effect.setMetallicFactorProperty(1.0f);
+        effect.setRoughnessFactorProperty(1.0f);
+        effect.DirectionalLight0.setEnabledProperty(true);
+        effect.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        effect.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+        drawAndExpect("metallic-roughness map is unit 2", Color(151, 11, 11, 255), 3);
+
+        effect.DirectionalLight0.setEnabledProperty(false);
+        effect.setMetallicRoughnessMapProperty(nullptr);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setTextureProperty(&white);
         effect.setOcclusionMapProperty(&occlusion);
         effect.setAmbientLightColorProperty(Vector3::One);
 
@@ -170,9 +214,18 @@ protected:
         const int sampleY = viewport.getHeightProperty() / 2;
 
         const std::vector<std::uint8_t> whitePixel = {255, 255, 255, 255};
+        const std::vector<std::uint8_t> redBaseColorPixel = {255, 0, 0, 255};
+        const std::vector<std::uint8_t> metallicRoughnessPixel = {0, 255, 0, 255};
+        const std::vector<std::uint8_t> blueEmissivePixel = {0, 0, 255, 255};
         const std::vector<std::uint8_t> occlusionPixel = {64, 128, 192, 255};
         const std::vector<std::uint8_t> normalPixel = {255, 128, 191, 255};
         Texture2D white = Texture2D::CreateFromPixels(device, 1, 1, whitePixel);
+        Texture2D redBaseColor =
+            Texture2D::CreateFromPixels(device, 1, 1, redBaseColorPixel);
+        Texture2D metallicRoughness =
+            Texture2D::CreateFromPixels(device, 1, 1, metallicRoughnessPixel);
+        Texture2D blueEmissive =
+            Texture2D::CreateFromPixels(device, 1, 1, blueEmissivePixel);
         Texture2D occlusion = Texture2D::CreateFromPixels(device, 1, 1, occlusionPixel);
         Texture2D normal = Texture2D::CreateFromPixels(device, 1, 1, normalPixel);
 
@@ -187,8 +240,8 @@ protected:
         device.SetVertexBuffer(&rigidBuffer);
         PbrEffect rigidEffect(device);
         Configure(rigidEffect);
-        RunMapCases(
-            *this, device, rigidEffect, white, occlusion, normal, sampleX, sampleY, "PbrEffect");
+        RunMapCases(*this, device, rigidEffect, white, redBaseColor, metallicRoughness,
+                    blueEmissive, occlusion, normal, sampleX, sampleY, "PbrEffect");
 
         const std::vector<SkinnedPbrVertex> skinned = SkinnedQuad();
         VertexBuffer skinnedBuffer(device, static_cast<int>(skinned.size()));
@@ -199,8 +252,8 @@ protected:
         Configure(skinnedEffect);
         skinnedEffect.SetBoneTransforms({Matrix::getIdentityProperty()});
         skinnedEffect.setWeightsPerVertexProperty(1);
-        RunMapCases(*this, device, skinnedEffect, white, occlusion, normal,
-                    sampleX, sampleY, "SkinnedPbrEffect");
+        RunMapCases(*this, device, skinnedEffect, white, redBaseColor, metallicRoughness,
+                    blueEmissive, occlusion, normal, sampleX, sampleY, "SkinnedPbrEffect");
 
         // GLTF-264's exact corpus geometry normal and joint scale. Inverse-transpose(S[1,2,1])
         // sends (0,.6,.8) to normalize(0,.3,.8). With L=+Y, V=+Z and this test's rough dielectric

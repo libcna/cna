@@ -204,6 +204,14 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME EasyGL_Pbr_MaterialMaps COMMAND cna_test_easygl_pbr_material_maps
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-373: a narrower renderer-shared test whose five sentinel textures
+        # prove base/normal/MR/emissive/occlusion binding without relying on EasyGL-only scalar or
+        # output-transfer extensions.
+        cna_easygl_test(cna_test_easygl_pbr_texture_slots
+                        ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Pbr_TextureSlots COMMAND cna_test_easygl_pbr_texture_slots
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_gltf.md GLTF-268: the generated stride-68 skinned PBR corpus fixture through the
         # real ContentManager.Load<Model> -> bind-pose palette -> Model.Draw -> EasyGL pixel path.
         cna_easygl_test(cna_test_easygl_gltf_skinned_pbr_nonuniform_joint
