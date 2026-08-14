@@ -204,16 +204,4 @@ namespace CNA::Internal::Renderers
         std::unique_ptr<IGraphicsRenderer> (*create)(const GraphicsRendererCreateArgs& args) = nullptr;
     };
 
-    /**
-     * @brief The descriptor of the renderer compiled into this build.
-     *
-     * plan_runtimerenderer.md RTR-P1-1: a transitional shim, defined once per renderer family
-     * exactly as CreateGraphicsRenderer already is, so that GraphicsDevice can be freed of its
-     * pre-window #ifdef chains (phase P1) before the generated registry exists (phase P2). Phase
-     * P2 replaces every call to this with a GraphicsRendererRegistry lookup and deletes the
-     * per-family definitions.
-     *
-     * @return The single compiled-in descriptor.
-     */
-    [[nodiscard]] const GraphicsRendererDescriptor& ActiveDescriptor();
 }

@@ -2073,7 +2073,9 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // Factory function to be implemented by each renderer
-    // INTERNAL API - SDL dependency should be abstracted later
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+    // plan_runtimerenderer.md design decision 4: the factory used to be declared here, once, and
+    // defined once per renderer family with an identical signature -- which is exactly why two
+    // renderer archives could never link into the same binary. Each family now declares and
+    // defines CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead, and
+    // GraphicsRendererRegistry reaches it through GraphicsRendererDescriptor::create.
 }

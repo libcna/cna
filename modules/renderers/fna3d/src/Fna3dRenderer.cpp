@@ -940,7 +940,13 @@ namespace CNA::Internal::Renderers::Fna3d
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Fna3d { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+        const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Fna3d::CreateGraphicsRenderer(
         const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Fna3d::Fna3dRenderer>(args);

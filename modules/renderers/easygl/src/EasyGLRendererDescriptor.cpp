@@ -19,6 +19,19 @@
 
 namespace CNA::Internal::Renderers::EasyGL
 {
+    /**
+     * @brief Creates this family's renderer instance.
+     *
+     * Defined in the family's own renderer translation unit. Declared here because the descriptor
+     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
+     * into one binary.
+     *
+     * @param args Construction arguments, already populated by GraphicsDevice.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+
     namespace
     {
         /// EasyGL creates its GL context on the window CNA created, and SDL refuses to attach one
@@ -51,10 +64,3 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 }
 
-namespace CNA::Internal::Renderers
-{
-    const GraphicsRendererDescriptor& ActiveDescriptor()
-    {
-        return EasyGL::GetDescriptor();
-    }
-}

@@ -4011,7 +4011,12 @@ void main()
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGL4
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGL4 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> OpenGL4::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<OpenGL4::OpenGL4Renderer>(
             args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,

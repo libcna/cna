@@ -811,7 +811,12 @@ namespace CNA::Internal::Renderers::SvgDom
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace SvgDom { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> SvgDom::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<SvgDom::SvgDomRenderer>(
             args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);

@@ -126,6 +126,11 @@ cna_detect_sharp_runtime_shape()
 
 include(cmake/RendererSelection.cmake)
 
+# plan_runtimerenderer.md design decision 3: emit the explicit table of renderer families
+# linked into this build. Must run after RendererSelection.cmake has resolved the identity.
+include(cmake/RendererRegistry.cmake)
+cna_generate_renderer_registry(CNA_RENDERER_REGISTRY_SOURCE ${CNA_GRAPHICS_RENDERER})
+
 # Example and test registrations live inside the module tree (modules/<name>/examples/,
 # modules/renderers/<family>/examples/): testing must be enabled before the modules are
 # composed so their subdirectory add_test() registrations take effect.

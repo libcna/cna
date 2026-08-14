@@ -2,7 +2,12 @@ file(GLOB_RECURSE CNA_GRAPHICS_CORE_SOURCES CONFIGURE_DEPENDS
     "src/Xna/*.cpp"
     "src/Internal/*.cpp"
 )
-cna_add_module(cna_graphics_core GraphicsCore ${CNA_GRAPHICS_CORE_SOURCES})
+# plan_runtimerenderer.md design decision 3: the generated renderer registry compiles into the
+# graphics core, which is where GraphicsDevice consumes it. It lives in the build tree, not
+# the source tree, so it is never committed and is regenerated whenever the selection changes.
+cna_add_module(cna_graphics_core GraphicsCore
+    ${CNA_GRAPHICS_CORE_SOURCES}
+    ${CNA_RENDERER_REGISTRY_SOURCE})
 target_link_libraries(cna_graphics_core PUBLIC cna_math cna_core)
 cna_link_sharp_runtime(cna_graphics_core PUBLIC Core.Base IO Collections.Core Text)
 # GraphicsDevice.cpp/GraphicsAdapter.cpp/Texture2D.cpp query SDL video state directly;

@@ -495,13 +495,13 @@ running that family's own smoke/example target where one exists.
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P2-1 | ⬜ | Declare `CreateGraphicsRenderer` inside each family namespace in `IGraphicsRenderer.hpp` (or better: drop the global declaration entirely and let each family's own public header declare it). |
-| RTR-P2-2 | ⬜ | Write `cmake/RendererRegistry.cmake` — generates `CnaRendererRegistry.generated.cpp` into the build tree from the enabled-family list. |
-| RTR-P2-3 | ⬜ | Implement `GraphicsRendererRegistry` over the generated table. With one family enabled, `Count() == 1`. |
-| RTR-P2-4 | ⬜ | Replace `renderer_ = CreateGraphicsRenderer(args)` (`GraphicsDevice.cpp:2419`) with a registry lookup + `descriptor.create(args)`. |
-| RTR-P2-5 | ⬜ | Retire the `ActiveDescriptor()` shim from RTR-P1-1 in favour of the registry. |
-| RTR-P2-6 | ⬜ | Confirm the generated file is regenerated on reconfigure and is correctly `.gitignore`d (build tree only, never committed). |
-| RTR-P2-7 | ⬜ | Verify the declared `cna_graphics_core` ↔ renderer archive cycle still resolves after the symbol move, on both the GNU linker and the MinGW cross-link. |
+| RTR-P2-1 | ✅ | Declare `CreateGraphicsRenderer` inside each family namespace in `IGraphicsRenderer.hpp` (or better: drop the global declaration entirely and let each family's own public header declare it). |
+| RTR-P2-2 | ✅ | Write `cmake/RendererRegistry.cmake` — generates `CnaRendererRegistry.generated.cpp` into the build tree from the enabled-family list. |
+| RTR-P2-3 | ✅ | Implement `GraphicsRendererRegistry` over the generated table. With one family enabled, `Count() == 1`. |
+| RTR-P2-4 | ✅ | Replace `renderer_ = CreateGraphicsRenderer(args)` (`GraphicsDevice.cpp:2419`) with a registry lookup + `descriptor.create(args)`. |
+| RTR-P2-5 | ✅ | Retire the `ActiveDescriptor()` shim from RTR-P1-1 in favour of the registry. |
+| RTR-P2-6 | ✅ | Confirm the generated file is regenerated on reconfigure and is correctly `.gitignore`d (build tree only, never committed). |
+| RTR-P2-7 | ✅ | Verify the declared `cna_graphics_core` ↔ renderer archive cycle still resolves after the symbol move, on both the GNU linker and the MinGW cross-link. |
 | RTR-P2-8 | ⬜ | **Phase gate.** All Linux-buildable renderers configure, build and pass their own smoke targets. |
 
 #### P2 factory renames, one task per family
@@ -511,48 +511,48 @@ export `GetDescriptor()` with a populated `create` pointer, verify the family's 
 
 | ID | St | Family |
 |---|---|---|
-| RTR-P2-F01 | ⬜ | `sdl-renderer` |
-| RTR-P2-F02 | ⬜ | `easygl` |
-| RTR-P2-F03 | ⬜ | `bgfx` |
-| RTR-P2-F04 | ⬜ | `vulkan` |
-| RTR-P2-F05 | ⬜ | `webgpu` |
-| RTR-P2-F06 | ⬜ | `magnum` |
-| RTR-P2-F07 | ⬜ | `headless` |
-| RTR-P2-F08 | ⬜ | `software` — must not disturb the `CNA_SOFTWARE_2D_ONLY` re-compilation `GDI` depends on |
-| RTR-P2-F09 | ⬜ | `stub` |
-| RTR-P2-F10 | ⬜ | `portablegl` |
-| RTR-P2-F11 | ⬜ | `directx11` |
-| RTR-P2-F12 | ⬜ | `directx12` |
-| RTR-P2-F13 | ⬜ | `direct2d` |
-| RTR-P2-F14 | ⬜ | `canvas` |
-| RTR-P2-F15 | ⬜ | `html-dom` |
-| RTR-P2-F16 | ⬜ | `svg-dom` — also update the standalone `cna_test_svgdom_host` target |
-| RTR-P2-F17 | ⬜ | `skia` |
-| RTR-P2-F18 | ⬜ | `blend2d` |
-| RTR-P2-F19 | ⬜ | `freedirect` |
-| RTR-P2-F20 | ⬜ | `directx9` |
-| RTR-P2-F21 | ⬜ | `directx1` |
-| RTR-P2-F22 | ⬜ | `directx2` |
-| RTR-P2-F23 | ⬜ | `directx3` |
-| RTR-P2-F24 | ⬜ | `directx5` |
-| RTR-P2-F25 | ⬜ | `directx6` |
-| RTR-P2-F26 | ⬜ | `directx7` |
-| RTR-P2-F27 | ⬜ | `directx8` |
-| RTR-P2-F28 | ⬜ | `directx10` |
-| RTR-P2-F29 | ⬜ | `sdl-gpu` |
-| RTR-P2-F30 | ⬜ | `opengles1` |
-| RTR-P2-F31 | ⬜ | `opengl4` |
-| RTR-P2-F32 | ⬜ | `opengl1` — its one-line factory is currently a single packed line; expand it |
-| RTR-P2-F33 | ⬜ | `opengl2` |
-| RTR-P2-F34 | ⬜ | `wicked` |
-| RTR-P2-F35 | ⬜ | `sokol` |
-| RTR-P2-F36 | ⬜ | `diligent` |
-| RTR-P2-F37 | ⬜ | `glide` |
-| RTR-P2-F38 | ⬜ | `gdi` — also update the three `gdi/examples/*` targets that call `CreateGraphicsRenderer` directly |
-| RTR-P2-F39 | ⬜ | `llgl` |
-| RTR-P2-F40 | ⬜ | `metal` (`.mm` unit) |
-| RTR-P2-F41 | ⬜ | `fna3d` |
-| RTR-P2-F42 | ⬜ | `openvg` |
+| RTR-P2-F01 | ✅ | `sdl-renderer` |
+| RTR-P2-F02 | ✅ | `easygl` |
+| RTR-P2-F03 | 🟨 | `bgfx` |
+| RTR-P2-F04 | ✅ | `vulkan` |
+| RTR-P2-F05 | ✅ | `webgpu` |
+| RTR-P2-F06 | ✅ | `magnum` |
+| RTR-P2-F07 | ✅ | `headless` |
+| RTR-P2-F08 | ✅ | `software` — must not disturb the `CNA_SOFTWARE_2D_ONLY` re-compilation `GDI` depends on |
+| RTR-P2-F09 | ✅ | `stub` |
+| RTR-P2-F10 | ✅ | `portablegl` |
+| RTR-P2-F11 | ✅ | `directx11` |
+| RTR-P2-F12 | ✅ | `directx12` |
+| RTR-P2-F13 | ✅ | `direct2d` |
+| RTR-P2-F14 | ✅ | `canvas` |
+| RTR-P2-F15 | ✅ | `html-dom` |
+| RTR-P2-F16 | ✅ | `svg-dom` — also update the standalone `cna_test_svgdom_host` target |
+| RTR-P2-F17 | ✅ | `skia` |
+| RTR-P2-F18 | ✅ | `blend2d` |
+| RTR-P2-F19 | ✅ | `freedirect` |
+| RTR-P2-F20 | ✅ | `directx9` |
+| RTR-P2-F21 | ✅ | `directx1` |
+| RTR-P2-F22 | ✅ | `directx2` |
+| RTR-P2-F23 | ✅ | `directx3` |
+| RTR-P2-F24 | ✅ | `directx5` |
+| RTR-P2-F25 | ✅ | `directx6` |
+| RTR-P2-F26 | ✅ | `directx7` |
+| RTR-P2-F27 | ✅ | `directx8` |
+| RTR-P2-F28 | ✅ | `directx10` |
+| RTR-P2-F29 | ✅ | `sdl-gpu` |
+| RTR-P2-F30 | ✅ | `opengles1` |
+| RTR-P2-F31 | ✅ | `opengl4` |
+| RTR-P2-F32 | ✅ | `opengl1` — its one-line factory is currently a single packed line; expand it |
+| RTR-P2-F33 | ✅ | `opengl2` |
+| RTR-P2-F34 | ✅ | `wicked` |
+| RTR-P2-F35 | ✅ | `sokol` |
+| RTR-P2-F36 | ✅ | `diligent` |
+| RTR-P2-F37 | ✅ | `glide` |
+| RTR-P2-F38 | ✅ | `gdi` — also update the three `gdi/examples/*` targets that call `CreateGraphicsRenderer` directly |
+| RTR-P2-F39 | ✅ | `llgl` |
+| RTR-P2-F40 | ✅ | `metal` (`.mm` unit) |
+| RTR-P2-F41 | ✅ | `fna3d` |
+| RTR-P2-F42 | ✅ | `openvg` |
 
 ---
 

@@ -24,7 +24,7 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and OPENGL1's GLX attributes are all descriptor-driven |
 | Per-family descriptors | ✅ all 42 families; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ⬜ not implemented |
+| Namespaced factories / generated registry | ✅ all 42 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
 | `GraphicsRendererSelection` API | ⬜ not implemented |
 | Fallback chain | ⬜ not implemented |
 | Multi-renderer CMake mode | ⬜ not implemented |

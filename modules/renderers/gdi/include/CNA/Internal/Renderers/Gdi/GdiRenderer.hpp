@@ -213,4 +213,17 @@ namespace CNA::Internal::Renderers::Gdi
         bool debugForceNextReleaseDcFailure_ = false;
         GdiPresentationTelemetry lastPresentationTelemetry_{};
     };
+
+    /**
+     * @brief Creates the GDI renderer.
+     *
+     * plan_runtimerenderer.md design decision 4: the factory lives in this family's own namespace
+     * so that several renderer archives can link into one binary. Declared here because this
+     * family's example/contract programs construct a renderer directly, without going through
+     * GraphicsDevice.
+     *
+     * @param args Construction arguments.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 } // namespace CNA::Internal::Renderers::Gdi

@@ -1011,7 +1011,12 @@ namespace CNA::Internal::Renderers::Gdi
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_GDI
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Gdi { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Gdi::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         auto renderer = std::make_unique<Gdi::GdiRenderer>(
             args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);

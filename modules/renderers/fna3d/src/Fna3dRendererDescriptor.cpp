@@ -19,6 +19,19 @@
 
 namespace CNA::Internal::Renderers::Fna3d
 {
+    /**
+     * @brief Creates this family's renderer instance.
+     *
+     * Defined in the family's own renderer translation unit. Declared here because the descriptor
+     * below takes its address, and because plan_runtimerenderer.md design decision 4 moved it out
+     * of the shared CNA::Internal::Renderers namespace so that several renderer archives can link
+     * into one binary.
+     *
+     * @param args Construction arguments, already populated by GraphicsDevice.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+
     namespace
     {
         [[nodiscard]] std::uint32_t PrepareWindowFlags()
@@ -50,10 +63,3 @@ namespace CNA::Internal::Renderers::Fna3d
     }
 }
 
-namespace CNA::Internal::Renderers
-{
-    const GraphicsRendererDescriptor& ActiveDescriptor()
-    {
-        return Fna3d::GetDescriptor();
-    }
-}

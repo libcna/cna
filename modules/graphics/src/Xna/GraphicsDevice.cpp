@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
+#include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -50,7 +51,6 @@
 
 namespace Microsoft::Xna::Framework::Graphics
 {
-    using CNA::Internal::Renderers::CreateGraphicsRenderer;
     using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
     using CNA::Internal::Renderers::RenderTargetBindingDescriptor;
 
@@ -138,7 +138,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // and DILIGENT, each of which picks its native API itself -- keep doing exactly that;
             // their computation moved into their own prepareWindowFlags() hook rather than being
             // reached through an #ifdef here.
-            const auto& descriptor = CNA::Internal::Renderers::ActiveDescriptor();
+            const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
             return static_cast<SDL_WindowFlags>(
                 SDL_WINDOW_RESIZABLE | descriptor.prepareWindowFlags());
         }
@@ -192,7 +192,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // own needsVideoSubsystem: a renderer that normally wants a window (D3D12) can be asked for
         // a genuinely off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what
         // lets such a device run with no display server at all, not merely without a visible window.
-        if (CNA::Internal::Renderers::ActiveDescriptor().needsVideoSubsystem
+        if (CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem
             && !presentationParameters_.getHeadlessEXTProperty())
         {
             if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
@@ -2140,7 +2140,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-        const auto& descriptor = CNA::Internal::Renderers::ActiveDescriptor();
+        const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
 
         // No real window, ever -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
         // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
@@ -2276,7 +2276,10 @@ namespace Microsoft::Xna::Framework::Graphics
             }
         };
 
-        renderer_ = CreateGraphicsRenderer(args);
+        // plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
+        // single shared factory symbol, which is what lets several renderer archives coexist.
+        const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+        renderer_ = descriptor.create(args);
 
         if (renderer_ != nullptr)
         {

@@ -6378,7 +6378,12 @@ namespace CNA::Internal::Renderers::Llgl
 #ifdef CNA_RENDERER_LLGL
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Llgl { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Llgl::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<CNA::Internal::Renderers::Llgl::LlglRenderer>(args);
     }
