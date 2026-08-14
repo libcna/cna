@@ -24,7 +24,7 @@ Distinguish these three clearly. Everything in the FUTURE column is unstarted.
 | **CURRENT** | Phase 2 — renderer expansion (OPENGLES2 + 13 new renderers) | **in progress**: six additions — `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`, `PORTABLEGL` — are implemented on their own lanes and integrated on `11branches`. The remaining planned additions are untouched and each still requires its own explicit owner instruction |
 | **FUTURE** | Phase 3 — complete XNA sample campaign | **not started**; blocked on Phases 1–2 |
 | **FUTURE** | Phase 4 — historical plan/audit review | **not started**; blocked on Phase 3 |
-| **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plan_gltf.md`: 460 rows, **446 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 145-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, and a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections (`docs/gltf-conformance.md`). **The milestone is NOT declared:** `GLTF-458` (**GLTF CORE 2.0 CORRECT**) and `GLTF-459` (**GLTF ROBUST**) are both still open, so the line below stands |
+| **CURRENT** | Phase 5 — glTF correctness campaign | **in progress on `feature/gltf`, ahead of its stated Phase 4 dependency** (started 2026-08-11 from `gltfissues.md`'s analysis and a forensic audit that reproduced eight defects, D1–D8, every one of which produced a *model that rendered*). The working record is `plan_gltf.md`: 460 rows, **448 closed**, and all eight audit defects `fixed` in the corpus defect ledger. The evidence base is a generated 145-asset corpus, the exact L0–L6 numerical ladder run per commit under ASan+UBSan, a required production-viewer OPENGLES3 L7 gate with 137 deterministic PNGs plus 8 deterministic safe rejections, and the completed 14-row pinned Khronos Gate C viewer retake (`docs/gltf-conformance.md`). **The milestone is NOT declared:** §27.1 row 13 remains partial by the recorded application-policy decision, while `GLTF-458` (**GLTF CORE 2.0 CORRECT**) and `GLTF-459` (**GLTF ROBUST**) are still open, so the line below stands |
 
 Explicitly **not** true today, and not to be stated as true anywhere:
 
@@ -41,8 +41,9 @@ Explicitly **not** true today, and not to be stated as true anywhere:
   feature branch and later increments merge separately.
 - The XNA samples do **not** all pass. The corpus has not been revisited.
 - glTF is **not** corrected — the campaign is under way, not finished, and this line is retired only when `GLTF-458`
-  (**GLTF CORE 2.0 CORRECT**) is declared with the evidence its own row demands. `cna-gltf-viewer` has not been retaken;
-  it is a separate repository, and seven of the campaign's remaining rows are its work rather than CNA's.
+  (**GLTF CORE 2.0 CORRECT**) is declared with the evidence its own row demands. The separate
+  `cna-gltf-viewer` **has** completed the pinned 14-row Gate C retake; the remaining CORE blocker is
+  §27.1 row 13's recorded application-owned alpha/double-sided policy boundary, not missing viewer evidence.
   What *is* true today is narrower and checkable: the import path is corrected for everything
   `plan_gltf.md` marks closed, what it still cannot carry is enumerated in `docs/gltf-limitations.md`,
   and each such loss is reported rather than silent.
