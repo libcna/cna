@@ -1987,6 +1987,8 @@ namespace CNA::Internal::Renderers::DirectX12
             perDraw.AlphaTest[1] = params.alphaTest[1];
             perDraw.AlphaTest[2] = params.alphaTest[2];
             perDraw.AlphaTest[3] = params.alphaTest[3];
+            perDraw.PbrMapScales[0] = params.pbrNormalScale;
+            perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

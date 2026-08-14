@@ -73,7 +73,8 @@ namespace CNA::Internal::Renderers::Llgl
         /// Floats in PbrEffect's own dedicated uniform block (see shaders/pbr3d.vert.glsl's
         /// PbrParams for the byte layout): 88 floats = 352 bytes. This effect's field set (base
         /// colour factor kept independent from alpha, raw AmbientLightColor, metallic/roughness
-        /// factors and alpha coverage) doesn't fit the shared 100-float Transform block, and its
+        /// factors, normal/occlusion map scales and alpha coverage) doesn't fit the shared
+        /// 100-float Transform block, and its
         /// shader pair is never linked with any other shader here.
         constexpr std::size_t kPbrUniformFloats = 88;
 
@@ -3356,6 +3357,8 @@ namespace CNA::Internal::Renderers::Llgl
 
         uniforms[44] = params.pbrRoughnessFactor;
         uniforms[45] = static_cast<float>(params.weightsPerVertex);
+        uniforms[46] = params.pbrNormalScale;
+        uniforms[47] = params.pbrOcclusionStrength;
 
         uniforms[48] = params.light0Dir[0];
         uniforms[49] = params.light0Dir[1];

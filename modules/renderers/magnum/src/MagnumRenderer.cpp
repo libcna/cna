@@ -1053,6 +1053,8 @@ namespace CNA::Internal::Renderers::Magnum
                        *defaultWhiteTexture_, occlusionFlip);
             program.SetFloat(program.LocationOf("uMetallicFactor"), params.pbrMetallicFactor);
             program.SetFloat(program.LocationOf("uRoughnessFactor"), params.pbrRoughnessFactor);
+            program.SetFloat(program.LocationOf("uNormalScale"), params.pbrNormalScale);
+            program.SetFloat(program.LocationOf("uOcclusionStrength"), params.pbrOcclusionStrength);
             program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{
                 params.ambientColor[0], params.ambientColor[1], params.ambientColor[2]});
             program.SetVector3(program.LocationOf("uEmissiveColor"), Mg::Vector3{

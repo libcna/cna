@@ -43,6 +43,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector
     vec4 alphaTest;
+    vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
 } pbr;
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
@@ -79,6 +80,7 @@ void main() {
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= pbr.pbrMapScales.x;
     vec3 finalNormal = normalize(TBN * sampledNormal);
     vec4 mr = texture(uMetallicRoughnessMap, vUV);
     float roughness = clamp(mr.g * pbr.emissive_roughness.w, 0.045, 1.0);
@@ -89,7 +91,8 @@ void main() {
     Lo += PbrLight(finalNormal, V, normalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light1Dir_pad.xyz), pbr.light1Diffuse_pad.xyz, albedo, F0, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light2Dir_pad.xyz), pbr.light2Diffuse_pad.xyz, albedo, F0, roughness, metallic);
-    float occlusion = texture(uOcclusionMap, vUV).r;
+    float occlusionSample = texture(uOcclusionMap, vUV).r;
+    float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
     vec3 emissive = pbr.emissive_roughness.xyz * texture(uEmissiveMap, vUV).rgb;
     outColor = vec4(ambient + Lo + emissive, alpha);

@@ -20,7 +20,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 diffuseColor;         // rgb = base colour factor, a = alpha (kept independent, not premultiplied)
     vec4 ambientColorPad;      // xyz = AmbientLightColor
     vec4 emissiveMetallic;     // xyz = EmissiveFactor, w = MetallicFactor
-    vec4 roughnessWeightsPad;  // x = RoughnessFactor, y = WeightsPerVertex (unused by this shader)
+    vec4 roughnessWeightsPad;  // x=RoughnessFactor, y=WeightsPerVertex (unused), z=NormalScale, w=OcclusionStrength
     vec4 light0DirPad;
     vec4 light0DiffusePad;
     vec4 light1DirPad;

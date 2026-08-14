@@ -117,7 +117,7 @@ sampler2D OcclusionMap         : register(s4);
 float4 DiffuseColor           : register(c0);
 float3 AmbientColor            : register(c1);
 float3 EmissiveColor           : register(c2);
-float4 MetallicRoughnessFactor : register(c3); // x=MetallicFactor, y=RoughnessFactor
+float4 MetallicRoughnessFactor : register(c3); // x=metallic, y=roughness, z=normal scale, w=occlusion strength
 float3 Light0Dir               : register(c4);
 float3 Light0Diffuse           : register(c5);
 float3 Light1Dir               : register(c6);
@@ -171,6 +171,7 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float3x3 TBN = float3x3(T, B, N);
 
     float3 sampledNormal = tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= MetallicRoughnessFactor.z;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
     float4 mr = tex2D(MetallicRoughnessMap, pin.UV);
@@ -186,6 +187,7 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, roughness, metallic);
 
     float occlusion = tex2D(OcclusionMap, pin.UV).r;
+    occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
     float3 ambient = AmbientColor * albedo * occlusion;
     float3 emissive = EmissiveColor * tex2D(EmissiveMap, pin.UV).rgb;
 

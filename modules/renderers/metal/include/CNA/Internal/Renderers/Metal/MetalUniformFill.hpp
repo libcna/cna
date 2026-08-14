@@ -81,7 +81,7 @@ namespace CNA::Internal::Renderers::Metal
         float light1Dir[4], light1Diffuse[4];
         float light2Dir[4], light2Diffuse[4];
         float eyePosition[4];
-        float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor
+        float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
         float alphaTest[4];
         float fogColorEnabled[4], fogVector[4];
     };
@@ -265,7 +265,8 @@ namespace CNA::Internal::Renderers::Metal
                 pu.light0Diffuse[component]=pu.light1Diffuse[component]=pu.light2Diffuse[component]=0.0f;
         }
         pu.eyePosition[0]=params.eyePositionWorld[0]; pu.eyePosition[1]=params.eyePositionWorld[1]; pu.eyePosition[2]=params.eyePositionWorld[2]; pu.eyePosition[3]=0;
-        pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor; pu.pbrFactors[2]=0; pu.pbrFactors[3]=0;
+        pu.pbrFactors[0]=params.pbrMetallicFactor; pu.pbrFactors[1]=params.pbrRoughnessFactor;
+        pu.pbrFactors[2]=params.pbrNormalScale; pu.pbrFactors[3]=params.pbrOcclusionStrength;
         std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
         pu.fogColorEnabled[0]=params.fogColor[0]; pu.fogColorEnabled[1]=params.fogColor[1]; pu.fogColorEnabled[2]=params.fogColor[2]; pu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
         std::memcpy(pu.fogVector, params.fogVector, sizeof(pu.fogVector));

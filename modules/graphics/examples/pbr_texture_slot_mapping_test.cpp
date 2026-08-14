@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-373/379: discriminating real-pixel proof of all five PBR texture bindings
-// and of glTF MASK coverage staying inside both rigid and skinned PBR programs.
+// plan_gltf.md GLTF-373/379: discriminating real-pixel proof of all five PBR texture bindings,
+// both PBR map scalars, and glTF MASK coverage staying inside rigid and skinned PBR programs.
 //
-// This source deliberately uses only the PBR contract shared by every renderer: no output sRGB
-// transfer, normalScale, occlusionStrength, or other later shader-semantic extensions. Five solid
-// one-pixel sentinels make a slot swap observable: red base colour, green metallic-roughness
+// Output sRGB transfer stays disabled so exact linear-UNORM oracle values remain portable. Five
+// solid one-pixel sentinels make a slot swap observable: red base colour, green metallic-roughness
 // (G=roughness=1, B=metallic=0), blue emissive, channel-asymmetric occlusion, and a tilted normal.
 
 #include "common/PixelTestGame.hpp"
@@ -57,6 +56,55 @@ namespace
         const PbrVertex br = vertex( 1.0f, -1.0f, 1.0f, 1.0f);
         const PbrVertex tr = vertex( 1.0f,  1.0f, 1.0f, 0.0f);
         return {tl, bl, br, tl, br, tr};
+    }
+
+    template <typename Effect>
+    void RunMapScalarCases(CNA::Examples::PixelTestGame& test,
+                           GraphicsDevice& device,
+                           Effect& effect,
+                           Texture2D& white,
+                           Texture2D& occlusion,
+                           Texture2D& normal,
+                           int sampleX,
+                           int sampleY,
+                           const char* prefix)
+    {
+        const auto drawAndExpect = [&](const char* caseName, const Color& expected, int tolerance)
+        {
+            device.Clear(Color(0, 255, 0, 255));
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            const std::string label = std::string(prefix) + " " + caseName;
+            test.ExpectPixel(label.c_str(), Rectangle(sampleX, sampleY, 1, 1), expected, tolerance);
+        };
+
+        effect.setAlphaModeEXTProperty(AlphaModeEXT::Opaque);
+        effect.setTextureProperty(&white);
+        effect.setNormalMapProperty(nullptr);
+        effect.setMetallicRoughnessMapProperty(nullptr);
+        effect.setEmissiveMapProperty(nullptr);
+        effect.setOcclusionMapProperty(&occlusion);
+        effect.setEmissiveFactorProperty(Vector3::Zero);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setRoughnessFactorProperty(1.0f);
+        effect.setNormalScaleEXTProperty(1.0f);
+        effect.setOcclusionStrengthEXTProperty(0.5f);
+        effect.setAmbientLightColorProperty(Vector3::One);
+        effect.DirectionalLight0.setEnabledProperty(false);
+        // glTF §3.9.3: 1 + 0.5 * (64/255 - 1) = 159.5/255, rounded to byte 160.
+        drawAndExpect("occlusion strength interpolates from one", Color(160, 160, 160, 255), 1);
+
+        effect.setOcclusionMapProperty(nullptr);
+        effect.setOcclusionStrengthEXTProperty(1.0f);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        effect.setNormalMapProperty(&normal);
+        effect.setNormalScaleEXTProperty(0.0f);
+        effect.DirectionalLight0.setEnabledProperty(true);
+        effect.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        effect.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+        // Scaling tangent-space X/Y to zero restores the geometric +Z normal: byte 79 instead of
+        // the tilted sample's byte 35. This distinguishes a consumed zero from an ignored scalar.
+        drawAndExpect("normal scale zero restores geometric normal", Color(79, 79, 79, 255), 2);
     }
 
     std::vector<SkinnedPbrVertex> SkinnedQuad()
@@ -220,6 +268,8 @@ protected:
         Configure(rigidEffect);
         RunSlotCases(*this, device, rigidEffect, white, redBaseColor, metallicRoughness,
                      blueEmissive, occlusion, normal, sampleX, sampleY, "PbrEffect");
+        RunMapScalarCases(*this, device, rigidEffect, white, occlusion, normal,
+                          sampleX, sampleY, "PbrEffect");
         RunAlphaMaskCases(*this, device, rigidEffect, redBelowCutoff, redBaseColor,
                           sampleX, sampleY, "PbrEffect");
 
@@ -234,6 +284,8 @@ protected:
         skinnedEffect.setWeightsPerVertexProperty(1);
         RunSlotCases(*this, device, skinnedEffect, white, redBaseColor, metallicRoughness,
                      blueEmissive, occlusion, normal, sampleX, sampleY, "SkinnedPbrEffect");
+        RunMapScalarCases(*this, device, skinnedEffect, white, occlusion, normal,
+                          sampleX, sampleY, "SkinnedPbrEffect");
         RunAlphaMaskCases(*this, device, skinnedEffect, redBelowCutoff, redBaseColor,
                           sampleX, sampleY, "SkinnedPbrEffect");
 

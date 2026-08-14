@@ -1731,7 +1731,7 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::BufferDesc pbrDesc;
         pbrDesc.Name = "CNA PBR constants";
-        pbrDesc.Size = 2 * sizeof(float) * 4; // g_PbrAmbientMetallic, g_PbrEmissiveRoughness
+        pbrDesc.Size = 3 * sizeof(float) * 4; // ambient/metallic, emissive/roughness, map scales
         pbrDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
         pbrDesc.Usage = Dg::USAGE_DYNAMIC;
         pbrDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
@@ -1752,11 +1752,12 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::UploadPbrConstants(const GpuDrawParams& params)
     {
-        const float values[8] = {
+        const float values[12] = {
             params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
             params.pbrMetallicFactor,
             params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
             params.pbrRoughnessFactor,
+            params.pbrNormalScale, params.pbrOcclusionStrength, 0.0f, 0.0f,
         };
         void* mapped = nullptr;
         context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);

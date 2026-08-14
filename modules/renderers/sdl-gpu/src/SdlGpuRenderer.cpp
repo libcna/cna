@@ -912,14 +912,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
 
-        // pbr3d.frag.glsl's tertiary PbrParams block: one material-factor vec4 followed by the
-        // alpha coverage vector used by glTF MASK draws.
+        // pbr3d.frag.glsl's tertiary PbrParams block: one material-factor/map-scale vec4 followed
+        // by the alpha coverage vector used by glTF MASK draws.
         void FillPbrParams(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
-            out[2] = 0.0f;
-            out[3] = 0.0f;
+            out[2] = p.pbrNormalScale;
+            out[3] = p.pbrOcclusionStrength;
             out[4] = p.alphaTest[0];
             out[5] = p.alphaTest[1];
             out[6] = p.alphaTest[2];

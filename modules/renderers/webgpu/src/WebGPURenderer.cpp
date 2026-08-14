@@ -823,15 +823,15 @@ namespace CNA::Internal::Renderers::WebGPU
             for (int i = 25; i < 32; ++i) out[i] = 0.0f;
         }
 
-        // pbr3d.wgsl's third (small) uniform buffer: PBR factors plus glTF MASK coverage,
+        // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
         void FillPbrFactors(std::array<float, 8>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
-            out[2] = 0.0f;
-            out[3] = 0.0f;
+            out[2] = p.pbrNormalScale;
+            out[3] = p.pbrOcclusionStrength;
             out[4] = p.alphaTest[0];
             out[5] = p.alphaTest[1];
             out[6] = p.alphaTest[2];
@@ -8547,7 +8547,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    sampledNormal.x *= pf.metallicRoughness.z;
+    sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
     let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
@@ -8572,7 +8574,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
 
-    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
     let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
 
@@ -10016,7 +10019,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    let sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    sampledNormal.x *= pf.metallicRoughness.z;
+    sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
     let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
@@ -10038,7 +10043,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
 
-    let occlusion = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
     let emissive = lp.emissiveColor.xyz * textureSample(emissiveTex, texSampler, input.uv).rgb;
 

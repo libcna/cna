@@ -11,7 +11,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 diffuseColor;
     vec4 ambientColorPad;
     vec4 emissiveMetallic;
-    vec4 roughnessWeightsPad;
+    vec4 roughnessWeightsPad;  // x=roughness, y=skin weights, z=normal scale, w=occlusion strength
     vec4 light0DirPad;
     vec4 light0DiffusePad;
     vec4 light1DirPad;
@@ -79,6 +79,7 @@ void main()
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(normalMap, vTexCoord).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= roughnessWeightsPad.z;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     vec4 mr = texture(metallicRoughnessMap, vTexCoord);
@@ -93,7 +94,8 @@ void main()
     Lo += PbrLight(finalNormal, V, safeNormalize(-light1DirPad.xyz), light1DiffusePad.xyz, albedo, F0, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, roughness, metallic);
 
-    float occlusion = texture(occlusionMap, vTexCoord).r;
+    float occlusionSample = texture(occlusionMap, vTexCoord).r;
+    float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);
     vec3 ambient = ambientColorPad.xyz * albedo * occlusion;
     vec3 emissive = emissiveMetallic.xyz * texture(emissiveMap, vTexCoord).rgb;
 

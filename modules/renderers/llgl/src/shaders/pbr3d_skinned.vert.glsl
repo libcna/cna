@@ -19,7 +19,7 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 diffuseColor;
     vec4 ambientColorPad;
     vec4 emissiveMetallic;
-    vec4 roughnessWeightsPad;  // x = RoughnessFactor, y = WeightsPerVertex
+    vec4 roughnessWeightsPad;  // x=RoughnessFactor, y=WeightsPerVertex, z=NormalScale, w=OcclusionStrength
     vec4 light0DirPad;
     vec4 light0DiffusePad;
     vec4 light1DirPad;

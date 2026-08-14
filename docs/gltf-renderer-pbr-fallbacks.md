@@ -36,8 +36,8 @@ contain their complete declaration set.
 texture-slot portion runs ten cases each (five maps × rigid/skinned) with semantic sentinel texels: red base colour, green
 metallic-roughness (`G=1`, `B=0`), blue emissive, channel-asymmetric occlusion and a tilted normal.
 The linearly rendered expected bytes are analytically stated in the test; a swap cannot pass by
-showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers the
-EasyGL-only output-transfer and scalar semantics at the same binding boundary.
+showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers
+output transfer and supplies a second scalar-semantics oracle at the same binding boundary.
 
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 
@@ -66,18 +66,53 @@ gave their generic alpha-test path priority over PBR. The corrected per-renderer
 | OpenGL 2 | existing `uAlphaTest` uniform and fragment discard |
 | OpenGL 4 | `uAlphaTest` uniform uploaded by the PBR bind path and consumed by its fragment shader |
 | SDL GPU | second `vec4` of `PbrParams`, consumed by the PBR fragment shader; PBR wins effect selection |
-| Vulkan | final `vec4` of the 208-byte PBR UBO (dynamic stride 256), consumed by rigid and skinned fragments; PBR wins effect selection |
+| Vulkan | `alphaTest` at bytes 192–207 of the 224-byte PBR UBO (dynamic stride 256), consumed by rigid and skinned fragments; PBR wins effect selection |
 | WebGPU | second `vec4` of `PbrFactors`, consumed by rigid and skinned WGSL fragments; PBR wins effect selection |
 | Wicked | existing `cb.alphaTest` now consumed by `PbrPS` |
 
 `GltfRendererPbrFallbackPolicy.EveryPbrShaderConsumesTheAlphaCoverageVector` is an ordinary,
 source-based inventory gate over all 15 renderer implementations, including separately stored rigid
 and skinned variants. Vulkan adds four real-pixel cases (discarding and surviving texels, each rigid
-and skinned) to its ten texture-slot cases. Those 14 cases pass on llvmpipe. The changed shader
+and skinned) to its ten texture-slot cases. Those cases pass on llvmpipe. The changed shader
 sources also compile in the native OpenGL 4, SDL GPU, Vulkan, LLGL and WebGPU backend targets and in
 the MinGW DirectX 11/12 targets; Wicked's extracted `PbrPS` compiles to Vulkan SPIR-V. These checks
 prove this alpha-coverage slice of `GLTF-379`; the remaining §21.1 semantics still require the full
 matrix.
+
+## PBR map scalars (`GLTF-224`, `GLTF-225`, `GLTF-379`)
+
+glTF gives the normal and occlusion maps one scalar each. `normalTexture.scale` multiplies only the
+tangent-space normal's X and Y components before the TBN transform and normalization. Multiplying Z
+too would scale the complete vector and normalization would undo the change. `occlusionTexture.strength`
+uses the specification equation `1 + strength * (sampled.r - 1)`: strength zero is fully unoccluded,
+not black. Both scalars default to one.
+
+The first cross-renderer audit found that only EasyGL consumed the two values even though every
+`PbrEffect` and `SkinnedPbrEffect` already transported them through `GpuDrawParams`. The corrected
+CPU-to-shader transport is:
+
+| Renderer | Normal-scale / occlusion-strength transport |
+|---|---|
+| Bgfx | `u_metallicRoughnessFactor.z / .w` |
+| Diligent | third PBR constant `float4`, `g_PbrMapScales.x / .y` |
+| DirectX 9 | existing pixel constant `c3.z / .w` |
+| DirectX 11 / 12 | `D3DPbrPerDrawConstants::PbrMapScales` at byte 192, `x / y` |
+| EasyGL | existing `uNormalScale / uOcclusionStrength` uniforms |
+| LLGL | `roughnessWeightsPad.z / .w` in the unchanged 88-float PBR block |
+| Magnum | `uNormalScale / uOcclusionStrength` uniforms |
+| Metal | `PbrUniforms::pbrFactors.z / .w` |
+| OpenGL 2 / 4 | `uNormalScale / uOcclusionStrength` uniforms |
+| SDL GPU | first `PbrParams` vec4's `z / w`; block size remains two vec4s |
+| Vulkan | `pbrMapScales.x / .y` at bytes 208–223; PBR UBO grows from 208 to 224 bytes while its dynamic stride remains 256 |
+| WebGPU | `PbrFactors::metallicRoughness.z / .w` |
+| Wicked | `cb.pbrFactors.z / .w` |
+
+`GltfRendererPbrFallbackPolicy.EveryPbrShaderConsumesNormalScaleAndOcclusionStrength` locks both
+CPU values and both shader equations for all 15 implementations. The Vulkan pixel executable adds
+four discriminating cases to its ten slot and four MASK cases: strength .5 with a red-channel byte
+64 renders byte 160, while normal scale zero restores the geometric-normal result byte 79 instead
+of the tilted sample's byte 35. Each case runs on rigid and skinned PBR, and all 18 cases pass on
+llvmpipe. EasyGL's independent material-map test retains its wider three-value scalar sweeps.
 
 `PbrEffect` and `SkinnedPbrEffect` shaders sample five textures unconditionally. A missing glTF map
 therefore cannot mean “leave the slot unbound”; every PBR renderer must bind a semantic identity:

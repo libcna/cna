@@ -511,6 +511,93 @@ namespace
             R"(clip(selected))"}}},
     }};
 
+    struct RendererPbrScalarAudit
+    {
+        const char* name;
+        // Evidence covers both CPU-side values and both glTF shader equations: normalTexture.scale
+        // affects tangent-space X/Y only, while occlusionTexture.strength interpolates from 1.
+        std::array<const char*, 4> evidence;
+    };
+
+    constexpr std::array<RendererPbrScalarAudit, 15> kPbrScalarAudits{{
+        {"bgfx", {{
+            R"(float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                     params.pbrNormalScale, params.pbrOcclusionStrength })",
+            R"(uniform vec4 u_metallicRoughnessFactor;)",
+            R"(sampledNormal.xy *= u_metallicRoughnessFactor.z;)",
+            R"(occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);)"}}},
+        {"diligent", {{
+            R"(params.pbrNormalScale, params.pbrOcclusionStrength, 0.0f, 0.0f)",
+            R"(float4 g_PbrMapScales;)",
+            R"(sampledNormal.xy *= g_PbrMapScales.x;)",
+            R"(occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);)"}}},
+        {"directx9", {{
+            R"(params.pbrNormalScale, params.pbrOcclusionStrength})",
+            R"(float4 MetallicRoughnessFactor : register(c3))",
+            R"(sampledNormal.xy *= MetallicRoughnessFactor.z;)",
+            R"(occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);)"}}},
+        {"directx11", {{
+            R"(perDraw.PbrMapScales[0] = params.pbrNormalScale;)",
+            R"(perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= PbrMapScales.x;)",
+            R"(occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);)"}}},
+        {"directx12", {{
+            R"(perDraw.PbrMapScales[0] = params.pbrNormalScale;)",
+            R"(perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= PbrMapScales.x;)",
+            R"(occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);)"}}},
+        {"easygl", {{
+            R"(p.prog.set_uniform(p.loc_pbr_normalscale, params.pbrNormalScale))",
+            R"(p.prog.set_uniform(p.loc_pbr_occlstrength, params.pbrOcclusionStrength))",
+            R"("    sampledNormal.xy*=uNormalScale;\n")",
+            R"("    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n")"}}},
+        {"llgl", {{
+            R"(uniforms[46] = params.pbrNormalScale;)",
+            R"(uniforms[47] = params.pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= roughnessWeightsPad.z;)",
+            R"(float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);)"}}},
+        {"magnum", {{
+            R"(program.SetFloat(program.LocationOf("uNormalScale"), params.pbrNormalScale))",
+            R"(program.SetFloat(program.LocationOf("uOcclusionStrength"), params.pbrOcclusionStrength))",
+            R"(source += "    sampledNormal.xy *= uNormalScale;\n";)",
+            R"(source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";)"}}},
+        {"metal", {{
+            R"(pu.pbrFactors[2]=params.pbrNormalScale; pu.pbrFactors[3]=params.pbrOcclusionStrength;)",
+            R"(float4 pbrFactors;)",
+            R"(sampledNormal.xy *= pu.pbrFactors.z;)",
+            R"(float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);)"}}},
+        {"opengl2", {{
+            R"(glUniform1f(glGetUniformLocation(program, "uNormalScale"), params->pbrNormalScale))",
+            R"(glUniform1f(glGetUniformLocation(program, "uOcclusionStrength"), params->pbrOcclusionStrength))",
+            R"("sampledNormal.xy*=uNormalScale;")",
+            R"("float occlusion=1.0+uOcclusionStrength*(occlusionSample-1.0);")"}}},
+        {"opengl4", {{
+            R"(gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale))",
+            R"(gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength))",
+            R"(sampledNormal.xy *= uNormalScale;)",
+            R"(float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);)"}}},
+        {"sdl-gpu", {{
+            R"(out[2] = p.pbrNormalScale;)",
+            R"(out[3] = p.pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= pbrp.normalScale;)",
+            R"(float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);)"}}},
+        {"vulkan", {{
+            R"(out[52] = p.pbrNormalScale;)",
+            R"(out[53] = p.pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= pbr.pbrMapScales.x;)",
+            R"(float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);)"}}},
+        {"webgpu", {{
+            R"(out[2] = p.pbrNormalScale;)",
+            R"(out[3] = p.pbrOcclusionStrength;)",
+            R"(sampledNormal.x *= pf.metallicRoughness.z; sampledNormal.y *= pf.metallicRoughness.z;)",
+            R"(let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);)"}}},
+        {"wicked", {{
+            R"(constants.pbrFactors[2] = params->pbrNormalScale;)",
+            R"(constants.pbrFactors[3] = params->pbrOcclusionStrength;)",
+            R"(sampledNormal.xy *= cb.pbrFactors.z;)",
+            R"(const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);)"}}},
+    }};
+
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
@@ -698,6 +785,23 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheAlphaCoverageVector
         {
             EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
                 << "missing PBR alpha-coverage evidence: " << evidence;
+        }
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusionStrength)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrScalarAudit& audit : kPbrScalarAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        for (const char* evidence : audit.evidence)
+        {
+            EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+                << "missing PBR map-scalar evidence: " << evidence;
         }
     }
 }

@@ -3197,6 +3197,8 @@ namespace CNA::Internal::Renderers::Wicked
                                    constants.worldInverseTranspose);
                 constants.pbrFactors[0] = params->pbrMetallicFactor;
                 constants.pbrFactors[1] = params->pbrRoughnessFactor;
+                constants.pbrFactors[2] = params->pbrNormalScale;
+                constants.pbrFactors[3] = params->pbrOcclusionStrength;
             }
         }
         else

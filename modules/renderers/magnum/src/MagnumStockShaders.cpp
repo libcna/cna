@@ -421,6 +421,8 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform vec3 uEmissiveColor;\n";
             source += "uniform float uMetallicFactor;\n";
             source += "uniform float uRoughnessFactor;\n";
+            source += "uniform float uNormalScale;\n";
+            source += "uniform float uOcclusionStrength;\n";
             source += "uniform vec3 uLight0Dir;\n";
             source += "uniform vec3 uLight0Diffuse;\n";
             source += "uniform vec3 uLight1Dir;\n";
@@ -469,6 +471,7 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "    mat3 tangentBasis = mat3(tangent, bitangent, normal);\n";
             source += "    vec3 sampledNormal =\n";
             source += "        texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0;\n";
+            source += "    sampledNormal.xy *= uNormalScale;\n";
             source += "    vec3 shadingNormal = normalize(tangentBasis * sampledNormal);\n";
             source += "    vec4 metallicRoughness =\n";
             source += "        texture(uMetallicRoughnessMap, cnaSampleUV(vTexCoord, uRtFlipV.z));\n";
@@ -484,7 +487,8 @@ vec3 cnaPbrLight(vec3 normal, vec3 view, vec3 light, vec3 lightColor,
             source += "                                 uLight1Diffuse, albedo, f0, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight2Dir),\n";
             source += "                                 uLight2Diffuse, albedo, f0, roughness, metallic);\n";
-            source += "    float occlusion = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
+            source += "    float occlusionSample = texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r;\n";
+            source += "    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);\n";
             source += "    vec3 ambient = uAmbientColor * albedo * occlusion;\n";
             source += "    vec3 emissive =\n";
             source += "        uEmissiveColor * texture(uEmissiveMap, cnaSampleUV(vTexCoord, uRtFlipV.w)).rgb;\n";

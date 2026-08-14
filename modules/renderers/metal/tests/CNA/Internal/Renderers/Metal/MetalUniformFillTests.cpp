@@ -78,6 +78,8 @@ namespace
         p.vertexColorEnabled = true;
         p.pbrMetallicFactor = 61;
         p.pbrRoughnessFactor = 62;
+        p.pbrNormalScale = 63;
+        p.pbrOcclusionStrength = 64;
         p.lightingEnabled = true;
         return p;
     }
@@ -266,7 +268,7 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.light2Dir, 20,21,22,0);
     ExpectVec4Eq(pu.light2Diffuse, 23,24,25,0);
     ExpectVec4Eq(pu.eyePosition, 36,37,38,0);
-    ExpectVec4Eq(pu.pbrFactors, 61,62,0,0);
+    ExpectVec4Eq(pu.pbrFactors, 61,62,63,64);
     ExpectVec4Eq(pu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);

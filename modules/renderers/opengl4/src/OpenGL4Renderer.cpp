@@ -912,6 +912,8 @@ uniform vec3 uAmbientColor;
 uniform vec3 uEmissiveColor;
 uniform float uMetallicFactor;
 uniform float uRoughnessFactor;
+uniform float uNormalScale;
+uniform float uOcclusionStrength;
 uniform vec3 uLight0Dir;
 uniform vec3 uLight0Diffuse;
 uniform vec3 uLight1Dir;
@@ -962,6 +964,7 @@ void main()
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= uNormalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     vec4 mr = texture(uMetallicRoughnessMap, vUV);
@@ -976,7 +979,8 @@ void main()
     Lo += PbrLight(finalNormal, V, normalize(-uLight1Dir), uLight1Diffuse, albedo, F0, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-uLight2Dir), uLight2Diffuse, albedo, F0, roughness, metallic);
 
-    float occlusion = texture(uOcclusionMap, vUV).r;
+    float occlusionSample = texture(uOcclusionMap, vUV).r;
+    float occlusion = 1.0 + uOcclusionStrength * (occlusionSample - 1.0);
     vec3 ambient = uAmbientColor * albedo * occlusion;
     vec3 emissive = uEmissiveColor * texture(uEmissiveMap, vUV).rgb;
 
@@ -3288,6 +3292,10 @@ void main()
             if (metallicLoc >= 0) gl4_glUniform1f(metallicLoc, params.pbrMetallicFactor);
             const int roughnessLoc = prog.UniformLocation("uRoughnessFactor");
             if (roughnessLoc >= 0) gl4_glUniform1f(roughnessLoc, params.pbrRoughnessFactor);
+            const int normalScaleLoc = prog.UniformLocation("uNormalScale");
+            if (normalScaleLoc >= 0) gl4_glUniform1f(normalScaleLoc, params.pbrNormalScale);
+            const int occlusionStrengthLoc = prog.UniformLocation("uOcclusionStrength");
+            if (occlusionStrengthLoc >= 0) gl4_glUniform1f(occlusionStrengthLoc, params.pbrOcclusionStrength);
             const int alphaTestLoc = prog.UniformLocation("uAlphaTest");
             if (alphaTestLoc >= 0)
                 gl4_glUniform4f(alphaTestLoc, params.alphaTest[0], params.alphaTest[1],

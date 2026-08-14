@@ -50,8 +50,8 @@ layout(set = 3, binding = 1) uniform LitLightParams {
 layout(set = 3, binding = 2) uniform PbrParams {
     float metallicFactor;
     float roughnessFactor;
-    float pad0;
-    float pad1;
+    float normalScale;
+    float occlusionStrength;
     vec4 alphaTest;
 } pbrp;
 
@@ -101,6 +101,7 @@ void main() {
     vec3 B = cross(N, T) * fragBitangentSign;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture(uNormalMap, fragUV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= pbrp.normalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     vec4 mr = texture(uMetallicRoughnessMap, fragUV);
@@ -115,7 +116,8 @@ void main() {
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, roughness, metallic);
 
-    float occlusion = texture(uOcclusionMap, fragUV).r;
+    float occlusionSample = texture(uOcclusionMap, fragUV).r;
+    float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
     vec3 emissive = lp.emissiveColor_pad.xyz * texture(uEmissiveMap, fragUV).rgb;
 

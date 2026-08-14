@@ -2332,6 +2332,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             "uniform sampler2D uEmissiveMap;uniform sampler2D uOcclusionMap;"
             "uniform vec4 uDiffuse;uniform vec3 uAmbientColor;uniform vec3 uEmissiveColor;"
             "uniform float uMetallicFactor;uniform float uRoughnessFactor;"
+            "uniform float uNormalScale;uniform float uOcclusionStrength;"
             "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;"
             "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
             "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
@@ -2360,6 +2361,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             "vec3 B=cross(N,T)*vBitangentSign;"
             "mat3 TBN=mat3(T,B,N);"
             "vec3 sampledNormal=texture2D(uNormalMap,vTex).rgb*2.0-1.0;"
+            "sampledNormal.xy*=uNormalScale;"
             "vec3 finalNormal=normalize(TBN*sampledNormal);"
             "vec4 mr=texture2D(uMetallicRoughnessMap,vTex);"
             "float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);"
@@ -2370,7 +2372,8 @@ namespace CNA::Internal::Renderers::OpenGL2
             "Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,roughness,metallic);"
             "Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,roughness,metallic);"
             "Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,roughness,metallic);"
-            "float occlusion=texture2D(uOcclusionMap,vTex).r;"
+            "float occlusionSample=texture2D(uOcclusionMap,vTex).r;"
+            "float occlusion=1.0+uOcclusionStrength*(occlusionSample-1.0);"
             "vec3 ambient=uAmbientColor*albedo*occlusion;"
             "vec3 emissive=uEmissiveColor*texture2D(uEmissiveMap,vTex).rgb;"
             "gl_FragData[0]=vec4(ambient+Lo+emissive,alpha);"
@@ -3216,6 +3219,8 @@ namespace CNA::Internal::Renderers::OpenGL2
             {
                 glUniform1f(glGetUniformLocation(program, "uMetallicFactor"), params->pbrMetallicFactor);
                 glUniform1f(glGetUniformLocation(program, "uRoughnessFactor"), params->pbrRoughnessFactor);
+                glUniform1f(glGetUniformLocation(program, "uNormalScale"), params->pbrNormalScale);
+                glUniform1f(glGetUniformLocation(program, "uOcclusionStrength"), params->pbrOcclusionStrength);
             }
         }
 

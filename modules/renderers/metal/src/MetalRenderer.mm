@@ -464,7 +464,7 @@ struct PbrUniforms {
     float4 light1Dir; float4 light1Diffuse;
     float4 light2Dir; float4 light2Diffuse;
     float4 eyePosition;
-    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor
+    float4 pbrFactors;      // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
@@ -517,6 +517,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     float3 B = cross(N, T) * in.bitangentSign;
     float3x3 TBN = float3x3(T, B, N);
     float3 sampledNormal = normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0;
+    sampledNormal.xy *= pu.pbrFactors.z;
     float3 finalNormal = normalize(TBN * sampledNormal);
     float4 mr = mrMap.sample(mrSmp, in.uv);
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
@@ -527,7 +528,8 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, roughness, metallic);
-    float occlusion = occlusionMap.sample(occlusionSmp, in.uv).r;
+    float occlusionSample = occlusionMap.sample(occlusionSmp, in.uv).r;
+    float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
     float3 emissive = pu.emissiveColor.xyz * emissiveMap.sample(emissiveSmp, in.uv).rgb;
     float4 c = float4(ambient + Lo + emissive, alpha);

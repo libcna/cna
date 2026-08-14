@@ -57,7 +57,7 @@ struct CnaConstants
     float4 worldIT3;
     float4 envMapParams;    // x = amount, y = fresnel enabled, z = fresnel factor
     float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
-    float4 pbrFactors;      // x = metallic, y = roughness
+    float4 pbrFactors;      // x=metallic, y=roughness, z=normal scale, w=occlusion strength
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -427,7 +427,8 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     const float3 T = normalize(input.tangentWS - N * dot(N, input.tangentWS));
     const float3 B = cross(N, T) * input.bitangentSign;
     const float3x3 TBN = float3x3(T, B, N);
-    const float3 sampledNormal = normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f;
+    float3 sampledNormal = normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f;
+    sampledNormal.xy *= cb.pbrFactors.z;
     const float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
     const float4 mr = metallicRoughnessMap.Sample(sampler0, input.uv);
@@ -445,7 +446,8 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir2.xyz), cb.lightDiffuse2.rgb,
                    albedo, F0, roughness, metallic);
 
-    const float occlusion = occlusionMap.Sample(sampler0, input.uv).r;
+    const float occlusionSample = occlusionMap.Sample(sampler0, input.uv).r;
+    const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);
     const float3 ambient = cb.ambient.rgb * albedo * occlusion;
     const float3 emissive = cb.emissive.rgb * emissiveMap.Sample(sampler0, input.uv).rgb;
 

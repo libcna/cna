@@ -573,6 +573,7 @@ cbuffer PbrConstants
 {
     float4 g_PbrAmbientMetallic;   // xyz = ambient colour, w = metallic factor
     float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
+    float4 g_PbrMapScales;          // x = normal scale, y = occlusion strength
 };
 
 struct PSInput
@@ -623,6 +624,7 @@ void main(in PSInput psIn, out PSOutput psOut)
     float3 B = cross(N, T) * psIn.Tangent.w;
     float3x3 TBN = float3x3(T, B, N);
     float3 sampledNormal = g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= g_PbrMapScales.x;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
     float4 mr = g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, psIn.UV);
@@ -638,6 +640,7 @@ void main(in PSInput psIn, out PSOutput psOut)
     Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, roughness, metallic);
 
     float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r;
+    occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = g_PbrAmbientMetallic.xyz * albedo * occlusion;
     float3 emissive = g_PbrEmissiveRoughness.xyz * g_EmissiveMap.Sample(g_EmissiveMap_sampler, psIn.UV).rgb;
 

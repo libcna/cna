@@ -4040,7 +4040,8 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
@@ -4088,7 +4089,8 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
@@ -4485,7 +4487,8 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);
@@ -4533,7 +4536,8 @@ namespace CNA::Internal::Renderers::Bgfx
             float emissive[4] = { params.emissiveColor[0], params.emissiveColor[1],
                                    params.emissiveColor[2], 0.0f };
             bgfx::setUniform(emissiveColor3DUnif_, emissive);
-            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f };
+            float mrFactor[4] = { params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                  params.pbrNormalScale, params.pbrOcclusionStrength };
             bgfx::setUniform(metallicRoughnessFactorUnif_, mrFactor);
             float dir0[4] = { params.light0Dir[0], params.light0Dir[1], params.light0Dir[2], 0.0f };
             bgfx::setUniform(light0Dir3DUnif_, dir0);

@@ -28,6 +28,7 @@ cbuffer PerDraw : register(b0)
     float4 AmbientMetallic;    // xyz = AmbientColor, w = MetallicFactor
     float4 EmissiveRoughness;  // xyz = EmissiveColor, w = RoughnessFactor
     float4 AlphaTest;           // reference, tolerance, pass weight, fail weight
+    float4 PbrMapScales;        // x = normal scale, y = occlusion strength
 };
 
 cbuffer PbrLights : register(b1)
@@ -92,6 +93,7 @@ float4 main(PSInput input) : SV_Target
     float3 B = cross(N, T) * input.Tangent.w;
     float3x3 TBN = float3x3(T, B, N);
     float3 sampledNormal = uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= PbrMapScales.x;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
     float4 mr = uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, input.UV);
@@ -107,6 +109,7 @@ float4 main(PSInput input) : SV_Target
     Lo += PbrLight(finalNormal, V, normalize(-Light2DirPad.xyz), Light2DiffusePad.xyz, albedo, F0, roughness, metallic);
 
     float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r;
+    occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = AmbientMetallic.xyz * albedo * occlusion;
     float3 emissive = EmissiveRoughness.xyz * uEmissiveMap.Sample(uEmissiveMapSampler, input.UV).rgb;
 

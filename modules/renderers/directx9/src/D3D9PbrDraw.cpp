@@ -255,7 +255,8 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "DiffuseColor", params.diffuseColor);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AmbientColor", Pad3(params.ambientColor).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EmissiveColor", Pad3(params.emissiveColor).v);
-        const float metallicRoughness[4] = {params.pbrMetallicFactor, params.pbrRoughnessFactor, 0.0f, 0.0f};
+        const float metallicRoughness[4] = {params.pbrMetallicFactor, params.pbrRoughnessFactor,
+                                            params.pbrNormalScale, params.pbrOcclusionStrength};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "MetallicRoughnessFactor", metallicRoughness);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light0Dir", Pad3(params.light0Dir).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light0Diffuse", Pad3(params.light0Diffuse).v);

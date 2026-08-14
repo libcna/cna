@@ -45,6 +45,7 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 fogColorEnabled;       // xyz = FogColor, w = WeightsPerVertex (REMED-GFX-010; skinned only)
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector (xyz + w)
     vec4 alphaTest;             // reference, tolerance, pass weight, fail weight
+    vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
 } pbr;
 
 void main() {

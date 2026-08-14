@@ -18,7 +18,8 @@ SAMPLER2D(s_texOcclusion, 4);
 uniform vec4 u_diffuseColor;
 uniform vec4 u_ambientColor;
 uniform vec4 u_emissiveColor;
-/// PbrEffect: x = MetallicFactor, y = RoughnessFactor.
+/// PbrEffect: x = MetallicFactor, y = RoughnessFactor, z = normal scale,
+/// w = occlusion strength.
 uniform vec4 u_metallicRoughnessFactor;
 uniform vec4 u_light0Dir;
 uniform vec4 u_light0Diffuse;
@@ -68,6 +69,7 @@ void main()
     vec3 B = cross(N, T) * v_tangent.w;
     mat3 TBN = mat3(T, B, N);
     vec3 sampledNormal = texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0;
+    sampledNormal.xy *= u_metallicRoughnessFactor.z;
     vec3 finalNormal = normalize(mul(TBN, sampledNormal));
 
     vec4 mr = texture2D(s_texMetallicRoughness, rtFlipUV(v_texcoord0, u_rtFlipV.z));
@@ -83,6 +85,7 @@ void main()
     Lo += PbrLight(finalNormal, V, normalize(-u_light2Dir.xyz), u_light2Diffuse.xyz, albedo, F0, roughness, metallic);
 
     float occlusion = texture2D(s_texOcclusion, v_texcoord0).r;
+    occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);
     vec3 ambient = u_ambientColor.xyz * albedo * occlusion;
     vec3 emissive = u_emissiveColor.xyz * texture2D(s_texEmissive, rtFlipUV(v_texcoord0, u_rtFlipV.w)).rgb;
 
