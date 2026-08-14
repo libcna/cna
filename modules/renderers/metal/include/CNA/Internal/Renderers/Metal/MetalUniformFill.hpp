@@ -84,6 +84,7 @@ namespace CNA::Internal::Renderers::Metal
         float pbrFactors[4];   // x=MetallicFactor, y=RoughnessFactor, z=NormalScale, w=OcclusionStrength
         float alphaTest[4];
         float fogColorEnabled[4], fogVector[4];
+        float srgbFlags[4];    // x=base decode, y=emissive decode, z=output encode
     };
 
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
@@ -275,6 +276,10 @@ namespace CNA::Internal::Renderers::Metal
         std::memcpy(pu.alphaTest, params.alphaTest, sizeof(pu.alphaTest));
         pu.fogColorEnabled[0]=params.fogColor[0]; pu.fogColorEnabled[1]=params.fogColor[1]; pu.fogColorEnabled[2]=params.fogColor[2]; pu.fogColorEnabled[3]=params.fogEnabled?1.0f:0.0f;
         std::memcpy(pu.fogVector, params.fogVector, sizeof(pu.fogVector));
+        pu.srgbFlags[0]=params.pbrBaseColorTextureIsSrgb?1.0f:0.0f;
+        pu.srgbFlags[1]=params.pbrEmissiveTextureIsSrgb?1.0f:0.0f;
+        pu.srgbFlags[2]=params.pbrEncodeOutputToSrgb?1.0f:0.0f;
+        pu.srgbFlags[3]=0.0f;
     }
 
     // plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform

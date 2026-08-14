@@ -80,6 +80,9 @@ namespace
         p.pbrRoughnessFactor = 62;
         p.pbrNormalScale = 63;
         p.pbrOcclusionStrength = 64;
+        p.pbrBaseColorTextureIsSrgb = false;
+        p.pbrEmissiveTextureIsSrgb = true;
+        p.pbrEncodeOutputToSrgb = false;
         p.lightingEnabled = true;
         return p;
     }
@@ -272,6 +275,7 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.alphaTest, 26,27,28,29);
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);
+    ExpectVec4Eq(pu.srgbFlags, 0,1,0,0);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)
@@ -295,6 +299,7 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.ambientColor[i], referencePu.ambientColor[i], kEps);
         EXPECT_NEAR(pu.pbrFactors[i], referencePu.pbrFactors[i], kEps);
         EXPECT_NEAR(pu.fogColorEnabled[i], referencePu.fogColorEnabled[i], kEps);
+        EXPECT_NEAR(pu.srgbFlags[i], referencePu.srgbFlags[i], kEps);
     }
 
     // SkinnedPbrTransform's own fields: wvp/world and the world inverse-transpose copied from the

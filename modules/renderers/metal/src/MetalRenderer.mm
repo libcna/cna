@@ -268,6 +268,7 @@ struct EnvUniforms {
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
+    float4 srgbFlags;       // x=base decode, y=emissive decode, z=output encode
 };
 struct VEnvOut { float4 position [[position]]; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
 vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
@@ -504,6 +505,16 @@ inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, flo
     float3 kd = float3(1.0) - F;
     return (kd*diffuseColor/3.14159265 + specular) * lightColor * NdotL;
 }
+inline float3 cna_srgb_to_linear(float3 c) {
+    float3 lo = c / 12.92;
+    float3 hi = pow((c + 0.055) / 1.055, float3(2.4));
+    return mix(lo, hi, step(float3(0.04045), c));
+}
+inline float3 cna_linear_to_srgb(float3 c) {
+    float3 lo = c * 12.92;
+    float3 hi = 1.055 * pow(max(c, float3(0.0)), float3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(float3(0.0031308), c));
+}
 fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
     texture2d<float> normalMap [[texture(1)]], sampler normalSmp [[sampler(1)]],
@@ -513,7 +524,8 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     constant PbrUniforms& pu [[buffer(2)]])
 {
     float4 baseColorTex = tex.sample(smp, in.uv);
-    float3 albedo = baseColorTex.rgb * pu.diffuseColor.rgb;
+    float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
+    float3 albedo = baseColor * pu.diffuseColor.rgb;
     float alpha = baseColorTex.a * pu.diffuseColor.a;
     float3 N = normalize(in.normal);
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
@@ -534,10 +546,15 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     float occlusionSample = occlusionMap.sample(occlusionSmp, in.uv).r;
     float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
-    float3 emissive = pu.emissiveColor.xyz * emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    float3 emissiveSample = emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    emissiveSample = mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y);
+    float3 emissive = pu.emissiveColor.xyz * emissiveSample;
     float4 c = float4(ambient + Lo + emissive, alpha);
     if (cna_alpha_test_fails(c.a, pu.alphaTest)) discard_fragment();
-    c.rgb = mix(pu.fogColorEnabled.xyz, c.rgb, in.fogFactor);
+    float3 fogLinear = mix(pu.fogColorEnabled.xyz,
+                           cna_srgb_to_linear(pu.fogColorEnabled.xyz), pu.srgbFlags.z);
+    c.rgb = mix(fogLinear, c.rgb, in.fogFactor);
+    c.rgb = mix(c.rgb, cna_linear_to_srgb(c.rgb), pu.srgbFlags.z);
     return c;
 }
 
