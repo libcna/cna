@@ -13,6 +13,7 @@ endfunction()
 add_library(cna_c_api SHARED
     src/CnaCApi.cpp
     src/CnaCApiDetail.cpp
+    src/CnaCApiGraphics.cpp
     src/CnaCApiRuntime.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)

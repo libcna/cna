@@ -39,6 +39,8 @@ struct LastError final {
 
 [[nodiscard]] const LastError& GetLastError() noexcept;
 
+[[nodiscard]] CNA_ErrorCategory ErrorCategoryForResult(CNA_Result result) noexcept;
+
 void SetLastError(
     CNA_Result result,
     CNA_ErrorCategory category,

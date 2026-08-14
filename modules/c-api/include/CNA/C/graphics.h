@@ -191,6 +191,64 @@ typedef uint64_t CNA_GraphicsCapabilityFlags;
 /** @brief Bit corresponding to @ref CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING. */
 #define CNA_GRAPHICS_CAPABILITY_FLAG_ADDITIVE_BLENDING (UINT64_C(1) << 12)
 
+/** @brief Fixed-width surface-format identity used by texture APIs. */
+typedef uint32_t CNA_SurfaceFormat;
+
+/** @brief Unsigned 32-bit RGBA format with eight bits per channel. */
+#define CNA_SURFACE_FORMAT_COLOR UINT32_C(0)
+/** @brief Unsigned 16-bit BGR 5:6:5 format. */
+#define CNA_SURFACE_FORMAT_BGR565 UINT32_C(1)
+/** @brief Unsigned 16-bit BGRA 5:5:5:1 format. */
+#define CNA_SURFACE_FORMAT_BGRA5551 UINT32_C(2)
+/** @brief Unsigned 16-bit BGRA 4:4:4:4 format. */
+#define CNA_SURFACE_FORMAT_BGRA4444 UINT32_C(3)
+/** @brief DXT1 block-compressed format. */
+#define CNA_SURFACE_FORMAT_DXT1 UINT32_C(4)
+/** @brief DXT3 block-compressed format. */
+#define CNA_SURFACE_FORMAT_DXT3 UINT32_C(5)
+/** @brief DXT5 block-compressed format. */
+#define CNA_SURFACE_FORMAT_DXT5 UINT32_C(6)
+/** @brief Signed normalized two-byte format. */
+#define CNA_SURFACE_FORMAT_NORMALIZED_BYTE2 UINT32_C(7)
+/** @brief Signed normalized four-byte format. */
+#define CNA_SURFACE_FORMAT_NORMALIZED_BYTE4 UINT32_C(8)
+/** @brief Unsigned 32-bit RGBA 10:10:10:2 format. */
+#define CNA_SURFACE_FORMAT_RGBA1010102 UINT32_C(9)
+/** @brief Unsigned 32-bit RG format with 16 bits per channel. */
+#define CNA_SURFACE_FORMAT_RG32 UINT32_C(10)
+/** @brief Unsigned 64-bit RGBA format with 16 bits per channel. */
+#define CNA_SURFACE_FORMAT_RGBA64 UINT32_C(11)
+/** @brief Unsigned eight-bit alpha-only format. */
+#define CNA_SURFACE_FORMAT_ALPHA8 UINT32_C(12)
+/** @brief Single-channel IEEE binary32 format. */
+#define CNA_SURFACE_FORMAT_SINGLE UINT32_C(13)
+/** @brief Two-channel IEEE binary32 format. */
+#define CNA_SURFACE_FORMAT_VECTOR2 UINT32_C(14)
+/** @brief Four-channel IEEE binary32 format. */
+#define CNA_SURFACE_FORMAT_VECTOR4 UINT32_C(15)
+/** @brief Single-channel IEEE binary16 format. */
+#define CNA_SURFACE_FORMAT_HALF_SINGLE UINT32_C(16)
+/** @brief Two-channel IEEE binary16 format. */
+#define CNA_SURFACE_FORMAT_HALF_VECTOR2 UINT32_C(17)
+/** @brief Four-channel IEEE binary16 format. */
+#define CNA_SURFACE_FORMAT_HALF_VECTOR4 UINT32_C(18)
+/** @brief High-dynamic-range blendable format. */
+#define CNA_SURFACE_FORMAT_HDR_BLENDABLE UINT32_C(19)
+/** @brief CNA extension for an unsigned 32-bit BGRA color format. */
+#define CNA_SURFACE_FORMAT_COLOR_BGRA_EXT UINT32_C(20)
+/** @brief CNA extension for an sRGB-encoded 32-bit color format. */
+#define CNA_SURFACE_FORMAT_COLOR_SRGB_EXT UINT32_C(21)
+/** @brief CNA extension for sRGB-encoded DXT5 blocks. */
+#define CNA_SURFACE_FORMAT_DXT5_SRGB_EXT UINT32_C(22)
+/** @brief CNA extension for BC7 blocks. */
+#define CNA_SURFACE_FORMAT_BC7_EXT UINT32_C(23)
+/** @brief CNA extension for sRGB-encoded BC7 blocks. */
+#define CNA_SURFACE_FORMAT_BC7_SRGB_EXT UINT32_C(24)
+/** @brief CNA extension for an unsigned eight-bit single-channel format. */
+#define CNA_SURFACE_FORMAT_BYTE_EXT UINT32_C(25)
+/** @brief CNA extension for an unsigned 16-bit single-channel format. */
+#define CNA_SURFACE_FORMAT_USHORT_EXT UINT32_C(26)
+
 /**
  * @brief Describes the active CNA graphics renderer and its current device capabilities.
  */
@@ -213,6 +271,55 @@ typedef struct CNA_RendererInfo {
     /** @brief Maximum supported width or height of a two-dimensional texture in pixels. */
     uint32_t max_texture_dimension;
 } CNA_RendererInfo;
+
+/**
+ * @brief Configures creation of an owned two-dimensional texture.
+ */
+typedef struct CNA_Texture2DCreateInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Width in pixels; must be greater than zero. */
+    uint32_t width;
+
+    /** @brief Height in pixels; must be greater than zero. */
+    uint32_t height;
+
+    /** @brief `CNA_TRUE` to allocate a complete mip chain, otherwise `CNA_FALSE`. */
+    CNA_Bool mip_map;
+
+    /** @brief Reserved bytes; callers must initialize them to zero. */
+    uint8_t reserved[3];
+
+    /** @brief Surface format; the initial bulk-transfer slice supports `CNA_SURFACE_FORMAT_COLOR`. */
+    CNA_SurfaceFormat format;
+} CNA_Texture2DCreateInfo;
+
+/**
+ * @brief Describes an owned two-dimensional texture.
+ */
+typedef struct CNA_Texture2DInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Texture width in pixels. */
+    uint32_t width;
+
+    /** @brief Texture height in pixels. */
+    uint32_t height;
+
+    /** @brief Number of allocated mip levels. */
+    uint32_t level_count;
+
+    /** @brief Texture surface format. */
+    CNA_SurfaceFormat format;
+} CNA_Texture2DInfo;
 
 /**
  * @brief Borrows the active graphics device during a game lifecycle callback.
@@ -283,6 +390,72 @@ CNA_C_API CNA_Result cna_graphics_device_supports_capability(
     CNA_Handle graphics_device,
     CNA_GraphicsCapability capability,
     CNA_Bool* out_supported);
+
+/**
+ * @brief Creates an owned Color-format two-dimensional texture.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param create_info Versioned dimensions, mip and surface-format configuration.
+ * @param out_texture Receives an owned texture handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for a known unavailable format or
+ * dimension, or a documented argument/handle/thread/native failure.
+ *
+ * The texture outlives the callback that creates it, but remains a child of the active game. The
+ * caller must destroy it before calling @ref cna_game_destroy.
+ */
+CNA_C_API CNA_Result cna_texture2d_create(
+    CNA_Handle graphics_device,
+    const CNA_Texture2DCreateInfo* create_info,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Gets dimensions, mip count and format for an owned two-dimensional texture.
+ *
+ * @param texture Owned texture handle.
+ * @param out_info Caller-provided versioned structure to receive texture information.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_texture2d_get_info(
+    CNA_Handle texture,
+    CNA_Texture2DInfo* out_info);
+
+/**
+ * @brief Replaces Color-format mip level zero from an RGBA8 pixel array.
+ *
+ * @param texture Owned Color-format texture handle.
+ * @param pixels Caller-owned pixels copied during this call.
+ * @param pixel_count Exact number of pixels; must equal width multiplied by height.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_texture2d_set_data_rgba8(
+    CNA_Handle texture,
+    const CNA_Color* pixels,
+    uint64_t pixel_count);
+
+/**
+ * @brief Reads Color-format mip level zero into a caller-owned RGBA8 pixel array.
+ *
+ * @param texture Owned Color-format texture handle.
+ * @param destination Caller-owned output pixels, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination measured in pixels.
+ * @param out_pixels Receives the exact required pixel count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread/native failure. No partial pixel array is written.
+ */
+CNA_C_API CNA_Result cna_texture2d_get_data_rgba8(
+    CNA_Handle texture,
+    CNA_Color* destination,
+    uint64_t capacity,
+    uint64_t* out_pixels);
+
+/**
+ * @brief Disposes and releases an owned two-dimensional texture.
+ *
+ * @param texture Owned texture handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. The handle is invalid
+ * after success; a second destroy returns `CNA_RESULT_INVALID_HANDLE`.
+ */
+CNA_C_API CNA_Result cna_texture2d_destroy(CNA_Handle texture);
 
 #ifdef __cplusplus
 }

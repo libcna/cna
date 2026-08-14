@@ -19,3 +19,8 @@ static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));
 static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0));
 static_assert(CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12));
+static_assert(sizeof(CNA_SurfaceFormat) == sizeof(uint32_t));
+static_assert(CNA_SURFACE_FORMAT_COLOR == UINT32_C(0));
+static_assert(CNA_SURFACE_FORMAT_USHORT_EXT == UINT32_C(26));
+static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U);
+static_assert(sizeof(CNA_Texture2DInfo) == 24U);

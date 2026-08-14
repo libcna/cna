@@ -23,6 +23,41 @@ thread_local LastError lastError;
 
 } // namespace
 
+CNA_ErrorCategory ErrorCategoryForResult(const CNA_Result result) noexcept
+{
+    switch (result) {
+        case CNA_RESULT_SUCCESS:
+            return CNA_ERROR_CATEGORY_NONE;
+        case CNA_RESULT_INVALID_ARGUMENT:
+            return CNA_ERROR_CATEGORY_ARGUMENT;
+        case CNA_RESULT_INVALID_HANDLE:
+            return CNA_ERROR_CATEGORY_HANDLE;
+        case CNA_RESULT_INVALID_STATE:
+            return CNA_ERROR_CATEGORY_STATE;
+        case CNA_RESULT_OUT_OF_MEMORY:
+            return CNA_ERROR_CATEGORY_MEMORY;
+        case CNA_RESULT_IO:
+            return CNA_ERROR_CATEGORY_IO;
+        case CNA_RESULT_NOT_SUPPORTED:
+            return CNA_ERROR_CATEGORY_NOT_SUPPORTED;
+        case CNA_RESULT_PLATFORM:
+            return CNA_ERROR_CATEGORY_PLATFORM;
+        case CNA_RESULT_THREAD:
+            return CNA_ERROR_CATEGORY_THREAD;
+        case CNA_RESULT_CALLBACK:
+            return CNA_ERROR_CATEGORY_CALLBACK;
+        case CNA_RESULT_OVERFLOW:
+        case CNA_RESULT_BUFFER_TOO_SMALL:
+            return CNA_ERROR_CATEGORY_RANGE;
+        case CNA_RESULT_ENCODING:
+            return CNA_ERROR_CATEGORY_ENCODING;
+        case CNA_RESULT_SHUTTING_DOWN:
+            return CNA_ERROR_CATEGORY_SHUTTING_DOWN;
+        default:
+            return CNA_ERROR_CATEGORY_INTERNAL;
+    }
+}
+
 const LastError& GetLastError() noexcept
 {
     return lastError;

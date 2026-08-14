@@ -31,3 +31,12 @@ _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
 _Static_assert(CNA_GRAPHICS_CAPABILITY_THREE_D == UINT32_C(0) &&
                    CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING == UINT32_C(12),
                "CNA graphics capability identities must remain stable");
+_Static_assert(sizeof(CNA_SurfaceFormat) == sizeof(uint32_t),
+               "CNA_SurfaceFormat must have a fixed-width representation");
+_Static_assert(CNA_SURFACE_FORMAT_COLOR == UINT32_C(0) &&
+                   CNA_SURFACE_FORMAT_USHORT_EXT == UINT32_C(26),
+               "CNA surface-format identities must remain stable");
+_Static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U,
+               "CNA_Texture2DCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Texture2DInfo) == 24U,
+               "CNA_Texture2DInfo layout must remain stable");

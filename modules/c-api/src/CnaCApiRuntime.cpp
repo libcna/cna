@@ -3,14 +3,13 @@
 #include "CNA/C/runtime.h"
 #include "CNA/C/graphics.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiRuntimeDetail.hpp"
 
-#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/TimeSpan.hpp"
 
-#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -20,7 +19,11 @@ namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::HasOwnedGraphicsResources;
 using CNA::C::Detail::HandleRegistry;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::ValidateStringView;
@@ -34,49 +37,13 @@ struct RuntimeState final {
     std::mutex mutex;
     HandleRegistry handles;
     bool hasActiveGame = false;
+    uint64_t ownedGraphicsResourceCount = 0U;
 };
 
 [[nodiscard]] RuntimeState& GetRuntimeState()
 {
     static RuntimeState state;
     return state;
-}
-
-struct BorrowedGraphicsDevice final {
-    GraphicsDevice* value;
-};
-
-[[nodiscard]] CNA_ErrorCategory CategoryForResult(const CNA_Result result) noexcept
-{
-    switch (result) {
-        case CNA_RESULT_INVALID_ARGUMENT:
-            return CNA_ERROR_CATEGORY_ARGUMENT;
-        case CNA_RESULT_INVALID_HANDLE:
-            return CNA_ERROR_CATEGORY_HANDLE;
-        case CNA_RESULT_INVALID_STATE:
-            return CNA_ERROR_CATEGORY_STATE;
-        case CNA_RESULT_OUT_OF_MEMORY:
-            return CNA_ERROR_CATEGORY_MEMORY;
-        case CNA_RESULT_IO:
-            return CNA_ERROR_CATEGORY_IO;
-        case CNA_RESULT_NOT_SUPPORTED:
-            return CNA_ERROR_CATEGORY_NOT_SUPPORTED;
-        case CNA_RESULT_PLATFORM:
-            return CNA_ERROR_CATEGORY_PLATFORM;
-        case CNA_RESULT_THREAD:
-            return CNA_ERROR_CATEGORY_THREAD;
-        case CNA_RESULT_CALLBACK:
-            return CNA_ERROR_CATEGORY_CALLBACK;
-        case CNA_RESULT_OVERFLOW:
-        case CNA_RESULT_BUFFER_TOO_SMALL:
-            return CNA_ERROR_CATEGORY_RANGE;
-        case CNA_RESULT_ENCODING:
-            return CNA_ERROR_CATEGORY_ENCODING;
-        case CNA_RESULT_SHUTTING_DOWN:
-            return CNA_ERROR_CATEGORY_SHUTTING_DOWN;
-        default:
-            return CNA_ERROR_CATEGORY_INTERNAL;
-    }
 }
 
 [[nodiscard]] bool IsSupportedGameCallbacks(const CNA_GameCallbacks* const callbacks) noexcept
@@ -164,15 +131,15 @@ public:
         }
 
         const auto reference = std::make_shared<BorrowedGraphicsDevice>(
-            BorrowedGraphicsDevice{&getGraphicsDeviceProperty()});
-        const CNA_Result result = GetRuntimeState().handles.Create(
+            BorrowedGraphicsDevice{&getGraphicsDeviceProperty(), handle_});
+        const CNA_Result result = GetRuntimeHandles().Create(
             ObjectKind::GraphicsDevice,
             reference,
             &borrowedGraphicsDeviceHandle_);
         if (result != CNA_RESULT_SUCCESS) {
             return Fail(
                 result,
-                CategoryForResult(result),
+                ErrorCategoryForResult(result),
                 "The callback-scoped graphics-device handle could not be created.");
         }
         *outGraphicsDevice = borrowedGraphicsDeviceHandle_;
@@ -282,7 +249,7 @@ private:
         if (borrowedGraphicsDeviceHandle_ == CNA_INVALID_HANDLE) {
             return;
         }
-        static_cast<void>(GetRuntimeState().handles.Release(borrowedGraphicsDeviceHandle_));
+        static_cast<void>(GetRuntimeHandles().Release(borrowedGraphicsDeviceHandle_));
         borrowedGraphicsDeviceHandle_ = CNA_INVALID_HANDLE;
     }
 
@@ -300,11 +267,14 @@ private:
     const CNA_Handle handle,
     std::shared_ptr<CGame>* const outGame)
 {
-    const CNA_Result result = GetRuntimeState().handles.Get(handle, ObjectKind::Game, outGame);
+    const CNA_Result result = GetRuntimeHandles().Get(handle, ObjectKind::Game, outGame);
     if (result == CNA_RESULT_SUCCESS) {
         return CNA_RESULT_SUCCESS;
     }
-    return Fail(result, CategoryForResult(result), "The CNA game handle is invalid for this call.");
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The CNA game handle is invalid for this call.");
 }
 
 [[nodiscard]] CNA_Result GetCallableGame(
@@ -324,11 +294,20 @@ private:
     return CNA_RESULT_SUCCESS;
 }
 
-[[nodiscard]] CNA_Result GetGraphicsDevice(
+} // namespace
+
+namespace CNA::C::Detail {
+
+HandleRegistry& GetRuntimeHandles() noexcept
+{
+    return GetRuntimeState().handles;
+}
+
+CNA_Result GetBorrowedGraphicsDevice(
     const CNA_Handle handle,
     std::shared_ptr<BorrowedGraphicsDevice>* const outGraphicsDevice)
 {
-    const CNA_Result result = GetRuntimeState().handles.Get(
+    const CNA_Result result = GetRuntimeHandles().Get(
         handle,
         ObjectKind::GraphicsDevice,
         outGraphicsDevice);
@@ -337,133 +316,34 @@ private:
     }
     return Fail(
         result,
-        CategoryForResult(result),
+        ErrorCategoryForResult(result),
         "The callback-scoped graphics-device handle is invalid for this call.");
 }
 
-[[nodiscard]] bool TryMapGraphicsCapability(
-    const CNA_GraphicsCapability capability,
-    CNA::GraphicsCapability* const outCapability) noexcept
+void AddOwnedGraphicsResource() noexcept
 {
-    if (outCapability == nullptr) {
-        return false;
-    }
-    switch (capability) {
-        case CNA_GRAPHICS_CAPABILITY_THREE_D:
-            *outCapability = CNA::GraphicsCapability::ThreeD;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_DEPTH_STENCIL_BUFFER:
-            *outCapability = CNA::GraphicsCapability::DepthStencilBuffer;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_MULTI_SAMPLE_ANTI_ALIASING:
-            *outCapability = CNA::GraphicsCapability::MultiSampleAntiAliasing;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_MULTIPLE_RENDER_TARGETS:
-            *outCapability = CNA::GraphicsCapability::MultipleRenderTargets;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_ANISOTROPIC_FILTERING:
-            *outCapability = CNA::GraphicsCapability::AnisotropicFiltering;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_WIRE_FRAME:
-            *outCapability = CNA::GraphicsCapability::WireFrame;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_OCCLUSION_QUERY:
-            *outCapability = CNA::GraphicsCapability::OcclusionQuery;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_CUSTOM_EFFECTS:
-            *outCapability = CNA::GraphicsCapability::CustomEffects;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_TEXTURE_3D:
-            *outCapability = CNA::GraphicsCapability::Texture3D;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_MULTI_STREAM_VERTEX_INPUT:
-            *outCapability = CNA::GraphicsCapability::MultiStreamVertexInput;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_INSTANCING:
-            *outCapability = CNA::GraphicsCapability::Instancing;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_STENCIL_BUFFER:
-            *outCapability = CNA::GraphicsCapability::StencilBuffer;
-            return true;
-        case CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING:
-            *outCapability = CNA::GraphicsCapability::AdditiveBlending;
-            return true;
-        default:
-            return false;
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    ++state.ownedGraphicsResourceCount;
+}
+
+void RemoveOwnedGraphicsResource() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (state.ownedGraphicsResourceCount != 0U) {
+        --state.ownedGraphicsResourceCount;
     }
 }
 
-[[nodiscard]] CNA_GraphicsRendererType MapGraphicsRendererType(
-    const CNA::GraphicsRendererType rendererType) noexcept
+bool HasOwnedGraphicsResources() noexcept
 {
-    switch (rendererType) {
-        case CNA::GraphicsRendererType::SdlRenderer: return CNA_GRAPHICS_RENDERER_SDL_RENDERER;
-        case CNA::GraphicsRendererType::OpenGLES2: return CNA_GRAPHICS_RENDERER_OPENGLES2;
-        case CNA::GraphicsRendererType::OpenGLES3: return CNA_GRAPHICS_RENDERER_OPENGLES3;
-        case CNA::GraphicsRendererType::OpenGL33: return CNA_GRAPHICS_RENDERER_OPENGL33;
-        case CNA::GraphicsRendererType::WebGL1: return CNA_GRAPHICS_RENDERER_WEBGL1;
-        case CNA::GraphicsRendererType::WebGL2: return CNA_GRAPHICS_RENDERER_WEBGL2;
-        case CNA::GraphicsRendererType::Bgfx: return CNA_GRAPHICS_RENDERER_BGFX;
-        case CNA::GraphicsRendererType::Vulkan: return CNA_GRAPHICS_RENDERER_VULKAN;
-        case CNA::GraphicsRendererType::WebGPU: return CNA_GRAPHICS_RENDERER_WEBGPU;
-        case CNA::GraphicsRendererType::Magnum: return CNA_GRAPHICS_RENDERER_MAGNUM;
-        case CNA::GraphicsRendererType::Headless: return CNA_GRAPHICS_RENDERER_HEADLESS;
-        case CNA::GraphicsRendererType::Software: return CNA_GRAPHICS_RENDERER_SOFTWARE;
-        case CNA::GraphicsRendererType::Stub: return CNA_GRAPHICS_RENDERER_STUB;
-        case CNA::GraphicsRendererType::DirectX11: return CNA_GRAPHICS_RENDERER_DIRECTX11;
-        case CNA::GraphicsRendererType::DirectX12: return CNA_GRAPHICS_RENDERER_DIRECTX12;
-        case CNA::GraphicsRendererType::Direct2D: return CNA_GRAPHICS_RENDERER_DIRECT2D;
-        case CNA::GraphicsRendererType::Canvas: return CNA_GRAPHICS_RENDERER_CANVAS;
-        case CNA::GraphicsRendererType::HtmlDom: return CNA_GRAPHICS_RENDERER_HTML_DOM;
-        case CNA::GraphicsRendererType::Skia: return CNA_GRAPHICS_RENDERER_SKIA;
-        case CNA::GraphicsRendererType::Blend2D: return CNA_GRAPHICS_RENDERER_BLEND2D;
-        case CNA::GraphicsRendererType::FreeDirect: return CNA_GRAPHICS_RENDERER_FREEDIRECT;
-        case CNA::GraphicsRendererType::DirectX9: return CNA_GRAPHICS_RENDERER_DIRECTX9;
-        case CNA::GraphicsRendererType::DirectX1: return CNA_GRAPHICS_RENDERER_DIRECTX1;
-        case CNA::GraphicsRendererType::DirectX2: return CNA_GRAPHICS_RENDERER_DIRECTX2;
-        case CNA::GraphicsRendererType::DirectX3: return CNA_GRAPHICS_RENDERER_DIRECTX3;
-        case CNA::GraphicsRendererType::DirectX5: return CNA_GRAPHICS_RENDERER_DIRECTX5;
-        case CNA::GraphicsRendererType::DirectX6: return CNA_GRAPHICS_RENDERER_DIRECTX6;
-        case CNA::GraphicsRendererType::DirectX7: return CNA_GRAPHICS_RENDERER_DIRECTX7;
-        case CNA::GraphicsRendererType::DirectX8: return CNA_GRAPHICS_RENDERER_DIRECTX8;
-        case CNA::GraphicsRendererType::DirectX10: return CNA_GRAPHICS_RENDERER_DIRECTX10;
-        case CNA::GraphicsRendererType::SdlGpu: return CNA_GRAPHICS_RENDERER_SDL_GPU;
-        case CNA::GraphicsRendererType::OpenGLES1: return CNA_GRAPHICS_RENDERER_OPENGLES1;
-        case CNA::GraphicsRendererType::OpenGL4: return CNA_GRAPHICS_RENDERER_OPENGL4;
-        case CNA::GraphicsRendererType::OpenGL1: return CNA_GRAPHICS_RENDERER_OPENGL1;
-        case CNA::GraphicsRendererType::OpenGL2: return CNA_GRAPHICS_RENDERER_OPENGL2;
-        case CNA::GraphicsRendererType::Wicked: return CNA_GRAPHICS_RENDERER_WICKED;
-        case CNA::GraphicsRendererType::Sokol: return CNA_GRAPHICS_RENDERER_SOKOL;
-        case CNA::GraphicsRendererType::Diligent: return CNA_GRAPHICS_RENDERER_DILIGENT;
-        case CNA::GraphicsRendererType::Glide: return CNA_GRAPHICS_RENDERER_GLIDE;
-        case CNA::GraphicsRendererType::Gdi: return CNA_GRAPHICS_RENDERER_GDI;
-        case CNA::GraphicsRendererType::Llgl: return CNA_GRAPHICS_RENDERER_LLGL;
-        case CNA::GraphicsRendererType::Metal: return CNA_GRAPHICS_RENDERER_METAL;
-        case CNA::GraphicsRendererType::Fna3d: return CNA_GRAPHICS_RENDERER_FNA3D;
-        case CNA::GraphicsRendererType::SvgDom: return CNA_GRAPHICS_RENDERER_SVG_DOM;
-        case CNA::GraphicsRendererType::OpenVg: return CNA_GRAPHICS_RENDERER_OPENVG;
-        case CNA::GraphicsRendererType::PortableGL: return CNA_GRAPHICS_RENDERER_PORTABLEGL;
-    }
-    return CNA_GRAPHICS_RENDERER_UNKNOWN;
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    return state.ownedGraphicsResourceCount != 0U;
 }
 
-[[nodiscard]] CNA_GraphicsCapabilityFlags GetGraphicsCapabilityFlags(
-    GraphicsDevice& graphicsDevice)
-{
-    CNA_GraphicsCapabilityFlags flags = UINT64_C(0);
-    for (CNA_GraphicsCapability capability = CNA_GRAPHICS_CAPABILITY_THREE_D;
-         capability <= CNA_GRAPHICS_CAPABILITY_ADDITIVE_BLENDING;
-         ++capability) {
-        CNA::GraphicsCapability nativeCapability{};
-        if (TryMapGraphicsCapability(capability, &nativeCapability) &&
-            graphicsDevice.SupportsCapability(nativeCapability)) {
-            flags |= UINT64_C(1) << capability;
-        }
-    }
-    return flags;
-}
-
-} // namespace
+} // namespace CNA::C::Detail
 
 CNA_Result cna_game_create(
     const CNA_GameCreateInfo* const createInfo,
@@ -488,13 +368,13 @@ CNA_Result cna_game_create(
         }
         if (const CNA_Result titleResult = ValidateStringView(createInfo->window_title, true);
             titleResult != CNA_RESULT_SUCCESS) {
-            return Fail(titleResult, CategoryForResult(titleResult), "The initial window title is not valid UTF-8.");
+            return Fail(titleResult, ErrorCategoryForResult(titleResult), "The initial window title is not valid UTF-8.");
         }
 
         std::string title;
         if (const CNA_Result titleResult = CopyStringView(createInfo->window_title, true, &title);
             titleResult != CNA_RESULT_SUCCESS) {
-            return Fail(titleResult, CategoryForResult(titleResult), "The initial window title could not be copied.");
+            return Fail(titleResult, ErrorCategoryForResult(titleResult), "The initial window title could not be copied.");
         }
 
         RuntimeState& state = GetRuntimeState();
@@ -516,7 +396,7 @@ CNA_Result cna_game_create(
         if (createResult != CNA_RESULT_SUCCESS) {
             return Fail(
                 createResult,
-                CategoryForResult(createResult),
+                ErrorCategoryForResult(createResult),
                 "The native game handle could not be created.");
         }
         game->SetHandle(*outGame);
@@ -588,7 +468,7 @@ CNA_Result cna_game_set_window_title(
         std::string titleCopy;
         if (const CNA_Result titleResult = CopyStringView(title, true, &titleCopy);
             titleResult != CNA_RESULT_SUCCESS) {
-            return Fail(titleResult, CategoryForResult(titleResult), "The window title is not valid UTF-8.");
+            return Fail(titleResult, ErrorCategoryForResult(titleResult), "The window title is not valid UTF-8.");
         }
         game->SetWindowTitle(titleCopy);
         return CNA_RESULT_SUCCESS;
@@ -603,6 +483,12 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (HasOwnedGraphicsResources()) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "All owned C graphics resources must be destroyed before the game.");
+        }
 
         game->Shutdown();
         const CNA_Result callbackResult = game->GetCallbackFailure();
@@ -611,7 +497,7 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         if (releaseResult != CNA_RESULT_SUCCESS) {
             return Fail(
                 releaseResult,
-                CategoryForResult(releaseResult),
+                ErrorCategoryForResult(releaseResult),
                 "The native game handle could not be released.");
         }
         {
@@ -632,126 +518,5 @@ CNA_Result cna_game_get_graphics_device(
             return result;
         }
         return game->BorrowGraphicsDevice(outGraphicsDevice);
-    });
-}
-
-CNA_Result cna_graphics_device_get_renderer_info(
-    const CNA_Handle graphicsDeviceHandle,
-    CNA_RendererInfo* const outInfo)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_RendererInfo) ||
-            outInfo->struct_version != StructureVersion) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The renderer-info output structure is invalid.");
-        }
-
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        GraphicsDevice& nativeDevice = *graphicsDevice->value;
-        const std::string_view rendererName = nativeDevice.GetGraphicsRendererName();
-        const int maxTextureDimension = nativeDevice.GetMaxTextureDimension();
-        if (maxTextureDimension < 0) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "The native renderer reported a negative texture-dimension limit.");
-        }
-        const CNA_RendererInfo info = {
-            .struct_size = sizeof(CNA_RendererInfo),
-            .struct_version = StructureVersion,
-            .renderer_name_byte_length = rendererName.size(),
-            .capability_flags = GetGraphicsCapabilityFlags(nativeDevice),
-            .renderer_type = MapGraphicsRendererType(nativeDevice.GetGraphicsRendererType()),
-            .max_texture_dimension = static_cast<uint32_t>(maxTextureDimension)
-        };
-        *outInfo = info;
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_get_renderer_name_size(
-    const CNA_Handle graphicsDeviceHandle,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The renderer-name size output is null.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outBytes = graphicsDevice->value->GetGraphicsRendererName().size();
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_copy_renderer_name(
-    const CNA_Handle graphicsDeviceHandle,
-    char* const destination,
-    const uint64_t capacity,
-    uint64_t* const outBytes)
-{
-    return CallWithExceptionBarrier([&]() {
-        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The renderer-name output buffer is invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-
-        const std::string_view rendererName = graphicsDevice->value->GetGraphicsRendererName();
-        *outBytes = rendererName.size();
-        if (capacity < rendererName.size()) {
-            return Fail(
-                CNA_RESULT_BUFFER_TOO_SMALL,
-                CNA_ERROR_CATEGORY_RANGE,
-                "The renderer-name output buffer is too small.");
-        }
-        if (!rendererName.empty()) {
-            std::memcpy(destination, rendererName.data(), rendererName.size());
-        }
-        return CNA_RESULT_SUCCESS;
-    });
-}
-
-CNA_Result cna_graphics_device_supports_capability(
-    const CNA_Handle graphicsDeviceHandle,
-    const CNA_GraphicsCapability capability,
-    CNA_Bool* const outSupported)
-{
-    return CallWithExceptionBarrier([&]() {
-        CNA::GraphicsCapability nativeCapability{};
-        if (outSupported == nullptr || !TryMapGraphicsCapability(capability, &nativeCapability)) {
-            return Fail(
-                CNA_RESULT_INVALID_ARGUMENT,
-                CNA_ERROR_CATEGORY_ARGUMENT,
-                "The graphics-capability query arguments are invalid.");
-        }
-        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
-        if (const CNA_Result result = GetGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
-            result != CNA_RESULT_SUCCESS) {
-            return result;
-        }
-        *outSupported = graphicsDevice->value->SupportsCapability(nativeCapability)
-            ? CNA_TRUE
-            : CNA_FALSE;
-        return CNA_RESULT_SUCCESS;
     });
 }

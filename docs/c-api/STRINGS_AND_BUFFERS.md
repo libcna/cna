@@ -54,6 +54,14 @@ size conversion is checked; values unrepresentable by the native implementation 
 Texture uploads, readback, vertices, indices, audio samples and sprite commands transfer ranges in
 bulk. The C API must not require a C program to perform one native transition per element.
 
+The initial `Texture2D` transfer route accepts an exact width-times-height array of `CNA_Color`
+values for Color-format mip level zero. The adapter converts each independently laid out C value;
+it never reinterprets the C array as C++ `Color`. Readback reports the required pixel count, writes
+nothing when capacity is insufficient and performs one canonical `Texture2D::GetData` call after
+capacity validation. Other surface formats and mip/sub-rectangle transfers remain unavailable in
+this initial slice and return the documented argument or not-supported result rather than silently
+changing representation.
+
 ## Collections
 
 No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.

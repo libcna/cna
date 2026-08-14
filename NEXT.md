@@ -5,7 +5,7 @@
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`022` are complete: `docs/c-api/` defines the
+> API** through C-native mappings. `CBIND-001`–`023` are complete: `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
 > `SDL_RENDERER`. The work deliberately contains no C#, .NET, JavaScript, Rust, Python, Java, Zig,
@@ -16,9 +16,10 @@
 > video driver and software renderer. A single clean serial build proved that the earlier missing
 > archive report came from overlapping verification builds, not a CNA archive defect. B4's
 > callback-scoped graphics-device handle and canonical renderer capability queries are now
-> complete.
-> `Texture2D`, batched `SpriteBatch` and input snapshots follow; the coverage matrix remains the
-> guard against omitted public CNA symbols.
+> complete. Owned Color `Texture2D` handles now support versioned create/info, full-level bulk
+> RGBA8 upload/readback, explicit destroy and enforced child-before-game teardown. Batched
+> `SpriteBatch` and input snapshots follow; the coverage matrix remains the guard against omitted
+> public CNA symbols.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

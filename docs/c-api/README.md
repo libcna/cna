@@ -4,9 +4,9 @@
 
 The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
 the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
-(`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery). It
-is not complete public CNA coverage. The contract in this directory is binding on implementation
-until the release gate in
+(`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
+owned Color-format `Texture2D` creation and bulk RGBA8 transfer. It is not complete public CNA
+coverage. The contract in this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
 
 ## Purpose

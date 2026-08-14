@@ -24,6 +24,13 @@ operation: it invalidates the game only after exit/unload notification and nativ
 C code remains responsible for explicit release before shutdown so release failures are observable
 and leak tests remain meaningful.
 
+An owned C `Texture2D` remains valid after the lifecycle callback that creates it, even though the
+graphics-device handle used for creation is callback-scoped. The texture remains a child of the
+active game. `cna_game_destroy` returns `CNA_RESULT_INVALID_STATE` without starting shutdown while
+any owned C graphics child is live; callers must destroy those children first. Texture destruction
+performs canonical `Dispose`, releases its generation-checked handle and makes a second destroy a
+deterministic `CNA_RESULT_INVALID_HANDLE`.
+
 ## Values, strings and arrays
 
 POD input values are copied on entry. String views and arrays are borrowed only for the duration of

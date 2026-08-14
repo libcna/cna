@@ -16,6 +16,7 @@ typedef struct LifecycleState {
     CNA_Handle borrowed_graphics_device;
     CNA_Bool supports_three_d;
     uint64_t renderer_name_bytes;
+    CNA_Handle texture;
 } LifecycleState;
 
 typedef struct WrongThreadState {
@@ -98,6 +99,64 @@ static CNA_Result on_load(
     state->borrowed_graphics_device = graphics_device;
     state->supports_three_d = supports_three_d;
     state->renderer_name_bytes = renderer_name_bytes;
+
+    CNA_Texture2DCreateInfo texture_create_info = {
+        sizeof(CNA_Texture2DCreateInfo),
+        UINT32_C(1),
+        UINT32_C(2),
+        UINT32_C(2),
+        CNA_FALSE,
+        {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_BGR565
+    };
+    CNA_Handle unsupported_texture = CNA_INVALID_HANDLE;
+    if (cna_texture2d_create(
+            graphics_device,
+            &texture_create_info,
+            &unsupported_texture) != CNA_RESULT_NOT_SUPPORTED ||
+        unsupported_texture != CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    texture_create_info.format = CNA_SURFACE_FORMAT_COLOR;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Texture2DInfo texture_info = {
+        sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    const CNA_Color pixels[4] = {
+        {UINT8_C(255), UINT8_C(0), UINT8_C(0), UINT8_C(255)},
+        {UINT8_C(0), UINT8_C(255), UINT8_C(0), UINT8_C(255)},
+        {UINT8_C(0), UINT8_C(0), UINT8_C(255), UINT8_C(255)},
+        {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(128)}
+    };
+    CNA_Color readback[4] = {
+        {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+        {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+        {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+        {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)}
+    };
+    uint64_t required_pixels = 0U;
+    if (cna_texture2d_create(graphics_device, &texture_create_info, &texture) !=
+            CNA_RESULT_SUCCESS ||
+        texture == CNA_INVALID_HANDLE ||
+        cna_texture2d_get_info(texture, &texture_info) != CNA_RESULT_SUCCESS ||
+        texture_info.width != 2U || texture_info.height != 2U ||
+        texture_info.level_count != 1U || texture_info.format != CNA_SURFACE_FORMAT_COLOR ||
+        cna_texture2d_set_data_rgba8(texture, pixels, 3U) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_texture2d_set_data_rgba8(texture, pixels, 4U) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_get_data_rgba8(texture, readback, 3U, &required_pixels) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        required_pixels != 4U ||
+        memcmp(readback, (CNA_Color[4]){
+            {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+            {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+            {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+            {UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)}}, sizeof(readback)) != 0 ||
+        cna_texture2d_get_data_rgba8(texture, readback, 4U, &required_pixels) !=
+            CNA_RESULT_SUCCESS ||
+        required_pixels != 4U || memcmp(readback, pixels, sizeof(pixels)) != 0) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->texture = texture;
     ++state->lifecycle_stage;
     ++state->load_count;
     return CNA_RESULT_SUCCESS;
@@ -278,7 +337,7 @@ int main(void)
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         state.load_count != 1 || state.update_count < 1 || state.draw_count != 1 ||
         state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
-        state.renderer_name_bytes == 0U) {
+        state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE) {
         return 4;
     }
     CNA_RendererInfo stale_renderer_info = {
@@ -289,12 +348,22 @@ int main(void)
             &stale_renderer_info) != CNA_RESULT_INVALID_HANDLE) {
         return 5;
     }
+    CNA_Texture2DInfo live_texture_info = {
+        sizeof(CNA_Texture2DInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    if (cna_texture2d_get_info(state.texture, &live_texture_info) != CNA_RESULT_SUCCESS ||
+        cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
+        cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_destroy(state.texture) != CNA_RESULT_INVALID_HANDLE ||
+        cna_texture2d_get_info(state.texture, &live_texture_info) != CNA_RESULT_INVALID_HANDLE) {
+        return 6;
+    }
     if (cna_game_request_exit(game) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 1 || state.exit_count != 1 ||
         state.lifecycle_stage != 5 ||
         cna_game_run_one_frame(game) != CNA_RESULT_INVALID_HANDLE) {
-        return 6;
+        return 7;
     }
 
     callbacks.update = on_update_and_exit;
@@ -303,10 +372,11 @@ int main(void)
     callbacks.exiting = on_exit;
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run(game) != CNA_RESULT_SUCCESS ||
+        cna_game_run(game) != CNA_RESULT_SUCCESS || state.texture == CNA_INVALID_HANDLE ||
+        cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 2 || state.exit_count != 2 || state.lifecycle_stage != 9) {
-        return 7;
+        return 8;
     }
 
     callbacks.load_content = on_failing_load;
@@ -318,7 +388,7 @@ int main(void)
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK) {
-        return 8;
+        return 9;
     }
 
     CNA_ErrorInfo error_info = {sizeof(CNA_ErrorInfo), UINT32_C(1), 0U, 0U, 0U};
@@ -332,7 +402,7 @@ int main(void)
             CNA_RESULT_SUCCESS ||
         message_bytes != 21U || memcmp(message, "test callback failure", 21U) != 0 ||
         cna_game_destroy(game) != CNA_RESULT_CALLBACK) {
-        return 9;
+        return 10;
     }
 
     return 0;
