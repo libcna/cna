@@ -51,6 +51,7 @@
 #include <vector>
 
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
@@ -68,6 +69,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "../../../../CNA/Internal/GltfImport/GltfFixtureCorpus.hpp"
 #include "../../../../CNA/Internal/GltfImport/GltfDrawParamsOracleEXT.hpp"
 
 extern char** environ;
@@ -913,6 +915,31 @@ namespace
         return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
     }
 
+    int RunGltfOracleDump(const std::string& input, const std::string& outDir)
+    {
+        const std::string mode = "--dump-oracle";
+        char* argv[] = {
+            const_cast<char*>(CNA_GLTF_TO_CNJ_TOOL_PATH),
+            const_cast<char*>(mode.c_str()),
+            const_cast<char*>(input.c_str()),
+            const_cast<char*>(outDir.c_str()),
+            nullptr,
+        };
+
+        pid_t pid = -1;
+        const int rc = posix_spawn(&pid, CNA_GLTF_TO_CNJ_TOOL_PATH, nullptr, nullptr, argv, environ);
+        if (rc != 0)
+        {
+            ADD_FAILURE() << "posix_spawn(" << CNA_GLTF_TO_CNJ_TOOL_PATH
+                          << ") failed: " << std::strerror(rc);
+            return -1;
+        }
+
+        int status = 0;
+        waitpid(pid, &status, 0);
+        return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    }
+
     // GLTF-237 compares the material contract only. Mesh naming, hierarchy and transforms have
     // their own runtime/offline parity sweeps; including them here made a perfectly equal material
     // fail on the offline tool's intentionally different generated mesh name. Floats use the same
@@ -1070,6 +1097,108 @@ TEST(GltfToCnjToolTest, MissingInputFileFailsCleanly)
                                            contentRoot.path().string(), "wont_happen");
     EXPECT_NE(exitCode, 0);
     EXPECT_FALSE(std::filesystem::exists(contentRoot.path() / "wont_happen.cnj"));
+}
+
+TEST(GltfToCnjToolTest, OracleDumpIsDeterministicSafeAndMatchesTheFixtureManifest)
+{
+    using namespace CnaTest::GltfOracle;
+    using CNA::Internal::JsonType;
+    using CNA::Internal::JsonValue;
+
+    const LoadedFixture fixture("xf-translation");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    ScratchDir firstRoot;
+    ScratchDir secondRoot;
+    const std::filesystem::path first = firstRoot.path() / "oracle";
+    const std::filesystem::path second = secondRoot.path() / "oracle";
+
+    ASSERT_EQ(0, RunGltfOracleDump(fixture.AssetPath().string(), first.string()));
+    ASSERT_EQ(0, RunGltfOracleDump(fixture.AssetPath().string(), second.string()));
+
+    const auto readText = [](const std::filesystem::path& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(file),
+                           std::istreambuf_iterator<char>());
+    };
+    const auto flattenNumberArrays = [](const JsonValue& value)
+    {
+        std::vector<double> result;
+        if (value.type != JsonType::Array) { return result; }
+        for (const JsonValue& element : value.arrayValue)
+        {
+            if (element.type == JsonType::Number) { result.push_back(element.numberValue); }
+            else
+            {
+                const std::vector<double> row = Numbers(element);
+                result.insert(result.end(), row.begin(), row.end());
+            }
+        }
+        return result;
+    };
+    const auto hexText = [](const std::string& bytes)
+    {
+        constexpr char digits[] = "0123456789abcdef";
+        std::string result;
+        result.reserve(bytes.size() * 2);
+        for (const unsigned char byte : bytes)
+        {
+            result.push_back(digits[byte >> 4]);
+            result.push_back(digits[byte & 0x0f]);
+        }
+        return result;
+    };
+    const std::string firstText = readText(first / "oracle.json");
+    ASSERT_FALSE(firstText.empty());
+    EXPECT_EQ(firstText, readText(second / "oracle.json"));
+
+    JsonValue dump;
+    ASSERT_NO_THROW(dump = CNA::Internal::ParseJson(firstText));
+    EXPECT_EQ("CNA-gltf-oracle-v1", StringOr(dump, "schema", ""));
+    EXPECT_EQ("xf-translation.gltf", StringOr(dump, "source", ""));
+
+    const JsonValue& l2 = Member(dump, "l2");
+    ASSERT_EQ(JsonType::Array, l2.type);
+    ASSERT_EQ(Path(fixture.Expected(), "l2.accessors").arrayValue.size(), l2.arrayValue.size());
+    ASSERT_FALSE(l2.arrayValue.empty());
+    EXPECT_EQ(Numbers(Member(Path(fixture.Expected(), "l2.accessors").arrayValue[0], "values")),
+              Numbers(Member(l2.arrayValue[0], "values")));
+
+    const JsonValue& l3 = Member(dump, "l3");
+    ASSERT_EQ(JsonType::Array, l3.type);
+    ASSERT_EQ(1u, l3.arrayValue.size());
+    const JsonValue& expectedPrimitive = Path(fixture.Expected(), "l3.primitives").arrayValue[0];
+    const JsonValue& actualPrimitive = Member(l3.arrayValue[0], "dump");
+    EXPECT_EQ(NumberOr(expectedPrimitive, "vertexCount", -1),
+              NumberOr(actualPrimitive, "vertexCount", -2));
+    EXPECT_EQ(flattenNumberArrays(Member(expectedPrimitive, "positions")),
+              flattenNumberArrays(Member(actualPrimitive, "positions")));
+
+    const JsonValue& expectedInstance = Path(fixture.Expected(), "l4.instances").arrayValue[0];
+    const JsonValue& actualInstance = Path(dump, "l4.expected.instances").arrayValue[0];
+    EXPECT_EQ(Numbers(Member(expectedInstance, "worldMatrixColumnMajor")),
+              Numbers(Member(actualInstance, "worldMatrixColumnMajor")));
+    EXPECT_EQ(flattenNumberArrays(Member(expectedInstance, "worldPositions")),
+              flattenNumberArrays(Member(actualInstance, "worldPositions")));
+
+    const JsonValue& l5 = Member(dump, "l5");
+    ASSERT_EQ(JsonType::Array, l5.type);
+    ASSERT_EQ(1u, l5.arrayValue.size());
+    const JsonValue& expectedPart = Path(fixture.Expected(), "l5.parts").arrayValue[0];
+    EXPECT_EQ(NumberOr(expectedPart, "stride", -1),
+              NumberOr(l5.arrayValue[0], "stride", -2));
+    EXPECT_EQ(NumberOr(expectedPart, "vertexBufferBytes", -1),
+              NumberOr(l5.arrayValue[0], "vertexByteCount", -2));
+    EXPECT_EQ(NumberOr(expectedPart, "indexBufferBytes", -1),
+              NumberOr(l5.arrayValue[0], "indexByteCount", -2));
+    const std::filesystem::path corpus = CorpusDirectory();
+    EXPECT_EQ(hexText(readText(corpus / StringOr(expectedPart, "vertexBufferFile", ""))),
+              StringOr(l5.arrayValue[0], "vertexBytesHex", ""));
+    EXPECT_EQ(hexText(readText(corpus / StringOr(expectedPart, "indexBufferFile", ""))),
+              StringOr(l5.arrayValue[0], "indexBytesHex", ""));
+
+    EXPECT_NE(0, RunGltfOracleDump(fixture.AssetPath().string(), first.string()))
+        << "an existing non-empty output directory must never be overwritten";
 }
 
 // Vertex 1's POSITION comes entirely from a sparse override on an accessor with no base
@@ -2607,10 +2736,10 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     const std::filesystem::path vertsPath = contentRoot.path() / "draco_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 32u); // stride 32, VertexPositionNormalTexture
+    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, VertexPositionNormalTangentTexture
 
     float px1;
-    std::memcpy(&px1, bytes.data() + 32, sizeof(float)); // vertex 1's Position.X
+    std::memcpy(&px1, bytes.data() + 48, sizeof(float)); // vertex 1's Position.X
     EXPECT_NEAR(px1, 1.0f, 1e-5f);
 
     const std::filesystem::path idxPath = contentRoot.path() / "draco_mesh0_idx.bin";
@@ -2625,8 +2754,9 @@ TEST(GltfToCnjToolTest, ConvertsDracoCompressedTriangleAndLoadsBackThroughConten
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr);
+    EXPECT_EQ(pbrFx->getTextureProperty(), nullptr);
 }
 #endif
 

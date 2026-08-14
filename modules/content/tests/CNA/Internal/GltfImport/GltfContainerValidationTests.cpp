@@ -214,7 +214,19 @@ TEST(GltfContainerValidation, EveryOtherCorpusFixturePassesValidationCleanly)
         SCOPED_TRACE(id);
 
         std::vector<std::string> warnings;
-        EXPECT_EQ("", ValidationErrorFor(fixture, warnings))
+        const std::string validationError = ValidationErrorFor(fixture, warnings);
+        if (CnaTest::GltfOracle::RequiresUnavailableDraco(fixture.Expected()))
+        {
+            EXPECT_NE(std::string::npos, validationError.find("KHR_draco_mesh_compression"))
+                << "the decoder-free build did not name the unavailable required extension: "
+                << validationError;
+            EXPECT_NE(std::string::npos, validationError.find("does not implement"))
+                << "the decoder-free refusal does not explain why import cannot proceed: "
+                << validationError;
+            continue;
+        }
+
+        EXPECT_EQ("", validationError)
             << "a valid fixture was rejected -- validation is too strict";
 
         if (fixture.Data().extensions_used_count == 0)

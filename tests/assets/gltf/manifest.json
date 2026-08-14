@@ -12,7 +12,7 @@
     "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
     "document": "docs/gltf-conformance.md"
   },
-  "distinctAssetCount": 141,
+  "distinctAssetCount": 145,
   "owningGroupCounts": {
     "container": 8,
     "accessors": 13,
@@ -27,7 +27,7 @@
     "cameras": 5,
     "lights": 2,
     "scenes": 3,
-    "draco": 0,
+    "draco": 4,
     "robustness": 8
   },
   "targetDistinctAssetCount": 145,
@@ -48,24 +48,7 @@
     "draco": 4,
     "robustness": 8
   },
-  "missingAssets": [
-    {
-      "id": "draco-triangle",
-      "owningGroup": "draco"
-    },
-    {
-      "id": "draco-vs-uncompressed-pair",
-      "owningGroup": "draco"
-    },
-    {
-      "id": "draco-skinned",
-      "owningGroup": "draco"
-    },
-    {
-      "id": "draco-morph",
-      "owningGroup": "draco"
-    }
-  ],
+  "missingAssets": [],
   "promotedAuditFixtures": {
     "f1": "xf-shared-mesh",
     "f2": "xf-parent-child",
@@ -2628,6 +2611,78 @@
       "auditFixture": null
     },
     {
+      "id": "draco-triangle",
+      "owningGroup": "draco",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "KHR_draco_mesh_compression",
+        "decoded face connectivity",
+        "generated tangent after decompression"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "draco-vs-uncompressed-pair",
+      "owningGroup": "draco",
+      "referencingGroups": [],
+      "validatedLayers": [
+        "L1",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "compressed/uncompressed L3 parity",
+        "all rigid vertex streams",
+        "sequential point ordering"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "draco-skinned",
+      "owningGroup": "draco",
+      "referencingGroups": [
+        "skinning"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "Draco with JOINTS_0 / WEIGHTS_0",
+        "two-joint skin",
+        "compressed/uncompressed skin parity"
+      ],
+      "auditFixture": null
+    },
+    {
+      "id": "draco-morph",
+      "owningGroup": "draco",
+      "referencingGroups": [
+        "animation"
+      ],
+      "validatedLayers": [
+        "L1",
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "features": [
+        "Draco base with morph target",
+        "POSITION/NORMAL/TANGENT deltas",
+        "compressed/uncompressed morph parity"
+      ],
+      "auditFixture": null
+    },
+    {
       "id": "bad-accessor-out-of-bounds",
       "owningGroup": "robustness",
       "referencingGroups": [],
@@ -3367,6 +3422,156 @@
       "path": "camera-perspective.vb.bin",
       "bytes": 144,
       "sha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683"
+    },
+    {
+      "path": "draco-morph.expected.json",
+      "bytes": 16964,
+      "sha256": "d377be9f4e23bac9a112b8e2b69dbf3e271bba0503cbc6d3ab3b535db753b0e8"
+    },
+    {
+      "path": "draco-morph.glb",
+      "bytes": 2472,
+      "sha256": "0da7cbb4e4d682bebfaffb36521ecf4f294303aff381c7335b4736fae13e6681"
+    },
+    {
+      "path": "draco-morph.gltf",
+      "bytes": 4502,
+      "sha256": "09c88767e2bfa82f2b70bd123a2ae6075d5ceae74ea152d52bf4867114b30258"
+    },
+    {
+      "path": "draco-morph.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-morph.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-morph.p1.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "draco-morph.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "draco-skinned.expected.json",
+      "bytes": 19218,
+      "sha256": "17e1771a1fb47641d11bd37ae78d62999eea1f402b83804832e909be79380459"
+    },
+    {
+      "path": "draco-skinned.glb",
+      "bytes": 2804,
+      "sha256": "d481ce9df55954fe80ddf917a270aff45db67329fa69de3656560e3524f0e98c"
+    },
+    {
+      "path": "draco-skinned.gltf",
+      "bytes": 4896,
+      "sha256": "e0ba1421c0e2f6b018f6542102f99c4b484ec27a23be3c3165bfba830c65785f"
+    },
+    {
+      "path": "draco-skinned.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-skinned.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-skinned.p1.vb.bin",
+      "bytes": 204,
+      "sha256": "0800baf1550989279bc4e6fe12003b34cbfa690d765fbb7d826fa790d74d81a5"
+    },
+    {
+      "path": "draco-skinned.vb.bin",
+      "bytes": 204,
+      "sha256": "0800baf1550989279bc4e6fe12003b34cbfa690d765fbb7d826fa790d74d81a5"
+    },
+    {
+      "path": "draco-triangle.expected.json",
+      "bytes": 7386,
+      "sha256": "bcf6d41c28e47756513e7da4c1de7610eef6870314513966a42e7ab48ead305a"
+    },
+    {
+      "path": "draco-triangle.glb",
+      "bytes": 940,
+      "sha256": "2d7f2e8583be47eeede757163bc65d25fa264c6725de21b529bb4376be05ffca"
+    },
+    {
+      "path": "draco-triangle.gltf",
+      "bytes": 1685,
+      "sha256": "1e67b38d85251bdcd0ef211b92990a4879cdc576fe905114d30ce6923f86f329"
+    },
+    {
+      "path": "draco-triangle.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-triangle.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.expected.json",
+      "bytes": 24950,
+      "sha256": "a565075a89c3f010a5adba3b6ade346d4c57b6bfc9731d893ef60139ab93230b"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.glb",
+      "bytes": 3096,
+      "sha256": "38749f7098b7b59afcd23ecc6e0fe1cf46ba012765574ee735a7c857caa674c0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.gltf",
+      "bytes": 5610,
+      "sha256": "98664877458ee59a73df5ad5282dd80d4c8c70faebfbb3a61dfdebb08fe22e61"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p1.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p1.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p2.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p2.vb.bin",
+      "bytes": 72,
+      "sha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p3.ib.bin",
+      "bytes": 6,
+      "sha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.p3.vb.bin",
+      "bytes": 72,
+      "sha256": "823355ddeb444ee46faeb08a4dd84c0007cd758ac59699a7d1f61bfa71bd31c0"
+    },
+    {
+      "path": "draco-vs-uncompressed-pair.vb.bin",
+      "bytes": 144,
+      "sha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440"
     },
     {
       "path": "float-color.expected.json",

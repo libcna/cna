@@ -12,7 +12,7 @@ import hashlib
 from typing import Any, Callable
 
 from . import GENERATOR_VERSION, SPEC_PIN
-from .defs import (accessors, animation, cameras, component_types, container, lights,
+from .defs import (accessors, animation, cameras, component_types, container, draco, lights,
                    materials, normals, robustness, scenes, skinning, textures, topology,
                    transforms)
 from .manifest import OPEN_DEFECT_STATUSES, Fixture, dumps
@@ -222,6 +222,7 @@ _GROUP_MODULES: list[tuple[str, Any]] = [
     ("cameras", cameras),
     ("lights", lights),
     ("scenes", scenes),
+    ("draco", draco),
     ("robustness", robustness),
 ]
 

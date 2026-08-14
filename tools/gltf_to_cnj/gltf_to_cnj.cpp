@@ -33,6 +33,7 @@
 
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
 #include "CNA/Internal/CnjMorphSidecarEXT.hpp"
+#include "GltfOracleEXT.hpp"
 
 #include <cctype>
 #include <cstdint>
@@ -44,6 +45,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -60,6 +62,8 @@ using namespace CNA::Internal::GltfImport;
 
 namespace
 {
+    namespace Oracle = CnaTest::GltfOracle;
+
     // ---------------------------------------------------------------------------
     // Small helpers: binary writers, JSON string escaping.
     // ---------------------------------------------------------------------------
@@ -214,6 +218,19 @@ namespace
             }
         }
         return out;
+    }
+
+    std::string HexBytes(const std::vector<std::uint8_t>& bytes)
+    {
+        constexpr char digits[] = "0123456789abcdef";
+        std::string result;
+        result.reserve(bytes.size() * 2);
+        for (const std::uint8_t byte : bytes)
+        {
+            result.push_back(digits[byte >> 4]);
+            result.push_back(digits[byte & 0x0f]);
+        }
+        return result;
     }
 
     const char* DiagnosticSeverityNameEXT(GltfImportDiagnosticSeverityEXT severity)
@@ -1228,16 +1245,166 @@ namespace
         }
         for (const std::string& w : warnings) { std::cout << "warning: " << w << "\n"; }
     }
+
+    void DumpOracle(const std::filesystem::path& inputPath,
+                    const std::filesystem::path& outputDir)
+    {
+        cgltf_options parseOptions{};
+        cgltf_data* data = nullptr;
+        cgltf_result result =
+            cgltf_parse_file(&parseOptions, inputPath.string().c_str(), &data);
+        if (result != cgltf_result_success)
+        {
+            throw std::runtime_error(
+                "cgltf_parse_file failed (code " +
+                std::to_string(static_cast<int>(result)) + ") for: " + inputPath.string());
+        }
+        struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
+
+        ValidateExternalUriContainmentEXT(data, inputPath.parent_path());
+        result = cgltf_load_buffers(&parseOptions, data, inputPath.string().c_str());
+        if (result != cgltf_result_success)
+        {
+            throw std::runtime_error(
+                "cgltf_load_buffers failed (code " +
+                std::to_string(static_cast<int>(result)) + ").");
+        }
+        if (data->asset.version != nullptr && std::string(data->asset.version) != "2.0")
+        {
+            throw std::runtime_error(
+                "Unsupported glTF asset.version '" + std::string(data->asset.version) +
+                "' -- only glTF 2.0 is supported.");
+        }
+
+        std::vector<std::string> validationWarnings;
+        ValidateGltfEXT(data, inputPath.string(), validationWarnings);
+
+        std::error_code error;
+        const bool outputExists = std::filesystem::exists(outputDir, error);
+        if (error)
+        {
+            throw std::runtime_error("Could not inspect oracle output directory: " +
+                                     error.message());
+        }
+        if (outputExists)
+        {
+            const bool outputIsDirectory = std::filesystem::is_directory(outputDir, error);
+            if (error)
+            {
+                throw std::runtime_error("Could not inspect oracle output directory: " +
+                                         error.message());
+            }
+            if (!outputIsDirectory)
+            {
+                throw std::runtime_error("Oracle output exists but is not a directory: " +
+                                         outputDir.string());
+            }
+            const bool outputIsEmpty = std::filesystem::is_empty(outputDir, error);
+            if (error)
+            {
+                throw std::runtime_error("Could not inspect oracle output directory: " +
+                                         error.message());
+            }
+            if (!outputIsEmpty)
+            {
+                throw std::runtime_error("Oracle output directory must be empty: " +
+                                         outputDir.string());
+            }
+        }
+        else
+        {
+            std::filesystem::create_directories(outputDir, error);
+            if (error)
+            {
+                throw std::runtime_error("Could not create oracle output directory: " +
+                                         error.message());
+            }
+        }
+
+        const std::vector<Oracle::ExtractedPrimitive> primitives =
+            Oracle::ExtractSceneMeshesEXT(*data);
+        const Oracle::WorldPositions expectedWorld = Oracle::EvaluateWorldPositionsEXT(*data);
+        const Oracle::WorldPositions cnaWorld = Oracle::EvaluateCnaWorldPositionsEXT(*data);
+
+        std::ostringstream json;
+        json << "{\n"
+             << "  \"schema\": \"CNA-gltf-oracle-v1\",\n"
+             << "  \"source\": \"" << JsonEscape(inputPath.filename().string()) << "\",\n"
+             << "  \"validationWarnings\": [";
+        for (std::size_t index = 0; index < validationWarnings.size(); ++index)
+        {
+            if (index != 0) { json << ','; }
+            json << "\"" << JsonEscape(validationWarnings[index]) << "\"";
+        }
+        json << "],\n  \"l2\": [";
+        for (std::size_t index = 0; index < data->accessors_count; ++index)
+        {
+            if (index != 0) { json << ','; }
+            json << Oracle::ToJson(Oracle::DumpAccessorEXT(*data, index));
+        }
+
+        json << "],\n  \"l3\": [";
+        for (std::size_t index = 0; index < primitives.size(); ++index)
+        {
+            const Oracle::ExtractedPrimitive& primitive = primitives[index];
+            if (index != 0) { json << ','; }
+            json << "{\"mesh\":" << primitive.mesh
+                 << ",\"primitive\":" << primitive.primitive
+                 << ",\"meshName\":\"" << JsonEscape(primitive.meshName)
+                 << "\",\"extracted\":" << (primitive.extracted ? "true" : "false")
+                 << ",\"error\":\"" << JsonEscape(primitive.error) << "\",\"dump\":"
+                 << Oracle::ToJson(primitive.dump) << '}';
+        }
+
+        json << "],\n  \"l4\": {\"expected\":" << Oracle::ToJson(expectedWorld)
+             << ",\"cna\":" << Oracle::ToJson(cnaWorld) << "},\n"
+             << "  \"l5\": [";
+        for (std::size_t index = 0; index < primitives.size(); ++index)
+        {
+            const Oracle::ExtractedPrimitive& primitive = primitives[index];
+            if (index != 0) { json << ','; }
+            json << "{\"mesh\":" << primitive.mesh
+                 << ",\"primitive\":" << primitive.primitive
+                 << ",\"extracted\":" << (primitive.extracted ? "true" : "false")
+                 << ",\"stride\":" << primitive.dump.stride
+                 << ",\"indexElementSize\":"
+                 << (primitive.extracted ? (primitive.dump.use32BitIndices ? 4 : 2) : 0)
+                 << ",\"vertexByteCount\":" << primitive.vertexBytes.size()
+                 << ",\"indexByteCount\":" << primitive.indexBytes.size()
+                 << ",\"vertexBytesHex\":\"" << HexBytes(primitive.vertexBytes)
+                 << "\",\"indexBytesHex\":\"" << HexBytes(primitive.indexBytes) << "\"}";
+        }
+        json << "]\n}\n";
+
+        const std::filesystem::path output = outputDir / "oracle.json";
+        WriteTextFile(output, json.str());
+        std::cout << "Wrote glTF L2-L5 oracle dump to " << output << ".\n";
+    }
 }
 
 int main(int argc, char** argv)
 {
+    if (argc == 4 && std::string_view(argv[1]) == "--dump-oracle")
+    {
+        try
+        {
+            DumpOracle(argv[2], argv[3]);
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr << "error: " << e.what() << "\n";
+            return 1;
+        }
+        return 0;
+    }
+
     if (argc != 4 && argc != 5)
     {
         std::cerr << "Usage: gltf_to_cnj <input.gltf|input.glb> <outputDir> <baseName> [unitScale]\n"
                       "  unitScale: optional multiplier applied to all positions/bone translations\n"
                       "             (default 1.0; glTF mandates meters -- use e.g. 0.01 for a source\n"
-                      "             file authored in centimeters).\n";
+                      "             file authored in centimeters).\n"
+                      "       gltf_to_cnj --dump-oracle <input.gltf|input.glb> <emptyOutputDir>\n";
         return 1;
     }
 

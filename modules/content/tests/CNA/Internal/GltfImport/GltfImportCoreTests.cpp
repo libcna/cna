@@ -432,12 +432,13 @@ TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
 {
     const MeshOut out = ExtractPrimitive0(kDracoTriangleGltf);
 
-    // Unskinned, uncolored, no PBR maps -> stride 32 (Position+Normal+TextureCoordinate).
-    ASSERT_EQ(out.stride, 32);
+    // glTF's ordinary metallic-roughness material selects the PBR stream even without maps:
+    // Position+Normal+generated Tangent+TextureCoordinate (GLTF-215).
+    ASSERT_EQ(out.stride, 48);
     ASSERT_FALSE(out.skinned);
     ASSERT_FALSE(out.colored);
-    ASSERT_FALSE(out.usePbr);
-    ASSERT_EQ(out.vertexBytes.size(), 3u * 32u);
+    ASSERT_TRUE(out.usePbr);
+    ASSERT_EQ(out.vertexBytes.size(), 3u * 48u);
 
     auto readFloat = [&](std::size_t byteOffset) {
         float v;
@@ -452,20 +453,20 @@ TEST(GltfImportCoreTest, ExtractMeshDecodesDracoCompressedTriangle)
     EXPECT_NEAR(readFloat(12), 0.0f, 1e-5f);
     EXPECT_NEAR(readFloat(16), 0.0f, 1e-5f);
     EXPECT_NEAR(readFloat(20), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(24), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(28), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(40), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(44), 0.0f, 1e-5f);
 
     // Vertex 1: Position (1,0,0), UV (1,0).
-    EXPECT_NEAR(readFloat(32 + 0), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 4), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 24), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(32 + 28), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 0), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 4), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 40), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(48 + 44), 0.0f, 1e-5f);
 
     // Vertex 2: Position (0,1,0), UV (0,1).
-    EXPECT_NEAR(readFloat(64 + 0), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 4), 1.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 24), 0.0f, 1e-5f);
-    EXPECT_NEAR(readFloat(64 + 28), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 0), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 4), 1.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 40), 0.0f, 1e-5f);
+    EXPECT_NEAR(readFloat(96 + 44), 1.0f, 1e-5f);
 
     // Draco's own decoded face list drives the index buffer directly (prim.indices has no
     // backing data for a Draco-compressed primitive) -- one triangle, 16-bit indices.

@@ -302,6 +302,11 @@ TEST(GltfConformanceL5, GeneratedBuffersMatchTheGoldenBytesExactly)
         const LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
 
+        // The same committed goldens are exercised by the decoder-enabled build. In the explicit
+        // decoder-free configuration, required-extension refusal is the correct outcome and is
+        // asserted by GltfContainerValidation rather than misreported here as an L5 byte defect.
+        if (RequiresUnavailableDraco(fixture.Expected())) { continue; }
+
         const GoldenBuffers golden = LoadGoldenBuffersEXT(fixture);
         ASSERT_TRUE(golden.declared) << "the fixture's manifest carries no l5 block at all";
         ASSERT_TRUE(golden.ok) << golden.error;

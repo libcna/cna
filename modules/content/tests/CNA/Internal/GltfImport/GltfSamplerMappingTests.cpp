@@ -340,7 +340,8 @@ TEST(GltfSamplerMapping, AttributeCountAgreementCoversEveryDeclaredStreamNotJust
     {
         const CnaTest::GltfOracle::LoadedFixture fixture(id);
         ASSERT_TRUE(fixture.Ok()) << fixture.Error();
-        const bool mayRefuse = CnaTest::GltfOracle::IsRejectionFixture(fixture.Expected());
+        const bool mayRefuse = CnaTest::GltfOracle::IsRejectionFixture(fixture.Expected()) ||
+            CnaTest::GltfOracle::RequiresUnavailableDraco(fixture.Expected());
         const cgltf_data& data = fixture.Data();
         for (cgltf_size m = 0; m < data.meshes_count; ++m)
         {

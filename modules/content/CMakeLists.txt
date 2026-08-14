@@ -22,5 +22,5 @@ target_include_directories(cna_content PRIVATE
         ${PROJECT_SOURCE_DIR}/third_party/stb
 )
 if(CNA_DRACO_AVAILABLE)
-    target_link_libraries(cna_content PRIVATE draco::draco)
+    target_link_libraries(cna_content PRIVATE cna_draco)
 endif()

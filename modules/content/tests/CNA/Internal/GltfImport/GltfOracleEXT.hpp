@@ -4,11 +4,12 @@
 // plan_gltf.md GLTF-005 / GLTF-006: the L2, L3 and L4 rungs of the numerical oracle ladder
 // (plan_gltf.md §7.1).
 //
-// TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
-// CNA::Internal::GltfImport. It is compiled into CnaTests alone, and no translation unit under
-// modules/*/src may call it. The EXT-suffixed names are the ones plan_gltf.md's task rows cite, so
-// a later session searching for DumpAccessorEXT / DumpMeshOutEXT / EvaluateWorldPositionsEXT finds
-// them -- the namespace, not the suffix, is what marks them non-production.
+// DIAGNOSTIC/TEST SCOPE ONLY. Nothing here is CNA public API, CNAEXT surface, or part of
+// CNA::Internal::GltfImport. It is compiled into CnaTests and the standalone glTF converter's
+// `--dump-oracle` diagnostic mode; no translation unit under modules/*/src may call it. The
+// EXT-suffixed names are the ones plan_gltf.md's task rows cite, so a later session searching for
+// DumpAccessorEXT / DumpMeshOutEXT / EvaluateWorldPositionsEXT finds them -- the namespace, not
+// the suffix, is what marks them non-runtime.
 //
 // The point of these helpers is to answer "at which layer does reality first diverge?" with
 // numbers rather than screenshots. They therefore never drive production behaviour: the world
@@ -214,6 +215,10 @@ namespace CnaTest::GltfOracle
         std::string error;
         /** @brief The L3 view of what `ExtractMesh` produced. */
         MeshOutDump dump;
+        /** @brief Exact L5 vertex bytes emitted by `ExtractMesh`. */
+        std::vector<std::uint8_t> vertexBytes;
+        /** @brief Exact L5 index bytes emitted by `ExtractMesh`. */
+        std::vector<std::uint8_t> indexBytes;
     };
 
     /**

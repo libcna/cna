@@ -59,6 +59,7 @@ using CnaTest::GltfOracle::NormalMatrixFromWorldEXT;
 using CnaTest::GltfOracle::NumberOr;
 using CnaTest::GltfOracle::Numbers;
 using CnaTest::GltfOracle::Path;
+using CnaTest::GltfOracle::RequiresUnavailableDraco;
 using CnaTest::GltfOracle::StringOr;
 using CnaTest::GltfOracle::ToJson;
 using CNA::Internal::GltfImport::TextureSlotEXT;
@@ -118,7 +119,8 @@ namespace
         for (const std::string& id : CorpusFixtureIds())
         {
             const LoadedFixture fixture(id);
-            if (!fixture.Ok() || IsRejectionFixture(fixture.Expected())) { continue; }
+            if (!fixture.Ok() || IsRejectionFixture(fixture.Expected()) ||
+                RequiresUnavailableDraco(fixture.Expected())) { continue; }
             ids.push_back(id);
         }
         return ids;

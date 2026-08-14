@@ -155,23 +155,39 @@ namespace
     /// hiding a removed or renamed suite on one of those targets.
     std::vector<std::string> PlatformExcludedGltfSuites()
     {
+        std::vector<std::string> excluded;
 #if defined(_WIN32) || defined(__EMSCRIPTEN__) || defined(__ANDROID__)
-        return {"GltfToCnjToolTest"};
-#else
-        return {};
+        excluded.push_back("GltfToCnjToolTest");
 #endif
+#ifndef CNA_DRACO_AVAILABLE
+        // These suites contain a test-only encoder and semantic decoder parity checks, so they are
+        // deliberately not registered in the CNA_ENABLE_DRACO=OFF configuration. Their source
+        // presence is still verified below, just like a platform-excluded process suite.
+        excluded.push_back("GltfDracoEncoderPin");
+        excluded.push_back("GltfDracoParity");
+#endif
+        return excluded;
     }
 
     bool SourceDeclaresPlatformExcludedGltfSuite(const std::string& suite)
     {
-        if (suite != "GltfToCnjToolTest") { return false; }
-        const std::filesystem::path source = RepositoryRoot() / "modules" / "content" / "tests" /
-            "Microsoft" / "Xna" / "Framework" / "Content" / "GltfToCnjToolTests.cpp";
+        std::filesystem::path source;
+        if (suite == "GltfToCnjToolTest")
+        {
+            source = RepositoryRoot() / "modules" / "content" / "tests" / "Microsoft" /
+                "Xna" / "Framework" / "Content" / "GltfToCnjToolTests.cpp";
+        }
+        else if (suite == "GltfDracoEncoderPin" || suite == "GltfDracoParity")
+        {
+            source = RepositoryRoot() / "modules" / "content" / "tests" / "CNA" /
+                "Internal" / "GltfImport" / "GltfDracoCorpusTests.cpp";
+        }
+        else { return false; }
         std::ifstream file(source);
         if (!file) { return false; }
         const std::string text((std::istreambuf_iterator<char>(file)),
                                std::istreambuf_iterator<char>());
-        return text.find("TEST(GltfToCnjToolTest,") != std::string::npos;
+        return text.find("TEST(" + suite + ",") != std::string::npos;
     }
 }
 

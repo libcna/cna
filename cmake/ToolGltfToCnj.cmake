@@ -6,10 +6,21 @@
 # triggered by this tool, since it only ever constructs plain math value types.
 add_executable(cna_tool_gltf_to_cnj
     tools/gltf_to_cnj/gltf_to_cnj.cpp
+    modules/content/tests/CNA/Internal/GltfImport/GltfOracleEXT.cpp
 )
-target_include_directories(cna_tool_gltf_to_cnj PRIVATE third_party/cgltf)
+target_include_directories(cna_tool_gltf_to_cnj PRIVATE
+    third_party/cgltf
+    modules/content/tests/CNA/Internal/GltfImport
+)
 target_link_libraries(cna_tool_gltf_to_cnj
     PRIVATE
     CNA
     SHARP_RUNTIME
 )
+
+# `--dump-oracle` decodes extension-backed POSITION data independently for its L4 world-space
+# oracle. CNA intentionally keeps its own Draco dependency PRIVATE, so the diagnostic translation
+# unit needs the optional decoder's headers and library explicitly as well.
+if(CNA_DRACO_AVAILABLE)
+    target_link_libraries(cna_tool_gltf_to_cnj PRIVATE cna_draco)
+endif()

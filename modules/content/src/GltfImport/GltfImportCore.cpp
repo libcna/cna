@@ -48,9 +48,9 @@
 #include <stdexcept>
 #include <unordered_set>
 
-// plan_cnj.md CNB-91 (Phase 14F): KHR_draco_mesh_compression decoding. Optional -- see
-// CNA_DRACO_AVAILABLE's own doc comment in cmake/CnaLibrary.cmake for why this is a real system
-// dependency rather than a vendored single-header library like cgltf.h/stb_image.h.
+// plan_cnj.md CNB-91 / plan_gltf.md GLTF-353: KHR_draco_mesh_compression decoding. The normal
+// build uses CNA's pinned Draco submodule; CNA_DRACO_AVAILABLE remains conditional so packagers
+// and the conformance gate can deliberately exercise the decoder-free refusal path.
 #ifdef CNA_DRACO_AVAILABLE
 #include "draco/compression/decode.h"
 #endif
@@ -2881,9 +2881,6 @@ namespace CNA::Internal::GltfImport
                 "(malformed file).");
         }
 
-        ReserveOrRefuse(out.vertexBytes, static_cast<std::size_t>(vertexCount),
-                         static_cast<std::size_t>(out.stride), name);
-
 #ifdef CNA_DRACO_AVAILABLE
         if (dracoMesh && static_cast<cgltf_size>(dracoMesh->num_points()) != vertexCount)
         {
@@ -2891,6 +2888,12 @@ namespace CNA::Internal::GltfImport
                 "Primitive '" + name + "' has a Draco-decoded point count that does not match its "
                 "declared POSITION accessor count (malformed file).");
         }
+#endif
+
+        ReserveOrRefuse(out.vertexBytes, static_cast<std::size_t>(vertexCount),
+                         static_cast<std::size_t>(out.stride), name);
+
+#ifdef CNA_DRACO_AVAILABLE
         // Unified per-semantic unpacking: reads from the decoded Draco mesh (via its own unique
         // attribute ID) when this is a Draco-compressed primitive, or from the regular accessor
         // otherwise -- every call site below is agnostic to which source actually backs it.

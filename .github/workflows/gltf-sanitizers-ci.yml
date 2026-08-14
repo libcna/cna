@@ -43,9 +43,13 @@ concurrency:
 
 jobs:
   gltf-sanitizers:
-    name: glTF import under ASan+UBSan (STUB renderer)
+    name: glTF import under ASan+UBSan (STUB, Draco ${{ matrix.draco }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        draco: [ON, OFF]
     env:
       CC: gcc-14
       CXX: g++-14
@@ -80,6 +84,7 @@ jobs:
             -DCNA_GRAPHICS_RENDERER=STUB \
             -DCNA_BUILD_TESTS=ON \
             -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_DRACO=${{ matrix.draco }} \
             -DCNA_SANITIZE=address,undefined
 
       - name: Build CnaTests and the offline glTF tool

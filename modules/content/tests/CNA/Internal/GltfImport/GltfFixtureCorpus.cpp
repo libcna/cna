@@ -4,6 +4,7 @@
 
 #include "GltfFixtureCorpus.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
@@ -215,6 +216,18 @@ namespace CnaTest::GltfOracle
     bool IsRejectionFixture(const CNA::Internal::JsonValue& expected)
     {
         return Member(expected, "rejection").type == CNA::Internal::JsonType::Object;
+    }
+
+    bool RequiresUnavailableDraco(const CNA::Internal::JsonValue& expected)
+    {
+#ifdef CNA_DRACO_AVAILABLE
+        (void)expected;
+        return false;
+#else
+        const std::vector<std::string> required = Strings(Path(expected, "l1.extensionsRequired"));
+        return std::find(required.begin(), required.end(), "KHR_draco_mesh_compression") !=
+               required.end();
+#endif
     }
 
     bool IsOpenDefect(const CNA::Internal::JsonValue& defect)

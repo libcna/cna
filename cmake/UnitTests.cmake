@@ -194,6 +194,17 @@ if(CNA_BUILD_TESTS)
             SDL3::SDL3
     )
 
+    # The Draco corpus owns one test-only encoder oracle: it recreates the committed compressed
+    # streams with CNA's pinned dependency and byte-compares them, so the otherwise standard-
+    # library-only Python generator never needs to execute a native tool. Production content code
+    # keeps Draco PRIVATE; expose it only to CnaTests when that optional decoder is configured.
+    if(CNA_DRACO_AVAILABLE)
+        target_link_libraries(CnaTests PRIVATE cna_draco)
+        if(NOT CNA_USE_SYSTEM_DRACO)
+            target_compile_definitions(CnaTests PRIVATE CNA_VENDORED_DRACO)
+        endif()
+    endif()
+
     # The metal and glide policy suites deliberately compile on every renderer (see their own
     # header comments); their policy headers ride the unconditional header-interface targets
     # those renderer modules always define.
@@ -431,10 +442,10 @@ if(CNA_BUILD_TESTS)
     # into exactly one rung -- so a new suite that matches no rung fails the run instead of
     # silently sitting outside `ctest -L gltf-conformance`. Keep the entries here only.
     set(CNA_GLTF_CONFORMANCE_RUNGS
-        "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*:GltfSharedDefectPolicy.*:GltfRendererPbrFallbackPolicy.*:GltfRendererIndexWidthPolicy.*:GltfRendererPointTopologyPolicy.*"
+        "L0|GltfFixtureCorpus.*:GltfOracleEXT.*:GltfConformanceLadder.*:GltfSharedDefectPolicy.*:GltfRendererPbrFallbackPolicy.*:GltfRendererIndexWidthPolicy.*:GltfRendererPointTopologyPolicy.*:GltfDracoEncoderPin.*"
         "L1|GltfConformanceL1.*:GltfContainerRobustness.*:GltfContainerValidation.*:GltfUriContainment.*:GltfExternalBuffer.*:GltfExtensionRegistry.*:GltfLimitationsDoc.*:GltfVendoredCgltf.*"
         "L2|GltfConformanceL2.*:GltfAccessorDecodeLock.*:GltfBufferAndWeightForm.*:GltfIndexDecode.*:GltfIndexForm.*"
-        "L3|GltfConformanceL3.*:GltfAttributeCoverage.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfMaterialVariants.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*:GltfUnlitMaterial.*"
+        "L3|GltfConformanceL3.*:GltfAttributeCoverage.*:GltfImportCoreTest.*:GltfPrimitiveTopology.*:GltfMaterialState.*:GltfMaterialVariants.*:GltfDrawTopology.*:GltfSamplerMapping.*:GltfImageSource.*:GltfUvChannel.*:GltfOcclusionRemap.*:GltfUnsupportedTexture.*:GltfUnlitMaterial.*:GltfDracoParity.*"
         "L4|GltfConformanceL4.*:GltfConventions.*:GltfImportReport.*:GltfNodeTransformOrder.*:GltfNodeHierarchy.*:GltfMirroring.*:GltfModelShape.*:GltfSceneGraphBones.*:GltfSkinSpaces.*:GltfSkinComposition.*:GltfSkinLadder.*:GltfRigidAnimation.*:GltfAnimationSampling.*:GltfAnimationRobustness.*:GltfClipAndLight.*:GltfCameras.*:GltfMorphWeights.*:GltfMorphBlending.*:GltfSceneSelection.*:GltfRealWorldAcceptanceL4.*"
         "L5|GltfConformanceL5.*:GltfStrideAndBuffer.*:GltfBufferOracle.*:GltfVertexBufferInvariants.*:GltfVertexLayoutTable.*:GltfNormalTangentCorpus.*"
         "L6|GltfConformanceL6.*:GltfDrawParamsOracleL6.*:GltfLightingPolicy.*:GltfLightBudget.*:GltfPbrBrdf.*"

@@ -131,6 +131,16 @@ namespace CnaTest::GltfOracle
     [[nodiscard]] bool IsRejectionFixture(const CNA::Internal::JsonValue& expected);
 
     /**
+     * @brief True when this build intentionally lacks the decoder a Draco fixture requires.
+     *
+     * Structural L1/L2 tests still inspect these fixtures in a decoder-free build. Layers that
+     * require semantic extraction skip only these records, while GltfContainerValidation asserts
+     * their required-extension refusal explicitly. This keeps `CNA_ENABLE_DRACO=OFF` a complete,
+     * green corpus configuration rather than deleting Draco assets from that configuration.
+     */
+    [[nodiscard]] bool RequiresUnavailableDraco(const CNA::Internal::JsonValue& expected);
+
+    /**
      * @brief True when a defect record is still open (`known-failing` or `partially-remediated`).
      *
      * A `fixed` record stays in the corpus forever as the regression witness for the task that

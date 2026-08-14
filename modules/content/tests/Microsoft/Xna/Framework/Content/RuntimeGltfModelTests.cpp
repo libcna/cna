@@ -794,14 +794,14 @@ TEST(RuntimeGltfModelTest, LoadsDracoCompressedTriangleDirectlyFromGltf)
     ASSERT_EQ(model.getMeshesProperty().getCountProperty(), 1);
     ModelMesh* mesh = model.getMeshesProperty()[0];
 
-    auto* basicFx = dynamic_cast<BasicEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
-    ASSERT_NE(basicFx, nullptr);
+    auto* pbrFx = dynamic_cast<PbrEffect*>(mesh->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(pbrFx, nullptr);
 
-    // No TEXCOORD-referencing material was authored, so BasicEffect stays untextured -- this
+    // No TEXCOORD-referencing material was authored, so PbrEffect stays untextured -- this
     // test only needs to prove the mesh geometry itself decoded correctly (no crash, right
     // vertex/index counts implicitly verified via GltfImportCoreTests.cpp's own more detailed
     // byte-level assertions for the identical fixture).
-    EXPECT_FALSE(basicFx->getTextureEnabledProperty());
+    EXPECT_EQ(pbrFx->getTextureProperty(), nullptr);
 }
 #endif
 

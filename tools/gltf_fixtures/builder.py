@@ -331,7 +331,8 @@ class GltfBuilder:
                      min_: Sequence[float] | None = None, max_: Sequence[float] | None = None,
                      sparse: dict[str, Any] | None = None,
                      declared_count: int | None = None,
-                     base_values_if_sparse_ignored: Sequence[float] | None = None) -> int:
+                     base_values_if_sparse_ignored: Sequence[float] | None = None,
+                     encoded_with: str | None = None) -> int:
         """Adds an accessor whose bytes some caller has already placed in the buffer.
 
         Use this when the accessor's storage is the thing under test -- interleaving, a non-zero
@@ -360,8 +361,15 @@ class GltfBuilder:
             honest ``count`` the expectation is built from. Only a malformed fixture wants this --
             a count no buffer could back is the lie under test (``GLTF-039``) -- so the two are
             kept separate rather than letting a bad count silently define the expectation.
+        :param encoded_with: extension that carries this accessor's values outside the accessor's
+            own bufferView. ``KHR_draco_mesh_compression`` accessors intentionally have no
+            bufferView; their decoded values become observable at L3 after the extension decoder,
+            while L2 can still assert the accessor metadata and the named source of the bytes.
         :return: the new accessor's index.
         """
+        if encoded_with is not None and buffer_view is not None:
+            raise ValueError(
+                f"{self.name}: {usage} is encoded with {encoded_with} but also has a bufferView")
         components = ACCESSOR_TYPE_COMPONENTS[accessor_type]
         if len(expected) != count * components:
             raise ValueError(
@@ -406,6 +414,8 @@ class GltfBuilder:
             "bufferViewByteStride": view.get("byteStride") if view is not None else None,
             "values": values,
         })
+        if encoded_with is not None:
+            self.accessor_records[-1]["encodedWith"] = encoded_with
         # Recorded only when the file LIES about its count, so a malformed fixture states the
         # number under test while every honest fixture's expectation stays exactly as it was.
         if declared_count is not None and declared_count != count:

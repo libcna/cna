@@ -1,0 +1,962 @@
+{
+  "id": "draco-skinned",
+  "description": "A two-joint, losslessly compressed skinned PBR triangle beside its ordinary accessor twin. Non-trivial JOINTS_0 and WEIGHTS_0 prove both generic Draco attributes reach the shared palette remap and stride-68 packer.",
+  "generator": {
+    "tool": "tools/gltf_fixtures",
+    "version": 1,
+    "task": "GLTF-003"
+  },
+  "specPin": {
+    "repository": "KhronosGroup/glTF",
+    "path": "specification/2.0/Specification.adoc",
+    "commit": "2b29723d025a995971726f2989697cdc49b1222a",
+    "sha256": "55986799907693d3f51b0a474497852c0d6318b85084811fdc05ff0db4b27967",
+    "document": "docs/gltf-conformance.md"
+  },
+  "specAnchors": [
+    "KHR_draco_mesh_compression",
+    "skins",
+    "skinned-mesh-attributes"
+  ],
+  "inventory": {
+    "id": "draco-skinned",
+    "owningGroup": "draco",
+    "referencingGroups": [
+      "skinning"
+    ],
+    "validatedLayers": [
+      "L1",
+      "L3",
+      "L4",
+      "L5"
+    ],
+    "features": [
+      "Draco with JOINTS_0 / WEIGHTS_0",
+      "two-joint skin",
+      "compressed/uncompressed skin parity"
+    ],
+    "auditFixture": null
+  },
+  "l1": {
+    "assetVersion": "2.0",
+    "defaultScene": 0,
+    "sceneCount": 1,
+    "nodeCount": 3,
+    "meshCount": 1,
+    "materialCount": 0,
+    "textureCount": 0,
+    "imageCount": 0,
+    "samplerCount": 0,
+    "skinCount": 1,
+    "animationCount": 0,
+    "accessorCount": 14,
+    "bufferViewCount": 9,
+    "bufferCount": 1,
+    "bufferByteLength": 620,
+    "extensionsUsed": [
+      "KHR_draco_mesh_compression"
+    ],
+    "extensionsRequired": [
+      "KHR_draco_mesh_compression"
+    ],
+    "punctualLightCount": 0
+  },
+  "l2": {
+    "accessors": [
+      {
+        "index": 0,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 1,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 2,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 3,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 2,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 4,
+        "usage": "JOINTS_0",
+        "type": "VEC4",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 5,
+        "usage": "WEIGHTS_0",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": null,
+        "byteOffset": 0,
+        "bufferViewByteOffset": null,
+        "bufferViewByteStride": null,
+        "values": [
+          0.75,
+          0.25,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ],
+        "encodedWith": "KHR_draco_mesh_compression"
+      },
+      {
+        "index": 6,
+        "usage": "POSITION",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 1,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 268,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      {
+        "index": 7,
+        "usage": "NORMAL",
+        "type": "VEC3",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 3,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 304,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 8,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 340,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 9,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 2,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 4,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 388,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 10,
+        "usage": "JOINTS_0",
+        "type": "VEC4",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 5,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 412,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "index": 11,
+        "usage": "WEIGHTS_0",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 6,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 436,
+        "bufferViewByteStride": null,
+        "values": [
+          0.75,
+          0.25,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.5,
+          0.5,
+          0.0,
+          0.0
+        ]
+      },
+      {
+        "index": 12,
+        "usage": "indices",
+        "type": "SCALAR",
+        "componentType": 5123,
+        "componentTypeName": "UNSIGNED_SHORT",
+        "count": 3,
+        "componentsPerElement": 1,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 7,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 484,
+        "bufferViewByteStride": null,
+        "values": [
+          0,
+          1,
+          2
+        ]
+      },
+      {
+        "index": 13,
+        "usage": "inverseBindMatrices",
+        "type": "MAT4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 2,
+        "componentsPerElement": 16,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 8,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 492,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      }
+    ]
+  },
+  "l3": {
+    "primitives": [
+      {
+        "mesh": 0,
+        "meshName": "DracoSkinnedPair",
+        "primitive": 0,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
+        "colors": [],
+        "joints": [
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "weights": [
+          [
+            0.75,
+            0.25,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.5,
+            0.5,
+            0.0,
+            0.0
+          ]
+        ],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      },
+      {
+        "mesh": 0,
+        "meshName": "DracoSkinnedPair",
+        "primitive": 1,
+        "mode": 4,
+        "modeName": "TRIANGLES",
+        "indexed": true,
+        "vertexCount": 3,
+        "positions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "normals": [
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
+        "colors": [],
+        "joints": [
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ]
+        ],
+        "weights": [
+          [
+            0.75,
+            0.25,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.5,
+            0.5,
+            0.0,
+            0.0
+          ]
+        ],
+        "indices": [
+          0,
+          1,
+          2
+        ],
+        "triangles": [
+          [
+            0,
+            1,
+            2
+          ]
+        ],
+        "importPolicy": {
+          "imported": true,
+          "topologyMode": 4,
+          "topologyName": "TRIANGLES",
+          "indices": [
+            0,
+            1,
+            2
+          ],
+          "converted": false,
+          "primitiveCount": 1
+        },
+        "material": null
+      }
+    ]
+  },
+  "l4": {
+    "instances": [
+      {
+        "node": 2,
+        "nodeName": "SkinnedPairNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "primitive": 0
+      },
+      {
+        "node": 2,
+        "nodeName": "SkinnedPairNode",
+        "mesh": 0,
+        "parentNodePath": [],
+        "worldMatrixColumnMajor": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "worldPositions": [
+          [
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "primitive": 1
+      }
+    ],
+    "worldBounds": {
+      "min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "max": [
+        1.0,
+        1.0,
+        0.0
+      ]
+    }
+  },
+  "l5": {
+    "supported": true,
+    "parts": [
+      {
+        "mesh": 0,
+        "primitive": 0,
+        "stride": 68,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          },
+          {
+            "name": "BlendWeight",
+            "offset": 48,
+            "size": 16
+          },
+          {
+            "name": "BlendIndices",
+            "offset": 64,
+            "size": 4
+          }
+        ],
+        "vertexBufferFile": "draco-skinned.vb.bin",
+        "vertexBufferBytes": 204,
+        "vertexBufferSha256": "0800baf1550989279bc4e6fe12003b34cbfa690d765fbb7d826fa790d74d81a5",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "draco-skinned.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      },
+      {
+        "mesh": 0,
+        "primitive": 1,
+        "stride": 68,
+        "vertexCount": 3,
+        "fields": [
+          {
+            "name": "Position",
+            "offset": 0,
+            "size": 12
+          },
+          {
+            "name": "Normal",
+            "offset": 12,
+            "size": 12
+          },
+          {
+            "name": "Tangent",
+            "offset": 24,
+            "size": 16
+          },
+          {
+            "name": "TextureCoordinate",
+            "offset": 40,
+            "size": 8
+          },
+          {
+            "name": "BlendWeight",
+            "offset": 48,
+            "size": 16
+          },
+          {
+            "name": "BlendIndices",
+            "offset": 64,
+            "size": 4
+          }
+        ],
+        "vertexBufferFile": "draco-skinned.p1.vb.bin",
+        "vertexBufferBytes": 204,
+        "vertexBufferSha256": "0800baf1550989279bc4e6fe12003b34cbfa690d765fbb7d826fa790d74d81a5",
+        "indexElementSize": 2,
+        "indexCount": 3,
+        "indexBufferFile": "draco-skinned.p1.ib.bin",
+        "indexBufferBytes": 6,
+        "indexBufferSha256": "90c2698921ca9fd02950be353f721888760e33ab5095a21e50f1e4360b6de1a0",
+        "sourceTopology": "TRIANGLES",
+        "topology": "TRIANGLES",
+        "primitiveCount": 1
+      }
+    ]
+  },
+  "rejection": null,
+  "defects": []
+}

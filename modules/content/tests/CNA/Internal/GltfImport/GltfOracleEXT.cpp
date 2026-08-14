@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the scope rules. Test scope only.
+// plan_gltf.md GLTF-005 / GLTF-006 -- see GltfOracleEXT.hpp for the diagnostic/test scope rules.
 
 #include "GltfOracleEXT.hpp"
 
@@ -11,6 +11,10 @@
 #include <cstring>
 #include <limits>
 #include <unordered_set>
+
+#ifdef CNA_DRACO_AVAILABLE
+#include "draco/compression/decode.h"
+#endif
 
 namespace CnaTest::GltfOracle
 {
@@ -342,14 +346,55 @@ namespace CnaTest::GltfOracle
             }
         }
 
-        /// The primitive's POSITION values, decoded straight from its accessor. Deliberately not
-        /// routed through MeshOut: the L4 oracle must stay usable on a fixture whose L3 is wrong.
-        std::vector<std::array<float, 3>> PrimitivePositions(const cgltf_primitive& prim)
+        /// The primitive's POSITION values, decoded straight from its declared source.
+        /// Deliberately not routed through MeshOut: the L4 oracle must stay usable on a fixture
+        /// whose L3 is wrong. For Draco the independent oracle invokes the pinned reference
+        /// decoder itself; only the extension's cgltf unique-id representation is shared with the
+        /// production importer.
+        std::vector<std::array<float, 3>> PrimitivePositions(const cgltf_data& data,
+                                                              const cgltf_primitive& prim)
         {
             std::vector<std::array<float, 3>> out;
             const cgltf_accessor* accessor =
                 cgltf_find_accessor(&prim, cgltf_attribute_type_position, 0);
             if (accessor == nullptr || cgltf_num_components(accessor->type) != 3) { return out; }
+
+#ifdef CNA_DRACO_AVAILABLE
+            if (prim.has_draco_mesh_compression != 0)
+            {
+                const cgltf_buffer_view* view = prim.draco_mesh_compression.buffer_view;
+                const std::uint8_t* bytes = view != nullptr ? cgltf_buffer_view_data(view) : nullptr;
+                if (view == nullptr || bytes == nullptr) { return out; }
+
+                draco::DecoderBuffer buffer;
+                buffer.Init(reinterpret_cast<const char*>(bytes), view->size);
+                draco::Decoder decoder;
+                draco::StatusOr<std::unique_ptr<draco::Mesh>> decoded =
+                    decoder.DecodeMeshFromBuffer(&buffer);
+                if (!decoded.ok()) { return out; }
+
+                const int uniqueId = CNA::Internal::GltfImport::FindDracoUniqueIdEXT(
+                    prim, &data, cgltf_attribute_type_position, 0);
+                const draco::PointAttribute* position = uniqueId >= 0
+                    ? decoded.value()->GetAttributeByUniqueId(static_cast<std::uint32_t>(uniqueId))
+                    : nullptr;
+                if (position == nullptr) { return out; }
+
+                out.reserve(static_cast<std::size_t>(decoded.value()->num_points()));
+                for (draco::PointIndex point(0); point < decoded.value()->num_points(); ++point)
+                {
+                    std::array<float, 3> value{};
+                    if (!position->ConvertValue<float>(position->mapped_index(point), 3,
+                                                       value.data()))
+                    {
+                        return {};
+                    }
+                    out.push_back(value);
+                }
+                return out;
+            }
+#endif
+
             std::vector<float> raw;
             if (!UnpackAccessorFloats(*accessor, raw).empty()) { return out; }
             out.reserve(static_cast<std::size_t>(accessor->count));
@@ -750,6 +795,8 @@ namespace CnaTest::GltfOracle
                                                                                : entry.meshName,
                             hasSkin ? &skeleton : nullptr, 1.0f);
                         entry.dump = DumpMeshOutEXT(extracted);
+                        entry.vertexBytes = extracted.vertexBytes;
+                        entry.indexBytes = extracted.indexBytes;
                         entry.extracted = true;
                     }
                     catch (const std::exception& e)
@@ -829,7 +876,7 @@ namespace CnaTest::GltfOracle
                         instance.primitive = static_cast<int>(p);
                         instance.worldMatrix = placement;
                         for (const std::array<float, 3>& local :
-                             PrimitivePositions(node.mesh->primitives[p]))
+                             PrimitivePositions(data, node.mesh->primitives[p]))
                         {
                             instance.worldPositions.push_back(
                                 TransformPoint(placement, local[0], local[1], local[2]));
