@@ -54,6 +54,7 @@ layout(set = 3, binding = 2) uniform PbrParams {
     float occlusionStrength;
     vec4 alphaTest;
     vec4 srgbFlags; // x=decode base, y=decode emissive, z=encode output
+    vec4 dielectricFresnel; // xyz=dielectric F0, w=dielectric F90
 } pbrp;
 
 vec3 cnaSrgbToLinear(vec3 c) {
@@ -71,7 +72,7 @@ vec3 cnaLinearToSrgb(vec3 c) {
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2). Mirrors
 // EasyGLRenderer::EnsurePbrProgram()'s PbrLight() formula-for-formula.
-vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, float roughness, float metallic) {
+vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec3 F90, float roughness, float metallic) {
     vec3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 1e-4);
@@ -82,7 +83,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, flo
     float D = a2 / (3.14159265 * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    vec3 F = F0 + (vec3(1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    vec3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     vec3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     vec3 diffuseColor = albedo * (1.0 - metallic);
     vec3 kd = vec3(1.0) - F;
@@ -123,12 +124,13 @@ void main() {
     float metallic  = clamp(mr.b * pbrp.metallicFactor, 0.0, 1.0);
 
     vec3 V = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
-    vec3 F0 = mix(vec3(0.04), albedo, metallic);
+    vec3 F0 = mix(pbrp.dielectricFresnel.xyz, albedo, metallic);
+    vec3 F90 = mix(vec3(pbrp.dielectricFresnel.w), vec3(1.0), metallic);
 
     vec3 Lo = vec3(0.0);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
 
     float occlusionSample = texture(uOcclusionMap, fragUV).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);

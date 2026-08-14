@@ -1445,7 +1445,7 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             std::array<float, 32> uniforms{};          ///< PC (FillExtUniforms's existing layout)
             std::array<float, 56> lightUniforms{};     ///< LitLightParams/SkinnedLightParams (byte-identical)
-            std::array<float, 12> pbrParams{};          ///< factors + alphaTest + sRGB flags vec4s
+            std::array<float, 16> pbrParams{};          ///< factors + alphaTest + sRGB + Fresnel vec4s
             bool skinned = false;
             std::array<float, 72 * 16> boneUniforms{}; ///< only used/uploaded when skinned == true
         std::array<float, 8> fogUniforms{};  ///< REMED-GFX-009 FogParams: vec4 fogColorEnabled + vec4 fogVector (32 bytes)

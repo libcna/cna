@@ -184,6 +184,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     cna_register_renderer_test(NAME SdlGpu_Pbr_SrgbTransfer COMMAND cna_test_sdlgpu_pbr_srgb_transfer
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: KHR_materials_ior and factor-only KHR_materials_specular must alter both
+    # dielectric Schlick endpoints on rigid and identity-skinned PBR pipelines.
+    cna_sdlgpu_test(cna_test_sdlgpu_pbr_fresnel_factors
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_register_renderer_test(NAME SdlGpu_Pbr_FresnelFactors COMMAND cna_test_sdlgpu_pbr_fresnel_factors
+        TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     cna_sdlgpu_test(cna_test_sdlgpu_skinnedeffect_vertexcolor sdlgpu_skinnedeffect_vertexcolor_test.cpp)
     cna_register_renderer_test(NAME SdlGpu_SkinnedEffectVertexColor COMMAND cna_test_sdlgpu_skinnedeffect_vertexcolor
         TIMEOUT 60 LABELS "SdlGpu" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")

@@ -912,9 +912,9 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[52] = p.specularColor[0]; out[53] = p.specularColor[1]; out[54] = p.specularColor[2]; out[55] = p.specularPower;
         }
 
-        // pbr3d.frag.glsl's tertiary PbrParams block: one material-factor/map-scale vec4 followed
-        // by the alpha coverage vector used by glTF MASK draws.
-        void FillPbrParams(std::array<float, 12>& out, const GpuDrawParams& p)
+        // pbr3d.frag.glsl's tertiary PbrParams block: material/map factors, alpha coverage,
+        // transfer flags, and the glTF dielectric Fresnel endpoints (four std140 vec4s).
+        void FillPbrParams(std::array<float, 16>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -928,6 +928,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
             out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             out[11] = 0.0f;
+            out[12] = p.pbrDielectricF0[0];
+            out[13] = p.pbrDielectricF0[1];
+            out[14] = p.pbrDielectricF0[2];
+            out[15] = p.pbrDielectricF90;
         }
 
         // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::
