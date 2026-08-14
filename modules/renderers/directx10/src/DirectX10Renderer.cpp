@@ -266,8 +266,10 @@ namespace CNA::Internal::Renderers::DirectX10
                 case PrimitiveType::TriangleStrip: return primitiveCount + 2;
                 case PrimitiveType::LineList:       return primitiveCount * 2;
                 case PrimitiveType::LineStrip:      return primitiveCount + 1;
-                default:                              return primitiveCount * 3;
+                case PrimitiveType::PointListEXT:   return primitiveCount;
             }
+            throw std::runtime_error(
+                "DirectX10 renderer does not support the requested PrimitiveType value");
         }
 
         D3D10_PRIMITIVE_TOPOLOGY ToD3D10Topology(PrimitiveType primitive)
@@ -278,8 +280,10 @@ namespace CNA::Internal::Renderers::DirectX10
                 case PrimitiveType::TriangleStrip: return D3D10_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
                 case PrimitiveType::LineList:       return D3D10_PRIMITIVE_TOPOLOGY_LINELIST;
                 case PrimitiveType::LineStrip:      return D3D10_PRIMITIVE_TOPOLOGY_LINESTRIP;
-                default:                              return D3D10_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+                case PrimitiveType::PointListEXT:   return D3D10_PRIMITIVE_TOPOLOGY_POINTLIST;
             }
+            throw std::runtime_error(
+                "DirectX10 renderer does not support the requested PrimitiveType value");
         }
     }
 

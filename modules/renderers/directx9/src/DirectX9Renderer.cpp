@@ -35,6 +35,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iterator>
+#include <stdexcept>
 
 namespace CNA::Internal::Renderers::DirectX9
 {
@@ -79,7 +80,7 @@ namespace CNA::Internal::Renderers::DirectX9
             return static_cast<std::size_t>(operation);
         }
 
-        /// D9-82: XNA's own PrimitiveType only ever needs these 4 D3DPRIMITIVETYPE values --
+        /// D9-82/GLTF-394: XNA's four topologies plus CNAEXT PointListEXT map explicitly --
         /// unlike D3D11/Vulkan/D3D12's own per-renderer VertexCountForPrimitives() precedent, D3D9's
         /// DrawPrimitive/DrawIndexedPrimitive already take a PrimitiveCount directly (not a raw
         /// vertex/index count), so no equivalent conversion helper is needed here.
@@ -91,8 +92,10 @@ namespace CNA::Internal::Renderers::DirectX9
             case PrimitiveType::TriangleStrip: return D3DPT_TRIANGLESTRIP;
             case PrimitiveType::LineList:      return D3DPT_LINELIST;
             case PrimitiveType::LineStrip:     return D3DPT_LINESTRIP;
+            case PrimitiveType::PointListEXT:  return D3DPT_POINTLIST;
             }
-            return D3DPT_TRIANGLELIST;
+            throw std::runtime_error(
+                "DirectX9 renderer does not support the requested PrimitiveType value");
         }
 
         using Microsoft::Xna::Framework::Graphics::DepthFormat;

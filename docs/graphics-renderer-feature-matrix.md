@@ -153,6 +153,24 @@ direct renderer-level upload whose width disagrees with the factory declaration.
 the important unsupported-device case: its pre-existing extension check now reaches the throwing
 base method instead of manufacturing a 16-bit buffer.
 
+### Explicit unsupported paths (`GLTF-394`)
+
+An unsupported cell is not permission to submit a different primitive or a narrower index. STUB's
+campaign contract ends at `GraphicsCapability::ThreeD == false`, and draw-requiring glTF tests name
+that capability when they skip; HEADLESS exposes a trace and never calls it a framebuffer result.
+The shared uint32 factory throws the width-specific message above for every renderer without an
+explicit 32-bit route.
+
+The Direct3D comparison audit found the remaining silent point-topology defaults. D3D9's five draw
+implementations and the D3D10/D3D11 count/native mappers now select their APIs' real point-list
+topologies. D3D12 does not pretend: its current pipeline-state cache fixes
+`PrimitiveTopologyType` to `TRIANGLE`, so all four draw paths reject `PointListEXT` at entry with
+`DirectX12 renderer does not support PrimitiveType::PointListEXT` before target, layout or PSO
+validation can obscure the cause. `GltfRendererPointTopologyPolicy` locks those dispositions from
+the renderer sources; D3D9, D3D10 and D3D11 additionally participate in the shared point framebuffer
+suite. No Direct3D mapper retains an unnamed default that can turn a future topology into a
+triangle list.
+
 The **Wicked Engine** renderer (`CNA_GRAPHICS_RENDERER=WICKED`, tracked in `../plan_wicked.md`) is
 **not** a column here for the same reason WebGPU is not: its feature surface is a first baseline,
 and — more importantly — nothing in it has been executed on real hardware yet, so it has no cell

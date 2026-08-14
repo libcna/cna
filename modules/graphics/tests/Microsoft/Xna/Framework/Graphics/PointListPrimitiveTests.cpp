@@ -15,14 +15,14 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Renderer scope. Bgfx, EasyGL, Vulkan and WebGPU render points and support backbuffer readback, so
-// they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but implements no
-// backbuffer readback, so it is covered by a separate practical control. Software explicitly
-// rejects every non-TriangleList topology (its documented v1 boundary) and is asserted as a
-// rejection, never as approximate geometry. D3D9, D3D11 and D3D12 still route PointListEXT through
-// their triangle-list default -- an independent defect recorded as REMED-GFX-114 -- so they are
-// deliberately not yet in the pixel guard below. Vulkan joined this matrix with plan_gltf.md
-// GLTF-393.
+// Renderer scope. Bgfx, D3D9, D3D10, D3D11, EasyGL, Vulkan and WebGPU render points and support
+// backbuffer readback, so they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT
+// natively but implements no backbuffer readback, so it is covered by a separate practical
+// control. Software explicitly rejects every non-TriangleList topology (its documented v1
+// boundary) and is asserted as a rejection, never as approximate geometry. D3D12 is also an
+// explicit rejection while its PSO cache is fixed to triangle topology; its named source contract
+// is locked by GltfRendererPointTopologyPolicy. Vulkan joined this matrix with plan_gltf.md
+// GLTF-393; the Direct3D disposition closes GLTF-394 / REMED-GFX-114.
 
 #include <algorithm>
 #include <array>
@@ -395,7 +395,9 @@ namespace
     };
 }
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_DIRECTX9) || \
+    defined(CNA_RENDERER_DIRECTX10) || defined(CNA_RENDERER_DIRECTX11) || \
+    defined(CNA_RENDERER_EASYGL) || \
     defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct

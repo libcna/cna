@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-163/373/374/379: repository-wide renderer contracts are tested from the
+// plan_gltf.md GLTF-163/373/374/379/394: repository-wide renderer contracts are tested from the
 // renderer sources even when the current host cannot compile or execute a particular backend.
 // This covers 32-bit index-factory ownership as well as PBR texture bindings, packed-channel
 // semantics and neutral fallbacks.
@@ -1361,4 +1361,40 @@ TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFa
         "ThrowUnsupportedFeature(\"32-bit index buffers\")")));
     EXPECT_NE(std::string::npos, RendererText(renderers / "skia").find(Normalize(
         "ThrowSkiaUnsupported3D(\"CreateIndexBuffer32\")")));
+}
+
+TEST(GltfRendererPointTopologyPolicy, Direct3DBackendsMapPointsOrRejectBeforeSubmission)
+{
+    // GLTF-394 closes the last known silent POINTS reinterpretations. D3D9 duplicates its native
+    // mapper in five independently compiled draw implementations, so checking only the ordinary
+    // path would leave PBR (the glTF path), stock, skinned-colour or instanced draws behind.
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    const std::string d3d9 = RendererText(renderers / "directx9");
+    EXPECT_EQ(5u, CountOccurrences(
+                      d3d9,
+                      "casePrimitiveType::PointListEXT:returnD3DPT_POINTLIST;"));
+
+    const std::string d3d10 = RendererText(renderers / "directx10");
+    EXPECT_NE(std::string::npos, d3d10.find(
+        "casePrimitiveType::PointListEXT:returnprimitiveCount;"));
+    EXPECT_NE(std::string::npos, d3d10.find(
+        "casePrimitiveType::PointListEXT:returnD3D10_PRIMITIVE_TOPOLOGY_POINTLIST;"));
+
+    const std::string d3d11 = RendererText(renderers / "directx11");
+    EXPECT_NE(std::string::npos, d3d11.find(
+        "casePrimitiveType::PointListEXT:returnprimitiveCount;"));
+    EXPECT_NE(std::string::npos, d3d11.find(
+        "casePrimitiveType::PointListEXT:returnD3D11_PRIMITIVE_TOPOLOGY_POINTLIST;"));
+
+    // D3D12's current PSO cache fixes PrimitiveTopologyType to TRIANGLE. Mapping IA topology to
+    // POINTLIST alone would therefore trade a triangle approximation for a validation error. Its
+    // honest contract is a named refusal, reached by all four ordinary/instanced native paths.
+    const std::string d3d12 = RendererText(renderers / "directx12");
+    EXPECT_NE(std::string::npos, d3d12.find("casePrimitiveType::PointListEXT:"));
+    EXPECT_NE(std::string::npos, d3d12.find(
+        "DirectX12rendererdoesnotsupportPrimitiveType::PointListEXT:"));
+    EXPECT_EQ(4u, CountOccurrences(d3d12, "ToD3D12Topology(primitive)"));
+    EXPECT_EQ(std::string::npos, d3d12.find(
+        "casePrimitiveType::PointListEXT:returnD3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;"));
 }
