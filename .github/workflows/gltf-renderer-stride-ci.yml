@@ -1,0 +1,103 @@
+# plan_gltf.md GLTF-158: exercise every glTF vertex declaration at each renderer boundary.
+#
+# This is intentionally narrower than the sanitizer and full conformance jobs. Its job is to make
+# a renderer-specific stride-table regression fail at the commit that introduces it: seven real
+# corpus loads, then seven Model::Draw + Present calls. STUB has no 3D capability, so it verifies
+# the common upload/declaration half and reports the native-draw half as an explicit skip.
+
+name: glTF renderer stride conformance
+
+on:
+  push:
+    branches: [feature/gltf, develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: gltf-renderer-stride-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stride-conformance:
+    name: ${{ matrix.renderer }} stride boundary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        renderer: [STUB, HEADLESS, OPENGLES3, VULKAN]
+    env:
+      CC: gcc-14
+      CXX: g++-14
+
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sibling repositories
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config xvfb \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libvulkan-dev mesa-vulkan-drivers \
+            libgl1-mesa-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Record SDL submodule commit
+        id: sdlsha
+        run: echo "sha=$(git -C third_party/SDL rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache prebuilt SDL
+        uses: actions/cache@v4
+        with:
+          path: .sdl-prebuilt-Linux-x86_64
+          key: sdl-${{ runner.os }}-${{ steps.sdlsha.outputs.sha }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=${{ matrix.renderer }} \
+            -DCNA_BUILD_TESTS=ON \
+            -DCNA_BUILD_EXAMPLES=OFF \
+            -DCNA_ENABLE_NET=OFF
+
+      - name: Build CnaTests
+        run: cmake --build build --target CnaTests --parallel 4
+
+      - name: Run all seven stride boundaries
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: 1
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+            lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+            test -n "${lvp_icd}"
+            export VK_ICD_FILENAMES="${lvp_icd}"
+          fi
+          xvfb-run -a ./build/CnaTests \
+            --gtest_filter='GltfStrideAndBuffer.EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration:RendererStrideConformance.EveryGltfStrideReachesTheNativeDrawBoundary'

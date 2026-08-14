@@ -1810,6 +1810,37 @@ namespace Microsoft::Xna::Framework::Content
             Graphics::GraphicsDevice& device, int stride, int numVertices,
             const std::vector<std::uint8_t>& vertBytes)
         {
+            // plan_gltf.md GLTF-159. A stride is enough to choose one of the importer's packing
+            // branches, but it is not a VertexDeclaration: renderers need the semantic, format
+            // and offset of every element as well. The old capacity-only constructor left that
+            // declaration empty, so EasyGL fell back to its duplicated magic-stride switch and
+            // every other renderer that remembers declarations had nothing to validate against.
+            // Build the declaration from the same canonical table that admitted the stride. It
+            // then travels through VertexBuffer::UploadValidatedData on every branch below,
+            // including SetDataRaw, and the renderer boundary sees the real glTF layout.
+            const CNA::Internal::Graphics::InferredVertexLayout layout =
+                CNA::Internal::Graphics::InferredLayoutForStride(
+                    stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
+            if (!layout.known)
+            {
+                throw ContentLoadException(
+                    "Vertex stride " + std::to_string(stride) +
+                    " is not in the canonical vertex layout table, so no renderer can bind "
+                    "it and no upload path exists for it. Refusing rather than returning an "
+                    "empty vertex buffer (GLTF-157).");
+            }
+
+            std::vector<Graphics::VertexElement> declarationElements;
+            declarationElements.reserve(layout.count);
+            for (std::size_t i = 0; i < layout.count; ++i)
+            {
+                declarationElements.emplace_back(
+                    layout.elements[i].offset, layout.elements[i].format,
+                    layout.elements[i].usage, layout.elements[i].usageIndex);
+            }
+            const Graphics::VertexDeclaration declaration(
+                stride, std::move(declarationElements));
+
             auto readF = [&](std::size_t off) {
                 float v;
                 std::memcpy(&v, vertBytes.data() + off, sizeof(float));
@@ -1830,7 +1861,8 @@ namespace Microsoft::Xna::Framework::Content
             // implicitly deleted (its `Color Color` member has no zero-arg constructor) -- build
             // each vector via reserve()+emplace_back() rather than a sized constructor, so none
             // of the 4 struct-backed branches below ever needs default-construction.
-            auto vb = std::make_unique<Graphics::VertexBuffer>(device, numVertices);
+            auto vb = std::make_unique<Graphics::VertexBuffer>(
+                device, declaration, numVertices, Graphics::BufferUsage::None);
             if (stride == 16) {
                 std::vector<Graphics::VertexPositionColor> verts;
                 verts.reserve(static_cast<std::size_t>(numVertices));
@@ -1884,20 +1916,10 @@ namespace Microsoft::Xna::Framework::Content
                 // whatever the buffer object happened to contain, which is the same class of
                 // silent wrongness the renderer-side ApplyLayout fallback has.
                 //
-                // The canonical table is consulted rather than a second literal list, because a
-                // second list is exactly what went stale in GLTF-278. If a stride is not in the
-                // table no renderer can bind it either, so refusing here is refusing earlier, not
-                // refusing more.
-                const CNA::Internal::Graphics::InferredVertexLayout layout =
-                    CNA::Internal::Graphics::InferredLayoutForStride(
-                        stride, CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt);
                 throw ContentLoadException(
                     "Vertex stride " + std::to_string(stride) +
-                    (layout.known
-                         ? " is in the canonical layout table but has no upload path here, so the "
-                           "vertex buffer would have been left empty."
-                         : " is not in the canonical vertex layout table, so no renderer can bind "
-                           "it and no upload path exists for it.") +
+                    " is in the canonical layout table but has no upload path here, so the "
+                    "vertex buffer would have been left empty." +
                     " Refusing rather than returning an empty vertex buffer (GLTF-157).");
             }
             return vb;

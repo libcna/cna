@@ -1,6 +1,6 @@
 # docs/ index
 
-99 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
+158 Markdown documents in `docs/` (including this index) — this index exists so a reader (human or
 AI agent) can tell what's current without opening every file. It groups files by topic and flags
 which ones are known-current vs. historical/dated. Entries not explicitly flagged have not been
 individually re-verified in the 2026-07-11 documentation pass that produced this index — treat
@@ -14,6 +14,8 @@ on it) rather than assuming either way.
   "is X still broken" over any dated snapshot below.
 - **`graphics-renderer-feature-matrix.md`** — current per-renderer Graphics feature status
   (SDL_Renderer/EasyGL/Vulkan/Bgfx). Start here for "does renderer X support feature Y."
+- **[`gltf-renderer-stride-conformance.md`](gltf-renderer-stride-conformance.md)** — current
+  seven-layout audit and automated evidence across STUB, HEADLESS, OpenGL ES 3 and Vulkan.
 - **[`webgpu-renderer.md`](webgpu-renderer.md)** — current status, build instructions and explicit
   limitations for the experimental fifth renderer; detailed remaining work is in `../plan_webgpu.md`.
 - **[`sokol-renderer.md`](sokol-renderer.md)** — capability boundary, build options and known

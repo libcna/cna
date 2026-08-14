@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-151 / GLTF-153 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
+// plan_gltf.md GLTF-151 / GLTF-153 / GLTF-158 / GLTF-159 / GLTF-162 / GLTF-164 / GLTF-165 / GLTF-166.
 //
 // The vertex/index buffer ABI, asserted at the layer a game actually meets it: the byte offsets a
 // renderer will read from, the index element size the GPU is told about, and what happens at the
@@ -23,7 +23,9 @@
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 #include "CNA/Internal/GltfImport/GltfImportCore.hpp"
+#include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
@@ -268,6 +270,94 @@ TEST(GltfStrideAndBuffer, AStrideOutsideTheTableIsNotGuessedAt)
     {
         SCOPED_TRACE("stride " + std::to_string(stride));
         EXPECT_FALSE(InferredLayoutForStride(stride, UnlistedStrideLayout::RendererRefusesIt).known);
+    }
+}
+
+// --- GLTF-158/159: real declaration plus renderer draw-boundary conformance ----------------------
+
+TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration)
+{
+    // Each fixture below is the corpus witness for exactly one of the seven layouts a glTF mesh
+    // can select. Loading, rather than constructing a VertexBuffer directly, is essential: the
+    // regression was in BuildVertexBufferFromRawBytes, where the capacity-only constructor erased
+    // the declaration before SetData/SetDataRaw reached the selected renderer.
+    struct Case { const char* fixture; int stride; };
+    const Case cases[] = {
+        {"tex-dual-texture-stride", 20},
+        {"normalized-u8-color", 24},
+        {"mat-unlit", 32},
+        {"mat-authored-tangent", 48},
+        {"skin-unlit", 52},
+        {"skin-vertex-color", 56},
+        {"skin-parented-joints", 68},
+    };
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, "tests/assets/gltf");
+    cm.setGraphicsDevice(gd);
+
+    for (const Case& c : cases)
+    {
+        SCOPED_TRACE(std::string(c.fixture) + " / stride " + std::to_string(c.stride));
+        Model model = cm.Load<Model>(c.fixture);
+        ASSERT_EQ(1, model.getMeshesProperty().getCountProperty());
+        ASSERT_EQ(1, model.getMeshesProperty()[0]->getMeshPartsProperty().getCountProperty());
+        const auto* part = model.getMeshesProperty()[0]->getMeshPartsProperty()[0];
+        ASSERT_NE(nullptr, part->getVertexBufferProperty());
+
+        const auto& declaration =
+            part->getVertexBufferProperty()->getVertexDeclarationProperty();
+        EXPECT_EQ(c.stride, declaration.getVertexStrideProperty());
+
+        const InferredVertexLayout canonical =
+            InferredLayoutForStride(c.stride, UnlistedStrideLayout::RendererRefusesIt);
+        ASSERT_TRUE(canonical.known);
+        const auto& actual = declaration.GetVertexElements();
+        ASSERT_EQ(canonical.count, actual.size());
+        for (std::size_t i = 0; i < canonical.count; ++i)
+        {
+            SCOPED_TRACE("element " + std::to_string(i));
+            EXPECT_EQ(canonical.elements[i].offset, actual[i].getOffsetProperty());
+            EXPECT_EQ(static_cast<int>(canonical.elements[i].format),
+                      static_cast<int>(actual[i].getVertexElementFormatProperty()));
+            EXPECT_EQ(static_cast<int>(canonical.elements[i].usage),
+                      static_cast<int>(actual[i].getVertexElementUsageProperty()));
+            EXPECT_EQ(canonical.elements[i].usageIndex, actual[i].getUsageIndexProperty());
+        }
+    }
+}
+
+TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
+{
+    // The declaration test above stops at the public VertexBuffer. This leg makes each selected
+    // renderer consume the uploaded buffer in an actual indexed draw, which is where Vulkan builds
+    // its pipeline input state and EasyGL checks the declaration against the selected stock
+    // program. A renderer can therefore accept an upload yet still fail here because one semantic
+    // is absent, misordered or has the wrong native format.
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+    {
+        GTEST_SKIP() << "renderer has no native 3D draw boundary; the upload/declaration contract "
+                        "is covered by EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration";
+    }
+
+    ContentManager cm(nullptr, "tests/assets/gltf");
+    cm.setGraphicsDevice(gd);
+    const char* fixtures[] = {
+        "tex-dual-texture-stride", "normalized-u8-color", "mat-unlit",
+        "mat-authored-tangent", "skin-unlit", "skin-vertex-color",
+        "skin-parented-joints",
+    };
+    const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+
+    for (const char* fixture : fixtures)
+    {
+        SCOPED_TRACE(fixture);
+        Model model = cm.Load<Model>(fixture);
+        EXPECT_NO_THROW(model.Draw(identity, identity, identity));
+        // Deferred renderers submit the draw here. Without Present, a Vulkan command can be
+        // recorded but never reach the driver's input-layout validation.
+        EXPECT_NO_THROW(gd.Present());
     }
 }
 
