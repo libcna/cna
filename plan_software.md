@@ -233,7 +233,7 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
   init fails) — a separate, larger, cross-cutting feature, not part of this backend's own scope.
   Flag it as a possible follow-up plan if wanted later; do not fold it into this one.
 - Full per-light `BasicEffect` lighting/fog (and the equivalent lighting inputs on
-  `EnvironmentMapEffect`/`SkinnedEffect`), MRT, MSAA, automatic mip generation for ordinary
+  `EnvironmentMapEffect`/`SkinnedEffect`), MRT, automatic mip generation for ordinary
   textures, anisotropic filtering, 3D
   textures, and render-target cube maps remain explicitly out of scope for v1, matching the
   owner's own minimal first-version list verbatim (clear; render target; triangle list; basic
@@ -242,6 +242,8 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
   textures were later lifted out of this out-of-scope list by `SOFTWARE-82`** (Phase S9,
   2026-07-13, minus the per-light lighting caveat above) — see that row and
   `docs/software-backend.md`'s Known Limitations for exactly what's supported.
+  Render-target 4x MSAA was likewise implemented later by the CPU rasteriser; `GLTF-395` locks its
+  active-pass level-zero resolve/readback contract in addition to the existing unbound tests.
   `Model.Draw()` with real skinning specifically hasn't been separately verified end-to-end
   (only the lower-level `SkinnedEffect`/`DrawPrimitivesEx` path was tested).
 - Performance/SIMD/multithreading work is explicitly not a goal (design decision 1) — do not

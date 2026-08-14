@@ -937,7 +937,13 @@ the seven-fixture native draw sweep reaches rigid PBR, coloured skinning and ski
 rerun is **520/520 with no skips** and the ten-rung L0–L6/tool ladder is 10/10. Focused ordinary
 target/backbuffer cull, depth/depth-bias and stride-52 skinning pixels are green; the broader
 winding control separately found a pre-existing blank readback on a 4x-MSAA target, recorded under
-`GLTF-395` rather than misclassified as an importer or stride failure. Corpus-wide L7 remains open.
+`GLTF-395` rather than misclassified as an importer or stride failure. `GLTF-395` then fixed that
+boundary: a level-zero SOFTWARE readback now snapshots the live four-sample plane without ending
+the render pass or exposing generated mip levels. The shared winding oracle is 127/127 on both
+EasyGL and Vulkan and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
+boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
+entry point, stock textured effects, mirrored transforms and SpriteBatch. Corpus-wide L7 remains
+open.
 
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts

@@ -152,7 +152,11 @@ rather than always passing.
   - `SkinnedEffect`: real per-vertex bone-transform blending (up to 4 weighted bones,
     `WeightsPerVertex`-gated) applied to the vertex position before the standard
     World\*View\*Projection transform.
-- **No MRT, no MSAA, no mipmapping, no 3D textures, no render-target cube maps.**
+- **No MRT, no ordinary-texture mipmapping, no 3D textures, no render-target cube maps.**
+  `RenderTarget2D` does implement an actual four-sample CPU colour plane and generated mip levels.
+  Unbind resolves the samples before mip generation; a level-zero `GetData` while the target is
+  active snapshots the live samples without unbinding it, while generated levels remain unavailable
+  until the pass ends. Requests other than 0 or 4 samples still fall back to single-sample storage.
   `CreateRenderTargetCube`/`CreateTexture3D` still return `nullptr` (the shared `IGraphicsRenderer`
   default — this renderer doesn't override them); only plain (non-render-target) `TextureCube`s are
   real.
