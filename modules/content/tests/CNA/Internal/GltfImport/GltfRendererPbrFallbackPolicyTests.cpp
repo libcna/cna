@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-374: every PBR-capable renderer must bind the same neutral textures when a
-// material map is absent. This is a repository-wide renderer contract, so it is tested from the
-// renderer sources even when the current host cannot compile or execute a particular backend.
+// plan_gltf.md GLTF-373/374/379: every PBR-capable renderer must keep the same texture bindings,
+// packed-channel semantics and neutral fallbacks. This is a repository-wide renderer contract, so
+// it is tested from the renderer sources even when the current host cannot compile or execute a
+// particular backend.
 
 #include <algorithm>
 #include <array>
@@ -684,6 +685,98 @@ namespace
          "lerp(rgb, CnaLinearToSrgb(rgb), cb.pbrSrgb.z)", 1},
     }};
 
+    struct RendererPbrChannelAudit
+    {
+        const char* name;
+        const char* normalRgbRemap;
+        const char* roughnessGreen;
+        const char* metallicBlue;
+        const char* occlusionRed;
+        std::size_t shaderCopies;
+    };
+
+    // glTF packs roughness into G and metallic into B; occlusion is R and a tangent-space normal
+    // consumes all RGB before the [0,1] -> [-1,1] remap. The count distinguishes backends with
+    // separately stored rigid/skinned fragments (and LLGL's GL/Vulkan sources plus its embedded
+    // generated GL copy) from those whose one fragment program is shared by both vertex paths.
+    constexpr std::array<RendererPbrChannelAudit, 15> kPbrChannelAudits{{
+        {"bgfx",
+         "texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0",
+         "mr.g * u_metallicRoughnessFactor.y",
+         "mr.b * u_metallicRoughnessFactor.x",
+         "texture2D(s_texOcclusion, v_texcoord0).r", 1},
+        {"diligent",
+         "g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0",
+         "mr.g * g_PbrEmissiveRoughness.w",
+         "mr.b * g_PbrAmbientMetallic.w",
+         "g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r", 1},
+        {"directx9",
+         "tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0",
+         "mr.g * MetallicRoughnessFactor.y",
+         "mr.b * MetallicRoughnessFactor.x",
+         "tex2D(OcclusionMap, pin.UV).r", 2},
+        {"directx11",
+         "uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0",
+         "mr.g * EmissiveRoughness.w",
+         "mr.b * AmbientMetallic.w",
+         "uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r", 2},
+        {"directx12",
+         "uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0",
+         "mr.g * EmissiveRoughness.w",
+         "mr.b * AmbientMetallic.w",
+         "uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r", 2},
+        {"easygl",
+         "texture(uNormalMap,cnaSampleUV(vUV,uRtFlipV.y)).rgb*2.0-1.0",
+         "mr.g*uRoughnessFactor",
+         "mr.b*uMetallicFactor",
+         "texture(uOcclusionMap,cnaSampleUV(vUV,uRtFlipVHi.x)).r", 2},
+        {"llgl",
+         ".rgb * 2.0 - 1.0",
+         "mr.g * roughnessWeightsPad.x",
+         "mr.b * emissiveMetallic.w",
+         "vTexCoord).r;", 3},
+        {"magnum",
+         "texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0",
+         "metallicRoughness.g * uRoughnessFactor",
+         "metallicRoughness.b * uMetallicFactor",
+         "texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r", 1},
+        {"metal",
+         "normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0",
+         "mr.g * pu.pbrFactors.y",
+         "mr.b * pu.pbrFactors.x",
+         "occlusionMap.sample(occlusionSmp, in.uv).r", 1},
+        {"opengl2",
+         "texture2D(uNormalMap,vTex).rgb*2.0-1.0",
+         "mr.g*uRoughnessFactor",
+         "mr.b*uMetallicFactor",
+         "texture2D(uOcclusionMap,vTex).r", 1},
+        {"opengl4",
+         "texture(uNormalMap, vUV).rgb * 2.0 - 1.0",
+         "mr.g * uRoughnessFactor",
+         "mr.b * uMetallicFactor",
+         "texture(uOcclusionMap, vUV).r", 1},
+        {"sdl-gpu",
+         "texture(uNormalMap, fragUV).rgb * 2.0 - 1.0",
+         "mr.g * pbrp.roughnessFactor",
+         "mr.b * pbrp.metallicFactor",
+         "texture(uOcclusionMap, fragUV).r", 1},
+        {"vulkan",
+         "texture(uNormalMap, vUV).rgb * 2.0 - 1.0",
+         "mr.g * pbr.emissive_roughness.w",
+         "mr.b * pbr.eyePos_metallic.w",
+         "texture(uOcclusionMap, vUV).r", 2},
+        {"webgpu",
+         "textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0",
+         "mr.g * pf.metallicRoughness.y",
+         "mr.b * pf.metallicRoughness.x",
+         "textureSample(occlusionTex, texSampler, input.uv).r", 2},
+        {"wicked",
+         "normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f",
+         "mr.g * cb.pbrFactors.y",
+         "mr.b * cb.pbrFactors.x",
+         "occlusionMap.Sample(sampler0, input.uv).r", 1},
+    }};
+
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
@@ -929,6 +1022,26 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsColorSpaceDeclarations)
             const std::string normalized = Normalize(evidence);
             EXPECT_GE(CountOccurrences(source, normalized), audit.shaderCopies)
                 << "missing PBR colour-transfer evidence: " << evidence;
+        }
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChannels)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrChannelAudit& audit : kPbrChannelAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+
+        for (const char* evidence :
+             {audit.normalRgbRemap, audit.roughnessGreen,
+              audit.metallicBlue, audit.occlusionRed})
+        {
+            EXPECT_EQ(audit.shaderCopies, CountOccurrences(source, Normalize(evidence)))
+                << "wrong or missing packed-channel evidence: " << evidence;
         }
     }
 }

@@ -39,6 +39,22 @@ The linearly rendered expected bytes are analytically stated in the test; a swap
 showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers
 output transfer and supplies a second scalar-semantics oracle at the same binding boundary.
 
+## Packed texture channels (`GLTF-226`, `GLTF-227`, `GLTF-233`, `GLTF-234`, `GLTF-379`)
+
+Every one of the 15 PBR shader implementations now has source-audit evidence for the same glTF
+packing: the normal map consumes RGB and remaps it with `*2−1`, metallic-roughness consumes G as
+roughness and B as metallic, and occlusion consumes R. The audit requires every separately stored
+rigid/skinned fragment. It also requires all three LLGL representations: the GL and Vulkan sources
+and the generated embedded GL copy, preventing a regenerated header from silently retaining stale
+channel semantics.
+
+The shared texture-slot executable is the discriminating L7 oracle required by `GLTF-234`.
+OPENGLES3 and Vulkan both pass all ten rigid/skinned slot cases. Its MR texel is pure green
+(`G=1`, `B=0`), which produces a fully rough dielectric; swapping G/B instead produces the sharply
+different near-smooth metallic case. Occlusion `(64,128,192)` distinguishes the required R byte
+from G and B, while normal `(255,128,191)` distinguishes the full RGB remap from the geometric
+normal and from an unremapped UNORM sample.
+
 ## PBR colour transfer (`GLTF-210`–`GLTF-213`, `GLTF-379`)
 
 All imported images remain ordinary RGBA8 UNORM textures. Colour meaning therefore travels as
