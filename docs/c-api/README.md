@@ -47,6 +47,19 @@ inheritance, so coverage uses a documented C-native equivalent:
 [`COVERAGE.md`](COVERAGE.md) is the required source-to-C mapping record. A public CNA symbol with
 no row is incomplete, even if a similar operation happens to work indirectly.
 
+The matrix is generated with Doxygen's C++ parser, not maintained by hand:
+
+```bash
+python3 tools/c-api/generate_coverage_inventory.py --write
+python3 tools/c-api/generate_coverage_inventory.py --check
+```
+
+`tools/c-api/coverage_mappings.json` records reviewed mappings to the existing C API. Unmapped
+callable declarations remain `planned`; useful but incomplete routes remain `partial`; explicitly
+deleted C++ operations are retained as `not applicable` so the source inventory stays complete
+without inventing a C operation. CBIND-043 will promote `--check` to a mandatory configured/CI
+gate.
+
 ## Public naming and language baseline
 
 - Public types use the `CNA_` prefix; public functions use lowercase `cna_`.

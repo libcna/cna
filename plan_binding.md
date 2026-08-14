@@ -231,7 +231,7 @@ mechanical wrapper.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-033 | Inventory the complete public CNA surface | ⬜ | Generate and review `docs/c-api/COVERAGE.md` from every installed/public header, excluding only explicitly internal paths. Each source symbol receives a C mapping, tests and status; no untracked public symbol is treated as covered. |
+| CBIND-033 | Inventory the complete public CNA surface | ✅ | Doxygen-backed `tools/c-api/generate_coverage_inventory.py` deterministically tracks all 414 public headers and 6,415 public/protected declarations while explicitly excluding 95 `Internal`/`Detail` headers and the C API itself. `coverage_mappings.json` assigns reviewed current mappings; every remaining symbol has a C-native mapping proposal, test obligation, status and owner task. The snapshot records 443 implemented, 21 partial, 5,881 planned and 70 explicitly deleted/not-applicable declarations; `--check` proves drift without prematurely wiring the CBIND-043 CI gate. |
 | CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ⬜ | Expose compact handles/POD descriptors and capability/error behavior for every public member in this family; verify resource ownership and renderer-specific refusal paths from C. |
 | CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ⬜ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. |
 | CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
@@ -304,7 +304,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-032` are ✅; `CBIND-033` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-033` are ✅; `CBIND-034` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -313,4 +313,5 @@ SDL pixel-verified backbuffer readback, not complete public CNA coverage. No lan
 binding exists. B4 is complete; B5 now includes owned content-manager/root/cache control and Color
 Texture2D loads, keyboard/mouse/gamepad/touch capture and a PCM16 SoundEffect/instance control
 route with stable native playback-availability reporting and isolated success/unavailable-device
-regressions. B5 is complete; the generated complete public-surface inventory is next.
+regressions. B5 is complete. B6 now has a deterministic, reviewed 414-header/6,415-symbol baseline;
+render targets, sprite fonts and graphics-state coverage in `CBIND-034` are next.

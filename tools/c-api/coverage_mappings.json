@@ -1,0 +1,564 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "id": "graphics-renderer-identities",
+      "qualified_name_regex": "^CNA::GraphicsRendererType(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_GraphicsRendererType` and `CNA_GRAPHICS_RENDERER_*`",
+      "tests": "ABI header tests, renderer identity audit and `LifecycleSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-022"
+    },
+    {
+      "id": "graphics-capability-identities",
+      "qualified_name_regex": "^CNA::GraphicsCapability(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_GraphicsCapability` and `CNA_GRAPHICS_CAPABILITY_*`",
+      "tests": "ABI header tests and `LifecycleSmoke.c` capability queries",
+      "status": "implemented",
+      "task": "CBIND-022"
+    },
+    {
+      "id": "player-index-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::PlayerIndex(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_PlayerIndex` and `CNA_PLAYER_INDEX_*`",
+      "tests": "ABI header tests and `InputSnapshotsSmoke.c` all-player capture",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "surface-format-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SurfaceFormat(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_SurfaceFormat` and `CNA_SURFACE_FORMAT_*`",
+      "tests": "ABI header tests and `LifecycleSmoke.c` Color-format transfer",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "sprite-sort-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteSortMode(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_SpriteSortMode` and `CNA_SPRITE_SORT_MODE_*`",
+      "tests": "ABI header tests and `LifecycleSmoke.c` all sort modes",
+      "status": "implemented",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "sprite-effect-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteEffects(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_SpriteEffects` and `CNA_SPRITE_EFFECT_*`",
+      "tests": "ABI header tests and `LifecycleSmoke.c` effect-bit validation",
+      "status": "implemented",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "keyboard-key-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keys(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_Key` and all canonical `CNA_KEY_*` identities",
+      "tests": "key identity audit plus C/C++ ABI header tests",
+      "status": "implemented",
+      "task": "CBIND-025"
+    },
+    {
+      "id": "button-state-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::ButtonState(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "snapshot button bits/booleans using `CNA_Bool` or fixed flag sets",
+      "tests": "`InputSnapshotsSmoke.c` mouse/gamepad state snapshots",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "gamepad-dead-zone-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadDeadZone(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_GamePadDeadZone` and `CNA_GAMEPAD_DEAD_ZONE_*`",
+      "tests": "ABI header tests and exact normalization cases in `InputSnapshotsSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "gamepad-button-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Buttons(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_GamePadButtonFlags` and `CNA_GAMEPAD_BUTTON_*`",
+      "tests": "button identity audit, ABI header tests and local button queries",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-state-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchLocationState(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_TouchLocationState` and `CNA_TOUCH_LOCATION_*`",
+      "tests": "ABI header tests and `InputSnapshotsSmoke.c` location helpers",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "audio-channel-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioChannels(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_AudioChannels` and `CNA_AUDIO_CHANNELS_*`",
+      "tests": "ABI header tests and `AudioSmoke.c` PCM creation",
+      "status": "implemented",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "sound-state-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundState(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_SoundState` and `CNA_SOUND_STATE_*`",
+      "tests": "ABI header tests and `AudioSmoke.c` state transitions",
+      "status": "implemented",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "core-pod-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(Color|Vector2|Rectangle)$",
+      "kinds": ["struct", "class"],
+      "mapping": "`CNA_Color`, `CNA_Vector2` or `CNA_Rectangle` fixed-layout POD",
+      "tests": "C/C++ ABI header layout tests and `LifecycleSmoke.c` value transfer",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "vector-rectangle-fields",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Vector2::[XY]|Rectangle::(?:X|Y|Width|Height))$",
+      "kinds": ["field"],
+      "mapping": "same-named field in `CNA_Vector2` or `CNA_Rectangle`",
+      "tests": "C/C++ ABI header layout tests and `LifecycleSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "color-channel-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Color::(?:get|set)(?:R|G|B|A)Property$",
+      "kinds": ["method"],
+      "mapping": "direct `r`, `g`, `b`, `a` fields in `CNA_Color`",
+      "tests": "C/C++ ABI header layout tests and clear/texture pixel tests",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game$",
+      "kinds": ["class"],
+      "mapping": "owned/callback-borrowed `CNA_Handle` game",
+      "tests": "`LifecycleSmoke.c` ownership, stale handle, callbacks and threading",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-lifecycle-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:Game|~Game|RunOneFrame|Run|Exit|Dispose)$",
+      "kinds": ["constructor", "destructor", "method"],
+      "mapping": "`cna_game_create/run_one_frame/run/request_exit/destroy`",
+      "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-callback-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:LoadContent|UnloadContent|Update|Draw|OnExiting)$",
+      "kinds": ["method"],
+      "mapping": "matching `CNA_GameCallbacks` lifecycle callback",
+      "tests": "`LifecycleSmoke.c` callback order/time/error/context coverage",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-time-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameTime$",
+      "kinds": ["class", "struct"],
+      "mapping": "callback-borrowed `CNA_GameTime` POD snapshot",
+      "tests": "C/C++ ABI header layout tests and lifecycle timing callbacks",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-time-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameTime::get(?:TotalGameTime|ElapsedGameTime|IsRunningSlowly)Property$",
+      "kinds": ["method"],
+      "mapping": "corresponding field in `CNA_GameTime`",
+      "tests": "`LifecycleSmoke.c` update/draw timing snapshots",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "game-window-title",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::setTitleProperty$",
+      "kinds": ["method"],
+      "mapping": "`cna_game_set_window_title` UTF-8 copy",
+      "tests": "`LifecycleSmoke.c` valid/malformed/embedded-NUL UTF-8",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "graphics-device-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice$",
+      "kinds": ["class"],
+      "mapping": "callback-scoped borrowed graphics-device `CNA_Handle`",
+      "tests": "`LifecycleSmoke.c` borrow identity, expiry and wrong context",
+      "status": "implemented",
+      "task": "CBIND-022"
+    },
+    {
+      "id": "game-graphics-device-property",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::getGraphicsDeviceProperty$",
+      "kinds": ["method"],
+      "mapping": "`cna_game_get_graphics_device`",
+      "tests": "`LifecycleSmoke.c` callback-scoped borrow and expiry",
+      "status": "implemented",
+      "task": "CBIND-022"
+    },
+    {
+      "id": "graphics-discovery-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:GetGraphicsRendererType|GetGraphicsRendererName|GetMaxTextureDimension|SupportsCapability)$",
+      "kinds": ["method"],
+      "mapping": "renderer info/name/capability C query family",
+      "tests": "ABI header tests, identity audits and `LifecycleSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-022"
+    },
+    {
+      "id": "graphics-clear-color",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::Clear$",
+      "signature_regex": "^\\(const Color &color\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_game_clear` with `CNA_Color`",
+      "tests": "`LifecycleSmoke.c` callback/thread checks and SDL backbuffer pixel",
+      "status": "implemented",
+      "task": "CBIND-017"
+    },
+    {
+      "id": "backbuffer-readback-color",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
+      "signature_regex": "^\\(Color \\*data, int elementCount\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_get_backbuffer_data_rgba8`",
+      "tests": "HEADLESS refusal and exact SDL_RENDERER pixels in `LifecycleSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-026"
+    },
+    {
+      "id": "backbuffer-info-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PresentationParameters::get(?:BackBufferWidth|BackBufferHeight|BackBufferFormat)Property$",
+      "kinds": ["method"],
+      "mapping": "field in `CNA_BackBufferInfo` from `cna_graphics_device_get_backbuffer_info`",
+      "tests": "ABI layout plus HEADLESS/SDL_RENDERER `LifecycleSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-026"
+    },
+    {
+      "id": "texture2d-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D$",
+      "kinds": ["class"],
+      "mapping": "owned game-child Texture2D `CNA_Handle`",
+      "tests": "`LifecycleSmoke.c` create/info/transfer/lifetime under two renderers",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "texture2d-supported-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::Texture2D$",
+      "signature_regex": "^\\(GraphicsDevice &graphicsDevice, int width, int height(?:, bool mipMap, SurfaceFormat format)?\\)$",
+      "kinds": ["constructor"],
+      "mapping": "`cna_texture2d_create` with `CNA_Texture2DCreateInfo`",
+      "tests": "`LifecycleSmoke.c` dimensions/format/mips/parent and failure cases",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "texture2d-info-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::get(?:Width|Height|Bounds)Property$",
+      "kinds": ["method"],
+      "mapping": "`cna_texture2d_get_info` versioned snapshot",
+      "tests": "ABI layout and `LifecycleSmoke.c` create/info cases",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "texture2d-color-setdata",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::SetData$",
+      "signature_regex": "^\\(const Color \\*data, int elementCount\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_texture2d_set_data_rgba8` full level zero",
+      "tests": "HEADLESS/SDL_RENDERER upload, size and lifetime cases",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "texture2d-color-getdata",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::GetData$",
+      "signature_regex": "^\\(Color \\*data, int elementCount\\) const$",
+      "kinds": ["method"],
+      "mapping": "`cna_texture2d_get_data_rgba8` full level zero",
+      "tests": "HEADLESS/SDL_RENDERER round-trip and capacity cases",
+      "status": "implemented",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "texture-base-info-partial",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::get(?:Format|LevelCount)Property$",
+      "kinds": ["method"],
+      "mapping": "`cna_texture2d_get_info` for Texture2D handles only",
+      "tests": "Texture2D info tests; other Texture subclasses remain unmapped",
+      "status": "partial",
+      "task": "CBIND-023"
+    },
+    {
+      "id": "spritebatch-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
+      "kinds": ["class"],
+      "mapping": "owned game-child SpriteBatch `CNA_Handle`",
+      "tests": "`LifecycleSmoke.c` creation/state/lifetime under two renderers",
+      "status": "implemented",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "spritebatch-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::SpriteBatch$",
+      "signature_regex": "^\\(GraphicsDevice &graphicsDevice\\)$",
+      "kinds": ["constructor"],
+      "mapping": "`cna_sprite_batch_create`",
+      "tests": "`LifecycleSmoke.c` create, wrong handle/thread and parent ordering",
+      "status": "implemented",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "spritebatch-begin-partial",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
+      "kinds": ["method"],
+      "mapping": "`cna_sprite_batch_begin`; sort mode exposed, other state fixed to XNA defaults",
+      "tests": "all sort modes, validation/state and renderer refusal in `LifecycleSmoke.c`",
+      "status": "partial",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "spritebatch-draw-partial",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Draw$",
+      "kinds": ["method"],
+      "mapping": "`cna_sprite_batch_submit_many` rectangle-texture command subset",
+      "tests": "command validation/lifetime plus exact SDL_RENDERER pixels",
+      "status": "partial",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "spritebatch-end",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::End$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_sprite_batch_end`",
+      "tests": "`LifecycleSmoke.c` state, native refusal and retained-texture release",
+      "status": "implemented",
+      "task": "CBIND-024"
+    },
+    {
+      "id": "keyboard-snapshot-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState$",
+      "kinds": ["class", "struct"],
+      "mapping": "copied `CNA_KeyboardState` POD",
+      "tests": "ABI layout and `LifecycleSmoke.c` capture/local queries",
+      "status": "implemented",
+      "task": "CBIND-025"
+    },
+    {
+      "id": "keyboard-get-state",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keyboard::GetState$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_keyboard_get_state`",
+      "tests": "HEADLESS/SDL_RENDERER capture and wrong-thread cases",
+      "status": "implemented",
+      "task": "CBIND-025"
+    },
+    {
+      "id": "keyboard-state-queries",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState::(?:IsKeyDown|IsKeyUp|GetPressedKeys|operator\\[\\])$",
+      "kinds": ["method", "operator"],
+      "mapping": "local `cna_keyboard_state_*` POD query family",
+      "tests": "synthetic multiword key/count/copy/capacity cases",
+      "status": "implemented",
+      "task": "CBIND-025"
+    },
+    {
+      "id": "mouse-state-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState$",
+      "kinds": ["class", "struct"],
+      "mapping": "copied `CNA_MouseState` POD",
+      "tests": "ABI layout and HEADLESS/SDL_RENDERER snapshot tests",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "mouse-get-state",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Mouse::GetState$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": ["method"],
+      "mapping": "`cna_mouse_get_state`",
+      "tests": "HEADLESS/SDL_RENDERER absence and wrong-thread snapshots",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "mouse-state-readable-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState::get(?:X|Y|ScrollWheelValue|HorizontalScrollWheelValue|LeftButton|MiddleButton|RightButton|XButton1|XButton2)Property$",
+      "kinds": ["method"],
+      "mapping": "corresponding field/bit in `CNA_MouseState`",
+      "tests": "ABI layout and `InputSnapshotsSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "gamepad-state-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::(?:GamePadState|GamePadButtons|GamePadDPad|GamePadThumbSticks|GamePadTriggers)$",
+      "kinds": ["class", "struct"],
+      "mapping": "flattened copied `CNA_GamePadState`/`CNA_GamePadAnalogState` POD",
+      "tests": "ABI layout and all-player/dead-zone snapshot tests",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "gamepad-get-state-overloads",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::GetState$",
+      "kinds": ["method"],
+      "mapping": "`cna_gamepad_get_state` or `cna_gamepad_get_state_with_dead_zone`",
+      "tests": "four players, three modes, invalid identity and wrong-thread cases",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "gamepad-state-button-queries",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadState::IsButton(?:Down|Up)$",
+      "kinds": ["method"],
+      "mapping": "`cna_gamepad_state_is_button_down/up`",
+      "tests": "single/combined/empty/invalid bit-mask cases",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-capability-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities$",
+      "kinds": ["class", "struct"],
+      "mapping": "copied `CNA_TouchCapabilities` POD",
+      "tests": "ABI layout and platform-absence snapshots",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-capability-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities::get(?:IsConnected|MaximumTouchCount)Property$",
+      "kinds": ["method"],
+      "mapping": "corresponding `CNA_TouchCapabilities` field",
+      "tests": "`InputSnapshotsSmoke.c` capability and wrong-thread cases",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-panel-snapshot-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(?:GetCapabilities|GetState)$",
+      "kinds": ["method"],
+      "mapping": "`cna_touch_get_capabilities/state`",
+      "tests": "HEADLESS/SDL_RENDERER empty-device and thread cases",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-value-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::(?:TouchCollection|TouchLocation)$",
+      "kinds": ["class", "struct"],
+      "mapping": "fixed-capacity `CNA_TouchState` and `CNA_TouchLocation` POD",
+      "tests": "ABI layout plus synthetic find/previous-location tests",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "touch-read-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::(?:TouchCollection::(?:FindById|getCountProperty|getIsConnectedProperty|operator\\[\\])|TouchLocation::(?:TryGetPreviousLocation|getIdProperty|getPositionProperty|getPressureEXT|getStateProperty))$",
+      "kinds": ["method", "operator"],
+      "mapping": "snapshot field or local `cna_touch_*` query",
+      "tests": "`InputSnapshotsSmoke.c` found/absent/previous/range cases",
+      "status": "implemented",
+      "task": "CBIND-029"
+    },
+    {
+      "id": "content-manager-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager$",
+      "kinds": ["class"],
+      "mapping": "owned game-child ContentManager `CNA_Handle`",
+      "tests": "`ContentSmoke.c` root/cache/load/lifetime under two renderers",
+      "status": "partial",
+      "task": "CBIND-028"
+    },
+    {
+      "id": "content-manager-core-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:getRootDirectoryProperty|setRootDirectoryProperty|Unload|Dispose)$",
+      "kinds": ["method"],
+      "mapping": "matching `cna_content_manager_*` root/unload/destroy operation",
+      "tests": "strict-C UTF-8, cache, stale handle and parent-order tests",
+      "status": "implemented",
+      "task": "CBIND-028"
+    },
+    {
+      "id": "content-manager-load-texture-partial",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::Load$",
+      "kinds": ["method"],
+      "mapping": "`cna_content_manager_load_texture2d` for the Color Texture2D specialization only",
+      "tests": "real UTF-8 fixture/cache/unload/pixel tests in `ContentSmoke.c`",
+      "status": "partial",
+      "task": "CBIND-028"
+    },
+    {
+      "id": "sound-effect-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect$",
+      "kinds": ["class"],
+      "mapping": "owned game-child SoundEffect `CNA_Handle` for PCM16LE data",
+      "tests": "dummy/unavailable audio strict-C regression programs",
+      "status": "partial",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "sound-effect-pcm-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::SoundEffect$",
+      "signature_regex": "^\\(const std::vector< SharpRuntime::bytecs > &buffer, SharpRuntime::intcs sampleRate, AudioChannels channels\\)$",
+      "kinds": ["constructor"],
+      "mapping": "`cna_sound_effect_create_pcm16` with copied bytes",
+      "tests": "`AudioSmoke.c` PCM validation/duration/ownership and unavailable driver",
+      "status": "implemented",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "sound-effect-resource-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::(?:getDurationProperty|CreateInstance|Dispose)$",
+      "kinds": ["method"],
+      "mapping": "matching sound-effect duration/create-instance/destroy C operation",
+      "tests": "`AudioSmoke.c` duration, hierarchy, stale handles and wrong thread",
+      "status": "implemented",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "sound-instance-handle-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance$",
+      "kinds": ["class"],
+      "mapping": "owned SoundEffect child `CNA_Handle`",
+      "tests": "`AudioSmoke.c` state/control/lifetime and mixer-thread boundary",
+      "status": "partial",
+      "task": "CBIND-030"
+    },
+    {
+      "id": "sound-instance-control-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::(?:Play|Pause|Resume|Stop|Dispose|getStateProperty|getVolumeProperty|getPitchProperty|getPanProperty|getIsLoopedProperty|setVolumeProperty|setPitchProperty|setPanProperty|setIsLoopedProperty)$",
+      "kinds": ["method"],
+      "mapping": "matching `cna_sound_effect_instance_*` control/info operation",
+      "tests": "`AudioSmoke.c` transitions, clamping, validation, lifetime and threading",
+      "status": "implemented",
+      "task": "CBIND-030"
+    }
+  ]
+}
