@@ -181,10 +181,15 @@ def main() -> int:
         raise RuntimeError("corpus manifest must contain exactly 145 unique assets")
     validate_policy(policy, asset_ids)
 
+    expectations = {
+        asset_id: json.loads(
+            (corpus / f"{asset_id}.expected.json").read_text(encoding="utf-8")
+        )
+        for asset_id in asset_ids
+    }
     expected_rejections = {
         asset_id for asset_id in asset_ids
-        if json.loads((corpus / f"{asset_id}.expected.json").read_text(encoding="utf-8"))
-        .get("rejection") is not None
+        if expectations[asset_id].get("rejection") is not None
     }
     policy_rejections = {
         asset_id for asset_id, override in policy.get("overrides", {}).items()
@@ -264,6 +269,7 @@ def main() -> int:
                     raise RuntimeError(f"{asset_id}: rejection diagnostic is not deterministic")
                 base_result.update({
                     "returnCode": run_1["returnCode"],
+                    "owningTask": expectations[asset_id]["rejection"]["task"],
                     "errorContains": expected_fragment,
                     "terminalError": run_1["terminalError"],
                     "twoProcessDispositionIdentical": True,
@@ -356,17 +362,38 @@ def main() -> int:
             },
             "goldenComparison": comparison,
             "classification": {
-                "sharedImporterDivergences": [],
-                "rendererOwnedDivergences": [],
-                "presentationRigExceptions": sorted(
-                    asset_id for asset_id, override in policy.get("overrides", {}).items()
+                "scope": (
+                    "Differences between this run and the committed same-renderer goldens. "
+                    "Reported/deferred glTF features remain owned by their L1-L6 diagnostics; "
+                    "the independent Khronos subset is docs/gltf-reference-comparison.json."
+                ),
+                "activeGoldenDivergences": [],
+                "resolvedDivergences": policy.get("resolvedDivergences", []),
+                "presentationRigExceptions": [
+                    {
+                        "asset": asset_id,
+                        "ownerTask": "GLTF-009",
+                        "reason": override["reason"],
+                    }
+                    for asset_id, override in sorted(policy.get("overrides", {}).items())
                     if override.get("viewerArguments")
-                ),
-                "intentionalClearCaptures": sorted(
-                    asset_id for asset_id, override in policy.get("overrides", {}).items()
+                ],
+                "intentionalClearCaptures": [
+                    {
+                        "asset": asset_id,
+                        "ownerTask": "GLTF-009",
+                        "reason": override["reason"],
+                    }
+                    for asset_id, override in sorted(policy.get("overrides", {}).items())
                     if override.get("allowEmptyForeground")
-                ),
-                "expectedSafeRejections": sorted(policy_rejections),
+                ],
+                "expectedSafeRejections": [
+                    {
+                        "asset": asset_id,
+                        "ownerTask": expectations[asset_id]["rejection"]["task"],
+                    }
+                    for asset_id in sorted(policy_rejections)
+                ],
             },
             "assets": results,
         }

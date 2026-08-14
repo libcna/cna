@@ -103,9 +103,10 @@ ctest --test-dir build --output-on-failure
   punctual lights all import. What that costs is stated rather than implied: XNA's model is four
   joint influences and three directional lights, one UV channel, and one colour channel — glTF data
   beyond those is **counted and reported**, never silently dropped.
-- Correctness is held by a **generated 71-asset conformance corpus** and a nine-rung numerical
-  oracle ladder — container, accessor, semantic mesh, world geometry, packed GPU bytes, and the
-  effect parameters a draw would actually bind — run per commit, including under ASan + UBSan.
+- Correctness is held by a **generated 145-asset conformance corpus**: the exact L0–L6 numerical
+  ladder covers container, accessor, semantic mesh, world geometry, packed GPU bytes and bound
+  effect parameters per commit (including ASan + UBSan), then the production OPENGLES3 viewer
+  supplies the final deterministic L7 image/disposition gate.
 - **Read `docs/gltf-limitations.md` before choosing CNA for a glTF pipeline.** It lists every
   approximation and every unsupported feature next to the report field that names the loss at run
   time. `CNAEXT.md` §3.2 carries the same information as a per-capability status table.

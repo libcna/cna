@@ -7,6 +7,17 @@
     "alphaTolerance": 0,
     "justification": "Two independent Mesa llvmpipe/EasyGL processes produced byte-identical PNG files for all 137 renderable assets. The committed gate deliberately fixes LIBGL_ALWAYS_SOFTWARE=1, so no measured renderer variance exists to justify a non-zero threshold. Hardware-driver comparison is development evidence, not this oracle."
   },
+  "resolvedDivergences": [
+    {
+      "id": "easygl-unlit-origin-nan",
+      "classification": "renderer-owned",
+      "ownerTask": "GLTF-411",
+      "asset": "mat-unlit",
+      "symptom": "The first pinned-reference run produced black at an origin vertex and RGB MAE 189.33 because the lit shader evaluated normalize(0) before applying the unlit branch.",
+      "resolution": "EasyGL now branches before lighting and specular normalization; the rerun measures RGB MAE below the fixed 80 reference threshold.",
+      "fixedByCommit": "a88b14220"
+    }
+  ],
   "overrides": {
     "gltf-required-extension-unsupported": {
       "disposition": "reject",

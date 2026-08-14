@@ -386,7 +386,7 @@ pass for its fixture. Implemented so far:
 | **L4** | world-space vertex positions after node composition | implemented — `EvaluateWorldPositionsEXT` | `GLTF-006` |
 | **L5** | byte-exact generated vertex/index buffers | implemented — `CompareVertexBytesEXT` / `CompareIndexBytesEXT` | `GLTF-007` |
 | **L6** | effect parameters actually bound for a draw | implemented — `CaptureDrawParamsEXT` | `GLTF-008` |
-| **L7** | rendered pixels vs a golden PNG | focused EasyGL tests implemented; corpus rung open | `GLTF-009` |
+| **L7** | rendered pixels vs a golden PNG | 145 explicit EasyGL dispositions: 137 PNGs + 8 safe rejections | `GLTF-009` |
 
 The helpers are **test scope only** — they live under `modules/content/tests/CNA/Internal/GltfImport/`
 in namespace `CnaTest::GltfOracle`, are compiled only into `CnaTests`, and are not part of the CNA
@@ -608,9 +608,10 @@ directions: a new `Gltf*` suite matching no rung fails the run rather than quiet
 the label, and a rung naming a suite that no longer exists fails rather than quietly running zero
 tests.
 
-There is no **corpus-wide** `L7` entry. Focused renderer CTests may compare their own golden PNGs,
-but the generated glTF corpus does not yet have the fixed camera/light rig and image matrix
-`GLTF-009` requires; see §5.3.
+The production OPENGLES3 viewer registers `CnaGltfConformanceL7` under the same
+`gltf-conformance` label. It runs after the numerical CNA build in CI because the viewer is a
+separate repository and executable, but it is still a named final rung rather than an unlabelled
+screenshot side job. It gives all 145 canonical assets an explicit outcome; see §5.3.
 
 #### Reading a failure: the layer, the fixture, the field, the delta (`GLTF-402`)
 
@@ -635,17 +636,15 @@ above it meaningless, and fixing the L5 golden of a fixture whose accessor decod
 the afternoon. A byte in inter-field padding says so rather than naming a field it does not belong
 to, and an unknown stride says `<unknown stride layout>` rather than guessing (§4.2).
 
-#### Why the gate has no screenshot step (`GLTF-412`)
+#### Why the screenshot step is last (`GLTF-412`)
 
-The `gltf-conformance` label contains **no L7 rung**, and that is a decision rather than a
-limitation of the current environment. A gate whose first failing check is an image diff tells you
-that something is wrong and nothing about what: the same screenshot changes for a wrong world
-matrix, a wrong stride, a wrong colour space and a driver upgrade. Every one of those has a
-numerical layer that names it exactly, and each of those layers runs first.
+An image diff tells you that something is wrong and little about what: the same screenshot changes
+for a wrong world matrix, a wrong stride, a wrong colour space and a driver upgrade. Every one of
+those has a numerical layer that names it exactly, and each of those layers runs first.
 
-So the ordering is the contract: **the earliest divergent layer is the one that fails.** When an
-L7 rung is added (`GLTF-009`) it is registered last, after L6, for the same reason — a pixel
-comparison is the *last* question worth asking, not the first.
+So the ordering is the contract: **the earliest divergent layer is the one that fails.** The
+viewer-owned `CnaGltfConformanceL7` is registered last, after L6 in the CI sequence, for the same
+reason — a pixel comparison is the *last* question worth asking, not the first.
 
 ### 3.7 Adding a fixture (`GLTF-417`)
 
@@ -911,18 +910,29 @@ Two entries in the table are honest boundaries rather than coverage:
   application-selected `BlendState::NonPremultiplied` composites the straight PBR output correctly,
   while `Model::Draw` preserves state and source order rather than sorting or mutating either.
 
-### 5.3 Why corpus-wide L7 remains open
+### 5.3 Whole-corpus EasyGL L7 oracle (`GLTF-009` / `GLTF-390` / `GLTF-391`)
 
-`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. An OPENGLES3
-configuration is now available and genuinely rasterises: the registered rigid and identity-skinned
-EasyGL PBR golden tests both render, read the framebuffer and compare four 8×8 PNG regions. The
-`GLTF-212` refresh also gives a discriminating colour-space witness: the former linear-space byte
+`GLTF-009`'s acceptance is *deterministic PNGs across two runs on `OPENGLES3`*. The committed
+`scripts/gltf-l7-corpus.py` now launches the production viewer in **two independent processes for
+every one of the 145 canonical assets**. The result is 137 byte-identical 512×512 PNG pairs and
+eight byte-identical, non-zero safe rejections whose stable diagnostic and lower-layer owning task
+are both recorded. The corresponding 137 goldens live in `tests/gltf-l7/easygl/`; policy and the
+two camera/culling rig exceptions live in `tests/gltf-l7/easygl-policy.json`; the complete input,
+binary, commit, image, classification and hash evidence is
+`docs/gltf-l7-corpus-report.json`. `cna-gltf-viewer` registers the runner as
+`CnaGltfConformanceL7`, and `.github/workflows/gltf-renderer-stride-ci.yml` builds that pinned viewer
+against the CNA commit and runs the labelled rung under Xvfb.
+
+This is a real OPENGLES3 configuration that genuinely rasterises. The earlier registered rigid and
+identity-skinned EasyGL PBR golden tests both render, read the framebuffer and compare four 8×8 PNG
+regions. The `GLTF-212` refresh also gives a discriminating colour-space witness: the former
+linear-space byte
 oracle `(64,74,87)` becomes `(137,146,158)` after the independently calculated sRGB OETF, and both
 programs produce the latter. A second registered test uses mid-grey rather than endpoint textures:
 both programs return byte 128 through sRGB decode+encode, return 188 when each decode is deliberately
-bypassed, and produce the analytic 92/112 factor/composition cases. Thus `GLTF-009` is open work,
-no longer an environment blocker. `EasyGL_Pbr_MaterialMaps` adds an equally discriminating
-material-map witness on both programs: asymmetric texture channels lock occlusion to red, three
+bypassed, and produce the analytic 92/112 factor/composition cases. `EasyGL_Pbr_MaterialMaps` adds
+an equally discriminating material-map witness on both programs: asymmetric texture channels lock
+occlusion to red, three
 strengths lock its interpolation formula, and three normal scales lock `rgb*2-1` plus XY-only
 scaling before TBN transformation. The same test now also locks the skinned-PBR joint normal under
 `S=[1,2,1]` at byte 93 instead of the old direct-matrix result 139; the stock-effect companion
@@ -960,20 +970,21 @@ authors `KHR_materials_transmission=0.5`. Glass-first hides the later dial and p
 `(7,26,115)` over black; dial-first followed by straight-alpha glass keeps both authored colours
 visible at `(83,38,127)` on both EasyGL profiles.
 
-What those focused tests do **not** provide is the corpus rung: beyond those nine fixture
-witnesses, generated fixtures still need fixed camera/light rigs, a documented per-renderer
-tolerance, a reproducible PNG capture path and the independent two-process determinism check.
-Registering nine successful assets as `CnaGltfConformanceL7` would make the ladder look complete
-without testing the corpus.
+Those focused analytic tests remain valuable because a whole-image hash says *which fixture*
+changed while a centre-pixel analytic witness says *which equation* changed. The corpus rung adds
+the missing breadth without replacing them. Two otherwise valid one-sided fixtures are back-facing
+from the generic positive-octant camera, so their recorded rig uses the viewer's explicit
+`--no-cull`; dedicated culling fixtures retain the culling oracle. `skin-unnormalized` deliberately
+collapses its zero-weight corner onto another corner and is the sole explicitly allowed clear PNG.
+Every other accepted asset must contain at least one non-clear pixel, which prevents a renderer
+that draws nothing from creating an apparently deterministic oracle.
 
-The existing EasyGL golden tolerances cannot simply be promoted into that missing policy. They
-range from exact byte equality to 60 levels per channel and preserve the predicates of unrelated
-legacy renderer tests; they are scene-specific discrimination margins, not measured renderer
-variance against the pinned glTF reference. `scripts/xna-diff.py` already supplies the required
-mechanics (separate RGB/alpha limits, an absolute bad-pixel budget and a bad-pixel ratio), but no
-number becomes a glTF acceptance threshold until two independent captures establish determinism
-and a corpus/reference delta report justifies it. `GLTF-390` therefore remains an evidence task,
-not a request to choose the largest tolerance already present in the repository.
+The per-renderer threshold is **RGB 0, alpha 0** for this EasyGL gate. This is not copied from the
+legacy focused tests, whose tolerances range up to 60 and represent scene-specific discrimination
+margins. It is measured: three complete campaigns, including the final clean verification, produced
+byte-identical PNG files under `LIBGL_ALWAYS_SOFTWARE=1` on Mesa llvmpipe. A hardware GPU is useful
+development evidence but is not allowed to share this byte oracle; if another renderer gains a
+corpus L7 gate, it must first produce its own two-process report and its own justified policy.
 `STUB` still cannot be used as a shortcut:
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
@@ -1059,8 +1070,11 @@ early-rejection cases and a discriminating two-face strip/list normalization che
 
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
-directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a
-`CnaGltfConformanceL7` entry beside the others — the label's shape already accommodates it.
+directly. The report's divergence scope is equally explicit: the same-renderer run has no active
+golden mismatch; the actual renderer-owned divergence found by the pinned Khronos subset was the
+EasyGL unlit-origin NaN, owned by `GLTF-411` and fixed in `a88b14220`. The two presentation-rig
+exceptions and all eight expected safe rejections have one named owner each. Reported/deferred
+features remain owned by their numerical diagnostics rather than being reclassified from pixels.
 
 ### 5.4 Pinned reference-renderer subset (`GLTF-411`)
 
@@ -1093,8 +1107,9 @@ destination channel as geometry made `normalized-u8-color` look half absent whil
 coverage was pixel-aligned. Alpha differences remain in the report as diagnostics. PNGs stay
 disposable; [`gltf-reference-comparison.json`](gltf-reference-comparison.json) retains every asset,
 camera, state, environment, input/output hash and metric needed to audit the result without adding
-an external renderer or browser to CNA's CI/runtime dependency graph. This 12-asset cross-check does
-not claim `GLTF-009`'s still-open corpus-wide L7 rung.
+an external renderer or browser to CNA's CI/runtime dependency graph. This 12-asset cross-check is
+the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
+oracle. Neither is substituted for the other.
 
 ---
 

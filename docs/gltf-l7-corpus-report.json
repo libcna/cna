@@ -15,8 +15,8 @@
   "rendererEnvironment": [
     "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
   ],
-  "cnaCommit": "590789f19d92453533422025c254acd68ba2db9c",
-  "viewerCommit": "28fa045dac9a4322a8aa03e7b92939855bf96a36",
+  "cnaCommit": "70b26f62900056196383c3d814803e7bae7d556b",
+  "viewerCommit": "f32d1f136c74ed1508d4887952bf5a7a3d3b8b40",
   "viewerExecutableSha256": "4b2c94e3b20f209227d1080e25fc4aed87323bd3808de001effadd8085056159",
   "capture": {
     "processesPerAsset": 2,
@@ -47,24 +47,71 @@
     "justification": "Two independent Mesa llvmpipe/EasyGL processes produced byte-identical PNG files for all 137 renderable assets. The committed gate deliberately fixes LIBGL_ALWAYS_SOFTWARE=1, so no measured renderer variance exists to justify a non-zero threshold. Hardware-driver comparison is development evidence, not this oracle."
   },
   "classification": {
-    "sharedImporterDivergences": [],
-    "rendererOwnedDivergences": [],
+    "scope": "Differences between this run and the committed same-renderer goldens. Reported/deferred glTF features remain owned by their L1-L6 diagnostics; the independent Khronos subset is docs/gltf-reference-comparison.json.",
+    "activeGoldenDivergences": [],
+    "resolvedDivergences": [
+      {
+        "id": "easygl-unlit-origin-nan",
+        "classification": "renderer-owned",
+        "ownerTask": "GLTF-411",
+        "asset": "mat-unlit",
+        "symptom": "The first pinned-reference run produced black at an origin vertex and RGB MAE 189.33 because the lit shader evaluated normalize(0) before applying the unlit branch.",
+        "resolution": "EasyGL now branches before lighting and specular normalization; the rerun measures RGB MAE below the fixed 80 reference threshold.",
+        "fixedByCommit": "a88b14220"
+      }
+    ],
     "presentationRigExceptions": [
-      "mode-triangle-strip-morph",
-      "xf-rot-x90"
+      {
+        "asset": "mode-triangle-strip-morph",
+        "ownerTask": "GLTF-009",
+        "reason": "The generic positive-octant camera sees the back of this deliberately non-planar morphed strip. Disabling culling makes its pixel path observable; dedicated culling fixtures retain culling coverage."
+      },
+      {
+        "asset": "xf-rot-x90",
+        "ownerTask": "GLTF-009",
+        "reason": "The generic positive-octant camera sees the back of the +X-rotated one-sided triangle. Disabling culling makes the transformed geometry observable without changing the fixture."
+      }
     ],
     "intentionalClearCaptures": [
-      "skin-unnormalized"
+      {
+        "asset": "skin-unnormalized",
+        "ownerTask": "GLTF-009",
+        "reason": "The fixture deliberately leaves one zero-weight vertex unweighted. Its zero skin matrix collapses that corner onto another corner, so the single triangle is degenerate and the clear framebuffer is the expected pixel result."
+      }
     ],
     "expectedSafeRejections": [
-      "accessor-count-mismatch",
-      "bad-accessor-count-overflow",
-      "bad-accessor-out-of-bounds",
-      "bad-animation-input-order",
-      "bad-index-out-of-range",
-      "gltf-required-extension-unsupported",
-      "skin-73-joints",
-      "skin-joint-index-out-of-range"
+      {
+        "asset": "accessor-count-mismatch",
+        "ownerTask": "GLTF-060"
+      },
+      {
+        "asset": "bad-accessor-count-overflow",
+        "ownerTask": "GLTF-039"
+      },
+      {
+        "asset": "bad-accessor-out-of-bounds",
+        "ownerTask": "GLTF-021"
+      },
+      {
+        "asset": "bad-animation-input-order",
+        "ownerTask": "GLTF-313"
+      },
+      {
+        "asset": "bad-index-out-of-range",
+        "ownerTask": "GLTF-068"
+      },
+      {
+        "asset": "gltf-required-extension-unsupported",
+        "ownerTask": "GLTF-023"
+      },
+      {
+        "asset": "skin-73-joints",
+        "ownerTask": "GLTF-261"
+      },
+      {
+        "asset": "skin-joint-index-out-of-range",
+        "ownerTask": "GLTF-254"
+      }
     ]
   },
   "assets": [
@@ -264,6 +311,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-023",
       "errorContains": "lists 'KHR_materials_clearcoat' in extensionsRequired",
       "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/gltf-required-extension-unsupported.gltf' lists 'KHR_materials_clearcoat' in extensionsRequired, which CNA does not implement. The file declares it cannot be interpreted correctly without that extension, so importing it would produce geometry or shading its author already said would be wrong.",
       "twoProcessDispositionIdentical": true
@@ -2542,6 +2590,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-261",
       "errorContains": "has 73 joints, but the GPU bone palette holds 72",
       "terminalError": "cna-gltf-viewer: Skin 'BigRig' has 73 joints, but the GPU bone palette holds 72. Truncating would leave every vertex bound to a joint past the limit collapsed toward the origin, so the skin is refused instead (plan_gltf.md GLTF-261).",
       "twoProcessDispositionIdentical": true
@@ -3741,6 +3790,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-021",
       "errorContains": "reads 36 bytes from a bufferView of 24 bytes",
       "terminalError": "cna-gltf-viewer: Accessor '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-accessor-out-of-bounds.gltf accessor 0 (base)' reads 36 bytes from a bufferView of 24 bytes.",
       "twoProcessDispositionIdentical": true
@@ -3752,6 +3802,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-039",
       "errorContains": "declares a byte span that overflows",
       "terminalError": "cna-gltf-viewer: Accessor '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-accessor-count-overflow.gltf accessor 0 (base)' declares a byte span that overflows: count 4611686018427387905 at stride 12.",
       "twoProcessDispositionIdentical": true
@@ -3763,6 +3814,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-068",
       "errorContains": "cgltf_validate code 1",
       "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/bad-index-out-of-range.gltf' fails glTF structural validation: a buffer, bufferView or accessor range extends past the data backing it (cgltf_validate code 1). Decoding it could read outside the file's own buffers, so it is rejected rather than imported.",
       "twoProcessDispositionIdentical": true
@@ -3801,6 +3853,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-060",
       "errorContains": "cgltf_validate code 4",
       "terminalError": "cna-gltf-viewer: '/rv/data/development/github.com/openeggbert/cnagltf/tests/assets/gltf/accessor-count-mismatch.gltf' fails glTF structural validation: a structural constraint of the glTF object model is violated (cgltf_validate code 4). Decoding it could read outside the file's own buffers, so it is rejected rather than imported.",
       "twoProcessDispositionIdentical": true
@@ -3812,6 +3865,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-254",
       "errorContains": "weighted 0.400000 to joint 5",
       "terminalError": "cna-gltf-viewer: Primitive 'StrayJointTri': vertex 1 is weighted 0.400000 to joint 5, but the skin declares only 2 joints. Binding it to the root instead would drag the vertex there, so the file is refused (plan_gltf.md GLTF-254).",
       "twoProcessDispositionIdentical": true
@@ -3850,6 +3904,7 @@
       "disposition": "reject",
       "viewerArguments": [],
       "returnCode": 1,
+      "owningTask": "GLTF-313",
       "errorContains": "is not ascending",
       "terminalError": "cna-gltf-viewer: Animation sampler input of clip 'Backwards' channel 0 (translation) is not ascending: sample 2 is at t=1.000000, before sample 1 at t=2.000000. glTF requires sampler input to be strictly increasing.",
       "twoProcessDispositionIdentical": true

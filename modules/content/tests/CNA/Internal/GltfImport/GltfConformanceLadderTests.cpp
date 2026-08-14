@@ -309,6 +309,16 @@ TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAnd
               source.find("group: gltf-renderer-conformance-${{ github.sha }}"));
     EXPECT_NE(std::string::npos, source.find("cancel-in-progress: false"));
 
+    // GLTF-009/390: the application-owned L7 rung is just as required as the lower renderer
+    // matrix. Pinning the viewer commit prevents a mutable develop head from changing the camera
+    // or presentation policy underneath an otherwise unchanged CNA commit.
+    EXPECT_NE(std::string::npos, source.find("  l7-corpus:\n"));
+    EXPECT_NE(std::string::npos,
+              source.find("f32d1f136c74ed1508d4887952bf5a7a3d3b8b40"));
+    EXPECT_NE(std::string::npos, source.find("python3-pil"));
+    EXPECT_NE(std::string::npos, source.find("--target cna_gltf_viewer --parallel 3"));
+    EXPECT_NE(std::string::npos, source.find("-R '^CnaGltfConformanceL7$'"));
+
     // GitHub Actions fails a run step by default. Pin the absence of both escape hatches so a
     // future YAML cleanup cannot turn the required check green after a failed rung.
     EXPECT_EQ(std::string::npos, source.find("continue-on-error:"));
@@ -382,6 +392,29 @@ TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatE
         ++rendererTestsFound;
     }
     ASSERT_GT(rendererTestsFound, 0u) << "no renderer CTest registrations found in " << easyGlTests;
+
+    // The corpus-wide L7 executable is owned by the separately versioned production viewer, so
+    // its CMake registration is not present in a clean CNA checkout.  The required CNA workflow
+    // pins that viewer commit and selects the exact CTest name.  Extract exact anchored selectors
+    // from the workflow instead of adding a free-form exception here: renaming/removing the CI
+    // rung then makes the plan citation stale and fails this test.
+    const std::filesystem::path workflow =
+        RepositoryRoot() / ".github" / "workflows" / "gltf-renderer-stride-ci.yml";
+    std::ifstream workflowFile(workflow);
+    ASSERT_TRUE(workflowFile.is_open()) << "cannot open " << workflow;
+    const std::string workflowSource((std::istreambuf_iterator<char>(workflowFile)),
+                                     std::istreambuf_iterator<char>());
+    const std::regex exactCtestSelector(R"(-R\s+['"]?\^([A-Za-z0-9_]+)\$['"]?)");
+    std::size_t workflowTestsFound = 0;
+    for (std::sregex_iterator it(workflowSource.begin(), workflowSource.end(), exactCtestSelector),
+                              end;
+         it != end; ++it)
+    {
+        registeredEvidenceNames.insert((*it)[1].str());
+        ++workflowTestsFound;
+    }
+    ASSERT_GT(workflowTestsFound, 0u)
+        << "no exact CTest selector found in the glTF conformance workflow";
 
     std::set<std::string> corpusIds;
     for (const std::string& id : CnaTest::GltfOracle::CorpusFixtureIds()) { corpusIds.insert(id); }
