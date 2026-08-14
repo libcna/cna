@@ -382,6 +382,170 @@ CNA_C_API CNA_Result cna_curve_key_collection_remove_at(
     CNA_CurveKeyCollectionHandle collection,
     int32_t index);
 
+/** @brief Owned handle for a Curve. */
+typedef CNA_Handle CNA_CurveHandle;
+
+/**
+ * @brief Creates an empty curve with constant pre-loop and post-loop behavior.
+ *
+ * @param out_curve Receives the owned handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_create(CNA_CurveHandle* out_curve);
+
+/**
+ * @brief Destroys an owned curve handle.
+ *
+ * @param curve Curve handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_destroy(CNA_CurveHandle curve);
+
+/**
+ * @brief Gets whether a curve contains at most one key.
+ *
+ * @param curve Curve handle.
+ * @param out_is_constant Receives the result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_get_is_constant(
+    CNA_CurveHandle curve,
+    CNA_Bool* out_is_constant);
+
+/**
+ * @brief Creates a mutable collection-view handle for a curve's keys.
+ *
+ * The returned handle retains the curve and must be released with
+ * cna_curve_key_collection_destroy. Mutations through the view affect the curve.
+ *
+ * @param curve Curve handle.
+ * @param out_keys Receives the owned collection-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_get_keys(
+    CNA_CurveHandle curve,
+    CNA_CurveKeyCollectionHandle* out_keys);
+
+/**
+ * @brief Gets the behavior before the first key.
+ *
+ * @param curve Curve handle.
+ * @param out_loop_type Receives the pre-loop behavior.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_get_pre_loop(
+    CNA_CurveHandle curve,
+    CNA_CurveLoopType* out_loop_type);
+
+/**
+ * @brief Sets the behavior before the first key.
+ *
+ * @param curve Curve handle.
+ * @param loop_type New pre-loop behavior.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_set_pre_loop(
+    CNA_CurveHandle curve,
+    CNA_CurveLoopType loop_type);
+
+/**
+ * @brief Gets the behavior after the last key.
+ *
+ * @param curve Curve handle.
+ * @param out_loop_type Receives the post-loop behavior.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_get_post_loop(
+    CNA_CurveHandle curve,
+    CNA_CurveLoopType* out_loop_type);
+
+/**
+ * @brief Sets the behavior after the last key.
+ *
+ * @param curve Curve handle.
+ * @param loop_type New post-loop behavior.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_set_post_loop(
+    CNA_CurveHandle curve,
+    CNA_CurveLoopType loop_type);
+
+/**
+ * @brief Creates an independent deep copy of a curve.
+ *
+ * @param curve Source curve handle.
+ * @param out_curve Receives the owned clone handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_clone(
+    CNA_CurveHandle curve,
+    CNA_CurveHandle* out_curve);
+
+/**
+ * @brief Evaluates a curve at a position.
+ *
+ * @param curve Curve handle.
+ * @param position Position to evaluate.
+ * @param out_value Receives the evaluated value.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_evaluate(
+    CNA_CurveHandle curve,
+    float position,
+    float* out_value);
+
+/**
+ * @brief Computes matching incoming and outgoing tangents for every key.
+ *
+ * @param curve Curve handle.
+ * @param tangent_type Tangent type for both directions.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_compute_tangents(
+    CNA_CurveHandle curve,
+    CNA_CurveTangent tangent_type);
+
+/**
+ * @brief Computes separate incoming and outgoing tangents for every key.
+ *
+ * @param curve Curve handle.
+ * @param tangent_in_type Incoming tangent type.
+ * @param tangent_out_type Outgoing tangent type.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_compute_tangents_in_out(
+    CNA_CurveHandle curve,
+    CNA_CurveTangent tangent_in_type,
+    CNA_CurveTangent tangent_out_type);
+
+/**
+ * @brief Computes matching incoming and outgoing tangents for one key.
+ *
+ * @param curve Curve handle.
+ * @param key_index Zero-based key index.
+ * @param tangent_type Tangent type for both directions.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_compute_tangent(
+    CNA_CurveHandle curve,
+    int32_t key_index,
+    CNA_CurveTangent tangent_type);
+
+/**
+ * @brief Computes separate incoming and outgoing tangents for one key.
+ *
+ * @param curve Curve handle.
+ * @param key_index Zero-based key index.
+ * @param tangent_in_type Incoming tangent type.
+ * @param tangent_out_type Outgoing tangent type.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_curve_compute_tangent_in_out(
+    CNA_CurveHandle curve,
+    int32_t key_index,
+    CNA_CurveTangent tangent_in_type,
+    CNA_CurveTangent tangent_out_type);
+
 #ifdef __cplusplus
 }
 #endif

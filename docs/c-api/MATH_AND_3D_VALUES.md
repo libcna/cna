@@ -171,8 +171,7 @@ canonical CurveKey implementation through `cna_curve_key_*` operations.
 
 Every operation consuming a key validates its continuity identity. Unknown values fail before
 mutating outputs; float values retain native IEEE behavior, including the current CNA NaN position
-comparison result. Dynamic CurveKeyCollection ownership and Curve evaluation follow in the next
-CBIND-035B5 slices and are not implied by the value ABI.
+comparison result.
 
 ## CurveKeyCollection operations
 
@@ -185,3 +184,16 @@ Count/get and `cna_curve_key_collection_copy_to` replace C++ aliases, indexers a
 Copy-to accepts a caller capacity and destination index, always reports the collection key count
 once the handle is valid, and writes nothing unless the full range fits. All input keys are checked
 for a recognized continuity value before collection mutation.
+
+## Curve operations
+
+`CNA_CurveHandle` owns the canonical native curve and validates its type, generation and creation
+thread. Creation, deep cloning, constant-state queries, pre/post-loop properties, evaluation and
+all four tangent overloads delegate to `Curve`. Unknown loop and tangent identities, invalid key
+indices and invalid handles fail through the normal C error contract without partial output.
+
+`cna_curve_get_keys` maps both native key-reference properties to a mutable
+`CNA_CurveKeyCollectionHandle` view. Each returned view must be destroyed separately, retains the
+curve even if its original handle is destroyed, and exposes the complete collection API above;
+mutations through the view immediately affect evaluation. Strict-C coverage exercises all five
+loop modes, all tangent overloads, clone independence and retained-view lifetime.

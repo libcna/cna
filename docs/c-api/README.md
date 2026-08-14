@@ -9,7 +9,7 @@ owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteB
 complete graphics-state descriptors, display/adapter/presentation snapshots, owned render targets
 and caller-built SpriteFonts, fixed-layout 3D math/geometry values, complete MathHelper,
 Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray/bounding-volume
-operations, complete CurveKey values and owned CurveKeyCollection mutation, packed storage and
+operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
 core draw/buffer/vertex identities, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned

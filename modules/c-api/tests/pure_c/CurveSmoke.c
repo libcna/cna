@@ -15,6 +15,12 @@ _Static_assert(offsetof(CNA_CurveKey, tangent_in) == 8U, "tangent_in offset chan
 _Static_assert(offsetof(CNA_CurveKey, tangent_out) == 12U, "tangent_out offset changed");
 _Static_assert(offsetof(CNA_CurveKey, continuity) == 16U, "continuity offset changed");
 _Static_assert(sizeof(CNA_CurveKeyCollectionHandle) == 8U, "collection handle size changed");
+_Static_assert(sizeof(CNA_CurveHandle) == 8U, "curve handle size changed");
+
+static int nearly_equal(const float left, const float right)
+{
+    return fabsf(left - right) <= 0.00001F;
+}
 
 static int validate_construction_and_properties(void)
 {
@@ -246,8 +252,208 @@ static int validate_collection(void)
     return 1;
 }
 
+typedef struct CurveWrongThreadState {
+    CNA_CurveHandle curve;
+    CNA_Result result;
+} CurveWrongThreadState;
+
+static int get_curve_state_on_wrong_thread(void* const context)
+{
+    CurveWrongThreadState* const state = (CurveWrongThreadState*)context;
+    CNA_Bool is_constant = CNA_FALSE;
+    state->result = cna_curve_get_is_constant(state->curve, &is_constant);
+    return 0;
+}
+
+static int validate_curve_loops(
+    const CNA_CurveHandle curve,
+    CNA_CurveLoopType* const loop_type,
+    float* const value)
+{
+    if (cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_CONSTANT) != CNA_RESULT_SUCCESS ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_CONSTANT) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, -1.0F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 0.0F) ||
+        cna_curve_evaluate(curve, 3.0F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 4.0F) ||
+        cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, -1.0F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, -2.0F) ||
+        cna_curve_evaluate(curve, 3.0F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 6.0F) ||
+        cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_CYCLE) != CNA_RESULT_SUCCESS ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_CYCLE) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, -0.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 3.0F) ||
+        cna_curve_evaluate(curve, 2.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 1.0F) ||
+        cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_CYCLE_OFFSET) != CNA_RESULT_SUCCESS ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_CYCLE_OFFSET) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, -0.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, -1.0F) ||
+        cna_curve_evaluate(curve, 2.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 5.0F) ||
+        cna_curve_set_pre_loop(curve, CNA_CURVE_LOOP_OSCILLATE) != CNA_RESULT_SUCCESS ||
+        cna_curve_set_post_loop(curve, CNA_CURVE_LOOP_OSCILLATE) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, -0.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 1.0F) ||
+        cna_curve_evaluate(curve, 2.5F, value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(*value, 3.0F) ||
+        cna_curve_get_pre_loop(curve, loop_type) != CNA_RESULT_SUCCESS ||
+        *loop_type != CNA_CURVE_LOOP_OSCILLATE ||
+        cna_curve_get_post_loop(curve, loop_type) != CNA_RESULT_SUCCESS ||
+        *loop_type != CNA_CURVE_LOOP_OSCILLATE) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_curve(void)
+{
+    CNA_CurveHandle curve = UINT64_MAX;
+    CNA_CurveHandle clone = CNA_INVALID_HANDLE;
+    CNA_CurveKeyCollectionHandle keys = CNA_INVALID_HANDLE;
+    CNA_CurveKeyCollectionHandle clone_keys = CNA_INVALID_HANDLE;
+    if (cna_curve_create(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_create(&curve) != CNA_RESULT_SUCCESS || curve == CNA_INVALID_HANDLE ||
+        cna_curve_get_keys(curve, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_get_keys(curve, &keys) != CNA_RESULT_SUCCESS ||
+        keys == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    CNA_Bool is_constant = CNA_FALSE;
+    CNA_CurveLoopType loop_type = UINT32_MAX;
+    float value = -1.0F;
+    if (cna_curve_get_is_constant(curve, &is_constant) != CNA_RESULT_SUCCESS ||
+        is_constant != CNA_TRUE ||
+        cna_curve_get_pre_loop(curve, &loop_type) != CNA_RESULT_SUCCESS ||
+        loop_type != CNA_CURVE_LOOP_CONSTANT ||
+        cna_curve_get_post_loop(curve, &loop_type) != CNA_RESULT_SUCCESS ||
+        loop_type != CNA_CURVE_LOOP_CONSTANT ||
+        cna_curve_evaluate(curve, 10.0F, &value) != CNA_RESULT_SUCCESS || value != 0.0F) {
+        return 0;
+    }
+
+    CNA_CurveKey key0;
+    CNA_CurveKey key1;
+    CNA_CurveKey key2;
+    if (cna_curve_key_init_full(
+            0.0F, 0.0F, 2.0F, 2.0F, CNA_CURVE_CONTINUITY_SMOOTH, &key0) !=
+            CNA_RESULT_SUCCESS ||
+        cna_curve_key_init_full(
+            1.0F, 2.0F, 2.0F, 2.0F, CNA_CURVE_CONTINUITY_SMOOTH, &key1) !=
+            CNA_RESULT_SUCCESS ||
+        cna_curve_key_init_full(
+            2.0F, 4.0F, 2.0F, 2.0F, CNA_CURVE_CONTINUITY_SMOOTH, &key2) !=
+            CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(keys, key2) != CNA_RESULT_SUCCESS ||
+        cna_curve_get_is_constant(curve, &is_constant) != CNA_RESULT_SUCCESS ||
+        is_constant != CNA_TRUE ||
+        cna_curve_evaluate(curve, 0.5F, &value) != CNA_RESULT_SUCCESS || value != 4.0F ||
+        cna_curve_key_collection_add(keys, key0) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_add(keys, key1) != CNA_RESULT_SUCCESS ||
+        cna_curve_get_is_constant(curve, &is_constant) != CNA_RESULT_SUCCESS ||
+        is_constant != CNA_FALSE ||
+        cna_curve_evaluate(curve, 0.5F, &value) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(value, 1.0F)) {
+        return 0;
+    }
+
+    CNA_CurveKey computed = key0;
+    if (cna_curve_compute_tangents(curve, CNA_CURVE_TANGENT_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get(keys, 1, &computed) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(computed.tangent_in, 2.0F) || !nearly_equal(computed.tangent_out, 2.0F) ||
+        cna_curve_compute_tangents_in_out(
+            curve, CNA_CURVE_TANGENT_FLAT, CNA_CURVE_TANGENT_SMOOTH) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get(keys, 1, &computed) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(computed.tangent_in, 0.0F) || !nearly_equal(computed.tangent_out, 2.0F) ||
+        cna_curve_compute_tangent(curve, 1, CNA_CURVE_TANGENT_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get(keys, 1, &computed) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(computed.tangent_in, 2.0F) || !nearly_equal(computed.tangent_out, 2.0F) ||
+        cna_curve_compute_tangent_in_out(
+            curve, 1, CNA_CURVE_TANGENT_FLAT, CNA_CURVE_TANGENT_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get(keys, 1, &computed) != CNA_RESULT_SUCCESS ||
+        !nearly_equal(computed.tangent_in, 0.0F) || !nearly_equal(computed.tangent_out, 2.0F) ||
+        cna_curve_compute_tangents(curve, CNA_CURVE_TANGENT_LINEAR) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_set(keys, 0, key0) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_set(keys, 1, key1) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_set(keys, 2, key2) != CNA_RESULT_SUCCESS ||
+        !validate_curve_loops(curve, &loop_type, &value)) {
+        return 0;
+    }
+
+    if (cna_curve_clone(curve, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_clone(curve, &clone) != CNA_RESULT_SUCCESS || clone == CNA_INVALID_HANDLE ||
+        clone == curve || cna_curve_get_keys(clone, &clone_keys) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_set_value(&key1, 20.0F) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_set(keys, 1, key1) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, 1.0F, &value) != CNA_RESULT_SUCCESS || value != 20.0F ||
+        cna_curve_evaluate(clone, 1.0F, &value) != CNA_RESULT_SUCCESS || value != 2.0F ||
+        cna_curve_get_pre_loop(clone, &loop_type) != CNA_RESULT_SUCCESS ||
+        loop_type != CNA_CURVE_LOOP_OSCILLATE ||
+        cna_curve_get_post_loop(clone, &loop_type) != CNA_RESULT_SUCCESS ||
+        loop_type != CNA_CURVE_LOOP_OSCILLATE) {
+        return 0;
+    }
+
+    if (cna_curve_set_pre_loop(curve, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_get_pre_loop(curve, &loop_type) != CNA_RESULT_SUCCESS ||
+        loop_type != CNA_CURVE_LOOP_OSCILLATE ||
+        cna_curve_set_post_loop(curve, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangents(curve, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangents_in_out(
+            curve, CNA_CURVE_TANGENT_LINEAR, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangent(curve, 1, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangent_in_out(
+            curve, 1, CNA_CURVE_TANGENT_LINEAR, UINT32_MAX) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangent(curve, -1, CNA_CURVE_TANGENT_LINEAR) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_compute_tangent_in_out(
+            curve, 3, CNA_CURVE_TANGENT_LINEAR, CNA_CURVE_TANGENT_LINEAR) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_get_is_constant(curve, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_get_pre_loop(curve, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_evaluate(curve, 0.0F, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_curve_get_is_constant(keys, &is_constant) != CNA_RESULT_INVALID_HANDLE ||
+        cna_curve_destroy(keys) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    CurveWrongThreadState wrong_thread = {curve, CNA_RESULT_SUCCESS};
+    thrd_t thread;
+    if (thrd_create(&thread, get_curve_state_on_wrong_thread, &wrong_thread) != thrd_success ||
+        thrd_join(thread, 0) != thrd_success || wrong_thread.result != CNA_RESULT_THREAD) {
+        return 0;
+    }
+
+    uint64_t count = 0U;
+    value = 123.0F;
+    if (cna_curve_destroy(curve) != CNA_RESULT_SUCCESS ||
+        cna_curve_evaluate(curve, 0.0F, &value) != CNA_RESULT_INVALID_HANDLE || value != 123.0F ||
+        cna_curve_destroy(curve) != CNA_RESULT_INVALID_HANDLE ||
+        cna_curve_key_collection_get_count(keys, &count) != CNA_RESULT_SUCCESS || count != 3U ||
+        cna_curve_key_collection_destroy(keys) != CNA_RESULT_SUCCESS ||
+        cna_curve_destroy(clone) != CNA_RESULT_SUCCESS ||
+        cna_curve_key_collection_get_count(clone_keys, &count) != CNA_RESULT_SUCCESS ||
+        count != 3U || cna_curve_key_collection_destroy(clone_keys) != CNA_RESULT_SUCCESS ||
+        cna_curve_destroy(clone) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
-    return validate_construction_and_properties() && validate_value_operations() &&
-            validate_collection() ? 0 : 1;
+    if (!validate_construction_and_properties()) {
+        return 1;
+    }
+    if (!validate_value_operations()) {
+        return 2;
+    }
+    if (!validate_collection()) {
+        return 3;
+    }
+    return validate_curve() ? 0 : 4;
 }

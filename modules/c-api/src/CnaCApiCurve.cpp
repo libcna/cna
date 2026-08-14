@@ -5,8 +5,11 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/CurveContinuity.hpp"
+#include "Microsoft/Xna/Framework/Curve.hpp"
 #include "Microsoft/Xna/Framework/CurveKey.hpp"
 #include "Microsoft/Xna/Framework/CurveKeyCollection.hpp"
+#include "Microsoft/Xna/Framework/CurveLoopType.hpp"
+#include "Microsoft/Xna/Framework/CurveTangent.hpp"
 
 #include <memory>
 #include <utility>
@@ -18,9 +21,12 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using Microsoft::Xna::Framework::Curve;
 using Microsoft::Xna::Framework::CurveContinuity;
 using Microsoft::Xna::Framework::CurveKey;
 using Microsoft::Xna::Framework::CurveKeyCollection;
+using Microsoft::Xna::Framework::CurveLoopType;
+using Microsoft::Xna::Framework::CurveTangent;
 
 [[nodiscard]] bool IsValidContinuity(const CNA_CurveContinuity value) noexcept
 {
@@ -41,6 +47,41 @@ using Microsoft::Xna::Framework::CurveKeyCollection;
 [[nodiscard]] CNA_Result ValidateKey(const CNA_CurveKey value) noexcept
 {
     return ValidateContinuity(value.continuity);
+}
+
+[[nodiscard]] bool IsValidLoopType(const CNA_CurveLoopType value) noexcept
+{
+    return value == CNA_CURVE_LOOP_CONSTANT || value == CNA_CURVE_LOOP_CYCLE ||
+        value == CNA_CURVE_LOOP_CYCLE_OFFSET || value == CNA_CURVE_LOOP_OSCILLATE ||
+        value == CNA_CURVE_LOOP_LINEAR;
+}
+
+[[nodiscard]] CNA_Result ValidateLoopType(const CNA_CurveLoopType value) noexcept
+{
+    if (IsValidLoopType(value)) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_ARGUMENT,
+        CNA_ERROR_CATEGORY_ARGUMENT,
+        "The curve loop type is invalid.");
+}
+
+[[nodiscard]] bool IsValidTangent(const CNA_CurveTangent value) noexcept
+{
+    return value == CNA_CURVE_TANGENT_FLAT || value == CNA_CURVE_TANGENT_LINEAR ||
+        value == CNA_CURVE_TANGENT_SMOOTH;
+}
+
+[[nodiscard]] CNA_Result ValidateTangent(const CNA_CurveTangent value) noexcept
+{
+    if (IsValidTangent(value)) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_ARGUMENT,
+        CNA_ERROR_CATEGORY_ARGUMENT,
+        "The curve tangent type is invalid.");
 }
 
 [[nodiscard]] CurveKey ToNative(const CNA_CurveKey value)
@@ -145,6 +186,23 @@ template<typename TCallable>
         result,
         ErrorCategoryForResult(result),
         "The CurveKeyCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetCurve(
+    const CNA_CurveHandle handle,
+    std::shared_ptr<Curve>* const outCurve)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle,
+        ObjectKind::Curve,
+        outCurve);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The Curve handle is invalid for this call.");
 }
 
 } // namespace
@@ -737,6 +795,334 @@ CNA_Result cna_curve_key_collection_remove_at(
             return result;
         }
         collection->RemoveAt(index);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_create(CNA_CurveHandle* const outCurve)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCurve == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Curve output handle is null.");
+        }
+        *outCurve = CNA_INVALID_HANDLE;
+        const auto curve = std::make_shared<Curve>();
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::Curve,
+            curve,
+            outCurve);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The Curve handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_destroy(const CNA_CurveHandle curveHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(curveHandle);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The Curve handle could not be destroyed.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_is_constant(
+    const CNA_CurveHandle curveHandle,
+    CNA_Bool* const outIsConstant)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsConstant == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Boolean output is null.");
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Bool result = curve->getIsConstantProperty() ? CNA_TRUE : CNA_FALSE;
+        *outIsConstant = result;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_keys(
+    const CNA_CurveHandle curveHandle,
+    CNA_CurveKeyCollectionHandle* const outKeys)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outKeys == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The CurveKeyCollection output handle is null.");
+        }
+        *outKeys = CNA_INVALID_HANDLE;
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::shared_ptr<CurveKeyCollection> keys(curve, &curve->getKeysProperty());
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::CurveKeyCollection,
+            keys,
+            outKeys);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The Curve key-view handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_pre_loop(
+    const CNA_CurveHandle curveHandle,
+    CNA_CurveLoopType* const outLoopType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLoopType == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The curve loop output is null.");
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_CurveLoopType result =
+            static_cast<CNA_CurveLoopType>(curve->getPreLoopProperty());
+        *outLoopType = result;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_set_pre_loop(
+    const CNA_CurveHandle curveHandle,
+    const CNA_CurveLoopType loopType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateLoopType(loopType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->setPreLoopProperty(static_cast<CurveLoopType>(loopType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_get_post_loop(
+    const CNA_CurveHandle curveHandle,
+    CNA_CurveLoopType* const outLoopType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLoopType == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The curve loop output is null.");
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_CurveLoopType result =
+            static_cast<CNA_CurveLoopType>(curve->getPostLoopProperty());
+        *outLoopType = result;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_set_post_loop(
+    const CNA_CurveHandle curveHandle,
+    const CNA_CurveLoopType loopType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateLoopType(loopType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->setPostLoopProperty(static_cast<CurveLoopType>(loopType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_clone(
+    const CNA_CurveHandle curveHandle,
+    CNA_CurveHandle* const outCurve)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCurve == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Curve output handle is null.");
+        }
+        *outCurve = CNA_INVALID_HANDLE;
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto clone = std::make_shared<Curve>(curve->Clone());
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::Curve,
+            clone,
+            outCurve);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The cloned Curve handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_evaluate(
+    const CNA_CurveHandle curveHandle,
+    const float position,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The curve value output is null.");
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const float result = curve->Evaluate(position);
+        *outValue = result;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangents(
+    const CNA_CurveHandle curveHandle,
+    const CNA_CurveTangent tangentType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTangent(tangentType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->ComputeTangents(static_cast<CurveTangent>(tangentType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangents_in_out(
+    const CNA_CurveHandle curveHandle,
+    const CNA_CurveTangent tangentInType,
+    const CNA_CurveTangent tangentOutType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA_Result validation = ValidateTangent(tangentInType);
+        if (validation == CNA_RESULT_SUCCESS) {
+            validation = ValidateTangent(tangentOutType);
+        }
+        if (validation != CNA_RESULT_SUCCESS) {
+            return validation;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->ComputeTangents(
+            static_cast<CurveTangent>(tangentInType),
+            static_cast<CurveTangent>(tangentOutType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangent(
+    const CNA_CurveHandle curveHandle,
+    const int32_t keyIndex,
+    const CNA_CurveTangent tangentType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTangent(tangentType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->ComputeTangent(keyIndex, static_cast<CurveTangent>(tangentType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_curve_compute_tangent_in_out(
+    const CNA_CurveHandle curveHandle,
+    const int32_t keyIndex,
+    const CNA_CurveTangent tangentInType,
+    const CNA_CurveTangent tangentOutType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA_Result validation = ValidateTangent(tangentInType);
+        if (validation == CNA_RESULT_SUCCESS) {
+            validation = ValidateTangent(tangentOutType);
+        }
+        if (validation != CNA_RESULT_SUCCESS) {
+            return validation;
+        }
+        std::shared_ptr<Curve> curve;
+        if (const CNA_Result result = GetCurve(curveHandle, &curve);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        curve->ComputeTangent(
+            keyIndex,
+            static_cast<CurveTangent>(tangentInType),
+            static_cast<CurveTangent>(tangentOutType));
         return CNA_RESULT_SUCCESS;
     });
 }

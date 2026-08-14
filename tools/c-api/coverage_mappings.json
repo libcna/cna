@@ -889,6 +889,16 @@
       "tests": "every entry point, handle ABI, ordering/repositioning, clone independence, count/index/copy, capacity atomicity, invalid keys/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B5b"
+    },
+    {
+      "id": "curve-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Curve\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "owned validated `CNA_CurveHandle` plus `cna_curve_*` loop, clone, evaluation and tangent operations; both native key-reference properties collapse to an owned mutable collection-view handle that retains the curve",
+      "tests": "every entry point, handle ABI, empty/single-state identity, mutable retained key views, all loop modes and tangent overloads, evaluation, clone independence, invalid enums/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B5c"
     }
   ]
 }

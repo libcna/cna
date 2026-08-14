@@ -208,6 +208,7 @@ static_assert(offsetof(CNA_BoundingSphere, radius) == 12U);
 static_assert(offsetof(CNA_BoundingFrustum, matrix) == 0U);
 static_assert(sizeof(CNA_CurveKey) == 20U);
 static_assert(sizeof(CNA_CurveKeyCollectionHandle) == 8U);
+static_assert(sizeof(CNA_CurveHandle) == 8U);
 static_assert(alignof(CNA_CurveKey) == 4U);
 static_assert(offsetof(CNA_CurveKey, position) == 0U);
 static_assert(offsetof(CNA_CurveKey, value) == 4U);
