@@ -808,6 +808,14 @@ byte.
 | Alpha mode / cutoff | `AlphaStateIsCarriedOnTheEffectButNotYetInTheParameterBlock` | L3 `material.alphaMode` / `alphaCutoff` |
 | Double-sided | same | L3 `material.doubleSided` — *carried*, see below |
 
+`RigidAndSkinnedPbrEffectsGiveEverySharedNameTheSameConvention` guards the duplicated public
+effect boundary itself (`GLTF-380`). One generic setter sequence configures `PbrEffect` and
+`SkinnedPbrEffect` with deliberately asymmetric matrices, factors, five maps, alpha state, colour-
+space flags, lights and fog, then compares every shared `GpuDrawParams` field. Only the explicitly
+skin-specific flag, palette, palette count and influence count may differ. A parameter name shared
+by the two PBR effects therefore cannot silently acquire a different unit, colour space, default or
+meaning on the skinned path.
+
 `GLTF-237` applies the same L6 contract across the loader boundary. The offline converter and
 direct runtime loader both start from `MaterialOut`; the former serialises it through `.cnj`, then
 `OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus` compares every material-bearing

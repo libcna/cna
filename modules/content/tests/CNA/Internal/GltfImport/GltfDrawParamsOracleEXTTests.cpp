@@ -40,6 +40,7 @@
 #include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 
@@ -1482,6 +1483,143 @@ TEST(GltfDrawParamsOracleL6, EveryStockEffectIsCapturableWithItsOwnDistinguishin
 
     // Leave the model holding an effect it does not own for no longer than the test needs it.
     part->setEffectProperty(nullptr);
+}
+
+// --- plan_gltf.md GLTF-380: identically named PBR parameters share one convention ------------
+
+// PbrEffect and SkinnedPbrEffect expose the same material, lighting and fog names but implement
+// FillGpuDrawParams separately. A same-spelled setter is not evidence that the two copies apply
+// alpha, colour space, disabled lights, Fresnel factors or fog with the same convention. Feed both
+// effects deliberately asymmetric values through their public APIs and compare every field of the
+// shared PBR draw contract; only the skin flag/palette/influence count are allowed to differ.
+TEST(GltfDrawParamsOracleL6, RigidAndSkinnedPbrEffectsGiveEverySharedNameTheSameConvention)
+{
+    using CNA::Internal::Renderers::GpuDrawParams;
+    using Microsoft::Xna::Framework::Graphics::AlphaModeEXT;
+    using Microsoft::Xna::Framework::Graphics::PbrEffect;
+    using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
+    using Microsoft::Xna::Framework::Vector3;
+
+    GraphicsDevice gd;
+    const std::vector<std::uint8_t> texel{17, 53, 149, 211};
+    Texture2D texture = Texture2D::CreateFromPixels(gd, 1, 1, texel);
+
+    PbrEffect rigid(gd);
+    SkinnedPbrEffect skinned(gd);
+    const Matrix world = Matrix::CreateScale(2.0f, 3.0f, 4.0f)
+        * Matrix::CreateRotationY(0.37f)
+        * Matrix::CreateTranslation(5.0f, 7.0f, 11.0f);
+    const Matrix view = TestView();
+    const Matrix projection = TestProjection();
+
+    const auto configureSharedSurface = [&](auto& effect) {
+        effect.setWorldProperty(world);
+        effect.setViewProperty(view);
+        effect.setProjectionProperty(projection);
+        effect.setDiffuseColorProperty({0.12f, 0.34f, 0.56f});
+        effect.setAlphaProperty(0.73f);
+        effect.setAmbientLightColorProperty({0.02f, 0.04f, 0.08f});
+        effect.setLightingEnabledProperty(true);
+        effect.setFogEnabledProperty(true);
+        effect.setFogColorProperty({0.13f, 0.27f, 0.41f});
+        effect.setFogStartProperty(2.0f);
+        effect.setFogEndProperty(9.0f);
+
+        effect.setTextureProperty(&texture);
+        effect.setNormalMapProperty(&texture);
+        effect.setMetallicRoughnessMapProperty(&texture);
+        effect.setEmissiveMapProperty(&texture);
+        effect.setOcclusionMapProperty(&texture);
+        effect.setMetallicFactorProperty(0.23f);
+        effect.setRoughnessFactorProperty(0.71f);
+        effect.setIorEXTProperty(1.8f);
+        effect.setSpecularFactorEXTProperty(0.42f);
+        effect.setSpecularColorFactorEXTProperty({0.19f, 0.61f, 1.7f});
+        effect.setNormalScaleEXTProperty(0.27f);
+        effect.setOcclusionStrengthEXTProperty(0.63f);
+        effect.setBaseColorTextureIsSrgbEXTProperty(false);
+        effect.setEmissiveTextureIsSrgbEXTProperty(false);
+        effect.setEncodeOutputToSrgbEXTProperty(false);
+        effect.setEmissiveFactorProperty({0.11f, 0.22f, 0.33f});
+        effect.setAlphaModeEXTProperty(AlphaModeEXT::Mask);
+        effect.setAlphaCutoffEXTProperty(0.37f);
+
+        auto configureLight = [](auto& light, bool enabled, const Vector3& direction,
+                                 const Vector3& diffuse) {
+            light.setDirectionProperty(direction);
+            light.setDiffuseColorProperty(diffuse);
+            light.setEnabledProperty(enabled);
+        };
+        configureLight(effect.getDirectionalLight0Property(), true,
+                       {0.17f, -0.31f, -0.93f}, {0.91f, 0.37f, 0.13f});
+        configureLight(effect.getDirectionalLight1Property(), false,
+                       {-0.73f, 0.11f, -0.67f}, {0.29f, 0.83f, 0.47f});
+        configureLight(effect.getDirectionalLight2Property(), true,
+                       {0.41f, 0.79f, -0.45f}, {0.17f, 0.31f, 0.89f});
+    };
+    configureSharedSurface(rigid);
+    configureSharedSurface(skinned);
+
+    GpuDrawParams rigidParams;
+    GpuDrawParams skinnedParams;
+    rigid.FillGpuDrawParams(rigidParams);
+    skinned.FillGpuDrawParams(skinnedParams);
+
+    const auto expectArrayNear = [](const char* name, const float* a, const float* b,
+                                    std::size_t count) {
+        SCOPED_TRACE(name);
+        for (std::size_t i = 0; i < count; ++i)
+            EXPECT_NEAR(a[i], b[i], kTolerance) << "element " << i;
+    };
+
+    // Shared textures and material quantities.
+    EXPECT_EQ(rigidParams.texture0, skinnedParams.texture0);
+    EXPECT_EQ(rigidParams.pbrNormalMap, skinnedParams.pbrNormalMap);
+    EXPECT_EQ(rigidParams.pbrMetallicRoughnessMap, skinnedParams.pbrMetallicRoughnessMap);
+    EXPECT_EQ(rigidParams.pbrEmissiveMap, skinnedParams.pbrEmissiveMap);
+    EXPECT_EQ(rigidParams.pbrOcclusionMap, skinnedParams.pbrOcclusionMap);
+    expectArrayNear("diffuseColor", rigidParams.diffuseColor, skinnedParams.diffuseColor, 4);
+    expectArrayNear("ambientColor", rigidParams.ambientColor, skinnedParams.ambientColor, 3);
+    expectArrayNear("emissiveColor", rigidParams.emissiveColor, skinnedParams.emissiveColor, 3);
+    EXPECT_FLOAT_EQ(rigidParams.pbrMetallicFactor, skinnedParams.pbrMetallicFactor);
+    EXPECT_FLOAT_EQ(rigidParams.pbrRoughnessFactor, skinnedParams.pbrRoughnessFactor);
+    expectArrayNear("pbrDielectricF0", rigidParams.pbrDielectricF0,
+                    skinnedParams.pbrDielectricF0, 3);
+    EXPECT_FLOAT_EQ(rigidParams.pbrDielectricF90, skinnedParams.pbrDielectricF90);
+    EXPECT_FLOAT_EQ(rigidParams.pbrNormalScale, skinnedParams.pbrNormalScale);
+    EXPECT_FLOAT_EQ(rigidParams.pbrOcclusionStrength, skinnedParams.pbrOcclusionStrength);
+    EXPECT_EQ(rigidParams.pbrBaseColorTextureIsSrgb, skinnedParams.pbrBaseColorTextureIsSrgb);
+    EXPECT_EQ(rigidParams.pbrEmissiveTextureIsSrgb, skinnedParams.pbrEmissiveTextureIsSrgb);
+    EXPECT_EQ(rigidParams.pbrEncodeOutputToSrgb, skinnedParams.pbrEncodeOutputToSrgb);
+    expectArrayNear("alphaTest", rigidParams.alphaTest, skinnedParams.alphaTest, 4);
+
+    // Shared transforms, lights and fog. Disabled light 1 is especially important: both effects
+    // must zero its diffuse colour while preserving its authored direction.
+    expectArrayNear("worldColMajor", rigidParams.worldColMajor,
+                    skinnedParams.worldColMajor, 16);
+    expectArrayNear("eyePositionWorld", rigidParams.eyePositionWorld,
+                    skinnedParams.eyePositionWorld, 3);
+    expectArrayNear("light0Dir", rigidParams.light0Dir, skinnedParams.light0Dir, 3);
+    expectArrayNear("light0Diffuse", rigidParams.light0Diffuse,
+                    skinnedParams.light0Diffuse, 3);
+    expectArrayNear("light1Dir", rigidParams.light1Dir, skinnedParams.light1Dir, 3);
+    expectArrayNear("light1Diffuse", rigidParams.light1Diffuse,
+                    skinnedParams.light1Diffuse, 3);
+    expectArrayNear("light2Dir", rigidParams.light2Dir, skinnedParams.light2Dir, 3);
+    expectArrayNear("light2Diffuse", rigidParams.light2Diffuse,
+                    skinnedParams.light2Diffuse, 3);
+    EXPECT_TRUE(rigidParams.fogEnabled);
+    EXPECT_EQ(rigidParams.fogEnabled, skinnedParams.fogEnabled);
+    expectArrayNear("fogColor", rigidParams.fogColor, skinnedParams.fogColor, 3);
+    expectArrayNear("fogVector", rigidParams.fogVector, skinnedParams.fogVector, 4);
+
+    EXPECT_TRUE(rigidParams.pbr);
+    EXPECT_TRUE(skinnedParams.pbr);
+    EXPECT_EQ(rigidParams.textureEnabled, skinnedParams.textureEnabled);
+    EXPECT_EQ(rigidParams.lightingEnabled, skinnedParams.lightingEnabled);
+    EXPECT_FALSE(rigidParams.skinned);
+    EXPECT_TRUE(skinnedParams.skinned);
 }
 
 // A custom effect is the one effect the glTF importer never constructs itself, so a corpus-only

@@ -9,9 +9,9 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **390 closed (`✔` 256, `✅` 134),
-  53 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
-  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **403 closed (`✔` 257, `✅` 146),
+  44 `⬜` remaining.** The other 13 carry a deliberate partial marker: 6 `🔬` (investigation, no
+  implementation owed), 5 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
@@ -48,7 +48,7 @@ Expected as of this writing:
 | full suite | **6 372 passed, 191 skipped, 18 failed** |
 | generator `--check` | **141 assets, 699 files — byte-identical** |
 | pinned Khronos Validator | **262 valid, 20 expected-invalid, 42 warnings** |
-| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **479 passed, 26 skipped** / **505 passed, 0 skipped** / **505 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **493 passed, 27 skipped** / **520 passed, 0 skipped** / **520 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -60,9 +60,9 @@ saying they are there.
 There are additional trees for **HEADLESS** and the now-working **OPENGLES3** renderer:
 `/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` and
 `/media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3`. HEADLESS reports
-`GraphicsCapability::ThreeD`, so STUB's 26 capability-gated glTF cases really run there — and two
+`GraphicsCapability::ThreeD`, so STUB's 27 capability-gated glTF cases really run there — and two
 were failing on stale pre-`GLTF-215` effect expectations that the skip had hidden. OPENGLES3 runs
-the same 505 cases and also supplies registered framebuffer tests. Compare them with
+the same 520 cases and also supplies registered framebuffer tests. Compare them with
 
 ```bash
 scripts/gltf-renderer-parity.sh "$B" /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless
@@ -215,7 +215,7 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    it turns eight blocked rows into ordinary work.
 5. **Cross-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
    `398`). STUB, HEADLESS and OPENGLES3 now agree on all 41 L1–L5 tests; HEADLESS and OPENGLES3
-   agree on the full 505-test glTF selection. Vulkan and the corpus L7 rung are the remaining
+   agree on the full 520-test glTF selection. Vulkan and the corpus L7 rung are the remaining
    renderer residues.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
