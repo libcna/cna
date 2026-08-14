@@ -317,13 +317,19 @@ namespace Microsoft::Xna::Framework::Graphics
          * cull an imported scene.
          *
          * The result is recomputed from the current absolute bone transforms, so rigid/node
-         * animation is reflected immediately. It is in model-root space — glTF's composed scene
-         * space after node transforms, but before the caller's `world` argument to `Model::Draw`.
-         * Transform the returned sphere by that matrix when application world space is required.
+         * animation is reflected immediately. For a mesh named by @ref getSkinsEXTProperty it
+         * also conservatively unions the mesh sphere under the current bone palette carried by
+         * its `SkinnedEffect`/`SkinnedPbrEffect`; bind-pose mesh-node cancellation and later
+         * `AnimationPlayer` updates therefore remain inside the result. It is in model-root space
+         * — glTF's composed scene space after node transforms and skinning, but before the
+         * caller's `world` argument to `Model::Draw`. Transform the returned sphere by that
+         * matrix when application world space is required.
          *
-         * This has the same deformation contract as the mesh spheres it aggregates. GPU skinning
-         * or a morph that moves vertices outside an imported mesh sphere requires the caller to
-         * update that existing read-write `ModelMesh::BoundingSphere` property.
+         * This has the same deformation contract as the mesh spheres it aggregates. Skinning is
+         * conservative over the complete active palette and can therefore overbound a mesh whose
+         * vertices use only a few joints. A morph that moves vertices outside an imported mesh
+         * sphere still requires the caller to update that existing read-write
+         * `ModelMesh::BoundingSphere` property.
          *
          * @return The merged sphere, or `std::nullopt` when the model has no meshes.
          */

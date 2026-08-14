@@ -16,11 +16,13 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
@@ -369,6 +371,39 @@ TEST(ModelTest, BoundingSphereEXTStaysConservativeForAShearedAbsoluteBoneTransfo
     EXPECT_GT(bounds->Radius,
               mesh.getBoundingSphereProperty().Transform(shear).Radius)
         << "the test no longer distinguishes a shear-safe radius from XNA's single-TRS rule";
+}
+
+TEST(ModelTest, BoundingSphereEXTIncludesTheCurrentSkinPaletteBeforeMeshPlacement)
+{
+    GraphicsDevice device;
+    SkinnedEffect effect(device);
+    ModelMeshPart part;
+    ModelMesh mesh(nullptr, {&part});
+    part.setEffectProperty(&effect);
+    mesh.setBoundingSphereProperty(BoundingSphere(Vector3::Zero, 1.0f));
+
+    ModelBone meshNode{0, "TranslatedMeshNode"};
+    meshNode.setTransformProperty(Matrix::CreateTranslation(0.0f, 0.0f, 50.0f));
+    Model model(nullptr, {&meshNode}, {&mesh}, {&meshNode});
+
+    SkinningData skinningData;
+    skinningData.BoneCount = 1;
+    model.setSkinsEXTProperty({ModelSkinEXT{"Skin", &skinningData, {&mesh}}});
+
+    // The glTF palette's inverse(meshNodeWorld) term cancels the placement in the bind pose.
+    // A placement-only whole-model bound would incorrectly stay centred at z=50.
+    effect.SetBoneTransforms({Matrix::CreateTranslation(0.0f, 0.0f, -50.0f)});
+    const auto bind = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(bind.has_value());
+    EXPECT_TRUE(VectorNear(bind->Center, Vector3::Zero));
+    EXPECT_FLOAT_EQ(1.0f, bind->Radius);
+
+    // The property is live for palette animation too, just as it already is for rigid bones.
+    effect.SetBoneTransforms({Matrix::CreateTranslation(0.0f, 0.0f, -40.0f)});
+    const auto posed = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(posed.has_value());
+    EXPECT_TRUE(VectorNear(posed->Center, Vector3(0.0f, 0.0f, 10.0f)));
+    EXPECT_FLOAT_EQ(1.0f, posed->Radius);
 }
 
 // --- plan_gltf.md GLTF-444: Model::Draw's shared bone scratch buffer ----------------------------

@@ -508,6 +508,20 @@ TEST(GltfSkinSpaces, MeshNodeTransformIsCancelledExactlyOnce)
     EXPECT_NEAR(1.0f, skinned.X, kTolerance);
     EXPECT_NEAR(0.0f, skinned.Y, kTolerance);
     EXPECT_NEAR(-50.0f, skinned.Z, kTolerance);
+
+    // GLTF-128/GLTF-427: camera framing must follow the position the skin palette actually sends
+    // to the GPU, not the mesh-local sphere at z=0 or the ignored mesh node at z=+50. This exact
+    // fixture exposed the gap in the viewer: the draw was correct but entirely outside its camera.
+    const auto bounds = model.getBoundingSphereEXTProperty();
+    ASSERT_TRUE(bounds.has_value());
+    EXPECT_NEAR(-50.0f, bounds->Center.Z, kTolerance);
+    for (const Microsoft::Xna::Framework::Vector3& position :
+         std::vector<Microsoft::Xna::Framework::Vector3>{
+             {0.0f, 0.0f, -50.0f}, {1.0f, 0.0f, -50.0f}, {0.0f, 1.0f, -50.0f}})
+    {
+        EXPECT_LE(Microsoft::Xna::Framework::Vector3::Distance(bounds->Center, position),
+                  bounds->Radius + kTolerance);
+    }
 }
 
 // --- GLTF-293: rigid (non-joint) node animation ------------------------------------------------

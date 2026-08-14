@@ -1,9 +1,9 @@
 # glTF ↔ XNA conventions: what is *not* converted
 
-`plan_gltf.md` `GLTF-105`. This document exists to state, once and in one place, the set of
-conventions glTF 2.0 and XNA 4.0 **already agree on** — because every one of them is a place where
-a well-meaning "fix" would silently break every asset in the project, and where the absence of
-conversion code looks like an omission rather than a decision.
+`plan_gltf.md` `GLTF-105`. This document exists to state, once and in one place, which conventions
+glTF 2.0 and XNA 4.0 agree on and where their rasterizer-facing winding rules differ. Each is a
+place where a well-meaning "fix" could silently break every asset in the project, and where the
+absence of import-time conversion code looks like an omission rather than a decision.
 
 Every claim here is asserted by
 `modules/content/tests/CNA/Internal/GltfImport/GltfConventionsTests.cpp`. A change that introduces
@@ -19,12 +19,28 @@ first. That is the point: the invariants are cheap to state and expensive to red
 | Forward axis | −Z | −Z | **None** |
 | Texture coordinate origin | Top-left, V down | Top-left, V down | **None** |
 | Quaternion component order | `[x, y, z, w]` | `Quaternion(X, Y, Z, W)` | **None** — a straight member copy |
-| Vertex winding for a front face | Counter-clockwise | Counter-clockwise | **None** |
+| Vertex winding for a front face | Counter-clockwise | Clockwise under XNA's default `CullCounterClockwise` state | No index rewrite; a glTF-aware draw uses `CullClockwise` (and reverses it for a mirrored placement) |
 | Distance unit | Metres (§3.4) | Undefined; whatever the game chooses | None at import; `unitScale` is the offline tool's own knob |
 
-Because all of these agree, the importer contains **no axis remap, no handedness negation and no V
-flip anywhere**. A position authored as `(1, 2, 3)` arrives in the vertex buffer as `(1, 2, 3)`; a
-normal of `(0, 0, 1)` stays `(0, 0, 1)`; a UV of `(0.25, 0.75)` stays `(0.25, 0.75)`.
+Because the coordinate conventions agree, the importer contains **no axis remap, no handedness
+negation and no V flip anywhere**. A position authored as `(1, 2, 3)` arrives in the vertex buffer
+as `(1, 2, 3)`; a normal of `(0, 0, 1)` stays `(0, 0, 1)`; a UV of `(0.25, 0.75)` stays
+`(0.25, 0.75)`. Triangle indices also remain in the file's order, but the draw-time cull state must
+account for the front-face difference described below.
+
+### Front-face winding is draw state (`GLTF-423`)
+
+glTF declares a counter-clockwise triangle front-facing. XNA's default
+`RasterizerState::CullCounterClockwise`, as its name says, removes that winding and retains the
+clockwise face. CNA deliberately does not reverse imported index buffers: culling is application
+state, and one buffer can be shared by mirrored and unmirrored placements that need opposite
+decisions.
+
+The glTF viewer therefore uses `CullClockwise` for an ordinary single-sided placement,
+`CullCounterClockwise` when its current world determinant is negative, and `CullNone` only for an
+authored `doubleSided` material or the explicit `--no-cull` debug option. This is a format-to-XNA
+draw-policy boundary, not an axis or handedness conversion. Applications that call `Model::Draw`
+directly retain control of the same `RasterizerState` and must make the equivalent decision.
 
 ### Asset UVs are not render-target orientation state (`GLTF-192`, `GLTF-397`)
 
@@ -173,9 +189,10 @@ of mirroring ancestors mirrors, an even number does not.
 CNA **detects** this (`MeshInstanceOut::mirroredEXT`) and reports it. It does not rewrite the shared
 index or vertex buffer: one mesh instanced by both a mirrored and an unmirrored node would have one
 placement fixed and the other broken. The two consequences then separate at draw time. Winding
-remains an application-owned `RasterizerState` decision, the same boundary `doubleSided` sits
-behind. PBR tangent handedness is shader-owned instead: EasyGL multiplies the unchanged local
-`TANGENT.w` by the direction transform's determinant sign per placement (`GLTF-176`).
+reverses the ordinary glTF-aware cull choice described above and remains an application-owned
+`RasterizerState` decision, the same boundary `doubleSided` sits behind. PBR tangent handedness is
+shader-owned instead: EasyGL multiplies the unchanged local `TANGENT.w` by the direction
+transform's determinant sign per placement (`GLTF-176`).
 
 ### Bounds follow the same placement
 
@@ -186,22 +203,25 @@ including authored non-zero `mesh.weights` or `node.weights`; the `.cnj` format 
 bounds field because its existing vertex sidecars contain the same positions.
 
 `Model::getBoundingSphereEXTProperty()` then follows the transform pipeline above rather than
-re-reading those sidecars: it transforms each mesh sphere by the mesh's **current absolute parent
-bone transform** and merges the placed spheres. The result therefore moves immediately with rigid
-node animation. A rotated child below a non-uniformly scaled parent can make that composed matrix
-sheared, so the radius uses a conservative upper bound on its largest stretch rather than the
-longest-basis shortcut that is exact only for an orthogonal TRS basis. No meshes means
-`std::nullopt`; a zero-radius sphere remains valid point geometry.
+re-reading those sidecars. A rigid mesh sphere is transformed by its **current absolute parent-bone
+transform**. A mesh listed in `Model::SkinsEXT` is conservatively unioned under every matrix in its
+current effect palette before that mesh placement, which includes glTF's mesh-node cancellation
+and later `AnimationPlayer` updates. A rotated child below a non-uniformly scaled parent can make a
+composed matrix sheared, so the radius uses a conservative upper bound on its largest stretch
+rather than the longest-basis shortcut that is exact only for an orthogonal TRS basis. No meshes
+means `std::nullopt`; a zero-radius sphere remains valid point geometry.
 
 The result is in **model-root space**. For an imported glTF this is the composed scene space that
 `SceneNodeOut::worldTransform` calls world, but it deliberately excludes the caller's application
 `world` matrix passed to `Model::Draw`, which the model cannot know. A caller needing final
 application-world bounds transforms the returned sphere by that same matrix.
 
-This has the existing mesh-sphere deformation boundary, not a second hidden geometry tracker. GPU
-skinning and a later morph re-upload do not rewrite `ModelMesh::BoundingSphere`; if either moves
-vertices outside the imported default-pose sphere, the application updates that read-write XNA
-property. The whole-model accessor will use the updated value on its next call.
+This has the existing mesh-sphere deformation boundary, not a second hidden geometry tracker. The
+skin bound is conservative over the complete active palette, so it may overbound a mesh that uses
+only a few joints but cannot miss a linearly blended vertex solely because its palette moved. A
+later morph re-upload still does not rewrite `ModelMesh::BoundingSphere`; if it moves vertices
+outside the imported sphere, the application updates that read-write XNA property. The whole-model
+accessor will use the updated value on its next call.
 
 ## `KHR_materials_variants`: source indices and complete part states
 

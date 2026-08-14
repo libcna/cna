@@ -6,12 +6,15 @@
 #include <stdexcept>
 
 #include "CNA/Internal/Graphics/ModelMaterialVariantsEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 
 namespace CNA::Internal::Graphics
 {
@@ -216,6 +219,59 @@ namespace Microsoft::Xna::Framework::Graphics
                 const int boneIndex = parent != nullptr ? parent->getIndexProperty() : 0;
                 placement = absoluteBoneTransforms.at(static_cast<std::size_t>(boneIndex));
             }
+
+            // A glTF skin palette operates before Model::Draw's mesh placement. In particular,
+            // the palette carries inverse(meshNodeWorld), so a translated skinned mesh node can
+            // be cancelled back to its skeleton's actual bind-pose space. Applying only
+            // `placement` here framed that file around the node transform while the GPU drew its
+            // vertices somewhere else. The current effect palette is public, live state; union
+            // the local sphere under every joint transform and then the mesh placement.
+            //
+            // This is conservative for linear blend skinning: each vertex is a convex combination
+            // of its joint-transformed positions, and the merged sphere is convex and contains all
+            // of those positions. It can overbound a mesh that uses only a subset of the palette,
+            // but it cannot exclude a posed vertex solely because the mesh-node cancellation or a
+            // later AnimationPlayer update moved it.
+            bool usedSkinPalette = false;
+            for (const ModelSkinEXT& skin : skins_)
+            {
+                if (skin.Data == nullptr || skin.Data->BoneCount <= 0 ||
+                    skin.Data->BoneCount > SkinnedEffect::MaxBones ||
+                    std::find(skin.Meshes.begin(), skin.Meshes.end(), mesh) == skin.Meshes.end())
+                {
+                    continue;
+                }
+
+                for (ModelMeshPart* part : mesh->getMeshPartsProperty())
+                {
+                    const Effect* effect = part != nullptr ? part->getEffectProperty() : nullptr;
+                    std::vector<Matrix> palette;
+                    if (const auto* skinned = dynamic_cast<const SkinnedEffect*>(effect))
+                    {
+                        palette = skinned->GetBoneTransforms(skin.Data->BoneCount);
+                    }
+                    else if (const auto* skinnedPbr =
+                                 dynamic_cast<const SkinnedPbrEffect*>(effect))
+                    {
+                        palette = skinnedPbr->GetBoneTransforms(skin.Data->BoneCount);
+                    }
+                    else
+                    {
+                        continue;
+                    }
+
+                    for (const Matrix& joint : palette)
+                    {
+                        const BoundingSphere posed = TransformModelBoundsSphereEXT(
+                            mesh->getBoundingSphereProperty(), joint * placement);
+                        result = result.has_value()
+                            ? BoundingSphere::CreateMerged(*result, posed)
+                            : posed;
+                    }
+                    usedSkinPalette = true;
+                }
+            }
+            if (usedSkinPalette) { continue; }
 
             const BoundingSphere placed =
                 TransformModelBoundsSphereEXT(mesh->getBoundingSphereProperty(), placement);

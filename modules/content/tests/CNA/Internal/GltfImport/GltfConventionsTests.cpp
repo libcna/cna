@@ -2,9 +2,10 @@
 //
 // plan_gltf.md GLTF-104 / GLTF-105 / GLTF-106 / GLTF-108 / GLTF-191.
 //
-// The conventions glTF 2.0 and XNA 4.0 already agree on -- handedness, up axis, forward axis, UV
-// origin, quaternion component order, winding -- and therefore the conversions the importer
-// deliberately does NOT contain. See docs/gltf-conventions.md for the full statement.
+// The coordinate conventions glTF 2.0 and XNA 4.0 already agree on -- handedness, up axis, forward
+// axis, UV origin and quaternion component order -- and therefore the conversions the importer
+// deliberately does NOT contain. Front-face winding is the one rasterizer-state difference and is
+// handled at draw time rather than by rewriting shared buffers; see docs/gltf-conventions.md.
 //
 // These are the most dangerous invariants in the project precisely because they are invisible: an
 // axis flip or a V flip is a few characters, looks like a fix to whoever writes it, and breaks
