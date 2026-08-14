@@ -76,8 +76,11 @@ directory.
 ## Current status
 
 The standalone replay shape and the deterministic in-build corpus are green. A sustained
-coverage-guided campaign under ASan/UBSan is tracked by FX-051's remaining acceptance criteria and
-by FX-052; note that LeakSanitizer cannot run under this project's managed environment (its ptrace
-policy blocks the tracer), and the pinned upstream MojoShader has its own known UBSan findings in
-float formatting and zero-length clone copies. Those are recorded rather than presented as a clean
-third-party gate.
+coverage-guided campaign is still to run; it is tracked by FX-051's remaining acceptance criteria.
+
+What has run (2026-08-14) is a full ASan+UBSan+LSan pass over the 340 FX, Effect, XNB, capability
+and content-reader tests on the SDL_GPU/Vulkan driver. All pass. AddressSanitizer reports nothing.
+Every UBSan report and every leak record belongs to third-party code -- `SpirvPatchTable` alignment
+and null-argument reports plus SPIR-V emitter leaks in the pinned MojoShader, one shift overflow in
+FNA3D's pipeline cache, and 32 bytes per device inside `FNA3D_CreateDevice`. None is attributable
+to CNA. They are recorded as upstream findings rather than presented as a clean third-party gate.

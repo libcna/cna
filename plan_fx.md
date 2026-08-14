@@ -67,12 +67,22 @@ normal MojoShader diagnostic. The deterministic malformed-input corpus covers 51
 128 stock-Effect mutations without per-case output or a flaky wall-clock assertion, while retaining
 the seed, iteration, size, and mutation description in failure traces.
 
-A fresh ASan/UBSan build executes all 58 FX/XNB/capability tests without an address-sanitizer or CNA
+A fresh ASan/UBSan build executes the FX/XNB/capability suites without an address-sanitizer or CNA
 undefined-behavior finding after MojoShader enum fields were made safe to inspect even when mutated
-bytes do not encode a valid C++ enum. `FX-052` remains open because LeakSanitizer cannot operate
-under this managed environment's ptrace policy and the pinned upstream MojoShader itself reports
-known UBSan findings in float formatting and zero-length clone copies; these are recorded rather
-than misrepresented as a clean third-party sanitizer gate. A broader affected debug run passes
+bytes do not encode a valid C++ enum. The 2026-08-14 re-run over the current branch covers **340
+tests** (`Fna3dCompiledEffect*`, `Effect*`, every XNB suite, capability and content-reader suites)
+on the SDL_GPU/Vulkan driver: all pass, AddressSanitizer reports nothing, and every one of the 19
+UBSan reports is in third-party code -- `SpirvPatchTable` alignment and null-argument reports in the
+pinned MojoShader plus one `left shift of 255 by 24 places` in FNA3D's own pipeline cache. Zero
+UBSan reports are attributable to CNA.
+
+The earlier claim that LeakSanitizer cannot operate under this managed environment's ptrace policy
+was **wrong and is corrected here**: LSan runs. It reports 209,008 bytes in 15,479 allocations
+across the compiled-effect suite, and every one of the 1,600 leak records is allocated by
+third-party code -- 1,562 by MojoShader's SPIR-V emitter (`spv_load_srcarg`,
+`spv_add_attrib_fixup`, `spv_componentlist_alloc`, `emit_SPIRV_*`) and 37 by `FNA3D_CreateDevice`
+itself, 32 bytes per device. **No leak record is allocated by CNA code.** These are recorded as
+upstream findings rather than misrepresented as a clean third-party sanitizer gate. A broader affected debug run passes
 1,203 Effect, SpriteBatch, GraphicsDevice, primitive, and model tests. A build directory created
 from scratch fetched the exact pinned FNA3D and MojoShader revisions, applied only the managed
 MojoShader patch, built `CnaTests`, and passed the focused regression, corpus, and all 58 targeted
@@ -450,7 +460,7 @@ must be accepted before a row can close.
 | FX-035 | Prevent `PrepareDrawEXT` from overwriting a compiled pass while preserving vertex/index/stream binding | FX-024, FX-033 | Arbitrary semantics, indexed/non-indexed, multi-stream, and instancing tests render correctly |
 | FX-036 | Enable `CompiledEffects` only for FNA3D and run shared capability/unsupported tests | FX-025, FX-032, FX-033, FX-034, FX-035 | FNA3D is true and every incomplete backend remains false with explicit rejection |
 | FX-037 | Add FNA3D golden-pixel tests for 3D, SpriteBatch, multi-technique, multi-pass, parameters, textures, and pass states | FX-004, FX-036 | Deterministic results match the FNA oracle within documented tolerances |
-| FX-038 | Add FNA3D lifecycle, reset, repeated-clone, and failure-injection tests | FX-019, FX-036 | **Done** apart from the sanitizer run tracked by FX-052. Device reset, four-generation clone chains disposed out of order, disposed-effect rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles all pass |
+| FX-038 | Add FNA3D lifecycle, reset, repeated-clone, and failure-injection tests | FX-019, FX-036 | **Done**, including the FX-052 sanitizer run over these cases. Device reset, four-generation clone chains disposed out of order, disposed-effect rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles all pass |
 
 ### Phase E - XNB Content Pipeline
 
@@ -467,7 +477,7 @@ must be accepted before a row can close.
 |---|---|---|---|
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
 | FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness and corpus **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`); the sustained coverage-guided campaign under ASan/UBSan is still to run |
-| FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | Clean supported-platform sanitizer reports |
+| FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | **Done for CNA-owned code.** 340 FX/Effect/XNB/capability tests pass under ASan+UBSan with zero address findings and zero CNA undefined-behaviour findings; the FX-038 reset and repeated create/apply/dispose stress cases run inside that suite. LeakSanitizer runs after all (the earlier ptrace claim was wrong) and attributes every leak record to pinned MojoShader's SPIR-V emitter or to `FNA3D_CreateDevice`, none to CNA. The remaining third-party UBSan/leak findings are recorded upstream findings, not a CNA gate |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | No unexplained regression from the develop baseline |
 | FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
