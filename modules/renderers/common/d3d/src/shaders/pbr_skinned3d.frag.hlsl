@@ -26,6 +26,7 @@ cbuffer PerDraw : register(b0)
     float4 AlphaTest;
     // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive
     float4 PbrMapScales;
+    float4 DielectricFresnel; // xyz = dielectric F0, w = dielectric F90
 };
 
 cbuffer PbrLights : register(b2)
@@ -69,7 +70,7 @@ float3 CnaLinearToSrgb(float3 color)
 }
 
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -81,7 +82,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     float D = a2 / (kPi * dTerm * dTerm + 1e-7);
     float k = (roughness + 1.0); k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90 - F0) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0 - metallic);
     float3 kd = float3(1.0, 1.0, 1.0) - F;
@@ -112,12 +113,14 @@ float4 main(PSInput input) : SV_Target
     float metallic  = clamp(mr.b * AmbientMetallic.w, 0.0, 1.0);
 
     float3 V = normalize(EyePosWeights.xyz - input.WorldPos);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w),
+                      float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-Light0DirPad.xyz), Light0DiffusePad.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light1DirPad.xyz), Light1DiffusePad.xyz, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light2DirPad.xyz), Light2DiffusePad.xyz, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light0DirPad.xyz), Light0DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light1DirPad.xyz), Light1DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light2DirPad.xyz), Light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
     float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r;
     occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);

@@ -1991,6 +1991,10 @@ namespace CNA::Internal::Renderers::DirectX12
             perDraw.PbrMapScales[1] = params.pbrOcclusionStrength;
             perDraw.PbrMapScales[2] = params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
             perDraw.PbrMapScales[3] = params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            perDraw.DielectricFresnel[0] = params.pbrDielectricF0[0];
+            perDraw.DielectricFresnel[1] = params.pbrDielectricF0[1];
+            perDraw.DielectricFresnel[2] = params.pbrDielectricF0[2];
+            perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

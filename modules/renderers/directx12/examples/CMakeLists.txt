@@ -57,6 +57,11 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX12")
     cna_directx12_test(cna_test_directx12_pbr_srgb_transfer
                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_srgb_transfer_test.cpp)
 
+    # GLTF-343/344: compile-verify the shared rigid/skinned Fresnel harness for D3D12. Like the
+    # sRGB harness above it is not CTest-registered under Wine because of DX-100's swap-chain limit.
+    cna_directx12_test(cna_test_directx12_pbr_fresnel_factors
+                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+
     # REMED-GFX-127: every public Texture2D::GetData call must return the resource's real content or
     # reject the request deterministically -- never fabricate one. Built but deliberately NOT
     # registered as a CTest, for exactly the reason cna_diag_d3d12_swapchain above is not: this is a

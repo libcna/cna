@@ -221,12 +221,12 @@ namespace CNA::Internal::Renderers::D3DCommon
     static_assert(sizeof(D3DSprite2DConstants) == 16, "D3DSprite2DConstants must be a 16-byte buffer (sprite2d's real PerDraw cbuffer is only 8 bytes of shader-visible data)");
     static_assert(sizeof(D3DSprite2DConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
-    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's and
-    /// pbr_skinned3d.vert.hlsl/pbr_skinned3d.frag.hlsl's shared `cbuffer PerDraw : register(b0)`
-    /// byte-for-byte (208 bytes) -- the metallic-roughness BRDF's material-level constants
-    /// (PbrEffect/SkinnedPbrEffect). Includes World (unlike D3DPerDrawConstants) since the PBR
-    /// fragment stage needs a true world-space position/normal for its BRDF, same reasoning
-    /// D3DLightingConstants documents for lit_textured3d.
+    /// plan_cnj.md CNB-58 follow-up: matches pbr3d.frag.hlsl and
+    /// pbr_skinned3d.frag.hlsl's `cbuffer PerDraw : register(b0)` byte-for-byte (224 bytes) -- the
+    /// metallic-roughness BRDF's material-level constants (PbrEffect/SkinnedPbrEffect). The vertex
+    /// stages declare only the prefix they consume. Includes World (unlike D3DPerDrawConstants)
+    /// since the PBR fragment stage needs a true world-space position/normal for its BRDF, same
+    /// reasoning D3DLightingConstants documents for lit_textured3d.
     struct alignas(16) D3DPbrPerDrawConstants
     {
         float Mvp[16];              ///< row_major float4x4, offset 0 (64 bytes).
@@ -236,14 +236,16 @@ namespace CNA::Internal::Renderers::D3DCommon
         float EmissiveRoughness[4]; ///< offset 160: xyz = EmissiveColor, w = RoughnessFactor
         float AlphaTest[4];          ///< offset 176: reference, tolerance, pass/fail weights
         float PbrMapScales[4];       ///< offset 192: x/y = map scales, z/w = base/emissive decode
+        float DielectricFresnel[4];  ///< offset 208: xyz = dielectric F0, w = dielectric F90
     };
-    static_assert(sizeof(D3DPbrPerDrawConstants) == 208, "D3DPbrPerDrawConstants must match pbr3d's real 208-byte PerDraw cbuffer size");
+    static_assert(sizeof(D3DPbrPerDrawConstants) == 224, "D3DPbrPerDrawConstants must match pbr3d's real 224-byte PerDraw cbuffer size");
     static_assert(offsetof(D3DPbrPerDrawConstants, World) == 64, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, DiffuseColor) == 128, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, AmbientMetallic) == 144, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, EmissiveRoughness) == 160, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, AlphaTest) == 176, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(offsetof(D3DPbrPerDrawConstants, PbrMapScales) == 192, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
+    static_assert(offsetof(D3DPbrPerDrawConstants, DielectricFresnel) == 208, "D3DPbrPerDrawConstants field offset mismatch vs HLSL");
     static_assert(sizeof(D3DPbrPerDrawConstants) % 16 == 0, "D3D11 constant buffer ByteWidth must be a 16-byte multiple");
 
     /// plan_cnj.md CNB-58 follow-up: matches pbr3d.vert.hlsl/pbr3d.frag.hlsl's shared
