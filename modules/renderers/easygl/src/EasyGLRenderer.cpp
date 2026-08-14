@@ -5997,6 +5997,9 @@ std::string("#version 300 es\n") +
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
           "uniform float uOcclusionTextureCoordinateSet;\n" : "") +
+// GLTF-184: two precomputed affine rows per texture map. The selected vertex stream is transformed
+// before cnaSampleUV applies the storage-origin adjustment for a render-target texture.
+"uniform vec4 uTextureTransformRows[10];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6030,8 +6033,12 @@ CNA_GL_SRGB_TRANSFER_DECL
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(" + baseUv + ",uRtFlipV.x));\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
@@ -6041,13 +6048,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(" + normalUv + ",uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
 // merely rescale the whole vector, which normalization then undoes -- the perturbation would not
 // change at all.
 "    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(" + mrUv + ",uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -6057,13 +6064,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(" + occlusionUv + ",uRtFlipVHi.x)).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(" + emissiveUv + ",uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
@@ -6110,6 +6117,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
             p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6220,6 +6232,7 @@ std::string("#version 300 es\n") +
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
           "uniform float uOcclusionTextureCoordinateSet;\n" : "") +
+"uniform vec4 uTextureTransformRows[10];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6251,8 +6264,12 @@ CNA_GL_SRGB_TRANSFER_DECL
 CNA_GL_RT_SAMPLE_UV_HI_DECL
 CNA_GL_RT_SAMPLE_UV_DECL
 + (dualUv ? "vec2 cnaPbrUV(float setIndex){return setIndex<0.5?vUV:vUV1;}\n" : "") +
+"vec2 cnaPbrTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
-"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(" + baseUv + ",uRtFlipV.x));\n"
+"    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
 // the sample is decoded -- transferring both would apply it twice to one of them.
 "    vec3 baseRGB=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),uSrgb.x);\n"
@@ -6262,13 +6279,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 T=normalize(vTangent-N*dot(N,vTangent));\n"
 "    vec3 B=cross(N,T)*vBitangentSign;\n"
 "    mat3 TBN=mat3(T,B,N);\n"
-"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(" + normalUv + ",uRtFlipV.y)).rgb*2.0-1.0;\n"
+"    vec3 sampledNormal=texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(" + normalUv + ",1),uRtFlipV.y)).rgb*2.0-1.0;\n"
 // glTF §3.9.3: normalTexture.scale scales the tangent-space X and Y only. Scaling Z as well would
 // merely rescale the whole vector, which normalization then undoes -- the perturbation would not
 // change at all.
 "    sampledNormal.xy*=uNormalScale;\n"
 "    vec3 finalNormal=normalize(TBN*sampledNormal);\n"
-"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(" + mrUv + ",uRtFlipV.z));\n"
+"    vec4 mr=texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(" + mrUv + ",2),uRtFlipV.z));\n"
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
@@ -6278,13 +6295,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight2Dir),uLight2Diffuse,albedo,F0,F90,roughness,metallic);\n"
-"    float occlusion=texture(uOcclusionMap,cnaSampleUV(" + occlusionUv + ",uRtFlipVHi.x)).r;\n"
+"    float occlusion=texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(" + occlusionUv + ",4),uRtFlipVHi.x)).r;\n"
 // §3.9.3's own formula: 1 + strength * (sampled - 1). At strength 0 this is 1 whatever the map
 // holds, which is what "no occlusion" has to mean -- multiplying by the strength instead would
 // darken everything to black.
 "    occlusion=1.0+uOcclusionStrength*(occlusion-1.0);\n"
 "    vec3 ambient=uAmbientColor*albedo*occlusion;\n"
-"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(" + emissiveUv + ",uRtFlipV.w)).rgb;\n"
+"    vec3 emissiveTex=texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(" + emissiveUv + ",3),uRtFlipV.w)).rgb;\n"
 // Same split as the base colour. The factor is additionally allowed above 1 by
 // KHR_materials_emissive_strength, which is a second reason never to transfer it.
 "    vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y);\n"
@@ -6333,6 +6350,11 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
             p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
+                "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
         p.loc_fog_color   = p.prog.uniform_location("uFogColor");
@@ -6850,6 +6872,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 p.loc_pbr_occlusiontexcoordset,
                 (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
                     ? 1.0f : 0.0f);
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
         }
         if (p.loc_pbr_srgb >= 0)
         {

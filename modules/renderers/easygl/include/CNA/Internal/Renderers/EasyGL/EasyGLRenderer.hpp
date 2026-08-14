@@ -680,6 +680,9 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_texcoordsets = -1;
             /// plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
             int loc_pbr_occlusiontexcoordset = -1;
+            /// plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
+            std::array<int, 10> loc_pbr_texture_transform_rows{
+                -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
             int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
