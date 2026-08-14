@@ -1681,6 +1681,41 @@ namespace CNA::Internal::GltfImport
         return out;
     }
 
+    int FindDracoUniqueIdEXT(const cgltf_primitive& prim, const cgltf_data* data,
+                             cgltf_attribute_type type, int index)
+    {
+        if (data == nullptr || data->accessors == nullptr || data->accessors_count == 0)
+        {
+            return -1;
+        }
+
+        const auto base = reinterpret_cast<std::uintptr_t>(data->accessors);
+        const auto byteCount = data->accessors_count * sizeof(cgltf_accessor);
+        const auto end = base + byteCount;
+        if (end < base) { return -1; }
+
+        for (cgltf_size k = 0; k < prim.draco_mesh_compression.attributes_count; ++k)
+        {
+            const cgltf_attribute& attribute = prim.draco_mesh_compression.attributes[k];
+            if (attribute.type != type || attribute.index != index || attribute.data == nullptr)
+            {
+                continue;
+            }
+
+            // KHR_draco_mesh_compression stores a Draco unique ID, not a glTF accessor index.
+            // cgltf nevertheless routes the integer through its generic attribute fixup, so it
+            // arrives as a pointer into data->accessors. Check the byte range/alignment before
+            // subtracting: a future cgltf representation change must fail closed, never invoke
+            // undefined pointer arithmetic or accidentally select another Draco attribute.
+            const auto address = reinterpret_cast<std::uintptr_t>(attribute.data);
+            if (address < base || address >= end) { return -1; }
+            const auto offset = address - base;
+            if (offset % sizeof(cgltf_accessor) != 0) { return -1; }
+            return static_cast<int>(offset / sizeof(cgltf_accessor));
+        }
+        return -1;
+    }
+
 #ifdef CNA_DRACO_AVAILABLE
     // CNB-91 (Phase 14F): decodes a Draco-compressed primitive's buffer_view into a real
     // draco::Mesh. Dequantization/attribute-transform is left at the decoder's own default
@@ -1706,30 +1741,6 @@ namespace CNA::Internal::GltfImport
                 "Primitive '" + name + "' failed Draco decoding: " + result.status().error_msg_string());
         }
         return std::move(result).value();
-    }
-
-    // Recovers a Draco-compressed primitive's own attribute unique ID for the given glTF semantic
-    // (type + set index), from cgltf's own already-fixed-up cgltf_attribute::data pointer.
-    // KHR_draco_mesh_compression's "attributes" object maps each semantic name to a small integer
-    // that is the *Draco stream's own unique attribute ID* -- NOT an accessor index -- but cgltf
-    // parses it through the exact same generic attribute-list code as regular (accessor-backed)
-    // primitive attributes, storing the raw integer as a pointer-index placeholder that its own
-    // fixup pass later resolves into `&data->accessors[N]`. Recovering the original integer N is
-    // then just pointer arithmetic against that same array's base -- the standard, well-known
-    // convention every cgltf + Draco integration uses (cgltf itself has no Draco decoding of its
-    // own, so this reinterpretation is left entirely to the consumer).
-    int FindDracoUniqueId(const cgltf_primitive& prim, const cgltf_data* data,
-                           cgltf_attribute_type type, int index)
-    {
-        for (cgltf_size k = 0; k < prim.draco_mesh_compression.attributes_count; ++k)
-        {
-            const cgltf_attribute& a = prim.draco_mesh_compression.attributes[k];
-            if (a.type == type && a.index == index && a.data)
-            {
-                return static_cast<int>(a.data - data->accessors);
-            }
-        }
-        return -1;
     }
 
     // Reads one Draco-decoded attribute out into a flat per-point float array, in Draco's own
@@ -2433,7 +2444,7 @@ namespace CNA::Internal::GltfImport
         {
             if (dracoMesh)
             {
-                const int uniqueId = FindDracoUniqueId(prim, data, type, setIndex);
+                const int uniqueId = FindDracoUniqueIdEXT(prim, data, type, setIndex);
                 return UnpackDracoAttribute(*dracoMesh, uniqueId, numComponents, context);
             }
             return acc ? UnpackAccessor(acc, static_cast<cgltf_size>(numComponents), context) : std::vector<float>();

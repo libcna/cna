@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **408 closed (`✔` 262, `✅` 146),
-  38 `⬜` remaining.** The other 14 carry a deliberate partial marker: 5 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **409 closed (`✔` 263, `✅` 146),
+  37 `⬜` remaining.** The other 14 carry a deliberate partial marker: 5 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger

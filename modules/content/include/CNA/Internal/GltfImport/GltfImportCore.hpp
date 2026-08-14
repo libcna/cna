@@ -356,6 +356,23 @@ namespace CNA::Internal::GltfImport
     [[nodiscard]] SamplerOut MapGltfSamplerEXT(int magFilter, int minFilter, int wrapS, int wrapT);
 
     /**
+     * @brief Recovers one KHR_draco_mesh_compression attribute's Draco unique ID.
+     *
+     * cgltf parses the extension's integer-valued `attributes` object through its ordinary
+     * attribute fixup and represents ID N as `&data->accessors[N]`. This helper deliberately owns
+     * that adapter boundary, verifies that the pointer really denotes a complete element of the
+     * current accessor array, and returns the recovered index. It is available even when CNA was
+     * built without libdraco so the cgltf representation contract remains unit-testable.
+     *
+     * @return The Draco unique ID, or -1 when the semantic/set is absent or the fixed-up pointer
+     *         does not belong to @p data's accessor array.
+     */
+    [[nodiscard]] int FindDracoUniqueIdEXT(const cgltf_primitive& primitive,
+                                            const cgltf_data* data,
+                                            cgltf_attribute_type type,
+                                            int index);
+
+    /**
      * @brief One glTF camera as instanced by a scene node (plan_gltf.md `GLTF-317`).
      *
      * `cgltf_camera` had **zero occurrences** in CNA: a file's cameras were dropped entirely, so an

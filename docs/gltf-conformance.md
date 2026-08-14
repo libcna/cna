@@ -962,6 +962,14 @@ prove both sources upright and texel-identical. EasyGL's `cnaSampleUV` flag is r
 resource and uploaded even when zero, so a bottom-up target correction cannot leak into the next
 ordinary glTF/PBR texture draw.
 
+The optional Draco decoder has one parser-adapter invariant that is tested even in builds without
+`libdraco`: cgltf represents each `KHR_draco_mesh_compression.attributes` integer N as the fixed-up
+pointer `&data->accessors[N]`. `GltfImportCoreTest.DracoUniqueIdsFollowCgltfsFixedUpAttributePointers`
+parses sparse, deliberately reordered IDs 7/2/5 through cgltf itself and requires their exact
+recovery by semantic and set. `FindDracoUniqueIdEXT` first checks the complete accessor byte range
+and element alignment, so a future cgltf representation change fails closed rather than performing
+undefined pointer subtraction or selecting a plausible but wrong Draco attribute (`GLTF-359`).
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a

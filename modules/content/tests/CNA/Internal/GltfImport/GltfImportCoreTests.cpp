@@ -339,6 +339,55 @@ TEST(GltfImportCoreTest, RemapOcclusionImageReturnsNulloptOnUndecodableInput)
     EXPECT_FALSE(result.has_value());
 }
 
+TEST(GltfImportCoreTest, DracoUniqueIdsFollowCgltfsFixedUpAttributePointers)
+{
+    // GLTF-359: IDs are deliberately sparse, out of semantic order and different from the core
+    // primitive's accessor mapping. This goes through cgltf_parse itself rather than constructing
+    // pointers by hand, so a cgltf upgrade that changes the extension representation breaks this
+    // adapter test before it can select the wrong decoded Draco attribute in production.
+    const std::string json = R"GLTF({
+      "asset": { "version": "2.0" },
+      "extensionsUsed": [ "KHR_draco_mesh_compression" ],
+      "buffers": [ { "byteLength": 1 } ],
+      "bufferViews": [ { "buffer": 0, "byteLength": 1 } ],
+      "accessors": [
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" },
+        { "componentType": 5126, "count": 1, "type": "SCALAR" }
+      ],
+      "meshes": [ { "primitives": [ {
+        "attributes": { "POSITION": 0 },
+        "extensions": { "KHR_draco_mesh_compression": {
+          "bufferView": 0,
+          "attributes": { "POSITION": 7, "NORMAL": 2, "TEXCOORD_1": 5 }
+        } }
+      } ] } ]
+    })GLTF";
+
+    cgltf_options options{};
+    cgltf_data* data = nullptr;
+    ASSERT_EQ(cgltf_result_success, cgltf_parse(&options, json.data(), json.size(), &data));
+    ASSERT_NE(nullptr, data);
+    ASSERT_EQ(1u, data->meshes_count);
+    ASSERT_EQ(1u, data->meshes[0].primitives_count);
+    const cgltf_primitive& primitive = data->meshes[0].primitives[0];
+    ASSERT_TRUE(primitive.has_draco_mesh_compression);
+
+    EXPECT_EQ(7, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_position, 0));
+    EXPECT_EQ(2, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_normal, 0));
+    EXPECT_EQ(5, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_texcoord, 1));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_texcoord, 0));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, data, cgltf_attribute_type_color, 0));
+    EXPECT_EQ(-1, FindDracoUniqueIdEXT(primitive, nullptr, cgltf_attribute_type_position, 0));
+
+    cgltf_free(data);
+}
+
 #ifdef CNA_DRACO_AVAILABLE
 // Draco mesh compression decoding (CNB-91, Phase 14F). Only compiled when this build actually has
 // libdraco support (see CNA_DRACO_AVAILABLE's own doc comment in cmake/CnaLibrary.cmake) --
