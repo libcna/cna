@@ -145,6 +145,7 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
+float4 DielectricFresnel       : register(c13); // xyz=dielectric F0, w=dielectric F90
 
 struct PSInput
 {
@@ -172,7 +173,7 @@ float3 CnaLinearToSrgb(float3 color)
 
 // Identical BRDF to Pbr3D.hlsl's own PbrLight() -- see that file's own comment for the citation.
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
@@ -185,7 +186,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     float k = (roughness + 1.0);
     k = k * k / 8.0;
     float G = (NdotV / (NdotV * (1.0 - k) + k)) * (NdotL / (NdotL * (1.0 - k) + k));
-    float3 F = F0 + (float3(1.0, 1.0, 1.0) - F0) * pow(saturate(1.0 - VdotH), 5.0);
+    float3 F = F0 + (F90 - F0) * pow(saturate(1.0 - VdotH), 5.0);
     float3 specular = (D * G * F) / max(4.0 * NdotV * NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0 - metallic);
     float3 kd = float3(1.0, 1.0, 1.0) - F;
@@ -213,12 +214,14 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
     float3 V = normalize(EyePosition - pin.WorldPos);
-    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
+    float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w),
+                      float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
-    Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, roughness, metallic);
-    Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light0Dir), Light0Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, F90, roughness, metallic);
+    Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, F90, roughness, metallic);
 
     float occlusion = tex2D(OcclusionMap, pin.UV).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);

@@ -275,6 +275,10 @@ namespace CNA::Internal::Renderers::DirectX9
         const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
                                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
+        const float dielectricFresnel[4] = {params.pbrDielectricF0[0], params.pbrDielectricF0[1],
+                                            params.pbrDielectricF0[2], params.pbrDielectricF90};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "DielectricFresnel", dielectricFresnel);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap -- matches EnsurePbrProgram()'s own unit assignment and GpuDrawParams'

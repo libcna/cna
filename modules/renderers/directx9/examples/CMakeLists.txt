@@ -159,6 +159,13 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX9")
     cna_register_renderer_test(NAME DirectX9_Pbr_SrgbTransfer COMMAND ${_directx9_pbr_srgb_cmd}
         TIMEOUT 60 LABELS "DIRECTX9")
 
+    # GLTF-343/344: SM3 witnesses for dielectric F0/F90 on rigid and skinned PBR paths.
+    cna_directx9_test(cna_test_directx9_pbr_fresnel_factors
+                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    cna_directx9_ctest_command(_directx9_pbr_fresnel_cmd cna_test_directx9_pbr_fresnel_factors)
+    cna_register_renderer_test(NAME DirectX9_Pbr_FresnelFactors COMMAND ${_directx9_pbr_fresnel_cmd}
+        TIMEOUT 60 LABELS "DIRECTX9")
+
     # D3D9 skinned-vertex-color porting task: real DrawPrimitivesEx dispatch for CNA's own CNAEXT
     # SkinnedVertexColor3D shader (stride 56 -- SkinnedEffect + a vertex Color real XNA's own
     # compiled SkinnedEffect.fx bytecode never carries).
