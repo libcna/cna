@@ -1,32 +1,29 @@
-# plan_gltf.md GLTF-158: exercise every glTF vertex declaration at each renderer boundary.
+# plan_gltf.md GLTF-158 / GLTF-398 / GLTF-420: exercise every glTF conformance rung and every
+# vertex declaration at each campaign renderer boundary.
 #
-# This is intentionally narrower than the sanitizer and full conformance jobs. Its job is to make
-# a renderer-specific stride-table regression fail at the commit that introduces it: seven real
-# corpus loads, then seven Model::Draw + Present calls. STUB has no 3D capability, so it verifies
-# the common upload/declaration half and reports the native-draw half as an explicit skip.
+# L0-L6 are exact, renderer-independent oracles, so they need no image tolerance policy. The
+# focused stride test then adds seven real Model::Draw + Present calls. STUB has no 3D capability,
+# so it verifies the common upload/declaration half and reports the native-draw half as an explicit
+# skip. There is no allow-failure path: any rung or native boundary failure makes its matrix job
+# fail, and therefore blocks the commit.
 
-name: glTF renderer stride conformance
+name: glTF renderer conformance
 
 on:
-  push:
-    branches: [feature/gltf, develop, master]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+  push: {}
   pull_request:
     branches: [develop, master]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
-  group: gltf-renderer-stride-ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Per-SHA rather than per-branch: a later push must not cancel the prior commit's required
+  # evidence before it produces a result (GLTF-420).
+  group: gltf-renderer-conformance-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   stride-conformance:
-    name: ${{ matrix.renderer }} stride boundary
+    name: glTF conformance (${{ matrix.renderer }})
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -86,6 +83,20 @@ jobs:
 
       - name: Build CnaTests
         run: cmake --build build --target CnaTests --parallel 4
+
+      - name: Run the complete glTF conformance ladder
+        env:
+          SDL_VIDEODRIVER: x11
+          SDL_AUDIODRIVER: dummy
+          LIBGL_ALWAYS_SOFTWARE: 1
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.renderer }}" == "VULKAN" ]]; then
+            lvp_icd="$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)"
+            test -n "${lvp_icd}"
+            export VK_ICD_FILENAMES="${lvp_icd}"
+          fi
+          xvfb-run -a ctest --test-dir build -L gltf-conformance --output-on-failure
 
       - name: Run all seven stride boundaries
         env:

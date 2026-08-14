@@ -265,6 +265,40 @@ TEST(GltfConformanceLadder, RendererParityIncludesSuitesWhoseNameContainsGltf)
     EXPECT_NE(std::string::npos, source.find("run \"$B\" '*Gltf*' > \"$tmp_b\""));
 }
 
+TEST(GltfConformanceLadder, RequiredCiRunsEveryCampaignRendererForEveryCommitAndCannotIgnoreFailure)
+{
+    const std::filesystem::path workflow =
+        RepositoryRoot() / ".github" / "workflows" / "gltf-renderer-stride-ci.yml";
+    std::ifstream file(workflow);
+    ASSERT_TRUE(file.is_open()) << "cannot open " << workflow;
+    const std::string source((std::istreambuf_iterator<char>(file)),
+                             std::istreambuf_iterator<char>());
+
+    // Exact matrix ownership: omitting the non-rasterising controls or either real API turns a
+    // differential gate into a single-backend smoke test. Vulkan remains useful extra evidence;
+    // GLTF-398's minimum is the first three entries.
+    EXPECT_NE(std::string::npos,
+              source.find("renderer: [STUB, HEADLESS, OPENGLES3, VULKAN]"));
+    EXPECT_NE(std::string::npos,
+              source.find("xvfb-run -a ctest --test-dir build -L gltf-conformance "
+                          "--output-on-failure"));
+    EXPECT_NE(std::string::npos, source.find("fail-fast: false"));
+
+    // A docs-only plan change is still a commit, and cancelling the prior SHA would leave it with
+    // no result. Every pushed branch is included too: the workflow deliberately pays the cost
+    // rather than redefining "per commit" as only a few long-lived branches.
+    EXPECT_NE(std::string::npos, source.find("  push: {}\n"));
+    EXPECT_EQ(std::string::npos, source.find("paths-ignore:"));
+    EXPECT_NE(std::string::npos,
+              source.find("group: gltf-renderer-conformance-${{ github.sha }}"));
+    EXPECT_NE(std::string::npos, source.find("cancel-in-progress: false"));
+
+    // GitHub Actions fails a run step by default. Pin the absence of both escape hatches so a
+    // future YAML cleanup cannot turn the required check green after a failed rung.
+    EXPECT_EQ(std::string::npos, source.find("continue-on-error:"));
+    EXPECT_EQ(std::string::npos, source.find("|| true"));
+}
+
 // --- plan_gltf.md GLTF-403 / GLTF-413: §27.1's evidence must exist ------------------------------
 
 TEST(GltfConformanceLadder, EverySection271RowIsTraceableToFixturesAndTestsThatExist)
