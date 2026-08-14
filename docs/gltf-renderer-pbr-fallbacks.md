@@ -39,6 +39,43 @@ The linearly rendered expected bytes are analytically stated in the test; a swap
 showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers
 output transfer and supplies a second scalar-semantics oracle at the same binding boundary.
 
+## PBR colour transfer (`GLTF-210`–`GLTF-213`, `GLTF-379`)
+
+All imported images remain ordinary RGBA8 UNORM textures. Colour meaning therefore travels as
+three independent draw flags: decode the base-colour sample, decode the emissive sample, and encode
+the final PBR RGB output. The first two follow the glTF texture roles and default on; the third is a
+destination policy and can be disabled for an sRGB render target or a later tone-map pass. Normal,
+metallic-roughness and occlusion stay linear and have no configurable transfer flag. Factors are
+already linear and are multiplied only after the relevant texture sample is decoded.
+
+When output encoding is enabled, fog is mixed in linear space too: the shader decodes the fog
+colour, performs the mix, and encodes RGB once at the end. Alpha is never transferred. The
+renderer-specific carriers are:
+
+| Renderer | Base decode / emissive decode / output encode carrier | Focused evidence |
+|---|---|---|
+| Bgfx | `u_srgb.x / .y / .z` | OpenGL `Bgfx_Pbr_SrgbTransfer`, 12 exact rigid/skinned cases |
+| Diligent | `g_PbrMapScales.z / .w`, `g_FogColor.w` | Vulkan and OpenGL `Diligent_Pbr_SrgbTransfer`, 12/12 on each API |
+| DirectX 9 | existing pixel constants `c1.w / c2.w / c12.w` | Microsoft `ps_3_0` compile plus WineD3D diagnostic 12/12; no DXVK prefix was available |
+| DirectX 11 / 12 | shared `PbrMapScales.z / .w`, `FogColor.w`; constant-buffer sizes unchanged | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic 12/12, D3D12 executable build-only because its Wine swap-chain gate remains unavailable |
+| EasyGL | `uSrgb.x / .y / .z` | `EasyGL_Pbr_SrgbTransfer`, exact rigid/skinned cases on OPENGLES2 and OPENGLES3 |
+| LLGL | unused `.w` lanes of ambient, eye-position and light-0 direction | `Llgl_Pbr_SrgbTransfer` on its Vulkan and OpenGL paths |
+| Magnum | `uSrgb.x / .y / .z` | `Magnum_Pbr_SrgbTransfer` |
+| Metal | `PbrUniforms::srgbFlags.x / .y / .z` | MSL source/ABI tests on Linux; real-device execution remains platform-owned |
+| OpenGL 2 / 4 | `uSrgb.x / .y / .z` | each backend's registered `Pbr_SrgbTransfer` executable |
+| SDL GPU | third `PbrParams` vec4, `.x / .y / .z` | `SdlGpu_Pbr_SrgbTransfer` |
+| Vulkan | `srgbFlags.x / .y / .z` in the PBR UBO | `Vulkan_Pbr_SrgbTransfer`, 12/12 on rigid/skinned SPIR-V |
+| WebGPU | third `PbrFactors` vec4, `.x / .y / .z` | `WebGPU_Pbr_SrgbTransfer`, rigid and skinned WGSL |
+| Wicked | `cb.pbrSrgb.x / .y / .z` | `Wicked_Pbr_SrgbTransfer`, 12/12 on Intel Vulkan with runtime DXC |
+
+The common mid-grey oracle uses texture byte 128. Decode plus encode must round-trip to 128, while
+linear bypass plus encode yields 188. A linear factor of 0.5 after decode yields 92, and adding
+quarter-strength base to half-strength emissive in linear space yields 112. Each case runs through
+both `PbrEffect` and identity-skinned `SkinnedPbrEffect`; endpoint-only samples could not distinguish
+the paths. `EveryPbrShaderHonorsColorSpaceDeclarations` additionally requires all three CPU flags
+and all three shader equations in every one of the 15 PBR implementations. It requires two copies
+for separately stored rigid/skinned fragments, so one corrected variant cannot hide a stale sibling.
+
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 
 The effect boundary carries one four-component alpha-test vector. `MASK` maps to
@@ -76,8 +113,7 @@ and skinned variants. Vulkan adds four real-pixel cases (discarding and survivin
 and skinned) to its ten texture-slot cases. Those cases pass on llvmpipe. The changed shader
 sources also compile in the native OpenGL 4, SDL GPU, Vulkan, LLGL and WebGPU backend targets and in
 the MinGW DirectX 11/12 targets; Wicked's extracted `PbrPS` compiles to Vulkan SPIR-V. These checks
-prove this alpha-coverage slice of `GLTF-379`; the remaining §21.1 semantics still require the full
-matrix.
+prove this alpha-coverage slice of `GLTF-379`; other §21.1 rows keep that broader audit open.
 
 ## PBR map scalars (`GLTF-224`, `GLTF-225`, `GLTF-379`)
 
@@ -224,7 +260,7 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 | SDL GPU | flat normal + white, rigid and skinned | `SdlGpu_PbrEffect`, `SdlGpu_SkinnedPbrEffect` |
 | WebGPU | flat normal + white, rigid and skinned | `WebGPU_Pbr3D`, `WebGPU_SkinnedPbr3D` |
 | Metal | named slot policy: normal→flat, all others→white | `MetalTextureBindingPolicy` unit matrix; real-device pixel gate remains platform-owned |
-| Wicked | flat normal + white | source-policy lock; renderer has not yet passed its own real-GPU gate |
+| Wicked | flat normal + white | `Wicked_Pbr_SrgbTransfer` (12/12 on Intel Vulkan) |
 
 The source-policy lock proves implementation agreement, not hardware availability. Rows without a
 runtime executable retain their renderer plan's own verification limitation; they do not weaken or
