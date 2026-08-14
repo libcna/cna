@@ -696,8 +696,10 @@ namespace CNA::Internal::Renderers::EasyGL
         Prog3D prog_env_mapped_;     ///< stride=32: aPos + aNormal + aUV, cube map (EnvironmentMapEffect)
         Prog3D prog_skinned_;        ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=true: per-pixel Blinn-Phong)
         Prog3D prog_skinned_vertexlit_;  ///< stride=52: aPos + aNormal + aUV + weights + indices (SkinnedEffect, PreferPerPixelLighting=false, XNA's own default: per-vertex/Gouraud-shaded Blinn-Phong, Task 1102b)
-        Prog3D prog_pbr_;            ///< stride=48/60: aPos + aNormal + aTangent + aUV[+aUV1], real glTF metallic-roughness BRDF (PbrEffect)
-        Prog3D prog_pbr_skinned_;    ///< stride=68/76: rigid PBR prefix + weights + indices [+aUV1], PBR BRDF + skinning (SkinnedPbrEffect)
+        Prog3D prog_pbr_;            ///< stride=48: legacy single-UV PBR program
+        Prog3D prog_pbr_dual_uv_;    ///< stride=60: PBR program with aUV1 and per-map selection
+        Prog3D prog_pbr_skinned_;    ///< stride=68: legacy single-UV skinned PBR program
+        Prog3D prog_pbr_skinned_dual_uv_;  ///< stride=76: skinned PBR with aUV1 selection
 
         ::easygl::Texture default_white_texture_;
         bool default_white_texture_ready_ = false;
@@ -752,8 +754,8 @@ namespace CNA::Internal::Renderers::EasyGL
         void EnsureEnvMapped3DProgram();
         void EnsureSkinnedProgram();
         void EnsureSkinnedVertexLitProgram();
-        void EnsurePbrProgram();
-        void EnsurePbrSkinnedProgram();
+        void EnsurePbrProgram(bool dualUv);
+        void EnsurePbrSkinnedProgram(bool dualUv);
         void EnsureDefaultWhiteTexture();
         void EnsureDefaultFlatNormalTexture();
         /// REMED-GFX-218: which stock program a draw gets. SelectProgram() and
