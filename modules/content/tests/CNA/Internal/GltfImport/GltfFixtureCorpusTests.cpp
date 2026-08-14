@@ -250,6 +250,120 @@ TEST(GltfFixtureCorpus, TheGeneratorPackageIsCompleteInTheCheckout)
     }
 }
 
+TEST(GltfFixtureCorpus, ExternalReferencePinsAreImmutableOptionalAndMapOnlyExistingFixtures)
+{
+    // GLTF-013/014/016: the three Khronos inputs are developer references, not a hidden network
+    // dependency. The Python runner additionally reads the two explicitly supplied upstream root
+    // manifests and expands every fileName; this checkout-only test guards the committed side of
+    // that contract without requiring Python, Git, npm, or network access.
+    const std::filesystem::path pins =
+        CorpusDirectory().parent_path().parent_path().parent_path()
+        / "tools" / "gltf_fixtures" / "reference-pins.json";
+    std::ifstream file(pins, std::ios::binary);
+    ASSERT_TRUE(file.is_open()) << pins.string();
+    const std::string text((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    JsonValue document;
+    ASSERT_NO_THROW(document = CNA::Internal::ParseJson(text));
+    ASSERT_EQ(JsonType::Object, document.type);
+    EXPECT_DOUBLE_EQ(1.0, NumberOr(document, "schemaVersion", -1));
+
+    const std::map<std::string, std::pair<std::string, std::string>> expectedSources = {
+        {"sample-assets", {"GLTF-013",
+                           "https://github.com/KhronosGroup/glTF-Sample-Assets"}},
+        {"asset-generator", {"GLTF-014",
+                              "https://github.com/KhronosGroup/glTF-Asset-Generator"}},
+        {"sample-renderer", {"GLTF-016",
+                             "https://github.com/KhronosGroup/glTF-Sample-Renderer"}},
+    };
+    const JsonValue& sources = Member(document, "sources");
+    ASSERT_EQ(JsonType::Array, sources.type);
+    ASSERT_EQ(expectedSources.size(), sources.arrayValue.size());
+    std::set<std::string> seenSources;
+    for (const JsonValue& source : sources.arrayValue)
+    {
+        ASSERT_EQ(JsonType::Object, source.type);
+        const std::string id = StringOr(source, "id", "");
+        const auto expected = expectedSources.find(id);
+        ASSERT_NE(expectedSources.end(), expected) << "unknown reference source " << id;
+        EXPECT_TRUE(seenSources.insert(id).second) << "duplicate reference source " << id;
+        EXPECT_EQ(expected->second.first, StringOr(source, "task", ""));
+        EXPECT_EQ(expected->second.second, StringOr(source, "repository", ""));
+        EXPECT_FALSE(BoolOr(source, "runtimeDependency", true));
+        EXPECT_FALSE(BoolOr(source, "ciDependency", true));
+
+        const std::string revision = StringOr(source, "revision", "");
+        EXPECT_EQ(40u, revision.size()) << id << ": pin must be a full commit";
+        EXPECT_TRUE(std::all_of(revision.begin(), revision.end(), [](const char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+        })) << id << ": pin must be lowercase hexadecimal";
+        EXPECT_FALSE(StringOr(Member(source, "license"), "summary", "").empty())
+            << id << ": pin has no licence summary";
+    }
+
+    const JsonValue& manifestMap = Member(document, "assetGeneratorManifest");
+    ASSERT_EQ(JsonType::Object, manifestMap.type);
+    EXPECT_EQ("group-semantic-overlap", StringOr(manifestMap, "mappingScope", ""));
+    const JsonValue& paths = Member(manifestMap, "paths");
+    ASSERT_EQ(JsonType::Object, paths.type);
+    EXPECT_EQ("Output/Positive/Manifest.json", StringOr(paths, "positive", ""));
+    EXPECT_EQ("Output/Negative/Manifest.json", StringOr(paths, "negative", ""));
+    const JsonValue& manifestDigests = Member(manifestMap, "sha256");
+    ASSERT_EQ(JsonType::Object, manifestDigests.type);
+    EXPECT_EQ("100ccab87d7f9a072532ccc3f3cd998e234365c03404b080d1fef96db8096330",
+              StringOr(manifestDigests, "positive", ""));
+    EXPECT_EQ("6502a9724d1ec90ff6e55ae8db99b1c8185927df14d9f6831e275fe27555ec94",
+              StringOr(manifestDigests, "negative", ""));
+
+    const JsonValue& mappings = Member(manifestMap, "groupMappings");
+    ASSERT_EQ(JsonType::Array, mappings.type);
+    EXPECT_EQ(28u, mappings.arrayValue.size())
+        << "the pinned Asset Generator revision has 28 root-manifest groups";
+    const std::vector<std::string> fixtureIds = CorpusFixtureIds();
+    const std::set<std::string> knownFixtures(fixtureIds.begin(), fixtureIds.end());
+    std::set<std::string> groups;
+    std::set<int> upstreamIds;
+    std::size_t overlaps = 0;
+    std::size_t gaps = 0;
+    for (const JsonValue& mapping : mappings.arrayValue)
+    {
+        ASSERT_EQ(JsonType::Object, mapping.type);
+        const std::string suite = StringOr(mapping, "suite", "");
+        const std::string folder = StringOr(mapping, "folder", "");
+        const std::string relationship = StringOr(mapping, "relationship", "");
+        const std::string identity = suite + "/" + folder;
+        EXPECT_TRUE(suite == "positive" || suite == "negative") << identity;
+        EXPECT_TRUE(groups.insert(identity).second) << "duplicate mapping " << identity;
+        const int upstreamId = static_cast<int>(NumberOr(mapping, "id", -1));
+        EXPECT_GE(upstreamId, 0) << identity;
+        EXPECT_TRUE(upstreamIds.insert(upstreamId).second) << "duplicate upstream id " << upstreamId;
+
+        const std::vector<std::string> mapped = Strings(Member(mapping, "cnaFixtureIds"));
+        if (relationship == "overlap")
+        {
+            ++overlaps;
+            EXPECT_FALSE(mapped.empty()) << identity << ": overlap names no CNA fixture";
+        }
+        else if (relationship == "gap")
+        {
+            ++gaps;
+            EXPECT_TRUE(mapped.empty()) << identity << ": gap claims CNA coverage";
+        }
+        else
+        {
+            ADD_FAILURE() << identity << ": unknown relationship " << relationship;
+        }
+        for (const std::string& fixtureId : mapped)
+        {
+            EXPECT_NE(knownFixtures.end(), knownFixtures.find(fixtureId))
+                << identity << " maps to absent CNA fixture " << fixtureId;
+        }
+        EXPECT_FALSE(StringOr(mapping, "note", "").empty()) << identity << ": mapping has no note";
+    }
+    EXPECT_EQ(26u, overlaps);
+    EXPECT_EQ(2u, gaps);
+}
+
 TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
 {
     // plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is

@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **386 closed (`✔` 256, `✅` 130),
-  57 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **389 closed (`✔` 256, `✅` 133),
+  54 `⬜` remaining.** The other 17 carry a deliberate partial marker: 8 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
@@ -42,9 +42,9 @@ Expected as of this writing:
 | Check | Expected |
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
-| full suite | **6 367 passed, 191 skipped, 18 failed** |
+| full suite | **6 368 passed, 191 skipped, 18 failed** |
 | generator `--check` | **141 assets, 699 files — byte-identical** |
-| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **475 passed, 26 skipped** / **501 passed, 0 skipped** / **501 passed, 0 skipped** |
+| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **476 passed, 26 skipped** / **502 passed, 0 skipped** / **502 passed, 0 skipped** |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -58,7 +58,7 @@ There are additional trees for **HEADLESS** and the now-working **OPENGLES3** re
 `/media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3`. HEADLESS reports
 `GraphicsCapability::ThreeD`, so STUB's 26 capability-gated glTF cases really run there — and two
 were failing on stale pre-`GLTF-215` effect expectations that the skip had hidden. OPENGLES3 runs
-the same 501 cases and also supplies registered framebuffer tests. Compare them with
+the same 502 cases and also supplies registered framebuffer tests. Compare them with
 
 ```bash
 scripts/gltf-renderer-parity.sh "$B" /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless
@@ -78,7 +78,7 @@ A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
 cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
 ASAN_OPTIONS=detect_leaks=1 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 475 passed, 26 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'    # 476 passed, 26 skipped, 0 findings
 ```
 
 The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
@@ -164,15 +164,15 @@ blocked on those backends.
 
 | Blocker | Rows | Note |
 |---|---|---|
-| **corpus L7 work** | 9 — `GLTF-016`, `182`, `244`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Nine generated fixture witnesses now rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from those focused cases. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
+| **corpus L7 work** | 8 — `GLTF-182`, `244`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Nine generated fixture witnesses now rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from those focused cases. The reference renderer and capture protocol are now pinned by `GLTF-016`; actual ten-asset comparison remains `GLTF-411`. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
 | **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
-| **third-party assets** | 7 — `GLTF-013`, `014`, `018`, `405`–`407`, `411` | Needs pinned, licence-reviewed external sample models. |
+| **third-party assets** | 4 — `GLTF-405`–`407`, `411` | Repositories, licences, the Asset Generator manifest projection, and the reference capture protocol are pinned. These rows still need deliberately fetched, per-asset licence-reviewed model runs/captures. |
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 
-The remaining **~28 are doable in this environment.**
+The remaining **~25 are doable in this environment.**
 
 ## Suggested next clusters
 
@@ -208,7 +208,7 @@ Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is supe
    it turns eight blocked rows into ordinary work.
 5. **Cross-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
    `398`). STUB, HEADLESS and OPENGLES3 now agree on all 41 L1–L5 tests; HEADLESS and OPENGLES3
-   agree on the full 501-test glTF selection. Vulkan and the corpus L7 rung are the remaining
+   agree on the full 502-test glTF selection. Vulkan and the corpus L7 rung are the remaining
    renderer residues.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to

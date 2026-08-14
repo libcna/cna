@@ -173,11 +173,114 @@ the same pinned commit:
 https://raw.githubusercontent.com/KhronosGroup/glTF/2b29723d025a995971726f2989697cdc49b1222a/extensions/2.0/Khronos/<EXTENSION_NAME>/README.md
 ```
 
-### 2.8 What this pin does *not* cover
+### 2.8 Optional Khronos reference pins (`GLTF-013`, `GLTF-014`, `GLTF-016`)
 
-`GLTF-013` … `GLTF-016` pin the sample assets, asset generator, validator and reference renderer
-separately. None of those is pinned yet, and no third-party asset has been introduced — every
-fixture in the corpus below is CNA-authored and MS-PL.
+The canonical, machine-readable registry is
+`tools/gltf_fixtures/reference-pins.json`. Full commit ids are used instead of moving branches or
+mutable npm ranges:
+
+| Purpose | Repository | Pinned commit | Licence and scope |
+|---|---|---|---|
+| real-world reference models | `KhronosGroup/glTF-Sample-Assets` | `2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf` | mixed, model-specific; the repository README is CC-BY-4.0, but `Models/<name>/README.md` and any model `LICENSE.md` are authoritative for that asset |
+| importer permutations | `KhronosGroup/glTF-Asset-Generator` | `3d99767e9a67fbfe109f0d298c1e8d909bcac9db` | MIT; manifest inspection only |
+| L7 comparison renderer | `KhronosGroup/glTF-Sample-Renderer` | `863b981fb755359063e370ff7b6e956bda0716e2` (package version `1.1.0`) | Apache-2.0; local development capture only |
+
+All three records state `runtimeDependency: false` and `ciDependency: false`, and the corpus test
+enforces both fields, the full 40-hex revisions, the repository allow-list, and a non-empty licence
+summary. They are fetched only when a developer deliberately performs a supplementary comparison.
+No source, npm package, generated model, image, or binary from them is committed, linked, fetched by
+CMake, or needed by the test gate. Every corpus fixture below remains CNA-authored and MS-PL.
+
+The Sample Assets pin does **not** grant a blanket model licence. Its own README says the displayed
+licence is only a summary and directs readers to each model directory for the detailed terms.
+`THIRD_PARTY_NOTICES.md`'s `GLTF-018` five-step review therefore remains mandatory before a model is
+ever redistributed. Recording this repository pin does not review any particular asset.
+
+To check that the immutable objects still exist without changing the pins:
+
+```bash
+git ls-remote https://github.com/KhronosGroup/glTF-Sample-Assets.git refs/heads/main
+git ls-remote https://github.com/KhronosGroup/glTF-Asset-Generator.git refs/heads/main
+git ls-remote https://github.com/KhronosGroup/glTF-Sample-Renderer.git refs/heads/main
+PYTHONPATH=tools python3 -m gltf_fixtures --reference-pins
+```
+
+The three printed branch heads matched the table when it was recorded on 2026-08-14; a later
+branch move is expected and does not change the immutable pins.
+
+### 2.9 Asset Generator manifest projection (`GLTF-014`)
+
+The pinned Asset Generator has two root manifests,
+`Output/Positive/Manifest.json` and `Output/Negative/Manifest.json`. Together they contain 28
+groups and 219 model permutations. CNA does not copy these files: after an explicit detached
+checkout, the corpus runner reads them directly and emits a deterministic projection:
+
+```bash
+git clone https://github.com/KhronosGroup/glTF-Asset-Generator.git /tmp/glTF-Asset-Generator
+git -C /tmp/glTF-Asset-Generator checkout --detach \
+  3d99767e9a67fbfe109f0d298c1e8d909bcac9db
+PYTHONPATH=tools python3 -m gltf_fixtures --asset-generator-map \
+  /tmp/glTF-Asset-Generator/Output/Positive/Manifest.json \
+  /tmp/glTF-Asset-Generator/Output/Negative/Manifest.json > /tmp/cna-asset-generator-map.json
+```
+
+Before parsing, the runner verifies the committed SHA-256 of both manifest files. The output then
+retains every upstream `folder`, numeric group `id`, model `fileName`, `loadable` flag, and exact
+source path, and attaches canonical `cnaFixtureIds`. A new/missing group, changed id, duplicate
+model path, malformed model, or mapping to an absent CNA fixture fails the command.
+The current projection classifies 203 permutations as semantic `overlap` and keeps 16 negative
+permutations visible as two `gap` groups (`Mesh_PrimitiveRestart` and `Mesh_NoPosition`).
+
+`overlap` deliberately does not mean byte equivalence, one-for-one coverage, or that CNA passed the
+third-party file. The Asset Generator combines rules into visual permutations, while CNA isolates
+one discriminating semantic and derives numeric expectations from the specification. This map is a
+navigable cross-reference between those two inventories; running downloaded assets is separate,
+supplementary evidence.
+
+### 2.10 Reference-renderer capture procedure (`GLTF-016`)
+
+Use the renderer only from a disposable, detached checkout. Its `package-lock.json` is part of the
+pin, so `npm ci` is required; do not substitute a globally installed viewer or a later package:
+
+```bash
+git clone https://github.com/KhronosGroup/glTF-Sample-Renderer.git /tmp/glTF-Sample-Renderer
+git -C /tmp/glTF-Sample-Renderer checkout --detach \
+  863b981fb755359063e370ff7b6e956bda0716e2
+cd /tmp/glTF-Sample-Renderer
+npm ci
+npm run build
+```
+
+Serve a local harness importing `dist/gltf-viewer.module.js`; never load renderer code or assets
+from a CDN. For every capture the harness must apply this state explicitly rather than inherit
+viewer UI preferences:
+
+- a 512×512 canvas, device scale factor 1, WebGL2 with `antialias: false` and
+  `preserveDrawingBuffer: true`;
+- scene index and either glTF camera index, or exact user-camera position, target, and vertical FOV
+  recorded beside the image; `resetView()` may initialise them but its resulting values must be
+  recorded rather than silently recalculated later;
+- animation paused and reset to time 0, morphing and skinning enabled, no variant unless its name
+  or index is recorded;
+- `clearColor=[0,0,0,0]`, exposure 1, `useIBL=false`, `usePunctual=true`,
+  `useDirectionalLightsWithDisabledIBL=true`, `renderEnvironmentMap=false`, Khronos PBR Neutral
+  tone mapping, `renderingParameters.internalMSAA=1`, **also** `state.internalMSAA=1` (this pinned
+  revision's initialiser reads that top-level spelling), and the non-floating-point framebuffer;
+- two calls to `GltfView.renderFrame(state, 512, 512)`, then `gl.finish()` and capture of the canvas
+  only. The first frame permits resource/shader initialisation; the second is the evidence frame.
+
+With IBL disabled, the pinned renderer supplies its two fixed internal directional lights when an
+asset has no punctual light. This avoids adding an unpinned HDR environment. A scene whose meaning
+requires IBL or an environment (notably some transmission examples) is outside this base protocol
+until the environment file has its own hash, licence review, rotation and intensity in the capture
+record.
+
+Store next to each PNG: the renderer repository and commit, asset path and SHA-256, browser version,
+WebGL vendor/renderer strings, all state above, camera values, and the PNG SHA-256. Compare the
+reference image to CNA using the same crop and the tolerance stated by the owning L7 task. These
+images are diagnostic external-renderer evidence, not replacements for the spec-derived L1–L6
+oracles. `GLTF-411` owns selecting, capturing, and comparing at least ten actual assets; this row
+only pins the renderer and makes that later work reproducible.
 
 ---
 

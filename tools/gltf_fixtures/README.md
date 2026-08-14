@@ -14,6 +14,7 @@ Run from the repository root:
 PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf     # regenerate in place
 PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf   # verify byte-identical
 PYTHONPATH=tools python3 -m gltf_fixtures --list                      # print the manifest, no writes
+PYTHONPATH=tools python3 -m gltf_fixtures --reference-pins            # validate/print external pins
 ```
 
 or from `tools/` without the `PYTHONPATH` prefix (`cd tools && python3 -m gltf_fixtures --list`).
@@ -38,6 +39,26 @@ The corpus is **committed**, not generated at test time. Fixtures are review art
 `CnaTests` must not need a Python interpreter. `GltfFixtureCorpusTests.cpp` re-verifies every
 committed file against the digest recorded in `manifest.json`, so a hand-edit or a stale file fails
 the build rather than quietly changing what the suite means.
+
+## Optional Khronos references
+
+`reference-pins.json` is the machine-readable source of truth for `GLTF-013`, `GLTF-014`, and
+`GLTF-016`. These are fetch-on-demand development references, never generated-corpus inputs, CI
+dependencies, or CNA runtime dependencies. In particular, no Khronos model is committed here.
+
+The pinned Asset Generator revision has root manifests with 28 groups and 219 permutations. An
+explicitly downloaded checkout can be projected onto CNA's canonical fixture identities with:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --asset-generator-map \
+  /path/to/glTF-Asset-Generator/Output/Positive/Manifest.json \
+  /path/to/glTF-Asset-Generator/Output/Negative/Manifest.json
+```
+
+The command reads every upstream `fileName`, rejects a missing/new group or changed group id, and
+emits all 219 records with their closest CNA fixtures. `relationship: "overlap"` means semantic
+overlap, not byte equivalence or a claim that CNA has run that third-party file. A `gap` is kept
+visible rather than mapped approximately. The command performs no network access.
 
 ## Rules
 

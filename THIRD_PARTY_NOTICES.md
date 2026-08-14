@@ -25,8 +25,24 @@ no third-party binary content is currently bundled in this repository.
 ## glTF reference assets — the procedure, and why none is committed (`GLTF-018`/`GLTF-019`)
 
 **No third-party glTF asset is committed to this repository, and none may be without the review
-below.** The conformance corpus is entirely CNA-generated (`tools/gltf_fixtures/`, 76 assets), which
-is a deliberate choice rather than an absence — see the decision at the end of this section.
+below.** The conformance corpus is entirely CNA-generated (`tools/gltf_fixtures/`, 141 assets),
+which is a deliberate choice rather than an absence — see the decision at the end of this section.
+
+### Pinned optional sources (`GLTF-013`, `GLTF-014`, `GLTF-016`)
+
+These repositories are reference inputs a developer may fetch deliberately. They are not
+redistributed, linked, fetched by the build, required by CI, or used by CNA at runtime. The
+machine-readable source of truth is `tools/gltf_fixtures/reference-pins.json`.
+
+| Reference | Immutable revision | Licence summary |
+|---|---|---|
+| `KhronosGroup/glTF-Sample-Assets` | `2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf` | mixed per asset. The repository README is CC-BY-4.0, but each model's own `README.md`/`LICENSE.md` and attribution are authoritative; this pin reviews no individual model |
+| `KhronosGroup/glTF-Asset-Generator` | `3d99767e9a67fbfe109f0d298c1e8d909bcac9db` | MIT, Copyright (c) 2017 Khronos Group; its manifests are read only from an explicit external checkout |
+| `KhronosGroup/glTF-Sample-Renderer` | `863b981fb755359063e370ff7b6e956bda0716e2` | Apache-2.0; its locked npm dependencies and own third-party notices apply to a disposable developer checkout |
+
+The detailed Asset Generator mapping and reference-renderer capture protocol are in
+`docs/gltf-conformance.md` §2.9–2.10. No licence obligation from these optional sources is added to
+CNA merely by recording a repository URL and revision here.
 
 ### The procedure, before any asset is committed
 
@@ -53,7 +69,7 @@ An asset that fails any step is **not committed** — it is fetched by a script 
 
 ### The decision: generated corpus committed, third-party assets fetched (`GLTF-019`)
 
-**Committed:** CNA's own generated corpus. 76 assets and 369 files at **968 KB total**, every one
+**Committed:** CNA's own generated corpus. 141 assets and 699 files at **1.78 MiB total**, every one
 emitted from a Python description, byte-identical across runs, and covered by a size budget
 (`GLTF-419`). It is in the repository because CI must be able to run the whole conformance ladder
 with no network at all, and because a fixture whose expected values were computed from the

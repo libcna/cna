@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--fixture-table", action="store_true",
                        help="print the corpus inventory as a markdown table (GLTF-416); "
                             "docs/gltf-conformance.md §6 is this output")
+    group.add_argument("--reference-pins", action="store_true",
+                       help="validate and print the development-only Khronos reference pins")
+    group.add_argument("--asset-generator-map", nargs=2,
+                       metavar=("POSITIVE_MANIFEST", "NEGATIVE_MANIFEST"),
+                       help="read the two pinned glTF-Asset-Generator root manifests and print "
+                            "their machine-readable projection onto CNA fixtures (GLTF-014)")
     group.add_argument("--explain", metavar="GOLDEN",
                        help="decode how an L5 golden differs from --against, using the fixture's "
                             "own layout (GLTF-410)")
@@ -94,6 +100,22 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     fixtures = all_fixtures()
+
+    if args.reference_pins or args.asset_generator_map:
+        from .references import load_reference_pins, project_asset_generator
+        try:
+            fixture_ids = [fixture.id for fixture in fixtures]
+            if args.reference_pins:
+                document = load_reference_pins(fixture_ids)
+            else:
+                document = project_asset_generator(
+                    Path(args.asset_generator_map[0]), Path(args.asset_generator_map[1]), fixture_ids)
+        except (OSError, ValueError) as error:
+            sys.stderr.write(f"gltf_fixtures: reference map: {error}\n")
+            return 1
+        sys.stdout.write(dumps(document))
+        return 0
+
     files = emit(fixtures)
 
     if args.fixture_table:
