@@ -4632,11 +4632,11 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // Shared fill for pbr3d.vert/frag.glsl's and pbr3d_skinned.vert/frag.glsl's identical
-    // PbrParams UBO layout (60 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
+    // PbrParams UBO layout (64 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
     // DiffuseColor (base color factor), and AmbientColor are NOT here -- they travel through the
     // 128-byte PC via FillExtPushConst instead (reused unchanged for PbrEffect/SkinnedPbrEffect,
     // same field semantics).
-    void VulkanRenderer::FillPbrUboData(float (&out)[60], const GpuDrawParams& p,
+    void VulkanRenderer::FillPbrUboData(float (&out)[64], const GpuDrawParams& p,
                                                 float weightsPerVertex)
     {
         out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.f;
@@ -4664,6 +4664,8 @@ namespace CNA::Internal::Renderers::Vulkan
         out[57] = p.pbrEmissiveTextureIsSrgb ? 1.f : 0.f;
         out[58] = p.pbrEncodeOutputToSrgb ? 1.f : 0.f;
         out[59] = 0.f;
+        out[60] = p.pbrDielectricF0[0]; out[61] = p.pbrDielectricF0[1];
+        out[62] = p.pbrDielectricF0[2]; out[63] = p.pbrDielectricF90;
     }
 
     void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
@@ -6695,7 +6697,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = pbrUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 240; // 60 floats -- see pbrUboData's own layout comment
+        bufInfo.range  = 256; // 64 floats -- see pbrUboData's own layout comment
 
         VkWriteDescriptorSet writes[6]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -6955,7 +6957,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo paramsBufInfo{};
         paramsBufInfo.buffer = pbrSkinnedUBO_[frameIdx];
         paramsBufInfo.offset = 0;
-        paramsBufInfo.range  = 240; // 60 floats
+        paramsBufInfo.range  = 256; // 64 floats
 
         VkWriteDescriptorSet writes[7]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -8079,7 +8081,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         pbrOff = pbrSlot * kPbrSkinnedUBOStride;
                         if (pbrOff + 240 <= kPbrSkinnedUBOStride * kPbrSkinnedUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(pbrSkinnedUBOPtr_[currentFrame_]) + pbrOff,
-                                        draw.pbrUboData, 240);
+                                        draw.pbrUboData, 256);
                         }
                         const uint32_t dynOffsets[2] = { boneOff, pbrOff };
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -8095,7 +8097,7 @@ namespace CNA::Internal::Renderers::Vulkan
                         const uint32_t uboOff = slot * kPbrUBOStride;
                         if (uboOff + 240 <= kPbrUBOStride * kPbrUBOMaxDraws) {
                             std::memcpy(static_cast<uint8_t*>(pbrUBOPtr_[currentFrame_]) + uboOff,
-                                        draw.pbrUboData, 240);
+                                        draw.pbrUboData, 256);
                         }
                         vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                 pipelineLayoutPbr3D_, 0, 1,

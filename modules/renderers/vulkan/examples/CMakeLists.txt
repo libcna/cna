@@ -1119,6 +1119,13 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_Pbr_TextureSlots COMMAND cna_test_vulkan_pbr_texture_slots
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # GLTF-343/344: shader-ready KHR_materials_ior/specular Fresnel endpoints on the rigid
+        # and identity-skinned Vulkan PBR pipelines, including a grazing F90-only discriminator.
+        cna_vulkan_test(cna_test_vulkan_pbr_fresnel_factors
+                        ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+        cna_register_renderer_test(NAME Vulkan_Pbr_FresnelFactors COMMAND cna_test_vulkan_pbr_fresnel_factors
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # GLTF-213: exact mid-grey sRGB decode, linear factors/base+emissive addition, and final
         # output encode on both the rigid and identity-skinned Vulkan PBR pipelines.
         cna_vulkan_test(cna_test_vulkan_pbr_srgb_transfer
