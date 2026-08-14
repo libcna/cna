@@ -209,6 +209,12 @@ destination and never deletes a partial checkout. It prints the per-model `READM
 paths for review, but fetching does not itself clear a model for redistribution. This remains a
 developer-only supplementary input: no CMake target or CI job invokes the script.
 
+The inverse invariant is checked by `scripts/check-gltf-asset-provenance.sh`: every Git-tracked
+`.gltf` or `.glb` must live in the generated corpus, and the corpus must pass its byte-identical
+generator check. The glTF sanitizer workflow invokes this audit. Thus a copied external model
+cannot silently become a fixture or test resource; CNA's current zero-third-party-asset policy must
+be changed explicitly, together with the per-asset `GLTF-018` licence and attribution record.
+
 To check that the immutable objects still exist without changing the pins:
 
 ```bash

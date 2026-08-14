@@ -92,6 +92,12 @@ specification is evidence in a way a downloaded model is not.
 and never a CI dependency. The script is not called by CMake or CI and refuses to modify an
 existing destination.
 
+This is a mechanically enforced boundary, not only a statement of intent:
+`scripts/check-gltf-asset-provenance.sh` verifies that every Git-tracked `.gltf`/`.glb` container is
+byte-for-byte output of CNA's own corpus generator and fails on a container anywhere else. The
+required glTF sanitizer workflow runs that check on every applicable change. There is currently no
+third-party-asset allow-list because there is no reviewed, committed third-party glTF asset.
+
 The reasoning, weighed as the row asks:
 
 | | Commit a curated subset | Fetch on demand |

@@ -85,7 +85,8 @@ git -C "$destination" remote add origin "$SAMPLE_ASSETS_REPOSITORY"
 git -c protocol.version=2 -C "$destination" fetch \
     --quiet --depth=1 --filter=blob:none --no-tags origin "$SAMPLE_ASSETS_REVISION"
 
-readonly fetched_revision=$(git -C "$destination" rev-parse --verify 'FETCH_HEAD^{commit}')
+fetched_revision=$(git -C "$destination" rev-parse --verify 'FETCH_HEAD^{commit}')
+readonly fetched_revision
 if [[ "$fetched_revision" != "$SAMPLE_ASSETS_REVISION" ]]; then
     printf "error: fetched revision %s, expected %s\n" \
         "$fetched_revision" "$SAMPLE_ASSETS_REVISION" >&2
@@ -104,7 +105,8 @@ git -C "$destination" sparse-checkout init --cone
 git -C "$destination" sparse-checkout set "${sparse_paths[@]}"
 git -C "$destination" checkout --quiet --detach "$SAMPLE_ASSETS_REVISION"
 
-readonly checked_out_revision=$(git -C "$destination" rev-parse --verify HEAD)
+checked_out_revision=$(git -C "$destination" rev-parse --verify HEAD)
+readonly checked_out_revision
 if [[ "$checked_out_revision" != "$SAMPLE_ASSETS_REVISION" ]]; then
     printf "error: checkout resolved to %s, expected %s\n" \
         "$checked_out_revision" "$SAMPLE_ASSETS_REVISION" >&2

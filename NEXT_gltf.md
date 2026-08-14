@@ -9,8 +9,8 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
   explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **417 closed (`✔` 271, `✅` 146),
-  33 `⬜` remaining.** The other 10 carry a deliberate partial marker: 1 `🔬` (investigation, no
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **418 closed (`✔` 272, `✅` 146),
+  32 `⬜` remaining.** The other 10 carry a deliberate partial marker: 1 `🔬` (investigation, no
   implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
   `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
@@ -177,7 +177,7 @@ blocked on those backends.
 | **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
 | **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
 | **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
-| **third-party assets** | 3 — `GLTF-406`, `407`, `411` | Repositories, licences, the Asset Generator manifest projection, the sparse pinned fetcher (`GLTF-405`) and the reference capture protocol exist. The remaining rows need deliberately fetched, per-asset licence-reviewed model runs/captures. |
+| **third-party assets** | 2 — `GLTF-407`, `411` | Repositories, licences, the Asset Generator manifest projection, the sparse pinned fetcher (`GLTF-405`), the zero-third-party-asset CI guard (`GLTF-406`) and the reference capture protocol exist. The remaining rows need deliberately fetched, per-asset licence-reviewed model runs/captures. |
 | **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
 | **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
 

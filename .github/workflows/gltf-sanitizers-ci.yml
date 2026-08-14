@@ -102,6 +102,11 @@ jobs:
           GLTF_VALIDATOR: build-tools/gltf-validator/gltf_validator
         run: scripts/regenerate-gltf-goldens.sh --check
 
+      # GLTF-406: the licence policy is deliberately stricter than an allow-list -- every tracked
+      # glTF/GLB is CNA-generated corpus output. Third-party models stay in opt-in sparse checkouts.
+      - name: Prove no third-party glTF asset is committed
+        run: scripts/check-gltf-asset-provenance.sh
+
       # GLTF-418: determinism is a property ACROSS runs, so it needs two processes with different
       # hash seeds -- a set iterated in hash order is stable within one process and varies between
       # them. Cheap (a second and a half) and it is the assumption every golden rests on.
