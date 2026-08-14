@@ -826,7 +826,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 12>& out, const GpuDrawParams& p)
+        void FillPbrFactors(std::array<float, 16>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -840,6 +840,10 @@ namespace CNA::Internal::Renderers::WebGPU
             out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
             out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             out[11] = 0.0f;
+            out[12] = p.pbrDielectricF0[0];
+            out[13] = p.pbrDielectricF0[1];
+            out[14] = p.pbrDielectricF0[2];
+            out[15] = p.pbrDielectricF90;
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -8477,6 +8481,7 @@ struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
     srgbFlags: vec4f,
+    dielectricFresnel: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8531,7 +8536,7 @@ fn linearToSrgb(c: vec3f) -> vec3f {
     return select(lo, hi, c >= vec3f(0.0031308));
 }
 
-fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, f90: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
     let ndotv = max(dot(n, v), 1e-4);
@@ -8543,7 +8548,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     var k = roughness + 1.0;
     k = k * k / 8.0;
     let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
-    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let f = f0 + (f90 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
     let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
     let diffuseColor = albedo * (1.0 - metallic);
     let kd = vec3f(1.0) - f;
@@ -8578,7 +8583,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(vec3f(0.04), albedo, metallic);
+    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
+    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
 
     // Same disabled-light NaN guard as lit_textured3d.wgsl: a disabled DirectionalLight forwards
     // Direction=(0,0,0) (only DiffuseColor is zeroed), and normalize() on a true zero vector is
@@ -8591,9 +8597,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
 
     var lo = vec3f(0.0);
-    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
     let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
@@ -8630,8 +8636,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains three vec4 values (metallicRoughness + alphaTest + sRGB flags).
-        uboEntries[2].buffer.minBindingSize = 12 * sizeof(float);
+        // PbrFactors contains four vec4 values (map factors, alpha test, sRGB flags, Fresnel).
+        uboEntries[2].buffer.minBindingSize = 16 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
@@ -9958,6 +9964,7 @@ struct PbrFactors {
     metallicRoughness: vec4f,
     alphaTest: vec4f,
     srgbFlags: vec4f,
+    dielectricFresnel: vec4f,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -10057,7 +10064,7 @@ fn linearToSrgb(c: vec3f) -> vec3f {
     return select(lo, hi, c >= vec3f(0.0031308));
 }
 
-fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, roughness: f32, metallic: f32) -> vec3f {
+fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: vec3f, f90: vec3f, roughness: f32, metallic: f32) -> vec3f {
     let h = normalize(v + l);
     let ndotl = max(dot(n, l), 0.0);
     let ndotv = max(dot(n, v), 1e-4);
@@ -10069,7 +10076,7 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     var k = roughness + 1.0;
     k = k * k / 8.0;
     let g = (ndotv / (ndotv * (1.0 - k) + k)) * (ndotl / (ndotl * (1.0 - k) + k));
-    let f = f0 + (vec3f(1.0) - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
+    let f = f0 + (f90 - f0) * pow(clamp(1.0 - vdoth, 0.0, 1.0), 5.0);
     let specular = (d * g * f) / max(4.0 * ndotv * ndotl, 1e-4);
     let diffuseColor = albedo * (1.0 - metallic);
     let kd = vec3f(1.0) - f;
@@ -10104,7 +10111,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
     let eye = normalize(lp.eyePos.xyz - input.worldPos);
-    let f0 = mix(vec3f(0.04), albedo, metallic);
+    let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic);
+    let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic);
 
     let dir0sq = dot(u.light0DirTexture.xyz, u.light0DirTexture.xyz);
     let dir1sq = dot(lp.light1Dir.xyz, lp.light1Dir.xyz);
@@ -10114,9 +10122,9 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let l2 = select(vec3f(0.0), normalize(-lp.light2Dir.xyz), dir2sq > 0.0);
 
     var lo = vec3f(0.0);
-    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, roughness, metallic);
-    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l0, u.light0DiffuseVertexColor.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
+    lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
     let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
@@ -10153,8 +10161,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains three vec4 values (metallicRoughness + alphaTest + sRGB flags).
-        uboEntries[2].buffer.minBindingSize = 12 * sizeof(float);
+        // PbrFactors contains four vec4 values (map factors, alpha test, sRGB flags, Fresnel).
+        uboEntries[2].buffer.minBindingSize = 16 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;

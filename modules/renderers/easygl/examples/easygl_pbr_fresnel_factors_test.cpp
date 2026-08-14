@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <cstdint>
@@ -124,6 +125,12 @@ protected:
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 
+        // Bind the neutral base map explicitly. Renderers that synthesize missing PBR maps and
+        // renderers that require Texture0 to select their PBR draw family must exercise the same
+        // material path.
+        const std::vector<std::uint8_t> whitePixel = {255, 255, 255, 255};
+        Texture2D white = Texture2D::CreateFromPixels(device, 1, 1, whitePixel);
+
         const std::vector<PbrVertex> rigid =
             TwoQuads<PbrVertex>(-1.0f, -0.5f, 0.0f, MakePbrVertex);
         VertexBuffer rigidBuffer(device, static_cast<int>(rigid.size()));
@@ -133,6 +140,7 @@ protected:
 
         PbrEffect rigidEffect(device);
         Configure(rigidEffect);
+        rigidEffect.setTextureProperty(&white);
         rigidEffect.Apply();
         device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
         SetExtensionWitness(rigidEffect);
@@ -148,6 +156,7 @@ protected:
 
         SkinnedPbrEffect skinnedEffect(device);
         Configure(skinnedEffect);
+        skinnedEffect.setTextureProperty(&white);
         skinnedEffect.SetBoneTransforms({Matrix::getIdentityProperty()});
         skinnedEffect.setWeightsPerVertexProperty(1);
         skinnedEffect.Apply();
