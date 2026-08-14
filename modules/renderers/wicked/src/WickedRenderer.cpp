@@ -3202,6 +3202,10 @@ namespace CNA::Internal::Renderers::Wicked
                 constants.pbrSrgb[0] = params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
                 constants.pbrSrgb[1] = params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
                 constants.pbrSrgb[2] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+                constants.pbrDielectricFresnel[0] = params->pbrDielectricF0[0];
+                constants.pbrDielectricFresnel[1] = params->pbrDielectricF0[1];
+                constants.pbrDielectricFresnel[2] = params->pbrDielectricF0[2];
+                constants.pbrDielectricFresnel[3] = params->pbrDielectricF90;
             }
         }
         else

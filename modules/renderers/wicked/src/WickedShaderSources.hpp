@@ -59,6 +59,7 @@ struct CnaConstants
     float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
     float4 pbrFactors;      // x=metallic, y=roughness, z=normal scale, w=occlusion strength
     float4 pbrSrgb;         // x=decode base, y=decode emissive, z=encode output
+    float4 pbrDielectricFresnel; // xyz=dielectric F0, w=dielectric F90
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -457,7 +458,7 @@ float3 CnaLinearToSrgb(float3 color)
 }
 
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
-                float roughness, float metallic)
+                float3 F90, float roughness, float metallic)
 {
     const float3 H = normalize(V + L);
     const float NdotL = max(dot(N, L), 0.0f);
@@ -473,7 +474,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
     k = k * k / 8.0f;
     const float G = (NdotV / (NdotV * (1.0f - k) + k)) * (NdotL / (NdotL * (1.0f - k) + k));
 
-    const float3 F = F0 + (float3(1.0f, 1.0f, 1.0f) - F0) * pow(saturate(1.0f - VdotH), 5.0f);
+    const float3 F = F0 + (F90 - F0) * pow(saturate(1.0f - VdotH), 5.0f);
     const float3 specular = (D * G * F) / max(4.0f * NdotV * NdotL, 1e-4f);
     const float3 diffuseColor = albedo * (1.0f - metallic);
     const float3 kd = float3(1.0f, 1.0f, 1.0f) - F;
@@ -500,15 +501,19 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     const float metallic = saturate(mr.b * cb.pbrFactors.x);
 
     const float3 V = normalize(cb.eyePosition.xyz - input.positionWS);
-    const float3 F0 = lerp(float3(0.04f, 0.04f, 0.04f), albedo, metallic);
+    const float3 F0 = lerp(cb.pbrDielectricFresnel.xyz, albedo, metallic);
+    const float3 F90 = lerp(float3(cb.pbrDielectricFresnel.w,
+                                  cb.pbrDielectricFresnel.w,
+                                  cb.pbrDielectricFresnel.w),
+                            float3(1.0f, 1.0f, 1.0f), metallic);
 
     float3 Lo = float3(0.0f, 0.0f, 0.0f);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir0.xyz), cb.lightDiffuse0.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir1.xyz), cb.lightDiffuse1.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir2.xyz), cb.lightDiffuse2.rgb,
-                   albedo, F0, roughness, metallic);
+                   albedo, F0, F90, roughness, metallic);
 
     const float occlusionSample = occlusionMap.Sample(sampler0, input.uv).r;
     const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);

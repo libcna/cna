@@ -92,6 +92,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
     set_tests_properties(Wicked_Pbr_SrgbTransfer PROPERTIES LABELS "GraphicsSmoke;Wicked"
         TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+    # GLTF-343/344: dielectric F0/F90 witnesses on Wicked's rigid and skinned PBR pipelines.
+    cna_wicked_game_test(cna_test_wicked_pbr_fresnel_factors
+        modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
+    add_test(NAME Wicked_Pbr_FresnelFactors COMMAND cna_test_wicked_pbr_fresnel_factors)
+    set_tests_properties(Wicked_Pbr_FresnelFactors PROPERTIES LABELS "GraphicsSmoke;Wicked"
+        TIMEOUT 120 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
     # plan_wicked.md WICKED-74. Everything else in this renderer needs a real Vulkan device, a
     # window and a display, so it is covered by the same demo smoke test the other GPU renderers
     # register. It is registered only when the examples are built, and skips rather than fails when

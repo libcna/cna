@@ -231,6 +231,7 @@ namespace CNA::Internal::Renderers::Wicked
         float envMapSpecular[4] = {};    ///< `EnvironmentMapEffect.EnvironmentMapSpecular` RGB.
         float pbrFactors[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< metallic, roughness, normal scale, occlusion strength.
         float pbrSrgb[4] = {};           ///< decode base, decode emissive, encode PBR output.
+        float pbrDielectricFresnel[4] = {}; ///< xyz=dielectric F0, w=dielectric F90.
     };
 
     /**
