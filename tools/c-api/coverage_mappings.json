@@ -899,6 +899,16 @@
       "tests": "every entry point, handle ABI, empty/single-state identity, mutable retained key views, all loop modes and tangent overloads, evaluation, clone independence, invalid enums/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B5c"
+    },
+    {
+      "id": "color-value-operations",
+      "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Color::(?:get|set)(?:R|G|B|A)Property$).*$",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Color\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "fixed-layout `CNA_Color`; direct channel fields; `cna_color_*` construction, packed-value, conversion, exact-string, equality/hash, interpolation, premultiplication, multiplication and packed-vector operations",
+      "tests": "every entry point, ABI layout, direct channels, all constructors, packed order, exact strings, conversions, equality/hash, clamp/truncation/wrap behavior, null and capacity atomicity in strict-C `ColorSmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B6a"
     }
   ]
 }

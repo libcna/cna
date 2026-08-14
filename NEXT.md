@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — CURVE FAMILY COMPLETE THROUGH CBIND-035B5c (2026-08-15)
+## C BINDING / C ABI — COLOR VALUE API COMPLETE THROUGH CBIND-035B6a (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -106,7 +106,12 @@
 > including retained mutable key views, both loop properties, deep clone, evaluation and every
 > tangent overload. All five loop modes, clone/view lifetime and invalid/stale/wrong-thread cases
 > are covered. Parent B5 is closed; the inventory is now 1,637 implemented, 21 partial, 4,687
-> planned and 70 N/A. CBIND-035B6 Color operations are next.
+> planned and 70 N/A. CBIND-035B6 is split into value operations and named constants. B6a maps
+> all 25 previously planned non-constant Color rows through the existing four-byte POD, direct
+> channels and 24 C operations. All constructors, packed values, conversions, exact/debug strings,
+> interpolation, premultiplication, multiplication, equality/hash and packed-vector mutation are
+> covered. The inventory is now 1,662 implemented, 21 partial, 4,662 planned and 70 N/A.
+> CBIND-035B6b will add all 141 named colors and close B6.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

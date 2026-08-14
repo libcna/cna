@@ -10,7 +10,7 @@ complete graphics-state descriptors, display/adapter/presentation snapshots, own
 and caller-built SpriteFonts, fixed-layout 3D math/geometry values, complete MathHelper,
 Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray/bounding-volume
 operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
-core draw/buffer/vertex identities, plus
+complete Color value operations (named colors pending), core draw/buffer/vertex identities, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability

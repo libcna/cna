@@ -197,3 +197,16 @@ indices and invalid handles fail through the normal C error contract without par
 curve even if its original handle is destroyed, and exposes the complete collection API above;
 mutations through the view immediately affect evaluation. Strict-C coverage exercises all five
 loop modes, all tangent overloads, clone independence and retained-view lifetime.
+
+## Color value operations
+
+The existing four-byte `CNA_Color` remains the C value identity; its `r`, `g`, `b` and `a` fields
+directly map the native channel properties. `color.h` adds every constructor, AABBGGRR packed-value
+round-trip, Vector3/Vector4 conversion, exact normal/debug string count and copy, equality/hash,
+Lerp, non-premultiplied conversion, multiplication and packed-vector mutation route.
+
+Constructor clamping and packed-vector truncation delegate to the canonical implementation.
+Integer premultiplication reproduces FNA's unchecked 32-bit multiplication with defined unsigned
+arithmetic before division, avoiding signed-overflow undefined behavior at the C boundary. String
+copies are caller-capacity operations and never partially write. The 141 named colors remain the
+only Color rows reserved for CBIND-035B6b.

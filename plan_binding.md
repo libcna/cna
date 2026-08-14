@@ -260,7 +260,7 @@ mechanical wrapper.
 | CBIND-035B3 | Complete Quaternion and Matrix operations | ✅ | `quaternion.h` and `matrix.h` map every remaining public row through 85 fallible operations. Both constructors/constants/properties and all member/static/operator math, decomposition/interpolation/transformation/factory routes are covered with row-major, singular, projection-failure, non-finite and aliasing evidence under both backends and ASan+UBSan. Completed as CBIND-035B3a–B3b. |
 | CBIND-035B4 | Complete planes, rays and bounding-volume operations | ✅ | `geometry.h` maps every remaining Plane, Ray, BoundingBox, BoundingSphere and BoundingFrustum row through C-native values, explicit optional hits and caller-capacity corners. Strict-C HEADLESS/SDL_RENDERER and ASan+UBSan tests cover every exported operation, including atomic capacity/failure paths and the canonical unsupported boundary-ray case. Completed as CBIND-035B4a–B4d. |
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ✅ | `curve.h` maps all 60 Curve, CurveKey and CurveKeyCollection rows through fixed values and validated handles without leaking C++ containers. Ordered collection mutation, retained mutable key views, all loop/evaluation/tangent behavior and lifetime/error boundaries are covered in strict C under both backends and ASan+UBSan. Completed as CBIND-035B5a–B5c. |
-| CBIND-035B6 | Complete Color operations and named constants | ⬜ | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. |
+| CBIND-035B6 | Complete Color operations and named constants | 🟨 | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. Work is decomposed into CBIND-035B6a–B6b below. |
 | CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
 
 ##### CBIND-035B2 scalar/vector slices
@@ -295,6 +295,13 @@ mechanical wrapper.
 | CBIND-035B5a | Complete CurveKey value operations | ✅ | `curve.h` maps all 19 CurveKey rows through a fixed 20-byte `CNA_CurveKey` and 17 operations covering every constructor/property, clone, comparison, equality/operator and hash route. Unknown continuity values are rejected before output mutation; native IEEE/NaN comparison behavior is preserved. Strict C17 and C++23 assertions freeze size, alignment and every field offset, while `CurveSmoke.c` calls every entry point under both backends and ASan+UBSan. |
 | CBIND-035B5b | Complete CurveKeyCollection ownership and mutation | ✅ | `curve.h` maps all 26 CurveKeyCollection rows through an owned, generation/type/thread-validated handle and 14 operations. Count/get and atomic destination-index copy replace native aliases, indexers and all iterator routes; add/set preserve native position ordering, while clear/clone/contains/index/remove map collection behavior without leaking `std::vector`. `CurveSmoke.c` calls every entry point and covers ordering, repositioning, clone independence, capacity atomicity, invalid keys/indices and invalid/stale/wrong-thread handles under both backends and ASan+UBSan. |
 | CBIND-035B5c | Complete Curve evaluation and close parent B5 | ✅ | `curve.h` maps all 15 Curve rows through a generation/type/thread-validated owned handle and 14 operations. Both native key-reference properties collapse to an owned mutable collection-view handle that retains the curve; creation/destruction, constant state, both loop properties, deep clone, evaluation and every tangent overload delegate to the canonical implementation. `CurveSmoke.c` calls every entry point and covers all five loop modes, all tangent overloads, clone independence, retained-view lifetime, invalid enums/indices and invalid/stale/wrong-thread handles under both backends and ASan+UBSan. This closes parent CBIND-035B5. |
+
+##### CBIND-035B6 color slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035B6a | Complete Color value operations | ✅ | `color.h` maps all 25 previously planned non-constant Color rows through the existing four-byte `CNA_Color`, direct channel fields and 24 operations covering all constructors, packed value, exact/debug strings, conversions, equality/hash, Lerp, both premultiplication routes, multiplication/operators and packed-vector mutation. Integer premultiplication explicitly preserves FNA's unchecked Int32 product without C++ signed-overflow UB. `ColorSmoke.c` calls every entry point and covers ABI/order, clamp/truncation/wrap, exact strings, capacity atomicity and null failures under both backends and ASan+UBSan. |
+| CBIND-035B6b | Complete named Color constants and close parent B6 | ⬜ | Map all 141 public named colors through stable C identities and canonical exact packed values; test the complete table and close parent B6. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -385,4 +392,6 @@ current snapshot is 1,596 implemented, 21 partial, 4,728 planned and 70 not appl
 CBIND-035B5b completes all 26 CurveKeyCollection rows; the current snapshot is 1,622 implemented,
 21 partial, 4,702 planned and 70 not applicable. CBIND-035B5c completes all 15 Curve rows and closes
 parent B5; the current snapshot is 1,637 implemented, 21 partial, 4,687 planned and 70 not
-applicable, with CBIND-035B6 Color operations next.
+applicable. CBIND-035B6a completes the remaining 25 non-constant Color rows; the current snapshot
+is 1,662 implemented, 21 partial, 4,662 planned and 70 not applicable, with CBIND-035B6b named
+Color constants next.

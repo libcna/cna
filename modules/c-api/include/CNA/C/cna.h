@@ -8,6 +8,7 @@
  */
 #include "CNA/C/abi.h"
 #include "CNA/C/core.h"
+#include "CNA/C/color.h"
 #include "CNA/C/math_values.h"
 #include "CNA/C/math.h"
 #include "CNA/C/vectors.h"

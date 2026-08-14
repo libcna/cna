@@ -13,6 +13,7 @@ endfunction()
 add_library(cna_c_api SHARED
     src/CnaCApi.cpp
     src/CnaCApiAudio.cpp
+    src/CnaCApiColor.cpp
     src/CnaCApiContent.cpp
     src/CnaCApiCurve.cpp
     src/CnaCApiDetail.cpp
@@ -219,6 +220,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_curve_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_curve_smoke)
     add_test(NAME CApi_CurveSmoke COMMAND cna_c_api_curve_smoke)
+
+    add_executable(cna_c_api_color_smoke
+        tests/pure_c/ColorSmoke.c
+    )
+    set_target_properties(cna_c_api_color_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_color_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_color_smoke)
+    add_test(NAME CApi_ColorSmoke COMMAND cna_c_api_color_smoke)
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c
