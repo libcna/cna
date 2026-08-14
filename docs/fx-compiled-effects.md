@@ -24,9 +24,9 @@ The binary is untrusted input. It is bounded at 64 MiB, its reflected object gra
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
 **Trust boundary.** That holds for CNA's own code and for the parser paths CNA has hardened, but
-not yet for arbitrary hostile content: a fuzz campaign still reaches unbounded string reads in the
-pinned MojoShader's parser after several thousand mutations on the OpenGL driver, and much sooner
-on the SDL_GPU driver, whose SPIR-V emitter validates shader bytecode with asserts throughout. Treat compiled effects the way you would treat any other native-parsed asset --
+not yet for arbitrary hostile content on every driver. A fuzz campaign is now clean on FNA3D's
+OpenGL driver, but stops early on the SDL_GPU driver, whose SPIR-V emitter validates shader
+bytecode with asserts throughout. Treat compiled effects the way you would treat any other native-parsed asset --
 ship your own, do not load one a user supplied. `plan_fx.md` FX-051 and
 [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) track the remaining exposure.
 
@@ -255,8 +255,8 @@ exactly one MojoShader — the revision FNA3D pins — and never builds a second
 - FNA3D: pinned at `3240147` by `cmake/ThirdPartyFNA3D.cmake`.
 - MojoShader: `6333f74dbd5644789a63e903816441b16c1e8b60`, zlib licence.
 - CNA applies one narrow, versioned robustness patch to that exact MojoShader revision
-  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns eight ways
-  untrusted bytecode could crash the process into ordinary parser errors. Seven of the eight were
+  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns eighteen ways
+  untrusted bytecode could crash the process into ordinary parser errors. Seventeen of the eighteen were
   found by the FX-051 fuzz campaign; see [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for
   the list and for the exposure that remains. CMake applies the patch automatically and
   idempotently, for fetched checkouts and for an explicit `FETCHCONTENT_SOURCE_DIR_FNA3D` override

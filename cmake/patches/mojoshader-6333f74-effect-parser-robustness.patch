@@ -1,5 +1,5 @@
 diff --git a/mojoshader.c b/mojoshader.c
-index 486d7e0..faa75e2 100644
+index 486d7e0..7508971 100644
 --- a/mojoshader.c
 +++ b/mojoshader.c
 @@ -2625,21 +2625,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
@@ -64,7 +64,7 @@ index 486d7e0..faa75e2 100644
                          if ( (base <= item) && ((base + count) > item) )
                              break;
                      } // for
-@@ -2738,13 +2755,23 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2738,13 +2755,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                      operand->type = MOJOSHADER_PRESHADEROPERAND_INPUT;
                      if (numarrays > 0)
                      {
@@ -72,7 +72,9 @@ index 486d7e0..faa75e2 100644
 +                        // tokens, and each entry both reads a token four ahead and consumes two,
 +                        // so it has to fit in what is left of the block before anything is
 +                        // allocated for it.
-+                        if (((numarrays * 2) + 5) > fxlc.tokcount)
++                        // Division rather than multiplication: numarrays is a 32-bit value from
++                        // the file, so (numarrays * 2) wraps and lets an absurd count through.
++                        if ((fxlc.tokcount < 5) || (numarrays > ((fxlc.tokcount - 5) / 2)))
 +                        {
 +                            fail(ctx, "Bogus preshader array register count.");
 +                            return;
@@ -89,7 +91,7 @@ index 486d7e0..faa75e2 100644
                          for (i = 0; i < numarrays; i++)
                          {
                              const uint32 jmp = SWAP32(fxlc.tokens[4]);
-@@ -2788,8 +2815,11 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2788,8 +2817,11 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                  } // case
  
                  default:

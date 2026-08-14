@@ -45,7 +45,7 @@ Delivered task groups:
   application and post-source-destruction clone use, which also builds as a standalone corpus
   replayer and mutation-campaign driver in any configuration, plus the deterministic in-build
   mutation corpus extended from construction only to that same full surface (`FX-051`);
-- fourteen upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
+- eighteen upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
   a dereferenced NULL preshader parse, a SPIR-V attribute fixup assert, register copies sized by
   the constant table rather than the parsed storage, an unbounded preshader operand count, two
   asserts on untrusted preshader tokens, an allocation sized before its own bounds check, and an
@@ -111,9 +111,9 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   exists on the development machine. The synthetic fixture now covers reflection, pass identity,
   every render-state token, samplers, textures and a real Shader Model 2.0 program without a
   proprietary compiler, but comparing CNA against itself is self-consistency, not ground truth;
-- a fuzz gate that runs dry (`FX-051`). Eleven crash classes found so far are fixed in the managed
-  MojoShader patch; the campaign now reaches roughly iteration 6,400 before a wild read in the
-  shader-array selection path, recorded with its reproduction command;
+- a fuzz gate that runs dry on every driver (`FX-051`). Eighteen crash classes are fixed in the
+  managed MojoShader patch and the campaign is clean on FNA3D's OpenGL driver; the SDL_GPU
+  driver's SPIR-V emitter still asserts on hostile shader bytecode;
 - `SamplerState.AddressW` reaching any renderer at all (`FX-026`), a pre-existing shared-layer gap
   that compiled sampler coverage exposed;
 - additional renderer implementations (`FX-061`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
@@ -497,7 +497,7 @@ must be accepted before a row can close.
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
-| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness, corpus and a deterministic mutation campaign **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). The campaign found fourteen crash classes, all in pinned MojoShader and none in CNA, now fixed by the managed patch. On the OpenGL driver it now runs 10,000 iterations clean on one seed and reaches ~8,700 on another, stopping in upstream's unbounded `readstring()`; on the SDL_GPU driver it stops much earlier in the SPIR-V emitter's own asserts. **Not yet clean**: this row stays open until the campaign runs dry on both drivers |
+| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness, corpus and a deterministic mutation campaign **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). The campaign found eighteen crash classes, all in pinned MojoShader and none in CNA, now fixed by the managed patch. **Clean on FNA3D's OpenGL driver** across three independent seeds (10,000/10,000/12,000 iterations). Still open: the SDL_GPU driver stops early in its SPIR-V emitter's asserts, and an 80,000-iteration soak reached a use-after-free at ~27,900 where MojoShader publishes a destroyed effect's sampler array as the current pass's state changes |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | **Done for CNA-owned code.** 340 FX/Effect/XNB/capability tests pass under ASan+UBSan with zero address findings and zero CNA undefined-behaviour findings; the FX-038 reset and repeated create/apply/dispose stress cases run inside that suite. LeakSanitizer runs after all (the earlier ptrace claim was wrong) and attributes every leak record to pinned MojoShader's SPIR-V emitter or to `FNA3D_CreateDevice`, none to CNA. The remaining third-party UBSan/leak findings are recorded upstream findings, not a CNA gate |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | **Done.** The whole `CnaTests` binary runs under FNA3D: 5,997 pass and every remaining failure is explained -- one real regression from this branch (a stale FNA3D instancing message) fixed here, three `MouseCursorTest` failures caused by `SDL_VIDEODRIVER=offscreen` having no system cursors, one render-target readback that fails only on the SDL_GPU/Vulkan driver and passes on FNA3D's OpenGL driver, and one pre-existing FNA3D device-lifetime crash unrelated to compiled effects, now recorded in `known_bugs.md` |

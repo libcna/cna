@@ -119,6 +119,7 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_effects.c` `readstring` | Took a base pointer and an offset but no length, so the file's own length prefix chose how many bytes to copy and from where -- upstream's `// !!! FIXME: sanity checks!` and `// !!! FIXME: verify this doesn't go past EOF looking for a null.` The payload length is now threaded through the parser, and the copy is NUL-terminated, which it never was |
 | `mojoshader_effects.c` `MOJOSHADER_compileEffect` | Parameter, technique and object counts read from the file, used both to size allocations and to bound the loops that fill them, with no bound and no overflow check on the size multiplication |
 | `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Its local `COPY_STRING` dereferenced without a NULL check, unlike the file's other one -- and `readstring` returns NULL for a zero-length string, which is ordinary content rather than hostile content |
+| `mojoshader.c` `parse_preshader` | The array-register bound added earlier was written as `(count * 2) + 5 > tokcount`, which wraps for a 32-bit count from the file and let an absurd one through into an allocation |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
@@ -127,8 +128,22 @@ asserted and then dereferenced -- was found earlier by the deterministic in-buil
 
 Two distinct areas, and they differ by driver.
 
-**On FNA3D's OpenGL driver (GLSL profile)** the campaign is clean: 10,000 iterations on each of
-two independent seeds with no crash, no assert and no sanitizer report.
+**On FNA3D's OpenGL driver (GLSL profile)** three independent seeds now run clean --
+10,000 / 10,000 / 12,000 iterations with no crash, no assert and no sanitizer report. Two of them
+only became clean after the run that first exposed them, which is the point of running more than
+one: a single clean seed proves very little.
+
+A longer soak on a fourth seed (80,000 iterations) reached a use-after-free at iteration ~27,900,
+and this one surfaces in CNA's own frame rather than upstream's:
+`Fna3dCompiledEffect::ApplySamplers` reads `change.sampler_states`, and that pointer is what
+`MOJOSHADER_effectBeginPass` publishes from `effect->current_pixl_raw` -- a raw pointer to whatever
+shader object the backend had bound, which can belong to an effect that has since been destroyed.
+CNA validates the count and the null-ness of what FNA3D hands back but cannot tell that the pointer
+itself is stale. Reproduce with:
+
+```sh
+./cna_compiled_effect_fuzzer --campaign fx-corpus 28000 0x4658534F414B
+```
 
 **On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign stops much earlier, in the SPIR-V
 emitter's own asserts (`spv_loadreg`, and others behind it). That emitter validates untrusted
