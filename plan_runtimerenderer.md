@@ -591,22 +591,22 @@ Still single-renderer builds: the API validates the request against the one comp
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P4-1 | ⬜ | Add `modules/core/include/CNA/GraphicsRendererSelection.hpp` — `SetPreferred(GraphicsRendererType)`, `SetPreferred(std::string_view)`, `GetSelected()`, `IsLatched()`, `GetAvailable()`. Full Doxygen; `CNAEXT` throughout (this is not XNA 4.0 API). |
-| RTR-P4-2 | ⬜ | Implement the latch: a process-wide flag set at the top of every `GraphicsDevice` constructor. |
-| RTR-P4-3 | ⬜ | `SetPreferred()` after latch → `System::InvalidOperationException` naming both the latched renderer and the rejected request. |
-| RTR-P4-4 | ⬜ | `SetPreferred()` with an identity not compiled into this build → `System::InvalidOperationException` listing what *is* available (design decision 6; fallback does not apply to a build-time absence unless a chain was configured). |
-| RTR-P4-5 | ⬜ | `SetPreferred(std::string_view)` accepts exactly the `CNA_GRAPHICS_RENDERER` spellings (`"SDL_RENDERER"`, `"OPENGLES3"`, …); unknown name → `System::ArgumentException`. |
-| RTR-P4-6 | ⬜ | Case-insensitive name matching, decided and documented one way (recommend: case-insensitive, since env vars and command lines are typed by hand). |
-| RTR-P4-7 | ⬜ | `CNA_GRAPHICS_RENDERER` **environment variable** read at first use, below an explicit `SetPreferred()` in precedence (following `CNA_BGFX_RENDERER`/`CNA_DILIGENT_DEVICE`). |
-| RTR-P4-8 | ⬜ | An env-var value naming a renderer not compiled in: warn via `CNA::Logger` and ignore, or throw? Decide explicitly and document — recommend **throw**, consistent with design decision 6. |
-| RTR-P4-9 | ⬜ | `GetSelected()` before any selection returns the compile-time default without latching. |
-| RTR-P4-10 | ⬜ | `RecreateRendererForMultiSampleCount()` must keep working post-latch (design decision 5) — regression test. |
-| RTR-P4-11 | ⬜ | Multiple sequential `GraphicsDevice` instances in one process keep the latch (it is process-wide, not per-device) — regression test. |
-| RTR-P4-12 | ⬜ | Thread safety: document that `SetPreferred()` must be called before any graphics thread starts; guard the latch with an atomic so a violation is detected rather than racing. |
-| RTR-P4-13 | ⬜ | Unit tests: set-then-get; set-after-latch throws; unknown name throws; not-compiled-in throws; env var honoured; explicit call beats env var. |
-| RTR-P4-14 | ⬜ | Example program `examples/` demonstrating pre-start selection — the reference a game author copies. |
-| RTR-P4-15 | ⬜ | `docs/runtime-renderer-selection.md` — document the API, the precedence order and the latch semantics. |
-| RTR-P4-16 | ⬜ | **Phase gate.** Single-renderer builds behave identically whether or not the new API is called. |
+| RTR-P4-1 | ✅ | Add `modules/core/include/CNA/GraphicsRendererSelection.hpp` — `SetPreferred(GraphicsRendererType)`, `SetPreferred(std::string_view)`, `GetSelected()`, `IsLatched()`, `GetAvailable()`. Full Doxygen; `CNAEXT` throughout (this is not XNA 4.0 API). |
+| RTR-P4-2 | ✅ | Implement the latch: a process-wide flag set at the top of every `GraphicsDevice` constructor. |
+| RTR-P4-3 | ✅ | `SetPreferred()` after latch → `System::InvalidOperationException` naming both the latched renderer and the rejected request. |
+| RTR-P4-4 | ✅ | `SetPreferred()` with an identity not compiled into this build → `System::InvalidOperationException` listing what *is* available (design decision 6; fallback does not apply to a build-time absence unless a chain was configured). |
+| RTR-P4-5 | ✅ | `SetPreferred(std::string_view)` accepts exactly the `CNA_GRAPHICS_RENDERER` spellings (`"SDL_RENDERER"`, `"OPENGLES3"`, …); unknown name → `System::ArgumentException`. |
+| RTR-P4-6 | ✅ | Case-insensitive name matching, decided and documented one way (recommend: case-insensitive, since env vars and command lines are typed by hand). |
+| RTR-P4-7 | ✅ | `CNA_GRAPHICS_RENDERER` **environment variable** read at first use, below an explicit `SetPreferred()` in precedence (following `CNA_BGFX_RENDERER`/`CNA_DILIGENT_DEVICE`). |
+| RTR-P4-8 | ✅ | An env-var value naming a renderer not compiled in: warn via `CNA::Logger` and ignore, or throw? Decide explicitly and document — recommend **throw**, consistent with design decision 6. |
+| RTR-P4-9 | ✅ | `GetSelected()` before any selection returns the compile-time default without latching. |
+| RTR-P4-10 | ✅ | `RecreateRendererForMultiSampleCount()` must keep working post-latch (design decision 5) — regression test. |
+| RTR-P4-11 | ✅ | Multiple sequential `GraphicsDevice` instances in one process keep the latch (it is process-wide, not per-device) — regression test. |
+| RTR-P4-12 | ✅ | Thread safety: document that `SetPreferred()` must be called before any graphics thread starts; guard the latch with an atomic so a violation is detected rather than racing. |
+| RTR-P4-13 | ✅ | Unit tests: set-then-get; set-after-latch throws; unknown name throws; not-compiled-in throws; env var honoured; explicit call beats env var. |
+| RTR-P4-14 | ✅ | Example program `examples/` demonstrating pre-start selection — the reference a game author copies. |
+| RTR-P4-15 | ✅ | `docs/runtime-renderer-selection.md` — document the API, the precedence order and the latch semantics. |
+| RTR-P4-16 | ✅ | **Phase gate.** Single-renderer builds behave identically whether or not the new API is called. |
 
 ---
 

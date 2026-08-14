@@ -11,6 +11,14 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES)
+    # ---- Runtime renderer selection reference (plan_runtimerenderer.md RTR-P4-14) ----
+    # Renderer-agnostic: it reports whatever this build contains rather than assuming one.
+    add_executable(cna_demo_renderer_selection
+        renderer_selection/renderer_selection_demo.cpp
+    )
+    target_link_libraries(cna_demo_renderer_selection PRIVATE CNA)
+    cna_link_sharp_runtime(cna_demo_renderer_selection PRIVATE)
+
     # ---- 2D sprite demo (works with all renderers) ----------------------------
     add_executable(cna_demo_2d
         demo_2d/src/Main.cpp

@@ -25,8 +25,8 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and OPENGL1's GLX attributes are all descriptor-driven |
 | Per-family descriptors | ✅ all 42 families; guarded by `scripts/check_runtime_renderer_discipline.py` |
 | Namespaced factories / generated registry | ✅ all 42 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
-| `GraphicsRendererSelection` API | ⬜ not implemented |
-| Fallback chain | ⬜ not implemented |
+| `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
+| Fallback chain | 🟨 configurable (`SetFallbackChain`/`EnableAutomaticFallback`); the substitution itself lands in P5 |
 | Multi-renderer CMake mode | ⬜ not implemented |
 | Runtime identity reporting | ⬜ not implemented |
 
@@ -70,7 +70,10 @@ runtime cannot fall through across that boundary against an already-created wind
 
 ---
 
-## Intended API (not yet available)
+## The API
+
+See `modules/graphics/examples/renderer_selection/renderer_selection_demo.cpp` for a runnable
+reference (`cna_demo_renderer_selection`).
 
 ```cpp
 #include "CNA/GraphicsRendererSelection.hpp"
@@ -96,6 +99,13 @@ Selection precedence, highest first:
 1. an explicit `SetPreferred()` call,
 2. the `CNA_GRAPHICS_RENDERER` **environment variable**,
 3. the build's compile-time default.
+
+A `CNA_GRAPHICS_RENDERER` value naming a renderer that is not compiled in **throws**, rather than
+being ignored — silently ignoring it would leave you believing you had switched renderer when you
+had not. The same applies to `SetPreferred()`.
+
+`GetAvailable()` and `GetSelected()` are usable before any `GraphicsDevice` exists, which is the
+whole point: the compiled-in set is published into the selection layer before `main()` runs.
 
 ---
 

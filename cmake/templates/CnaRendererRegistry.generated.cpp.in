@@ -7,6 +7,7 @@
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
 
 #include <algorithm>
 #include <array>
@@ -75,4 +76,32 @@ namespace CNA::Internal::Renderers::GraphicsRendererRegistry
         // CNA_GRAPHICS_RENDERER there.
         return Table().front();
     }
+}
+
+namespace
+{
+    // plan_runtimerenderer.md RTR-P4: publish the compiled-in set into the selection layer BEFORE
+    // main() runs, not lazily when the first GraphicsDevice is constructed.
+    //
+    // The lazy version was wrong in a way the reference example caught immediately: the selection
+    // API exists precisely to be used before any device exists, so a game calling GetAvailable()
+    // saw an empty list, and SetPreferred() accepted a renderer this build does not contain because
+    // there was nothing yet to check it against.
+    //
+    // A static initializer is safe HERE specifically, unlike the self-registration design decision 3
+    // rejected: this translation unit is not a candidate for linker elimination, because
+    // GraphicsDevice.cpp references GraphicsRendererRegistry::Default() directly. If a program
+    // links no graphics code at all, this file is genuinely absent and an empty available-set is
+    // the honest answer.
+    const bool cnaRendererRegistryPublished = [] {
+        namespace Registry = CNA::Internal::Renderers::GraphicsRendererRegistry;
+        std::array<CNA::GraphicsRendererType, @_count@> available{};
+        std::size_t index = 0;
+        for (const auto& descriptor : Registry::All())
+            available[index++] = descriptor.type;
+
+        CNA::GraphicsRendererSelectionAccessEXT::PublishAvailable(
+            available, Registry::Default().type);
+        return true;
+    }();
 }

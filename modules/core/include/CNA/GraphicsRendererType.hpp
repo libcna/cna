@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <string_view>
 
 namespace CNA
@@ -328,6 +329,47 @@ namespace CNA
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
         }
         return "UNKNOWN";
+    }
+
+    /**
+     * @brief Resolves a renderer name to its identity, case-insensitively.
+     *
+     * Accepts exactly the CNA_GRAPHICS_RENDERER spellings ("SDL_RENDERER", "OPENGLES3",
+     * "DIRECTX9", ...). Case-insensitive because these names reach CNA through environment
+     * variables and command lines, which are typed by hand.
+     *
+     * Answering "is this a real identity" is separate from "is it compiled into this build" --
+     * GraphicsRendererRegistry answers the latter.
+     *
+     * @param name The renderer name to resolve.
+     * @param outType Receives the identity when the name is recognized; untouched otherwise.
+     * @return true when @p name names one of the public renderer identities.
+     */
+    constexpr bool tryParseGraphicsRendererName(std::string_view name, GraphicsRendererType& outType)
+    {
+        constexpr auto equalsIgnoreCase = [](std::string_view a, std::string_view b) {
+            if (a.size() != b.size())
+                return false;
+            for (std::size_t i = 0; i < a.size(); ++i)
+            {
+                const char x = (a[i] >= 'a' && a[i] <= 'z') ? static_cast<char>(a[i] - 'a' + 'A') : a[i];
+                const char y = (b[i] >= 'a' && b[i] <= 'z') ? static_cast<char>(b[i] - 'a' + 'A') : b[i];
+                if (x != y)
+                    return false;
+            }
+            return true;
+        };
+
+        for (int ordinal = 0; ordinal <= static_cast<int>(GraphicsRendererType::PortableGL); ++ordinal)
+        {
+            const auto candidate = static_cast<GraphicsRendererType>(ordinal);
+            if (equalsIgnoreCase(getGraphicsRendererName(candidate), name))
+            {
+                outType = candidate;
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

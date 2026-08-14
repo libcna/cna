@@ -4,6 +4,7 @@
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/Internal/Graphics/BuiltInVertexStreams.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
@@ -102,6 +103,24 @@ namespace Microsoft::Xna::Framework::Graphics
             );
         }
 
+        /// plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
+        /// compiled-in set. The generated registry translation unit publishes that set into the
+        /// selection layer before main() runs, so by the time anything here asks, the answer is real.
+        [[nodiscard]] const CNA::Internal::Renderers::GraphicsRendererDescriptor& selectedDescriptor()
+        {
+            namespace Renderers = CNA::Internal::Renderers;
+
+
+            const CNA::GraphicsRendererType selected = CNA::GraphicsRendererSelection::GetSelected();
+            const auto* descriptor = Renderers::GraphicsRendererRegistry::Find(selected);
+
+            // Unreachable through the public API -- SetPreferred() refuses an identity that is not
+            // compiled in, and the default always is. Falling back to the build default rather than
+            // dereferencing null keeps a future caller honest instead of crashing.
+            return descriptor != nullptr ? *descriptor
+                                         : Renderers::GraphicsRendererRegistry::Default();
+        }
+
         /// plan_runtimerenderer.md RTR-P1-5: narrows PresentationParameters to the few fields a
         /// pre-window hook is allowed to read, so renderer descriptors never include the XNA
         /// graphics headers.
@@ -128,7 +147,7 @@ namespace Microsoft::Xna::Framework::Graphics
             // and DILIGENT, each of which picks its native API itself -- keep doing exactly that;
             // their computation moved into their own prepareWindowFlags() hook rather than being
             // reached through an #ifdef here.
-            const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+            const auto& descriptor = selectedDescriptor();
             return static_cast<SDL_WindowFlags>(
                 SDL_WINDOW_RESIZABLE | descriptor.prepareWindowFlags());
         }
@@ -172,6 +191,16 @@ namespace Microsoft::Xna::Framework::Graphics
         SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 
+        // plan_runtimerenderer.md design decision 5: the selection latches HERE, at the start of
+        // construction -- not at the first CreateGraphicsRenderer call. createOrAttachWindow() below
+        // already consumes the decision (window flags, whether a window exists at all), so latching
+        // any later would let a SetPreferred() call land after CNA had acted on the previous answer.
+        //
+        // Latching forbids CHANGING the selection, not creating a renderer again:
+        // RecreateRendererForMultiSampleCount() legitimately rebuilds the same renderer on a live
+        // device, and does so through this same descriptor.
+        CNA::GraphicsRendererSelectionAccessEXT::Latch(selectedDescriptor().type);
+
         // plan_headless.md design decision 2 / plan_software.md design decision 4 / plan_stub.md
         // design decision 1: the Headless, Software, and Stub renderers never create a real window
         // and never touch SDL's video subsystem at all, so all three can run in CI containers with
@@ -182,7 +211,7 @@ namespace Microsoft::Xna::Framework::Graphics
         // own needsVideoSubsystem: a renderer that normally wants a window (D3D12) can be asked for
         // a genuinely off-screen device instead. Skipping SDL_INIT_VIDEO is the point -- it is what
         // lets such a device run with no display server at all, not merely without a visible window.
-        if (CNA::Internal::Renderers::GraphicsRendererRegistry::Default().needsVideoSubsystem
+        if (selectedDescriptor().needsVideoSubsystem
             && !presentationParameters_.getHeadlessEXTProperty())
         {
             if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
@@ -2130,7 +2159,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-        const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+        const auto& descriptor = selectedDescriptor();
 
         // No real window, ever -- HEADLESS/SOFTWARE/STUB/PORTABLEGL, matching the constructor's own
         // needsVideoSubsystem check. GraphicsRendererCreateArgs::window stays nullptr;
@@ -2268,7 +2297,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         // plan_runtimerenderer.md design decision 4: reached through the descriptor rather than a
         // single shared factory symbol, which is what lets several renderer archives coexist.
-        const auto& descriptor = CNA::Internal::Renderers::GraphicsRendererRegistry::Default();
+        const auto& descriptor = selectedDescriptor();
         renderer_ = descriptor.create(args);
 
         if (renderer_ != nullptr)
