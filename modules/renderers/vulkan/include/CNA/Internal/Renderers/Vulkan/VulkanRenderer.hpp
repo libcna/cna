@@ -1603,7 +1603,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
         std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrDescSets_;
-        static constexpr uint32_t kPbrUBOStride   = 256; // 240 bytes used (60 floats), padded to 256
+        static constexpr uint32_t kPbrUBOStride   = 512; // 416 bytes used (104 floats), padded to 512
         static constexpr uint32_t kPbrUBOMaxDraws = 512;
         std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
@@ -1626,7 +1626,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
-        static constexpr uint32_t kPbrSkinnedUBOStride   = 256; // 240 bytes used (60 floats), padded to 256
+        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 416-byte PbrParams block
         static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
@@ -1741,9 +1741,9 @@ namespace CNA::Internal::Renderers::Vulkan
             // roughnessFactor, [40..43]=fogColor+weightsPerVertex, [44..47]=fogVector,
             // [48..51]=alphaTest, [52..55]=normal scale + occlusion strength + padding,
             // [56..59]=base/emissive decode + output-encode flags + padding,
-            // [60..63]=dielectric F0 RGB + F90.
-            // 64 floats = 256 bytes = kPbrUBOStride.
-            float                   pbrUboData[64]    = {};
+            // [60..63]=dielectric F0 RGB + F90, [64..103]=ten affine texture-transform rows.
+            // 104 floats = 416 bytes; the dynamic UBO stride is padded to 512 bytes.
+            float                   pbrUboData[104]   = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
             // per-vertex-lit pipeline sibling instead of the (historically always-selected)
@@ -2238,11 +2238,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
-        // Fills the 64-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
+        // Fills the 104-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
         // pbr3d_skinned.vert/frag.glsl (see Pending3DDraw::pbrUboData's own layout comment).
         // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
         // the unskinned PbrEffect path (stride 48), where it's unused.
-        void       FillPbrUboData(float (&out)[64], const GpuDrawParams& p, float weightsPerVertex);
+        void       FillPbrUboData(float (&out)[104], const GpuDrawParams& p, float weightsPerVertex);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).

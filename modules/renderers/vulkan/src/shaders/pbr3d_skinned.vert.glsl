@@ -51,6 +51,7 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 pbrMapScales;           // x = normal scale, y = occlusion strength
     vec4 srgbFlags;              // x = decode base, y = decode emissive, z = encode output
     vec4 dielectricFresnel;      // xyz = dielectric F0, w = dielectric F90
+    vec4 textureTransformRows[10];
 } pbr;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {

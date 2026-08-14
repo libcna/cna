@@ -44,6 +44,7 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
     vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
     vec4 dielectricFresnel;     // xyz = dielectric F0, w = dielectric F90
+    vec4 textureTransformRows[10]; // two affine rows per PBR texture slot
 } pbr;
 
 vec3 CnaSrgbToLinear(vec3 c) {
@@ -76,8 +77,14 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * NdotL;
 }
 
+vec2 CnaPbrTransformUV(vec2 uv, int slot) {
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, pbr.textureTransformRows[slot * 2].xyz),
+                dot(value, pbr.textureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main() {
-    vec4 baseColorTex = texture(uTexture, vUV);
+    vec4 baseColorTex = texture(uTexture, CnaPbrTransformUV(vUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), pbr.srgbFlags.x);
     vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
@@ -89,10 +96,10 @@ void main() {
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, vUV).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(uNormalMap, CnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= pbr.pbrMapScales.x;
     vec3 finalNormal = normalize(TBN * sampledNormal);
-    vec4 mr = texture(uMetallicRoughnessMap, vUV);
+    vec4 mr = texture(uMetallicRoughnessMap, CnaPbrTransformUV(vUV, 2));
     float roughness = clamp(mr.g * pbr.emissive_roughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * pbr.eyePos_metallic.w, 0.0, 1.0);
     vec3 V = normalize(pbr.eyePos_metallic.xyz - vWorldPos);
@@ -102,10 +109,10 @@ void main() {
     Lo += PbrLight(finalNormal, V, normalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light1Dir_pad.xyz), pbr.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light2Dir_pad.xyz), pbr.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
-    float occlusionSample = texture(uOcclusionMap, vUV).r;
+    float occlusionSample = texture(uOcclusionMap, CnaPbrTransformUV(vUV, 4)).r;
     float occlusion = 1.0 + pbr.pbrMapScales.y * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
-    vec3 emissiveSample = texture(uEmissiveMap, vUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, CnaPbrTransformUV(vUV, 3)).rgb;
     emissiveSample = mix(emissiveSample, CnaSrgbToLinear(emissiveSample), pbr.srgbFlags.y);
     vec3 emissive = pbr.emissive_roughness.xyz * emissiveSample;
     outColor = vec4(ambient + Lo + emissive, alpha);
