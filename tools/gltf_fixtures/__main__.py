@@ -78,6 +78,10 @@ def main(argv: list[str] | None = None) -> int:
                             "docs/gltf-conformance.md §6 is this output")
     group.add_argument("--reference-pins", action="store_true",
                        help="validate and print the development-only Khronos reference pins")
+    group.add_argument("--validator-pin", action="store_true",
+                       help="validate and print the pinned Khronos glTF Validator release")
+    group.add_argument("--fetch-validator", metavar="DIR",
+                       help="download and SHA-256-verify the pinned Linux Validator into DIR")
     group.add_argument("--asset-generator-map", nargs=2,
                        metavar=("POSITIVE_MANIFEST", "NEGATIVE_MANIFEST"),
                        help="read the two pinned glTF-Asset-Generator root manifests and print "
@@ -86,8 +90,11 @@ def main(argv: list[str] | None = None) -> int:
                        help="decode how an L5 golden differs from --against, using the fixture's "
                             "own layout (GLTF-410)")
     parser.add_argument("--against", metavar="FILE",
-                        help="the bytes --explain compares GOLDEN with (usually the committed "
-                             "version, extracted with 'git show HEAD:<path>')")
+                       help="the bytes --explain compares GOLDEN with (usually the committed "
+                            "version, extracted with 'git show HEAD:<path>')")
+    parser.add_argument("--validator", metavar="EXECUTABLE",
+                       help="validate both containers of every fixture with the pinned Khronos "
+                            "Validator before --out or --check succeeds (GLTF-015)")
     args = parser.parse_args(argv)
 
     if args.explain:
@@ -116,7 +123,43 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(dumps(document))
         return 0
 
+    if args.validator_pin:
+        from .validator import ValidatorError, load_validator_pin
+        try:
+            document = load_validator_pin()
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator pin: {error}\n")
+            return 1
+        sys.stdout.write(dumps(document))
+        return 0
+
+    if args.fetch_validator:
+        from .validator import ValidatorError, install_pinned_validator
+        try:
+            executable = install_pinned_validator(Path(args.fetch_validator))
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator download: {error}\n")
+            return 1
+        sys.stdout.write(f"gltf_fixtures: installed pinned Validator at {executable}\n")
+        return 0
+
     files = emit(fixtures)
+
+    if args.validator:
+        if not (args.out or args.check):
+            sys.stderr.write("gltf_fixtures: --validator requires --out or --check\n")
+            return 2
+        from .validator import ValidatorError, validate_emission
+        try:
+            summary = validate_emission(fixtures, files, Path(args.validator))
+        except (OSError, ValidatorError) as error:
+            sys.stderr.write(f"gltf_fixtures: Validator: {error}\n")
+            return 1
+        sys.stdout.write(
+            f"gltf_fixtures: Khronos Validator {summary['validatorVersion']} -- "
+            f"{summary['validContainers']} valid containers, "
+            f"{summary['expectedInvalidContainers']} expected-invalid containers, "
+            f"{summary['warningCount']} warning(s)\n")
 
     if args.fixture_table:
         # Generated rather than maintained: a corpus inventory written by hand is stale the first

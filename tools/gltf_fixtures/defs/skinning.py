@@ -630,8 +630,9 @@ def skin_unnormalized() -> Fixture:
     joint0 = b.add_node(name="Joint0")
     joint1 = b.add_node(name="Joint1")
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    joint_root = b.add_node(name="JointRoot", children=[joint0, joint1])
     b.add_skin({"name": "Skin", "joints": [joint0, joint1], "inverseBindMatrices": ibm})
-    b.add_scene([joint0, joint1, mesh_node], name="Scene")
+    b.add_scene([joint_root, mesh_node], name="Scene")
     b.set_default_scene(0)
 
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
@@ -653,6 +654,10 @@ def skin_unnormalized() -> Fixture:
     }
     return Fixture(
         id="skin-unnormalized", audit_fixture=None, owning_group="skinning",
+        validator_expected_errors=["ACCESSOR_WEIGHTS_NON_NORMALIZED"],
+        validator_exception_reason="CNA's explicit repair-and-report policy is exercised on "
+                                   "malformed non-normalized and all-zero weights; this fixture "
+                                   "pre-dates the bad-* naming rule.",
         description="Three vertices with weights summing to 0.75, to 1 within float error, and to "
                     "zero. The first is H12 -- a weighted sum applying three-quarters of the "
                     "transform drags the vertex toward the joint's origin -- and the other two are "
@@ -675,7 +680,7 @@ def skin_unnormalized() -> Fixture:
 def skin_73_joints() -> Fixture:
     """A rig one joint past the 72-entry GPU palette. Owns **GLTF-261**, the audit's **H6**.
 
-    The palette is ``MaxBones`` (72) ``mat4``\ s -- a real XNA constant that every renderer's
+    The palette is ``MaxBones`` (72) ``mat4`` values -- a real XNA constant that every renderer's
     uniform array is sized by, so raising it is not a local change. The file is therefore refused,
     and refusing rather than truncating is the whole point: truncating leaves the joints past the
     limit at the identity, so every vertex bound to them collapses toward the origin.
@@ -805,8 +810,9 @@ def skin_eight_influences() -> Fixture:
 
     joint_nodes = [b.add_node(name=f"Joint{i}") for i in range(8)]
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    joint_root = b.add_node(name="JointRoot", children=joint_nodes)
     b.add_skin({"name": "Skin", "joints": joint_nodes, "inverseBindMatrices": ibm})
-    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.add_scene([joint_root, mesh_node], name="Scene")
     b.set_default_scene(0)
 
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
@@ -1101,8 +1107,9 @@ def skin_two_weighted() -> Fixture:
     joint0 = b.add_node(name="Joint0")
     joint1 = b.add_node(name="Joint1", translation=[0.0, 10.0, 0.0])
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    joint_root = b.add_node(name="JointRoot", children=[joint0, joint1])
     b.add_skin({"name": "Skin", "joints": [joint0, joint1], "inverseBindMatrices": ibm})
-    b.add_scene([joint0, joint1, mesh_node], name="Scene")
+    b.add_scene([joint_root, mesh_node], name="Scene")
     b.set_default_scene(0)
 
     globals_ = [mat_identity(), mat_translation([0.0, 10.0, 0.0])]
@@ -1154,8 +1161,9 @@ def skin_four_weighted() -> Fixture:
     joint_nodes = [b.add_node(name="Joint" + str(i), translation=t)
                    for i, t in enumerate(translations)]
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    joint_root = b.add_node(name="JointRoot", children=joint_nodes)
     b.add_skin({"name": "Skin", "joints": joint_nodes, "inverseBindMatrices": ibm})
-    b.add_scene(joint_nodes + [mesh_node], name="Scene")
+    b.add_scene([joint_root, mesh_node], name="Scene")
     b.set_default_scene(0)
 
     globals_ = [mat_translation(t) for t in translations]

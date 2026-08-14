@@ -246,6 +246,12 @@ class Fixture:
     #: A corpus fixture is meant to be small enough to read; one that cannot be needs a stated
     #: reason rather than an exemption list in a test, which is how a budget quietly stops binding.
     size_exemption: str | None = None
+    #: Distinct severity-0 codes the pinned Khronos Validator must report for each container.
+    #: Empty means the asset must have zero validation errors. A non-empty list is reserved for
+    #: an intentionally malformed robustness witness and requires a human-readable reason; this
+    #: turns a validator failure into an explicit oracle instead of an allow-list wildcard.
+    validator_expected_errors: list[str] = field(default_factory=list)
+    validator_exception_reason: str | None = None
     l3: dict[str, Any] = field(default_factory=dict)
     l4: dict[str, Any] = field(default_factory=dict)
     #: The L5 golden expectation (`GLTF-007`). Left ``None`` it is derived from the fixture's own
@@ -339,6 +345,17 @@ class Fixture:
         # fixture's expectation instead of all 71 (`GLTF-419`).
         if self.size_exemption is not None:
             record["sizeExemptionReason"] = self.size_exemption
+        if self.validator_expected_errors:
+            if not self.validator_exception_reason:
+                raise ValueError(
+                    f"{self.id}: expected Validator errors need a stated exception reason")
+            if len(set(self.validator_expected_errors)) != len(self.validator_expected_errors):
+                raise ValueError(f"{self.id}: duplicate expected Validator error code")
+            record["validatorExpectedErrorCodes"] = sorted(self.validator_expected_errors)
+            record["validatorExceptionReason"] = self.validator_exception_reason
+        elif self.validator_exception_reason is not None:
+            raise ValueError(
+                f"{self.id}: Validator exception reason exists without an expected error")
         return record
 
     def expectation(self) -> dict[str, Any]:

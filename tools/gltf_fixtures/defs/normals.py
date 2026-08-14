@@ -105,10 +105,15 @@ def normal_quantized() -> Fixture:
     about the importer rather than about the fixture generator's own arithmetic.
     """
     b = GltfBuilder("normal-quantized")
+    # SHORT NORMAL is not a core glTF 2.0 vertex format. KHR_mesh_quantization both permits it
+    # and requires the extension to be listed as required; each VEC3 also needs 4-byte element
+    # alignment, hence the 8-byte stride rather than six tightly packed bytes.
+    b.declare_extensions(required=["KHR_mesh_quantization"])
     position = b.add_packed_accessor(usage="POSITION", values=_QUANTIZED_POSITIONS,
                                      accessor_type="VEC3", with_bounds=True)
     normal = b.add_packed_accessor(usage="NORMAL", values=_QUANTIZED_RAW_SHORTS,
-                                   accessor_type="VEC3", component_type=SHORT, normalized=True)
+                                   accessor_type="VEC3", component_type=SHORT, normalized=True,
+                                   byte_stride=8)
     indices = b.add_packed_accessor(usage="indices", values=[0, 1, 2], accessor_type="SCALAR",
                                     component_type=UNSIGNED_SHORT)
     mesh = b.add_mesh([{
@@ -148,7 +153,8 @@ def normal_quantized() -> Fixture:
                     "integers it gives a normal of length 32767, which nothing downstream rejects "
                     "and which lights as pure white.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
-        features=["NORMAL as normalized SHORT", "§3.6.2.2 normalized decode",
+        features=["KHR_mesh_quantization", "NORMAL as normalized SHORT",
+                  "8-byte aligned VEC3 elements", "§3.6.2.2 normalized decode",
                   "authored normal passed through byte-exact"],
         spec_anchors=["meshes-overview", "accessors"],
         l3={"primitives": [l3_primitive(

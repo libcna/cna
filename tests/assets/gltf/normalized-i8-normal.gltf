@@ -3,6 +3,12 @@
     "version": "2.0",
     "generator": "CNA gltf_fixtures"
   },
+  "extensionsUsed": [
+    "KHR_mesh_quantization"
+  ],
+  "extensionsRequired": [
+    "KHR_mesh_quantization"
+  ],
   "scene": 0,
   "scenes": [
     {
@@ -73,7 +79,8 @@
     {
       "buffer": 0,
       "byteOffset": 36,
-      "byteLength": 9
+      "byteLength": 12,
+      "byteStride": 4
     },
     {
       "buffer": 0,
@@ -84,7 +91,7 @@
   "buffers": [
     {
       "byteLength": 54,
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAgAAAAH8AAACAAAAAAAABAAIA"
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAgAAAAAB/AAAAAIAAAAABAAIA"
     }
   ]
 }

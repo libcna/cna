@@ -29,7 +29,11 @@
       "structural validation",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_TOO_LONG"
+    ],
+    "validatorExceptionReason": "The accessor-overruns-bufferView error is this bad-* fixture's subject."
   },
   "l1": {
     "assetVersion": "2.0",

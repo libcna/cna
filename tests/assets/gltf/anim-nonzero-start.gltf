@@ -93,7 +93,13 @@
       "bufferView": 3,
       "componentType": 5126,
       "count": 2,
-      "type": "SCALAR"
+      "type": "SCALAR",
+      "max": [
+        3.0
+      ],
+      "min": [
+        1.5
+      ]
     },
     {
       "bufferView": 4,

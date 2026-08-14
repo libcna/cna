@@ -631,7 +631,9 @@ def two_primitives_one_buffer() -> Fixture:
     second = [(2.0, 0.0, 0.0), (3.0, 0.0, 0.0), (2.0, 1.0, 0.0)]
     packed = pack(flatten(TRIANGLE_POSITIONS) + flatten(second), FLOAT)
     offset = b.append_bytes(packed, alignment=4)
-    view = b.add_buffer_view(offset, len(packed))
+    # Multiple vertex accessors sharing one bufferView require byteStride even when each accessor
+    # selects a non-overlapping window. Twelve is also the natural VEC3<float> element stride.
+    view = b.add_buffer_view(offset, len(packed), byte_stride=12)
     first_pos = b.add_accessor(usage="POSITION (primitive 0)", component_type=FLOAT,
                                accessor_type="VEC3", count=3,
                                expected=flatten(TRIANGLE_POSITIONS), buffer_view=view,

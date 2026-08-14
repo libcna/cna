@@ -25,9 +25,11 @@
         {
           "attributes": {
             "POSITION": 0,
-            "NORMAL": 1
+            "NORMAL": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
           },
-          "indices": 2,
+          "indices": 4,
           "material": 0,
           "mode": 4
         }
@@ -42,11 +44,26 @@
         "roughnessFactor": 0.6
       },
       "normalTexture": {
+        "index": 0,
         "scale": 0.35
       },
       "occlusionTexture": {
+        "index": 0,
         "strength": 0.8
       }
+    }
+  ],
+  "textures": [
+    {
+      "name": "NormalAndOcclusionMap",
+      "source": 0
+    }
+  ],
+  "images": [
+    {
+      "name": "LinearMap",
+      "uri": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP437D/PwAH/gM+bLWPxgAAAABJRU5ErkJggg==",
+      "mimeType": "image/png"
     }
   ],
   "accessors": [
@@ -74,6 +91,18 @@
     },
     {
       "bufferView": 2,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC2"
+    },
+    {
+      "bufferView": 4,
       "componentType": 5123,
       "count": 3,
       "type": "SCALAR"
@@ -93,13 +122,23 @@
     {
       "buffer": 0,
       "byteOffset": 72,
+      "byteLength": 48
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 120,
+      "byteLength": 24
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 144,
       "byteLength": 6
     }
   ],
   "buffers": [
     {
-      "byteLength": 78,
-      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA"
+      "byteLength": 150,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AACAPwAAAAAAAAAAAACAPwAAgD8AAAAAAAAAAAAAgD8AAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA"
     }
   ]
 }

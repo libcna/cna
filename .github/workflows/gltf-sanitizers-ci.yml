@@ -85,10 +85,21 @@ jobs:
       - name: Build CnaTests and the offline glTF tool
         run: cmake --build build-sanitize --target CnaTests cna_tool_gltf_to_cnj
 
+      # GLTF-015: fetch only the immutable native release named by validator-pin.json. The Python
+      # command verifies the archive SHA-256 before extracting its single executable; no validator
+      # code or binary is committed to CNA and this is not a runtime dependency.
+      - name: Fetch the pinned Khronos glTF Validator
+        run: PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator build-tools/gltf-validator
+
+      - name: Test the fixture Validator gate
+        run: PYTHONPATH=tools python3 -m unittest gltf_fixtures.test_validator
+
       # The corpus generator emits its assets and their manifests from one source, so a manifest
       # that no longer matches its asset means one of the two was edited by hand. Cheap to check
       # here, and it makes every assertion below trustworthy.
       - name: Verify the fixture corpus regenerates byte-identically
+        env:
+          GLTF_VALIDATOR: build-tools/gltf-validator/gltf_validator
         run: scripts/regenerate-gltf-goldens.sh --check
 
       # GLTF-418: determinism is a property ACROSS runs, so it needs two processes with different

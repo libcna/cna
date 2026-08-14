@@ -15,12 +15,35 @@ PYTHONPATH=tools python3 -m gltf_fixtures --out tests/assets/gltf     # regenera
 PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf   # verify byte-identical
 PYTHONPATH=tools python3 -m gltf_fixtures --list                      # print the manifest, no writes
 PYTHONPATH=tools python3 -m gltf_fixtures --reference-pins            # validate/print external pins
+PYTHONPATH=tools python3 -m gltf_fixtures --validator-pin             # validate/print CI tool pin
 ```
 
 or from `tools/` without the `PYTHONPATH` prefix (`cd tools && python3 -m gltf_fixtures --list`).
 
 Python 3.11+, standard library only. No third-party dependency, and none may be added: the corpus
 must be regenerable in any environment that can run the build.
+
+## Khronos Validator gate
+
+`validator-pin.json` pins the official native Linux release `2.0.0-dev.3.10` and the SHA-256 of
+its archive. Downloading is a deliberate operation; the executable is not committed and CNA never
+loads it at runtime:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator /tmp/cna-gltf-validator
+PYTHONPATH=tools python3 -m gltf_fixtures --check tests/assets/gltf \
+  --validator /tmp/cna-gltf-validator/gltf_validator
+# Equivalent repository workflow:
+GLTF_VALIDATOR=/tmp/cna-gltf-validator/gltf_validator \
+  scripts/regenerate-gltf-goldens.sh --check
+```
+
+Both the `.gltf` and `.glb` form of all 141 assets are checked. Ordinary fixtures must produce no
+Validator errors. An intentionally invalid or compatibility fixture must declare the exact set of
+expected Validator error codes and a reason in its generated expectation; being named `bad-*` is
+not itself a bypass. An undeclared error, an expected code that disappears, or one extra code fails
+the gate. The pinned audit currently covers 262 valid and 20 expected-invalid containers; warnings
+are counted and reported but are not errors.
 
 ## Output
 
@@ -92,6 +115,8 @@ tools/gltf_fixtures/
   __main__.py     the --out / --check / --list CLI
   builder.py      GltfBuilder: asset construction, GLB packing, and the L2 expectation records
   manifest.py     fixture/defect records, the L4 world-transform oracle, deterministic JSON
+  validator.py    pinned external Validator download, version check, and exact-error gate
+  validator-pin.json  immutable official Linux release metadata and archive digest
   corpus.py       the registry: which fixtures exist, in which owning group
   defs/           one module per owning group; a fixture lives in exactly one of them
 ```

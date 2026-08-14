@@ -31,7 +31,11 @@
       "hard cut",
       "input monotonicity policy"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_ANIMATION_INPUT_NON_INCREASING"
+    ],
+    "validatorExceptionReason": "CNA's documented hard-cut compatibility policy accepts equal adjacent times; the Validator correctly identifies the source as non-conformant and this fixture pre-dates bad-*."
   },
   "l1": {
     "assetVersion": "2.0",

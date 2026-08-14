@@ -31,7 +31,11 @@
       "\u00a73.5.3 exclusivity",
       "deterministic resolution"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "NODE_MATRIX_TRS"
+    ],
+    "validatorExceptionReason": "The mutually exclusive matrix-plus-TRS node is this bad-* fixture's subject."
   },
   "l1": {
     "assetVersion": "2.0",

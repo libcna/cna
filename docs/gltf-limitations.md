@@ -47,6 +47,7 @@ every lit file would be far worse than the approximation.
 | Extension | Classification | Claimed | Evidence / note | Task |
 |---|---|---|---|---|
 | `KHR_texture_transform` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | yes | Offset/rotation/scale applied with the specification's own formula, baked into the single shared UV channel. A second, different transform on another map cannot be baked and is named rather than dropped. | `GLTF-336` |
+| `KHR_mesh_quantization` | **IMPLEMENTED_AND_TESTED** | yes | Integer mesh attributes are decoded through the same normalized-accessor path as core formats and repacked into CNA's float vertex layouts. BYTE and SHORT normal witnesses pin the signed clamp and the extension's 4-byte VEC3 element alignment. | `GLTF-084` |
 | `KHR_materials_emissive_strength` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | yes | Applied on the PBR path. A non-PBR material has no emissive term to scale, so the strength has nowhere to go there. | `GLTF-222` |
 | `KHR_lights_punctual` | **APPROXIMATED_AND_REPORTED** | yes | Up to three directional lights, which is XNA's whole lighting model. Point and spot become directional lights aimed at the origin, ranges and cones are ignored, and an out-of-gamut intensity clamps -- every loss counted. | `GLTF-325` |
 | `KHR_draco_mesh_compression` | **IMPLEMENTED_AND_TESTED** | build-dependent | Decoded when the build has libdraco. Claimed only in such a build: claiming it without the decoder would accept a file whose geometry then arrives empty. | `GLTF-353` |

@@ -282,6 +282,38 @@ images are diagnostic external-renderer evidence, not replacements for the spec-
 oracles. `GLTF-411` owns selecting, capturing, and comparing at least ten actual assets; this row
 only pins the renderer and makes that later work reproducible.
 
+### 2.11 Pinned corpus Validator gate (`GLTF-015`)
+
+`tools/gltf_fixtures/validator-pin.json` pins the official Khronos glTF Validator native Linux
+release `2.0.0-dev.3.10` and its exact archive SHA-256
+`168eba887964125abe17ae97899b38d0b3cfd73c266c78424c194929ddcbc522`. The tool is
+Apache-2.0 licensed, fetched transiently by CI, and is neither committed nor linked into CNA; it is
+a CI/developer dependency, never a runtime dependency.
+
+The pin and download are explicit operations:
+
+```bash
+PYTHONPATH=tools python3 -m gltf_fixtures --validator-pin
+PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator /tmp/cna-gltf-validator
+GLTF_VALIDATOR=/tmp/cna-gltf-validator/gltf_validator \
+  scripts/regenerate-gltf-goldens.sh --check
+```
+
+The gate validates the `.gltf` and `.glb` form of every fixture. A normal fixture must have no
+Validator error; an intentionally invalid fixture must produce exactly the distinct error codes
+declared in its generated expectation, with a non-empty reason. An undeclared malformed fixture,
+a missing expected error, or one additional error all fail generation. This is deliberately
+stricter than treating every `bad-*` file as an unrestricted exception: five compatibility/repair
+fixtures whose names predate that convention are also explicit, exact-code exceptions.
+
+The closing audit covers **282 containers: 262 valid, 20 expected-invalid**, from ten declared
+exception identities. It currently reports 42 warnings, which remain informational because they
+include portability and best-practice advice rather than schema errors. The audit corrected the
+fixtures rather than weakening the gate: animation inputs gained required bounds, absent scenes
+are omitted instead of emitted as an empty array, integer normals declare and align
+`KHR_mesh_quantization`, interleaved attributes declare their stride, multi-joint skins have a
+common root, and the scale/strength material owns a schema-valid shared texture.
+
 ---
 
 ## 3. The oracle harness
@@ -315,11 +347,15 @@ asset **and** its expectation manifest, so the two cannot drift:
 python3 -m gltf_fixtures --out tests/assets/gltf         # regenerate the corpus in place
 python3 -m gltf_fixtures --check tests/assets/gltf       # verify the tree is byte-identical
 python3 -m gltf_fixtures --list                          # machine-readable inventory, no writes
+python3 -m gltf_fixtures --validator-pin                 # validate/print the CI tool pin
 ```
 
 Run from the repository root with `tools/` on `PYTHONPATH`, or from `tools/` without it
 (`cd tools && python3 -m gltf_fixtures --list`). Standard library only; no third-party dependency,
-and none may be added.
+and none may be added. The Khronos Validator is an optional external executable for local
+generation and an explicit CI gate (§2.11), not a Python package dependency. Pass
+`--validator /path/to/gltf_validator` with `--out` or `--check`, or set `GLTF_VALIDATOR` for the
+regeneration script.
 
 `CnaTests` never runs the generator. It verifies the committed corpus against the SHA-256 digests
 `manifest.json` records for every emitted file, so the byte-identity guarantee holds at test time
@@ -961,7 +997,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `normalized-u8-color` | component-types | L1, L2, L3 | normalized UNSIGNED_BYTE; COLOR_0 VEC4; vertex colour round-trip |
 | `normalized-u16-color` | component-types | L1, L2, L3 | normalized UNSIGNED_SHORT; COLOR_0 VEC4; 65535 divisor |
 | `float-color` | component-types | L1, L2, L3 | FLOAT COLOR_0; no normalisation |
-| `normalized-i8-normal` | component-types | L1, L2, L3 | normalized BYTE NORMAL; §3.6.2.2 signed clamp; cgltf workaround witness |
+| `normalized-i8-normal` | component-types | L1, L2, L3 | KHR_mesh_quantization; normalized BYTE NORMAL; 4-byte aligned VEC3 elements; §3.6.2.2 signed clamp; cgltf workaround witness |
 | `mode-points` | topology | L1, L2, L3, L4, L5 | primitive.mode = POINTS; non-indexed primitive; implicit index range |
 | `mode-lines` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINES; line topology |
 | `mode-line-loop` | topology | L1, L2, L3, L4, L5 | primitive.mode = LINE_LOOP; line topology; implicit closing segment |
@@ -971,7 +1007,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `mode-triangle-strip-morph` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_STRIP; morph target; strip -> list conversion; per-vertex delta addressing |
 | `mode-triangle-fan` | topology | L1, L2, L3, L4, L5 | primitive.mode = TRIANGLE_FAN; fan -> list conversion |
 | `normal-absent` | normals | L1, L2, L3, L4 | absent NORMAL; computed flat normals; non-planar triangle |
-| `normal-quantized` | normals | L1, L2, L3, L4, L5 | NORMAL as normalized SHORT; §3.6.2.2 normalized decode; authored normal passed through byte-exact |
+| `normal-quantized` | normals | L1, L2, L3, L4, L5 | KHR_mesh_quantization; NORMAL as normalized SHORT; 8-byte aligned VEC3 elements; §3.6.2.2 normalized decode; authored normal passed through byte-exact |
 | `tangent-handedness` | normals | L1, L2, L3, L4, L5 | opposite TANGENT.w signs; bitangent reconstruction; two primitives in one mesh; byte-exact tangent stream; normal map with non-zero tangent-space Y |
 | `tangent-absent-generated` | normals | L1, L2, L3, L4, L5 | absent TANGENT; angle-weighted tangent generation; Gram-Schmidt; unit generated tangent; generated handedness +1 |
 | `normal-nonuniform-scale` | normals | L1, L2, L3, L4, L5 | rotated non-uniform scale; inverse-transpose normal matrix; slanted authored normal; normal renormalisation after transform |
@@ -999,7 +1035,7 @@ written for this document: two descriptions of the same fixture are two things t
 | `mat-emissive-factor` | materials | L1, L2, L3 | emissiveFactor without the strength extension; dark base colour |
 | `mat-emissive-strength` | materials | L1, L2, L3 | KHR_materials_emissive_strength; emissiveFactor; HDR emissive above 1; no texture maps |
 | `mat-vertex-color-pbr` | materials | L1, L2, L3 | COLOR_0 with a PBR material; unsupported material model; import report |
-| `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; texture view without a texture |
+| `mat-normal-occlusion-scale` | materials | L1, L2, L3 | normalTexture.scale; occlusionTexture.strength; schema-valid shared linear map |
 | `mat-alpha-mask-cutoff` | materials | L1, L2, L3 | alphaMode MASK; non-default alphaCutoff; alpha test reaches the shader; no texture maps |
 | `mat-unimplemented-extensions` | materials | L1, L2, L3 | KHR_materials_clearcoat; KHR_materials_sheen; KHR_materials_volume; ignored extension reporting |
 | `mat-material-variants` | materials | L1, L2, L3, L4, L5 | KHR_materials_variants; KHR_materials_transmission; transmission alpha ordering; source-order variant identity; sparse variant mapping; PBR-to-unlit variant; default material reset |

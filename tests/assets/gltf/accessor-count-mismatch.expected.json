@@ -30,7 +30,11 @@
       "per-primitive attribute agreement",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "MESH_PRIMITIVE_UNEQUAL_ACCESSOR_COUNT"
+    ],
+    "validatorExceptionReason": "Unequal primitive attribute counts are deliberately refused by CNA; this pre-dates the bad-* naming rule."
   },
   "l1": {
     "assetVersion": "2.0",

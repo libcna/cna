@@ -56,6 +56,9 @@ def bad_accessor_out_of_bounds() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="bad-accessor-out-of-bounds", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_TOO_LONG"],
+        validator_exception_reason="The accessor-overruns-bufferView error is this bad-* "
+                                   "fixture's subject.",
         description="A POSITION accessor whose declared element count reaches 12 bytes past the "
                     "end of its bufferView. Decoding it would read outside the file's own buffer, "
                     "so it must be rejected at validation rather than imported with whatever "
@@ -120,6 +123,9 @@ def accessor_count_mismatch() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="accessor-count-mismatch", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["MESH_PRIMITIVE_UNEQUAL_ACCESSOR_COUNT"],
+        validator_exception_reason="Unequal primitive attribute counts are deliberately refused "
+                                   "by CNA; this pre-dates the bad-* naming rule.",
         description="A primitive whose NORMAL accessor holds two elements while its POSITION holds "
                     "three. Every accessor is individually valid; the file is malformed because "
                     "they disagree. Refused by structural validation and, independently, by "
@@ -191,8 +197,9 @@ def _stray_joint_builder(name: str, joints, weights) -> tuple:
     joint0 = b.add_node(name="Joint0")
     joint1 = b.add_node(name="Joint1")
     mesh_node = b.add_node(name="SkinnedMeshNode", mesh=mesh, skin=0)
+    joint_root = b.add_node(name="JointRoot", children=[joint0, joint1])
     b.add_skin({"name": "Skin", "joints": [joint0, joint1], "inverseBindMatrices": ibm})
-    b.add_scene([joint0, joint1, mesh_node], name="Scene")
+    b.add_scene([joint_root, mesh_node], name="Scene")
     b.set_default_scene(0)
     return b, mesh
 
@@ -214,6 +221,10 @@ def skin_joint_index_out_of_range() -> Fixture:
     b, mesh = _stray_joint_builder("skin-joint-index-out-of-range", _STRAY_JOINTS, _STRAY_WEIGHTS)
     return Fixture(
         id="skin-joint-index-out-of-range", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_JOINTS_INDEX_OOB",
+                                   "ACCESSOR_WEIGHTS_NON_NORMALIZED"],
+        validator_exception_reason="The weighted out-of-range skin joint is deliberately "
+                                   "malformed and refused; this pre-dates the bad-* naming rule.",
         description="A skinned triangle whose vertex 1 is weighted 0.4 to joint 5 in a two-joint "
                     "skin. Binding it to the root instead -- what CNA used to do -- drags the "
                     "vertex to the origin, so the file is refused. Its twin proves the refusal is "
@@ -259,6 +270,10 @@ def skin_joint_index_padding() -> Fixture:
     }
     return Fixture(
         id="skin-joint-index-padding", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_JOINTS_INDEX_OOB"],
+        validator_exception_reason="CNA deliberately tolerates out-of-range indices only in "
+                                   "zero-weight padding slots; the Validator rejects the source "
+                                   "shape and this pre-dates the bad-* naming rule.",
         description="The same out-of-range joint indices as skin-joint-index-out-of-range, with "
                     "every one of them carrying zero weight. Imports cleanly. Without this fixture "
                     "GLTF-254's check could be tightened into one that rejects real assets and "
@@ -318,6 +333,10 @@ def bad_accessor_count_overflow() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="bad-accessor-count-overflow", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_MAX_MISMATCH"],
+        validator_exception_reason="The impossible accessor count is this bad-* fixture's "
+                                   "subject; the pinned Validator's own span arithmetic wraps and "
+                                   "therefore reports only the resulting max mismatch.",
         description="A POSITION accessor declaring 2**62 + 1 elements over a 36-byte bufferView. "
                     "At a 12-byte stride the span computation wraps to 12 bytes, so every bounds "
                     "check that computes it in size_t -- including cgltf_validate's -- reports the "
@@ -378,6 +397,9 @@ def bad_index_out_of_range() -> Fixture:
     b.set_default_scene(0)
     return Fixture(
         id="bad-index-out-of-range", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_INDEX_OOB"],
+        validator_exception_reason="The primitive's out-of-range index is this bad-* fixture's "
+                                   "subject.",
         description="A triangle whose third index is 7 while the primitive has three vertices. "
                     "cgltf_validate bounds an index accessor against its own bufferView and never "
                     "against the vertex count, so this file is structurally sound and semantically "
@@ -456,6 +478,9 @@ def bad_matrix_and_trs() -> Fixture:
     }
     return Fixture(
         id="bad-matrix-and-trs", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["NODE_MATRIX_TRS"],
+        validator_exception_reason="The mutually exclusive matrix-plus-TRS node is this bad-* "
+                                   "fixture's subject.",
         description="A node authoring both `matrix` (translate +4 X) and `translation` (+9 Y). "
                     "§3.5.3 makes them mutually exclusive, so this file is malformed -- and the "
                     "campaign's recorded decision is to RESOLVE it deterministically rather than "
@@ -512,7 +537,7 @@ def bad_animation_input_order() -> Fixture:
     # Both accessors are honestly packed and honestly described; the file is malformed only in the
     # ORDER of the input values, which no structural check looks at.
     times = b.add_packed_accessor(usage="animation input (time)", values=[0.0, 2.0, 1.0],
-                                  accessor_type="SCALAR", component_type=FLOAT)
+                                  accessor_type="SCALAR", component_type=FLOAT, with_bounds=True)
     offsets = b.add_packed_accessor(
         usage="animation output (translation)",
         values=[(0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (8.0, 0.0, 0.0)], accessor_type="VEC3",
@@ -532,6 +557,9 @@ def bad_animation_input_order() -> Fixture:
     }
     return Fixture(
         id="bad-animation-input-order", audit_fixture=None, owning_group="robustness",
+        validator_expected_errors=["ACCESSOR_ANIMATION_INPUT_NON_INCREASING"],
+        validator_exception_reason="The decreasing animation input is this bad-* fixture's "
+                                   "subject.",
         description="An animation sampler whose input times are 0, 2, 1. Every accessor is "
                     "individually valid and cgltf_validate does not look at input ordering, so "
                     "this is CNA's own check -- and it refuses rather than sorting, because "

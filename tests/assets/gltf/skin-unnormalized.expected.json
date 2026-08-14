@@ -31,13 +31,17 @@
       "zero-weight vertex",
       "renormalisation policy"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_WEIGHTS_NON_NORMALIZED"
+    ],
+    "validatorExceptionReason": "CNA's explicit repair-and-report policy is exercised on malformed non-normalized and all-zero weights; this fixture pre-dates the bad-* naming rule."
   },
   "l1": {
     "assetVersion": "2.0",
     "defaultScene": 0,
     "sceneCount": 1,
-    "nodeCount": 3,
+    "nodeCount": 4,
     "meshCount": 1,
     "materialCount": 0,
     "textureCount": 0,

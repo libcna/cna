@@ -498,25 +498,32 @@ def mat_normal_occlusion_scale() -> Fixture:
     Neither was ever read, so a material that dialled its normal map down to a subtle 0.35 got the
     full-strength 1.0 instead -- not a subtle difference.
 
-    The material declares both texture *views* so the scalars have somewhere to live, and neither
-    view names a texture: the corpus has no image support yet (``GLTF-190``), and the scalars are
-    material state that reaches the effect whether or not a map is bound. That keeps this fixture
-    about the two numbers rather than about texture loading.
+    A glTF texture-info object requires an ``index``; a view containing only the scalar is invalid,
+    even though cgltf historically accepted it. The fixture therefore binds one tiny linear map
+    through both slots. The pixel values are not this fixture's oracle -- the two independently
+    authored scalars remain the discriminating state -- but the source asset itself is valid.
     """
     b = GltfBuilder("mat-normal-occlusion-scale")
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
                                      accessor_type="VEC3", with_bounds=True)
     normal = b.add_packed_accessor(usage="NORMAL", values=TRIANGLE_NORMALS, accessor_type="VEC3")
+    tangent = b.add_packed_accessor(usage="TANGENT", values=_FACTOR_TEXTURE_TANGENTS,
+                                    accessor_type="VEC4")
+    texcoord = b.add_packed_accessor(usage="TEXCOORD_0", values=_FACTOR_TEXTURE_TEXCOORDS,
+                                     accessor_type="VEC2")
     indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
                                     accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
+    image = b.add_image(encode_png(1, 1, [[(255, 128, 191, 255)]]), name="LinearMap")
+    texture = b.add_texture(source=image, name="NormalAndOcclusionMap")
     material = b.add_material({
         "name": "ScaledMaps",
         "pbrMetallicRoughness": {"metallicFactor": 0.0, "roughnessFactor": 0.6},
-        "normalTexture": {"scale": _NORMAL_SCALE},
-        "occlusionTexture": {"strength": _OCCLUSION_STRENGTH},
+        "normalTexture": {"index": texture, "scale": _NORMAL_SCALE},
+        "occlusionTexture": {"index": texture, "strength": _OCCLUSION_STRENGTH},
     })
     mesh = b.add_mesh([{
-        "attributes": {"POSITION": position, "NORMAL": normal},
+        "attributes": {"POSITION": position, "NORMAL": normal,
+                       "TANGENT": tangent, "TEXCOORD_0": texcoord},
         "indices": indices,
         "material": material,
         "mode": TRIANGLES,
@@ -538,9 +545,9 @@ def mat_normal_occlusion_scale() -> Fixture:
         "alphaCutoff": 0.5,
         "doubleSided": False,
         "hasBaseColorTexture": False,
-        "hasNormalTexture": False,
+        "hasNormalTexture": True,
         "hasMetallicRoughnessTexture": False,
-        "hasOcclusionTexture": False,
+        "hasOcclusionTexture": True,
         "hasEmissiveTexture": False,
         "occlusionRule": "1 + strength * (sampled - 1). At strength 0 the result is 1 -- no "
                          "occlusion at all, whatever the map holds. Multiplying by the strength "
@@ -557,11 +564,14 @@ def mat_normal_occlusion_scale() -> Fixture:
                     "away from each other, so a dropped value and a swapped pair are different "
                     "failures.",
         builder=b, validated_layers=["L1", "L2", "L3"],
-        features=["normalTexture.scale", "occlusionTexture.strength", "texture view without a texture"],
+        features=["normalTexture.scale", "occlusionTexture.strength",
+                  "schema-valid shared linear map"],
         spec_anchors=["additional-textures", "metallic-roughness-material"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="ScaledTri", primitive=0, mode=TRIANGLES,
-            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS, indices=TRIANGLE_INDICES,
+            positions=TRIANGLE_POSITIONS, normals=TRIANGLE_NORMALS,
+            tangents=_FACTOR_TEXTURE_TANGENTS, texcoords=_FACTOR_TEXTURE_TEXCOORDS,
+            indices=TRIANGLE_INDICES,
             material=expected_material)]},
         l4=world_positions(b, {mesh: list(TRIANGLE_POSITIONS)}),
     )

@@ -17,6 +17,10 @@
 #           --determinism  GLTF-418: emit the corpus twice, in two processes with different hash
 #                          seeds, into throwaway directories, and require the two to be identical
 #
+# Set GLTF_VALIDATOR to the pinned native executable to make regeneration/checking validate both
+# containers of every fixture before succeeding (GLTF-015). It is deliberately opt-in locally;
+# CI downloads the immutable release and always enables it.
+#
 # Exit codes: 0 ok · 1 the corpus does not match its generator · 2 the environment is unusable.
 
 set -euo pipefail
@@ -45,6 +49,10 @@ if [ ! -d "tools/gltf_fixtures" ]; then
 fi
 
 export PYTHONPATH="tools${PYTHONPATH:+:$PYTHONPATH}"
+validator_args=()
+if [ -n "${GLTF_VALIDATOR:-}" ]; then
+    validator_args=(--validator "$GLTF_VALIDATOR")
+fi
 
 # GLTF-418. Determinism is a property of the generator ACROSS RUNS, so comparing two emissions
 # inside one process would prove nothing: the interesting failure is a set or dict iterated in hash
@@ -66,12 +74,12 @@ if [ "$DETERMINISM" -eq 1 ]; then
 fi
 
 if [ "$CHECK_ONLY" -eq 0 ]; then
-    python3 -m gltf_fixtures --out "$CORPUS"
+    python3 -m gltf_fixtures --out "$CORPUS" "${validator_args[@]}"
 fi
 
 # The generator's own comparison: every emitted byte against what is on disk. This is the assertion,
 # not the write above -- a generator that wrote nothing at all would still "succeed" without it.
-python3 -m gltf_fixtures --check "$CORPUS"
+python3 -m gltf_fixtures --check "$CORPUS" "${validator_args[@]}"
 
 # The second half of GLTF-020's acceptance, and the one a human actually reads: on an unchanged tree
 # the regeneration must leave the working tree untouched. Reported rather than enforced, because a

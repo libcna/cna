@@ -29,7 +29,9 @@
       "L3"
     ],
     "features": [
+      "KHR_mesh_quantization",
       "normalized BYTE NORMAL",
+      "4-byte aligned VEC3 elements",
       "\u00a73.6.2.2 signed clamp",
       "cgltf workaround witness"
     ],
@@ -51,8 +53,12 @@
     "bufferViewCount": 3,
     "bufferCount": 1,
     "bufferByteLength": 54,
-    "extensionsUsed": [],
-    "extensionsRequired": [],
+    "extensionsUsed": [
+      "KHR_mesh_quantization"
+    ],
+    "extensionsRequired": [
+      "KHR_mesh_quantization"
+    ],
     "punctualLightCount": 0
   },
   "l2": {
@@ -96,7 +102,7 @@
         "bufferView": 1,
         "byteOffset": 0,
         "bufferViewByteOffset": 36,
-        "bufferViewByteStride": null,
+        "bufferViewByteStride": 4,
         "values": [
           -1.0,
           0.0,

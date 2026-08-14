@@ -404,3 +404,28 @@ TEST(GltfExtensionRegistry, FactorCarriedFresnelExtensionsReportTheirRemainingRe
     EXPECT_NE(std::string::npos, warningFor("KHR_materials_specular").find("textures"))
         << "KHR_materials_specular's two missing texture inputs are not named";
 }
+
+TEST(GltfExtensionRegistry, RequiredMeshQuantizationIsClaimedAndValidated)
+{
+    // The quantized-normal fixtures used to author extension-only formats as if they were core
+    // glTF. Both now declare the required extension and its alignment rules; CNA already decodes
+    // the formats generically, so the support gate must claim what the source actually requires.
+    const GltfExtensionRecordEXT* record = FindGltfExtensionEXT("KHR_mesh_quantization");
+    ASSERT_NE(nullptr, record);
+    EXPECT_EQ(GltfExtensionSupportEXT::Implemented, record->support);
+    EXPECT_TRUE(record->claimed);
+
+    for (const std::string& id : {"normal-quantized", "normalized-i8-normal"})
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const std::vector<std::string> required =
+            CnaTest::GltfOracle::Strings(
+                CnaTest::GltfOracle::Path(fixture.Expected(), "l1.extensionsRequired"));
+        EXPECT_NE(required.end(), std::find(required.begin(), required.end(),
+                                            "KHR_mesh_quantization"));
+        std::vector<std::string> warnings;
+        EXPECT_NO_THROW(ValidateGltfEXT(&fixture.Data(), id, warnings));
+    }
+}

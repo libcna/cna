@@ -92,7 +92,8 @@
     {
       "buffer": 0,
       "byteOffset": 0,
-      "byteLength": 72
+      "byteLength": 72,
+      "byteStride": 12
     },
     {
       "buffer": 0,

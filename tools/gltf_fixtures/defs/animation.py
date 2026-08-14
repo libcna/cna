@@ -66,7 +66,8 @@ def _sampler(b: GltfBuilder, *, times: list[float], values: list, value_type: st
     """
     return {
         "input": b.add_packed_accessor(usage="animation input (time)", values=times,
-                                       accessor_type="SCALAR", component_type=FLOAT),
+                                       accessor_type="SCALAR", component_type=FLOAT,
+                                       with_bounds=True),
         "output": b.add_packed_accessor(usage="animation output", values=values,
                                         accessor_type=value_type, component_type=FLOAT),
         "interpolation": interpolation,
@@ -98,7 +99,7 @@ def anim_rigid_node() -> Fixture:
     b.set_default_scene(0)
 
     times = b.add_packed_accessor(usage="animation input (time)", values=_KEY_TIMES,
-                                  accessor_type="SCALAR", component_type=FLOAT)
+                                  accessor_type="SCALAR", component_type=FLOAT, with_bounds=True)
     rotations = b.add_packed_accessor(usage="animation output (rotation)", values=_KEY_ROTATIONS,
                                       accessor_type="VEC4", component_type=FLOAT)
     b.add_animation({
@@ -250,7 +251,7 @@ def anim_nonzero_start() -> Fixture:
     b.set_default_scene(0)
 
     times = b.add_packed_accessor(usage="animation input (time)", values=_NONZERO_START_TIMES,
-                                  accessor_type="SCALAR", component_type=FLOAT)
+                                  accessor_type="SCALAR", component_type=FLOAT, with_bounds=True)
     rotations = b.add_packed_accessor(usage="animation output (rotation)", values=key_rotations,
                                       accessor_type="VEC4", component_type=FLOAT)
     b.add_animation({
@@ -722,6 +723,10 @@ def anim_repeated_time() -> Fixture:
     }
     return Fixture(
         id="anim-repeated-time", audit_fixture=None, owning_group="animation",
+        validator_expected_errors=["ACCESSOR_ANIMATION_INPUT_NON_INCREASING"],
+        validator_exception_reason="CNA's documented hard-cut compatibility policy accepts "
+                                   "equal adjacent times; the Validator correctly identifies the "
+                                   "source as non-conformant and this fixture pre-dates bad-*.",
         description="A translation channel with two samples at t=1.0 -- an authored hard cut. "
                     "Tolerated and counted rather than refused, and the fixture states what the "
                     "tolerance costs: the post-cut value is not representable in a resampled "

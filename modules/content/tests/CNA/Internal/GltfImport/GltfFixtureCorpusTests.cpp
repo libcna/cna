@@ -364,6 +364,75 @@ TEST(GltfFixtureCorpus, ExternalReferencePinsAreImmutableOptionalAndMapOnlyExist
     EXPECT_EQ(2u, gaps);
 }
 
+TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
+{
+    // GLTF-015: the CI tool is external, but which tool CI trusts is checkout state. Pin the exact
+    // official release archive and digest here without downloading or executing anything.
+    const std::filesystem::path pin =
+        CorpusDirectory().parent_path().parent_path().parent_path()
+        / "tools" / "gltf_fixtures" / "validator-pin.json";
+    std::ifstream file(pin, std::ios::binary);
+    ASSERT_TRUE(file.is_open()) << pin.string();
+    const std::string text((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+    JsonValue document;
+    ASSERT_NO_THROW(document = CNA::Internal::ParseJson(text));
+    ASSERT_EQ(JsonType::Object, document.type);
+    EXPECT_EQ("GLTF-015", StringOr(document, "task", ""));
+    EXPECT_EQ("https://github.com/KhronosGroup/glTF-Validator",
+              StringOr(document, "repository", ""));
+    EXPECT_EQ("2.0.0-dev.3.10", StringOr(document, "releaseVersion", ""));
+    EXPECT_FALSE(BoolOr(document, "runtimeDependency", true));
+    EXPECT_TRUE(BoolOr(document, "ciDependency", false));
+    EXPECT_EQ("Apache-2.0", StringOr(Member(document, "license"), "spdx", ""));
+
+    const JsonValue& artifact = Member(document, "ciArtifact");
+    ASSERT_EQ(JsonType::Object, artifact.type);
+    EXPECT_EQ("linux-x86_64", StringOr(artifact, "platform", ""));
+    EXPECT_EQ("gltf_validator", StringOr(artifact, "executable", ""));
+    EXPECT_EQ("168eba887964125abe17ae97899b38d0b3cfd73c266c78424c194929ddcbc522",
+              StringOr(artifact, "sha256", ""));
+    EXPECT_EQ("https://github.com/KhronosGroup/glTF-Validator/releases/download/"
+              "2.0.0-dev.3.10/gltf_validator-2.0.0-dev.3.10-linux64.tar.xz",
+              StringOr(artifact, "url", ""));
+}
+
+TEST(GltfFixtureCorpus, ValidatorErrorsAreExactNamedMalformedFixtureOracles)
+{
+    // An empty list is implicit and means zero errors. A non-empty list is not a blanket skip:
+    // both .gltf and .glb must produce exactly these distinct severity-0 codes in CI.
+    std::size_t exceptions = 0;
+    for (const std::string& id : CorpusFixtureIds())
+    {
+        SCOPED_TRACE(id);
+        const LoadedFixture fixture(id);
+        ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+        const JsonValue& inventory = Member(fixture.Expected(), "inventory");
+        const std::vector<std::string> codes =
+            Strings(Member(inventory, "validatorExpectedErrorCodes"));
+        if (codes.empty())
+        {
+            EXPECT_TRUE(StringOr(inventory, "validatorExceptionReason", "").empty());
+            EXPECT_NE(0u, id.rfind("bad-", 0))
+                << "a bad-* fixture must state which Validator error proves its malformedness";
+            continue;
+        }
+        ++exceptions;
+        EXPECT_FALSE(StringOr(inventory, "validatorExceptionReason", "").empty());
+        const std::set<std::string> unique(codes.begin(), codes.end());
+        EXPECT_EQ(codes.size(), unique.size()) << "duplicate Validator error code";
+        for (const std::string& code : codes)
+        {
+            EXPECT_FALSE(code.empty());
+            EXPECT_TRUE(std::all_of(code.begin(), code.end(), [](const char character) {
+                return (character >= 'A' && character <= 'Z') || character == '_'
+                       || (character >= '0' && character <= '9');
+            })) << "invalid Validator error code " << code;
+        }
+    }
+    EXPECT_EQ(10u, exceptions);
+}
+
 TEST(GltfFixtureCorpus, DistinctAssetCountEqualsTheSumOfOwningGroupCounts)
 {
     // plan_gltf.md §24.1: one asset has exactly one owning group, so the distinct-asset total is

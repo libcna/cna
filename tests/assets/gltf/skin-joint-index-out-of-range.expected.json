@@ -30,13 +30,18 @@
       "weighted stray influence",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_JOINTS_INDEX_OOB",
+      "ACCESSOR_WEIGHTS_NON_NORMALIZED"
+    ],
+    "validatorExceptionReason": "The weighted out-of-range skin joint is deliberately malformed and refused; this pre-dates the bad-* naming rule."
   },
   "l1": {
     "assetVersion": "2.0",
     "defaultScene": 0,
     "sceneCount": 1,
-    "nodeCount": 3,
+    "nodeCount": 4,
     "meshCount": 1,
     "materialCount": 0,
     "textureCount": 0,

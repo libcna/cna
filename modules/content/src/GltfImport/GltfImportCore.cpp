@@ -3543,6 +3543,12 @@ namespace CNA::Internal::GltfImport
                  "the single shared UV channel. A second, different transform on another map "
                  "cannot be baked and is named rather than dropped.",
                  "GLTF-336"},
+                {"KHR_mesh_quantization", GltfExtensionSupportEXT::Implemented, true,
+                 "Integer mesh attributes are decoded through the same normalized-accessor path "
+                 "as core formats and repacked into CNA's float vertex layouts. BYTE and SHORT "
+                 "normal witnesses pin the signed clamp and the extension's 4-byte VEC3 element "
+                 "alignment.",
+                 "GLTF-084"},
                 {"KHR_materials_emissive_strength", GltfExtensionSupportEXT::ImplementedWithNamedLimit,
                  true,
                  "Applied on the PBR path. A non-PBR material has no emissive term to scale, so "

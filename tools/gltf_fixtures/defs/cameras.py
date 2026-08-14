@@ -249,7 +249,7 @@ def camera_animated_node() -> Fixture:
     key_times = [0.0, 1.0]
     key_rotations = [(0.0, 0.0, 0.0, 1.0), (0.0, half_sqrt2, 0.0, half_sqrt2)]
     times = b.add_packed_accessor(usage="animation input (time)", values=key_times,
-                                  accessor_type="SCALAR", component_type=FLOAT)
+                                  accessor_type="SCALAR", component_type=FLOAT, with_bounds=True)
     rotations = b.add_packed_accessor(usage="animation output (rotation)", values=key_rotations,
                                       accessor_type="VEC4", component_type=FLOAT)
     b.add_animation({

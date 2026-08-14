@@ -44,6 +44,15 @@ The detailed Asset Generator mapping and reference-renderer capture protocol are
 `docs/gltf-conformance.md` §2.9–2.10. No licence obligation from these optional sources is added to
 CNA merely by recording a repository URL and revision here.
 
+### Khronos glTF Validator CI tool (`GLTF-015`)
+
+The generated-corpus CI gate downloads the official `KhronosGroup/glTF-Validator` native Linux
+release `2.0.0-dev.3.10`, licensed under Apache-2.0. Its archive is pinned by SHA-256
+`168eba887964125abe17ae97899b38d0b3cfd73c266c78424c194929ddcbc522` in
+`tools/gltf_fixtures/validator-pin.json` and verified before extraction. The downloaded executable
+is transient CI/developer tooling: no Validator source or binary is committed, redistributed, or
+loaded by CNA at runtime.
+
 ### The procedure, before any asset is committed
 
 Every one of these, per asset, in the commit that adds it:
@@ -69,7 +78,7 @@ An asset that fails any step is **not committed** — it is fetched by a script 
 
 ### The decision: generated corpus committed, third-party assets fetched (`GLTF-019`)
 
-**Committed:** CNA's own generated corpus. 141 assets and 699 files at **1.78 MiB total**, every one
+**Committed:** CNA's own generated corpus. 141 assets and 699 files at **1.79 MiB total**, every one
 emitted from a Python description, byte-identical across runs, and covered by a size budget
 (`GLTF-419`). It is in the repository because CI must be able to run the whole conformance ladder
 with no network at all, and because a fixture whose expected values were computed from the

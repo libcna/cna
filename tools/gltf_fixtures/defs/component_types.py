@@ -325,10 +325,13 @@ def normalized_i8_normal() -> Fixture:
     """A signed normalized ``NORMAL`` -- the accessor form §3.6.2.2's clamp exists for."""
     decoded = [tuple(max(c / 127.0, -1.0) for c in v) for v in _I8_NORMAL_RAW]
     b = GltfBuilder("normalized-i8-normal")
+    # BYTE NORMAL is enabled by KHR_mesh_quantization, not core glTF. The extension is mandatory
+    # for this source form and requires each VEC3 element to start on a four-byte boundary.
+    b.declare_extensions(required=["KHR_mesh_quantization"])
     position = b.add_packed_accessor(usage="POSITION", values=TRIANGLE_POSITIONS,
                                      accessor_type="VEC3", with_bounds=True)
     normal = b.add_packed_accessor(usage="NORMAL", values=_I8_NORMAL_RAW, accessor_type="VEC3",
-                                   component_type=BYTE, normalized=True)
+                                   component_type=BYTE, normalized=True, byte_stride=4)
     indices = b.add_packed_accessor(usage="indices", values=TRIANGLE_INDICES,
                                     accessor_type="SCALAR", component_type=UNSIGNED_SHORT)
     mesh = b.add_mesh([{
@@ -351,7 +354,9 @@ def normalized_i8_normal() -> Fixture:
                     "unit-length invariant reports on its own.",
         builder=b, validated_layers=["L1", "L2", "L3"],
         referencing_groups=["accessors", "normals"],
-        features=["normalized BYTE NORMAL", "§3.6.2.2 signed clamp", "cgltf workaround witness"],
+        features=["KHR_mesh_quantization", "normalized BYTE NORMAL",
+                  "4-byte aligned VEC3 elements", "§3.6.2.2 signed clamp",
+                  "cgltf workaround witness"],
         spec_anchors=["accessor-data-types"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="QuantisedNormalTri", primitive=0, mode=TRIANGLES,

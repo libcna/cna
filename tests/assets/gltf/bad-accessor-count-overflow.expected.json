@@ -29,7 +29,11 @@
       "structural validation",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_MAX_MISMATCH"
+    ],
+    "validatorExceptionReason": "The impossible accessor count is this bad-* fixture's subject; the pinned Validator's own span arithmetic wraps and therefore reports only the resulting max mismatch."
   },
   "l1": {
     "assetVersion": "2.0",

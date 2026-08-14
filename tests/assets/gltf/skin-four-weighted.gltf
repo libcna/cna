@@ -8,10 +8,7 @@
     {
       "name": "Scene",
       "nodes": [
-        0,
-        1,
-        2,
-        3,
+        5,
         4
       ]
     }
@@ -53,6 +50,15 @@
       "name": "SkinnedMeshNode",
       "mesh": 0,
       "skin": 0
+    },
+    {
+      "name": "JointRoot",
+      "children": [
+        0,
+        1,
+        2,
+        3
+      ]
     }
   ],
   "meshes": [

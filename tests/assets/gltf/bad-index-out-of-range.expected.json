@@ -30,7 +30,11 @@
       "index range validation",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_INDEX_OOB"
+    ],
+    "validatorExceptionReason": "The primitive's out-of-range index is this bad-* fixture's subject."
   },
   "l1": {
     "assetVersion": "2.0",

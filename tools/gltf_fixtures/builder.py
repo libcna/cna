@@ -418,7 +418,8 @@ class GltfBuilder:
 
     def add_packed_accessor(self, *, usage: str, values: Sequence[Any], accessor_type: str,
                             component_type: int = FLOAT, with_bounds: bool = False,
-                            normalized: bool = False) -> int:
+                            normalized: bool = False,
+                            byte_stride: int | None = None) -> int:
         """Packs ``values`` into a fresh tightly packed bufferView and adds an accessor over it.
 
         This is the ordinary path: the authored values are packed and the decoded expectation is
@@ -431,6 +432,10 @@ class GltfBuilder:
         :param component_type: one of the ``BYTE`` … ``FLOAT`` constants.
         :param with_bounds: emit the ``min``/``max`` bounds computed per component.
         :param normalized: mark integer components normalized.
+        :param byte_stride: optional distance between elements. This is needed for quantized
+            ``VEC3`` vertex attributes: ``KHR_mesh_quantization`` keeps every element 4-byte
+            aligned, so a BYTE normal has stride 4 and a SHORT normal stride 8 rather than the
+            tightly packed 3 or 6 bytes.
         :return: the new accessor's index.
         """
         components = ACCESSOR_TYPE_COMPONENTS[accessor_type]
@@ -443,11 +448,22 @@ class GltfBuilder:
                 raise ValueError(
                     f"{self.name}: {usage} is {accessor_type} ({components} components) but an "
                     f"element carries {len(element)}")
-        components_flat = flatten(elements)
-
         _fmt, size, _is_integer = _component(component_type)
-        offset = self.append_bytes(pack(components_flat, component_type), alignment=4)
-        view = self.add_buffer_view(offset, len(components_flat) * size)
+        element_size = components * size
+        if byte_stride is not None:
+            if (byte_stride < element_size or byte_stride > 252
+                    or byte_stride % 4 != 0):
+                raise ValueError(
+                    f"{self.name}: {usage} byte stride {byte_stride} cannot hold a "
+                    f"{element_size}-byte {accessor_type} element at a 4-byte glTF stride")
+            padding = bytes(byte_stride - element_size)
+            packed = b"".join(pack(element, component_type) + padding for element in elements)
+        else:
+            packed = pack(flatten(elements), component_type)
+        offset = self.append_bytes(packed, alignment=4)
+        view = self.add_buffer_view(offset, len(packed), byte_stride=byte_stride)
+
+        components_flat = flatten(elements)
 
         bounds: dict[str, Any] = {}
         if with_bounds:
@@ -715,7 +731,10 @@ class GltfBuilder:
             doc["extensionsRequired"] = list(self._extensions_required)
         if self._default_scene is not None:
             doc["scene"] = self._default_scene
-        doc["scenes"] = self._scenes
+        # Root arrays have minItems=1. In particular, an absent `scenes` array is valid while an
+        # empty one is not; `scene-no-scenes` exists to distinguish those two source shapes.
+        if self._scenes:
+            doc["scenes"] = self._scenes
         doc["nodes"] = self._nodes
         root_extensions = dict(self._root_extensions)
         if self._lights:

@@ -113,7 +113,13 @@
       "bufferView": 3,
       "componentType": 5126,
       "count": 2,
-      "type": "SCALAR"
+      "type": "SCALAR",
+      "max": [
+        1.0
+      ],
+      "min": [
+        0.0
+      ]
     },
     {
       "bufferView": 4,
@@ -125,7 +131,13 @@
       "bufferView": 5,
       "componentType": 5126,
       "count": 2,
-      "type": "SCALAR"
+      "type": "SCALAR",
+      "max": [
+        1.0
+      ],
+      "min": [
+        0.0
+      ]
     },
     {
       "bufferView": 6,

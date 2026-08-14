@@ -29,7 +29,11 @@
       "animation input ordering",
       "import rejection"
     ],
-    "auditFixture": null
+    "auditFixture": null,
+    "validatorExpectedErrorCodes": [
+      "ACCESSOR_ANIMATION_INPUT_NON_INCREASING"
+    ],
+    "validatorExceptionReason": "The decreasing animation input is this bad-* fixture's subject."
   },
   "l1": {
     "assetVersion": "2.0",

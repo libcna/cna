@@ -29,7 +29,7 @@
     "features": [
       "normalTexture.scale",
       "occlusionTexture.strength",
-      "texture view without a texture"
+      "schema-valid shared linear map"
     ],
     "auditFixture": null
   },
@@ -40,15 +40,15 @@
     "nodeCount": 1,
     "meshCount": 1,
     "materialCount": 1,
-    "textureCount": 0,
-    "imageCount": 0,
+    "textureCount": 1,
+    "imageCount": 1,
     "samplerCount": 0,
     "skinCount": 0,
     "animationCount": 0,
-    "accessorCount": 3,
-    "bufferViewCount": 3,
+    "accessorCount": 5,
+    "bufferViewCount": 5,
     "bufferCount": 1,
-    "bufferByteLength": 78,
+    "bufferByteLength": 150,
     "extensionsUsed": [],
     "extensionsRequired": [],
     "punctualLightCount": 0
@@ -109,6 +109,58 @@
       },
       {
         "index": 2,
+        "usage": "TANGENT",
+        "type": "VEC4",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 4,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 2,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 72,
+        "bufferViewByteStride": null,
+        "values": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 3,
+        "usage": "TEXCOORD_0",
+        "type": "VEC2",
+        "componentType": 5126,
+        "componentTypeName": "FLOAT",
+        "count": 3,
+        "componentsPerElement": 2,
+        "normalized": false,
+        "sparse": false,
+        "bufferView": 3,
+        "byteOffset": 0,
+        "bufferViewByteOffset": 120,
+        "bufferViewByteStride": null,
+        "values": [
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      {
+        "index": 4,
         "usage": "indices",
         "type": "SCALAR",
         "componentType": 5123,
@@ -117,9 +169,9 @@
         "componentsPerElement": 1,
         "normalized": false,
         "sparse": false,
-        "bufferView": 2,
+        "bufferView": 4,
         "byteOffset": 0,
-        "bufferViewByteOffset": 72,
+        "bufferViewByteOffset": 144,
         "bufferViewByteStride": null,
         "values": [
           0,
@@ -173,8 +225,40 @@
             1.0
           ]
         ],
-        "tangents": [],
-        "texcoords": [],
+        "tangents": [
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          [
+            1.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        ],
+        "texcoords": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            1.0,
+            0.0
+          ],
+          [
+            0.0,
+            1.0
+          ]
+        ],
         "colors": [],
         "joints": [],
         "weights": [],
@@ -224,9 +308,9 @@
           "alphaCutoff": 0.5,
           "doubleSided": false,
           "hasBaseColorTexture": false,
-          "hasNormalTexture": false,
+          "hasNormalTexture": true,
           "hasMetallicRoughnessTexture": false,
-          "hasOcclusionTexture": false,
+          "hasOcclusionTexture": true,
           "hasEmissiveTexture": false,
           "occlusionRule": "1 + strength * (sampled - 1). At strength 0 the result is 1 -- no occlusion at all, whatever the map holds. Multiplying by the strength instead would darken everything to black, which is the plausible wrong formula.",
           "normalScaleRule": "Scales the sampled tangent-space normal's X and Y only. Scaling Z too would merely rescale the vector, which normalization undoes -- the perturbation would not change at all."
@@ -323,7 +407,7 @@
         ],
         "vertexBufferFile": "mat-normal-occlusion-scale.vb.bin",
         "vertexBufferBytes": 144,
-        "vertexBufferSha256": "df1261c6b7ed706604a107ee51d6db2c42e8b44c324b312fcf9626c8a87de683",
+        "vertexBufferSha256": "e052d1b4ff9faa49bc4e80297972f4bb74f56d4830757d48dde318d996b89440",
         "indexElementSize": 2,
         "indexCount": 3,
         "indexBufferFile": "mat-normal-occlusion-scale.ib.bin",
