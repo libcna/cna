@@ -6,13 +6,15 @@ session needs to start work without re-deriving the state.
 
 ## Session status
 
-- **Branch:** `feature/gltf`, with local, intentionally unpushed commits. Never push without
-  explicit permission. No pull request has been opened and none should be unless asked. (The campaign ran on
+- **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
+  current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **419 closed (`✔` 273, `✅` 146),
-  31 `⬜` remaining.** The other 10 carry a deliberate partial marker: 1 `🔬` (investigation, no
-  implementation owed), 7 `✅/⬜`, no `✅/🐛` residue, 1 `🐛` (open:
-  `GLTF-421`), and 1 `⛔` (`GLTF-439`, blocked by this environment for a stated reason).
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **441 closed (`✔` 273, `✅` 168),
+  11 `⬜` remaining.** The other 8 carry a deliberate partial marker: 1 `🔬` (investigation, no
+  implementation owed) and 7 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
+- **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
+  Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
+  workflow also runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
 - **All eight audited defects (D1–D8) are `fixed`** in the corpus defect ledger
   (`tests/assets/gltf/manifest.json` → `defectLedger`). One entry is
   `partially-remediated`: `GLTF-241`, whose residue is owned by `GLTF-238`.
@@ -27,9 +29,9 @@ test binary from inside the build directory produces ~80 spurious failures and a
 have nothing to do with the code.
 
 ```bash
-B=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-tests
-export CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache CCACHE_MAXSIZE=30G
-cmake --build "$B" --target CnaTests -j3     # -j3 is the ceiling in openeggbert/CLAUDE.md
+B=build
+export CCACHE_DIR=/tmp/cna-gltf-ccache CCACHE_MAXSIZE=4G
+cmake --build "$B" --target CnaTests cna_tool_gltf_to_cnj --parallel 3
 ctest --test-dir "$B" -L gltf-conformance     # the 10-rung ladder
 "$B"/CnaTests                                 # the whole suite, from the ROOT
 "$B"/CnaTests --gtest_filter='*Gltf*'         # every glTF suite -- note the LEADING star
@@ -37,7 +39,11 @@ scripts/regenerate-gltf-goldens.sh --check    # the corpus, against its own gene
 scripts/regenerate-gltf-goldens.sh --determinism
 PYTHONPATH=tools python3 -m gltf_fixtures --fetch-validator /tmp/cna-gltf-validator
 GLTF_VALIDATOR=/tmp/cna-gltf-validator/gltf_validator \
-  scripts/regenerate-gltf-goldens.sh --check  # all 282 containers through the pinned Validator
+  scripts/regenerate-gltf-goldens.sh --check  # all 290 containers through the pinned Validator
+cmake -S . -B /tmp/cnagltf-nodraco-build -G Ninja \
+  -DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_BUILD_TESTS=ON -DCNA_ENABLE_DRACO=OFF
+cmake --build /tmp/cnagltf-nodraco-build --target CnaTests --parallel 3
+ctest --test-dir /tmp/cnagltf-nodraco-build -L gltf-conformance
 ```
 
 Expected as of this writing:
@@ -46,11 +52,12 @@ Expected as of this writing:
 |---|---|
 | `ctest -L gltf-conformance` | **10/10 passed** (the `Perf` rung joined on 2026-08-12) |
 | full suite | **6 372 passed, 191 skipped, 18 failed** |
-| generator `--check` | **141 assets, 699 files — byte-identical** |
-| pinned Khronos Validator | **262 valid, 20 expected-invalid, 42 warnings** |
-| `*Gltf*` on `STUB` / `HEADLESS` / `OPENGLES3` | **493 passed, 27 skipped** / **520 passed, 0 skipped** / **520 passed, 0 skipped** |
-| `*Gltf*` on `VULKAN` / `DIRECTX11` | **520 passed, 0 skipped** / **493 passed, 1 symlink skip** (26 POSIX tool cases are not registered on Windows) |
-| `*Gltf*` on `SOFTWARE` | **531 passed, 1 explicitly skipped** without external assets; **532 passed** when `CNA_GLTF_CHRONOGRAPH_WATCH` names the pinned GLTF-407 GLB. Its first run found and fixed the optional-base-map and 48/56/68-byte layout boundary; `GLTF-206`/`179` added policy/parity witnesses, `GLTF-163` added index-width gates, `GLTF-394` added the Direct3D topology policy, `GLTF-405`/`407` added pinned real-world fetch/acceptance, and `GLTF-398`/`420` added the required-CI workflow lock |
+| generator `--check` / `--determinism` | **145 assets, 729 files — byte-identical** |
+| pinned Khronos Validator | **270 valid, 20 expected-invalid, 42 warnings** |
+| `*Gltf*`, HEADLESS + vendored Draco | **549 tests: 548 passed, 1 opt-in ChronographWatch skip** (21.5 s locally) |
+| `*Gltf*`, HEADLESS without Draco | **539 tests: 538 passed, 1 opt-in skip**; the ten-test difference is the real decoder/encoder evidence, while the unavailable-path checks still run |
+| conformance ladder, Draco `ON` / `OFF` | **10/10 passed** / **10/10 passed** |
+| pinned reference renderer subset | **12/12 passed**; minimum foreground IoU 0.999579, coverage ratio 0.999891–1.000422, worst foreground RGB MAE 67.60 |
 
 **Those 18 failures are pre-existing and unrelated to glTF.** They are the STUB renderer's
 capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS fixtures
@@ -59,45 +66,35 @@ capability expectations (`GraphicsDeviceCapabilityTest.*`), the TextureCube DDS 
 Do not attempt to "fix" them as part of this campaign, and do not report a run as clean without
 saying they are there.
 
-There are additional trees for **HEADLESS** and the now-working **OPENGLES3** renderer:
-`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless` and
-`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3`. HEADLESS reports
-`GraphicsCapability::ThreeD`, so STUB's 27 capability-gated glTF cases really run there — and two
-were failing on stale pre-`GLTF-215` effect expectations that the skip had hidden. OPENGLES3 runs
-the same 520 cases and also supplies registered framebuffer tests. Compare them with
+HEADLESS reports `GraphicsCapability::ThreeD`, so STUB's capability-gated cases really run there.
+OPENGLES3 additionally supplies the real framebuffer evidence. When two compatible disposable
+trees are available, compare them with
 
 ```bash
-scripts/gltf-renderer-parity.sh "$B" /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless
-scripts/gltf-renderer-parity.sh /media/robertvokac/claude/tmp/cna/cmake-build-gltf-headless \
-  /media/robertvokac/claude/tmp/cna/cmake-build-gltf-opengles3
+scripts/gltf-renderer-parity.sh /path/to/headless-build /path/to/opengles3-build
 ```
 
 which fails on any L1–L5 difference and tolerates only `SKIPPED`-vs-`OK`.
 
-There is a second, **sanitiser** build tree beside it —
-`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan`, configured with
-`-DCNA_SANITIZE=address,undefined` and otherwise identical. It is what `GLTF-409` was closed with,
-and it is worth re-running after any importer change:
+A disposable **sanitizer** tree should be re-created after importer changes:
 
 ```bash
-A=/media/robertvokac/claude/tmp/cna/cmake-build-gltf-asan
-cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj -j2
+A=/tmp/cnagltf-sanitize-build
+cmake -S . -B "$A" -G Ninja -DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON \
+  -DCNA_ENABLE_DRACO=ON -DCNA_SANITIZE=address,undefined
+cmake --build "$A" --target CnaTests cna_tool_gltf_to_cnj --parallel 3
 ASAN_OPTIONS=detect_leaks=0 \
 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:exitcode=1 \
-  "$A"/CnaTests --gtest_filter='*Gltf*'    # 479 passed, 26 skipped, 0 findings
+  "$A"/CnaTests --gtest_filter='*Gltf*'
 ```
 
 `detect_leaks=0` is only for this ptrace-restricted local environment; the sanitizer CI keeps its
 own leak-detection policy. AddressSanitizer and UndefinedBehaviorSanitizer remain active here.
 
-The build directory is `-DCNA_GRAPHICS_RENDERER=STUB -DCNA_BUILD_TESTS=ON`, built **out of the
-repository** on the partition the owner designated for build output:
-`/media/robertvokac/claude/tmp/cna/cmake-build-gltf-tests`, with
-`CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache` exported on every configure and build and
-`-j3`. Never build in the scratchpad — see `CLAUDE.md`. A fresh worktree needs its submodules
-first; clone them sharing the main checkout's object store
-(`git submodule update --init --reference <cna>/.git/modules/<path> <path>`, ~26 MB instead of
-~500 MB) and copy `.sdl-prebuilt-Linux-x86_64/` from the main worktree rather than rebuilding SDL.
+The current ordinary tree is `-DCNA_GRAPHICS_RENDERER=HEADLESS -DCNA_BUILD_TESTS=ON
+-DCNA_ENABLE_DRACO=ON`. Always cap compilation at `--parallel 3`. A fresh worktree needs recursive
+submodules, including the pinned Draco gitlink, before configuration. Build trees and the ccache are
+disposable and are deliberately removed at the end of an autonomous run.
 
 ## What a new session must know before touching anything
 
@@ -164,61 +161,38 @@ These are not style preferences; they are what made the campaign find things.
 
 ## What is blocked in this environment, and why
 
-The table below is a work/residue index, not a disjoint count: some rows depend on more than one
-entry. Do not mark blocked work done, and do not work around it by weakening acceptance. Rechecked
-2026-08-14: `HEADLESS` is available as a second renderer and `OPENGLES3` now builds and genuinely
-rasterises on Mesa. That lifts the old blanket L7 blocker; the corpus L7 harness itself is open
-work (`GLTF-009`), while acceptances that explicitly require Vulkan or another renderer remain
-blocked on those backends.
+There is no longer a Draco, viewer-write or Khronos-reference blocker. The remaining limits are
+narrower than the old table implied:
 
-| Blocker | Rows | Note |
+| Boundary | Rows | Note |
 |---|---|---|
-| **corpus L7 work** | 8 — `GLTF-182`, `244`, `343`, `344`, `386`, `387`, `390`, `397` | No longer environment-blocked on EasyGL. Nine generated fixture witnesses now rasterise successfully, but these rows still need their stated fixture/harness work; do not infer corpus coverage from those focused cases. The reference renderer and capture protocol are now pinned by `GLTF-016`; actual ten-asset comparison remains `GLTF-411`. `GLTF-213` is listed below because its acceptance explicitly requires Vulkan too. |
-| **second/third renderer** | 11 — `GLTF-158`, `160`, `168`, `213`, `234`, `373`, `379`, `384`, `385`, `389`, `398` | `scripts/gltf-renderer-parity.sh` already performs L1–L6 comparisons. OPENGLES3 is now present; Vulkan and the platform-specific renderers are not. Some EasyGL-only halves are therefore actionable even where the whole cross-renderer row is not. |
-| **libdraco** | 8 — `GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364` | `libdraco-dev` is not installed; the Draco decode path is `#ifdef CNA_DRACO_AVAILABLE`. **The cheapest unblock on this list.** |
-| **`cna-gltf-viewer` repo** | 12 — `GLTF-323`, `422`–`432` | A separate repository. §27.1 row 20 depends on it, so `GLTF-458` cannot be declared from here. |
-| **third-party assets** | 1 — `GLTF-411` | Repositories, licences, the Asset Generator manifest projection, sparse pinned fetcher (`GLTF-405`), zero-third-party-asset CI guard (`GLTF-406`), exact ChronographWatch acceptance (`GLTF-407`) and reference capture protocol exist. The remaining row needs actual ten-asset reference-renderer captures. |
-| **CI configuration** | 2 — `GLTF-019`, `420` | Needs the repository's CI settings (required-check configuration), not reachable from a working tree. |
-| **renderer that loses its context** | 1 — `GLTF-439` | `DebugSimulateContextLoss()` is a no-op on both renderers here, so a test would measure the no-op. |
-
-The remaining **~25 are doable in this environment.**
+| **whole-corpus L7 harness/policy** | `GLTF-009`, `244`, `384`–`387`, `390`, `391` | The independent 12-asset reference subset is green and has a committed report. Turning that into a corpus-wide, multi-renderer CTest rung still needs golden storage/update policy and per-renderer tolerances. DIRECTX11 additionally needs Windows CI. |
+| **format/shader breadth** | `GLTF-182`, `183`, `344` | A second UV stream plus per-map selection is an ABI/shader change. `KHR_materials_specular` remains partial only for its two textures; factors and colour are already carried and rendered. |
+| **final viewer matrix** | `GLTF-323`, `429`, `432` | The viewer is writable and its direct/offline/reference captures work. The exact fourteen-row record is incomplete, especially the fetch-on-demand ≥50 MB case, so §27.1 row 20 remains partial. |
+| **milestone chain** | `GLTF-449`, `458`–`460` | These are intentionally gated by the remaining technical rows; do not change `FUTURE.md` or declare either milestone early. |
 
 ## Suggested next clusters
 
-Ordered by value, not by number. Each is a coherent unit with its own tests and one commit.
-Rewritten 2026-08-12 after that session closed 57 rows; the earlier list is superseded.
+Ordered by value, not by number. Rewritten 2026-08-14 after the 145-asset corpus, vendored Draco,
+viewer integration and pinned reference subset became green.
 
-1. **`GLTF-399` — finish the corpus (141/145 assets today).** Fourteen owning groups are complete;
-   accessors are 13/13, normals 6/6 and container is now 8/8. The generator emits external `.bin`
-   and image sidecars from the same fixture source, while GLB twins stay self-contained; exact
-   source spellings, BIN padding and byte parity are directly asserted. The four exact missing IDs
-   are generated into `manifest.json`; current + missing = target is checked per group, so the
-   former 135/136/141 count disagreement cannot recur. **Only Draco 0/4 remains**, blocked on the
-   pinned `libdraco` encoder/decoder integration.
-   The normals group now has all four named witnesses at L1–L5. `GLTF-175` and `GLTF-176` are also
-   closed at L7: the two-primitive sign fixture and the shared-buffer mirrored placement both pass
-   on OPENGLES2/3, including the per-draw determinant correction.
-   `GLTF-340` is likewise closed on both profiles: `mat-material-variants` now supplies an opaque
-   synthetic dial and a nearer 0.5-transmission glass state, and the exact framebuffer control
-   distinguishes correct back-to-front drawing from glass-first depth occlusion.
-2. **Phase 21 viewer rows are the largest *blocked* group and the only path to `GLTF-458`.**
-   `GLTF-422`–`GLTF-432` live in `openeggbert/cna-gltf-viewer`. §27.1 row 20 cannot go green
-   without them, so **GLTF CORE 2.0 CORRECT cannot be declared from this repository alone** —
-   that is the single most useful thing to tell whoever asks why the milestone is still open.
-3. **`GLTF-343` is closed; `GLTF-344` is now texture-only.** Raw IOR/specular factors survive
-   direct and offline import, both PBR effects and `.cnj`; all 15 PBR renderers consume the
-   Khronos-derived dielectric F0/F90 on rigid and skinned paths. A shared analytic pixel test and a
-   repository-wide CPU-upload/shader audit pin clamp order, defaults, endpoint use and backend
-   parity. Only `specularTexture` and `specularColorTexture`, with their independent UV and colour-
-   space handling, remain open; this is why `_ior` is claimed and `_specular` is still refused when
-   required.
-4. **The remaining Draco rows** (`GLTF-271`, `288`, `353`, `359`–`361`, `363`, `364`) need only
-   `apt-get install libdraco-dev` — the *cheapest* unblock on the list if the owner allows it, and
-   it turns eight blocked rows into ordinary work.
-5. **Cross-renderer rows** (`GLTF-158`, `160`, `168`, `234`, `373`, `379`, `384`, `385`, `389`,
-   `398`). STUB, HEADLESS and OPENGLES3 now agree on all 41 L1–L5 tests; HEADLESS and OPENGLES3
-   agree on the full 520-test glTF selection. Vulkan and the corpus L7 rung are the remaining
-   renderer residues.
+1. **Finish `GLTF-429`'s exact fourteen-row viewer record.** Reuse `--reference-capture` and the
+   now-working direct/offline paths, fill the missing morph/external/full-PBR rows explicitly, then
+   fetch (do not commit) a licensed ≥50 MB model for row 14. Close `GLTF-432` only after README and
+   viewer plan name the final results.
+2. **Promote the proven 12-asset method into `GLTF-009`/`244`/`390`/`391`.** Keep L0–L6 first,
+   decide which PNG evidence is committed, define update/review mechanics, then add L7 last in the
+   conformance label. Do not generalise the current EasyGL-vs-Khronos RGB threshold to other
+   renderers without measuring them.
+3. **Implement the shared UV2 foundation (`GLTF-182`/`183`) before the remaining
+   `KHR_materials_specular` textures (`GLTF-344`).** Both specular textures can choose their own
+   `texCoord`, so implementing them first would create exactly the per-map hardcoding these rows
+   exist to avoid.
+4. **Finish renderer/platform residue (`GLTF-384`–`387`)** once the L7 rung exists. OPENGLES3 and
+   Vulkan already pass L0–L6; DIRECTX11 requires Windows CI, and SOFTWARE needs the same image
+   protocol rather than a renderer-specific substitute.
+5. **Only then close the milestone chain** (`GLTF-449`, `458`–`460`). `FUTURE.md` must continue to
+   say the campaign is in progress until every §27.1 row is green.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
@@ -262,7 +236,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 |---|---|
 | `plan_gltf.md` | The 460-row campaign record. Each closed row carries its own evidence. |
 | `tools/gltf_fixtures/` | The corpus generator. Edit here, never the assets. |
-| `tests/assets/gltf/` | Generated corpus: **141 assets, 699 files**, including sidecars and `manifest.json`'s defect ledger. Never edited by hand. |
+| `tests/assets/gltf/` | Generated corpus: **145 assets, 729 files**, including sidecars and `manifest.json`'s defect ledger. Never edited by hand. |
 | `modules/content/src/GltfImport/GltfImportCore.cpp` | The importer. Extraction, skeletons, clips, lights, cameras, the extension registry, the stride table. |
 | `modules/content/src/Xna/ContentManager.cpp` | The runtime `.gltf` loader **and** the `.cnj` reader. Both must agree; several tests assert exactly that. |
 | `tools/gltf_to_cnj/gltf_to_cnj.cpp` | The offline converter — the second loader. |
@@ -270,6 +244,7 @@ Both have their own regression tests, and the L6 sweep now fails if it sees no a
 | `cmake/UnitTests.cmake` | `CNA_GLTF_CONFORMANCE_RUNGS` — the ladder's single source of truth (10 rungs since the `Perf` one joined). |
 | `scripts/regenerate-gltf-goldens.sh` | Regenerate the corpus, verify it, decode any binary golden that moved, and (`--determinism`) prove two processes emit the same bytes. |
 | `scripts/gltf-renderer-parity.sh` | Compare two build directories; fails on any L1–L5 difference, tolerates only `SKIPPED`-vs-`OK`. |
+| `scripts/gltf-reference-renderer-compare.py` | Reproduce the 12-asset OPENGLES3-vs-pinned-Khronos capture and metric report. |
 | `docs/gltf-conventions.md` | Every decision with a rationale: transforms, mirroring, colour space, effect selection, lighting, animation, extensions. |
 | `docs/gltf-performance.md` | Phase 22's measurements and the decision each led to — the parse/cache costs, the 4× unpack ceiling, the 2× morph duplication, the occlusion codec. Reproduce with `--gtest_filter='GltfPerformance.*' --gtest_output=xml:`. |
 | `docs/gltf-limitations.md` | The inverse: what cannot be carried, what is approximated, and the report field that names each loss. Its §1 is generated from the extension registry and its report fields are checked against the header — see `GltfLimitationsDoc`. |

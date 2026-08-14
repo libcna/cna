@@ -146,30 +146,34 @@ What the glTF gate costs per commit, measured the same way (same machine, Debug 
 
 | Step | Measured | Budget |
 |---|---|---|
-| `scripts/regenerate-gltf-goldens.sh --check` | 0.13 s | 5 s |
-| `scripts/regenerate-gltf-goldens.sh --determinism` (two full emissions) | 0.32 s | 10 s |
-| `CnaTests --gtest_filter='*Gltf*'` | 5.9 s | 60 s |
-| `ctest -L gltf-conformance` (10 rungs, each its own process) | 9.8 s | 120 s |
-| the same selection under ASan + UBSan with `detect_leaks=1` | 16.3 s | 300 s |
+| `scripts/regenerate-gltf-goldens.sh --check` | 0.14 s | 5 s |
+| `scripts/regenerate-gltf-goldens.sh --determinism` (two full emissions) | 0.22 s | 10 s |
+| `CnaTests --gtest_filter='*Gltf*'` | 21.5 s | 60 s |
+| `ctest -L gltf-conformance` (10 rungs, each its own process) | 32.0 s | 120 s |
+| the same selection under ASan + UBSan with `detect_leaks=0` locally | 105.5 s | 300 s |
+| `EasyGL_Gltf_ContextLoss` (real offscreen Mesa GLES 3.2 context) | 0.15 s | 30 s |
 
-**Under half a minute** for the functional gate and **well under one** including sanitizers, on 75
-assets and 435 tests. The budgets are roughly 10× the measurements, for the same reason the
-performance assertions are: a budget tuned to today's number fails on a loaded CI runner and gets
-raised until it means nothing.
+**Under one minute** for the functional gate and **under three minutes** including the local
+sanitizer selection, on the completed 145-asset corpus and 549 tests. Leak detection alone is off
+in that local figure because this execution environment denies the process inspection it needs;
+ASan and UBSan are active, and the identical CI matrix retains `detect_leaks=1`. The budgets leave
+roughly a 3× margin on the slower native steps, for the same reason the performance assertions are:
+a budget tuned to today's number fails on a loaded CI runner and gets raised until it means
+nothing.
 
 Enforcement is already in place and per rung rather than per suite: every `gltf-conformance` entry
 is registered with `TIMEOUT 300` (`cmake/UnitTests.cmake`), so a rung that hangs fails *as that
-rung* instead of stalling the job. The ladder costs more than the single filtered run (9.8 s versus
-5.9 s) because each rung is a separate process that re-parses the corpus — deliberate, since it is
+rung* instead of stalling the job. The ladder costs more than the single filtered run (32.0 s versus
+21.5 s) because each rung is a separate process that re-parses the corpus — deliberate, since it is
 what makes CTest's own result line name the divergent layer (`GLTF-402`).
 
-**What would change this.** The corpus is 75 assets; `GLTF-399` proposes 135. Cost here is close to
-linear in fixture count -- most of the time is per-fixture parse and decode -- so the same gate at
-135 assets is roughly 11 s functional and 30 s sanitised, still inside these budgets.
+**What changed.** The earlier 75-asset estimate predicted near-linear growth. The completed corpus
+is 145 assets, including four real Draco streams, and remains inside every existing budget without
+raising one. Future rows must remeasure after materially increasing either fixture size or the
+number of subprocess-based tool cases; no further extrapolation is needed for `GLTF-399`.
 
 ## What is not measured here, and why
 
 | Row | Why not |
 |---|---|
-| `GLTF-439` — device-loss behaviour | `DebugSimulateContextLoss()` is an `IGraphicsRenderer` virtual with a no-op default, and `STUB`/`HEADLESS` implement neither loss nor restore. Simulating it here would measure the no-op. |
 | Large-asset budgets (`GLTF ROBUST` §27.2 row 9) | Needs a ≥ 50 MB, ≥ 200 k-triangle, ≥ 150-joint asset, which is `GLTF-405`'s licensed third-party corpus. |
