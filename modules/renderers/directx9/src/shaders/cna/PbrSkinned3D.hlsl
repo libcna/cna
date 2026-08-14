@@ -133,8 +133,8 @@ sampler2D EmissiveMap          : register(s3);
 sampler2D OcclusionMap         : register(s4);
 
 float4 DiffuseColor           : register(c0);
-float3 AmbientColor            : register(c1);
-float3 EmissiveColor           : register(c2);
+float4 AmbientColor            : register(c1); // xyz=color, w=decode base-color texture from sRGB
+float4 EmissiveColor           : register(c2); // xyz=color, w=decode emissive texture from sRGB
 float4 MetallicRoughnessFactor : register(c3); // x=metallic, y=roughness, z=normal scale, w=occlusion strength
 float3 Light0Dir               : register(c4);
 float3 Light0Diffuse           : register(c5);
@@ -144,7 +144,7 @@ float3 Light2Dir               : register(c8);
 float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
-float3 FogColor                : register(c12);
+float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
 
 struct PSInput
 {
@@ -154,6 +154,21 @@ struct PSInput
     float3 WorldPos  : TEXCOORD3;
     float  FogFactor : TEXCOORD4;
 };
+
+float3 CnaSrgbToLinear(float3 color)
+{
+    float3 low = color / 12.92;
+    float3 high = pow((color + 0.055) / 1.055, float3(2.4, 2.4, 2.4));
+    return lerp(low, high, step(float3(0.04045, 0.04045, 0.04045), color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    float3 low = color * 12.92;
+    float exponent = 1.0 / 2.4;
+    float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
+    return lerp(low, high, step(float3(0.0031308, 0.0031308, 0.0031308), color));
+}
 
 // Identical BRDF to Pbr3D.hlsl's own PbrLight() -- see that file's own comment for the citation.
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
@@ -180,7 +195,8 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 {
     float4 baseColorTex = tex2D(Texture, pin.UV);
-    float3 albedo = baseColorTex.rgb * DiffuseColor.rgb;
+    float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
+    float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
 
     float3 N = normalize(pin.Normal);
@@ -206,8 +222,10 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 
     float occlusion = tex2D(OcclusionMap, pin.UV).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
-    float3 ambient = AmbientColor * albedo * occlusion;
-    float3 emissive = EmissiveColor * tex2D(EmissiveMap, pin.UV).rgb;
+    float3 ambient = AmbientColor.xyz * albedo * occlusion;
+    float3 emissiveSample = tex2D(EmissiveMap, pin.UV).rgb;
+    emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
+    float3 emissive = EmissiveColor.xyz * emissiveSample;
 
     float4 outColor = float4(ambient + Lo + emissive, alpha);
 
@@ -216,6 +234,8 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
         : ((outColor.a < AlphaTest.x) ? AlphaTest.z : AlphaTest.w);
     clip(alphaTestResult);
 
-    outColor.rgb = lerp(FogColor, outColor.rgb, pin.FogFactor);
+    float3 fogLinear = lerp(FogColor.xyz, CnaSrgbToLinear(FogColor.xyz), FogColor.w);
+    outColor.rgb = lerp(fogLinear, outColor.rgb, pin.FogFactor);
+    outColor.rgb = lerp(outColor.rgb, CnaLinearToSrgb(outColor.rgb), FogColor.w);
     return outColor;
 }

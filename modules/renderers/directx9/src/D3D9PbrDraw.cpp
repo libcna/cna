@@ -253,8 +253,14 @@ namespace CNA::Internal::Renderers::DirectX9
         }
 
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "DiffuseColor", params.diffuseColor);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AmbientColor", Pad3(params.ambientColor).v);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EmissiveColor", Pad3(params.emissiveColor).v);
+        const float ambientColor[4] = {params.ambientColor[0], params.ambientColor[1],
+                                       params.ambientColor[2],
+                                       params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f};
+        const float emissiveColor[4] = {params.emissiveColor[0], params.emissiveColor[1],
+                                        params.emissiveColor[2],
+                                        params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f};
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AmbientColor", ambientColor);
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EmissiveColor", emissiveColor);
         const float metallicRoughness[4] = {params.pbrMetallicFactor, params.pbrRoughnessFactor,
                                             params.pbrNormalScale, params.pbrOcclusionStrength};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "MetallicRoughnessFactor", metallicRoughness);
@@ -266,7 +272,9 @@ namespace CNA::Internal::Renderers::DirectX9
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "Light2Diffuse", Pad3(params.light2Diffuse).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "EyePosition", Pad3(params.eyePositionWorld).v);
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "AlphaTest", params.alphaTest);
-        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", Pad3(params.fogColor).v);
+        const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
+                                   params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
+        TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap -- matches EnsurePbrProgram()'s own unit assignment and GpuDrawParams'
