@@ -368,7 +368,7 @@ TEST(GltfExtensionRegistry, EveryDeferredMaterialExtensionIsReportedByNameRather
     EXPECT_GE(warnings.size(), deferred.size());
 }
 
-TEST(GltfExtensionRegistry, FactorCarriedFresnelExtensionsReportTheirRemainingResidue)
+TEST(GltfExtensionRegistry, FresnelExtensionsExposeOnlyTheRemainingTextureResidue)
 {
     const LoadedFixture fixture("mat-factor-only-gold");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -384,25 +384,26 @@ TEST(GltfExtensionRegistry, FactorCarriedFresnelExtensionsReportTheirRemainingRe
         return {};
     };
 
-    for (const std::string& extension : {"KHR_materials_ior", "KHR_materials_specular"})
-    {
-        SCOPED_TRACE(extension);
-        const GltfExtensionRecordEXT* record = FindGltfExtensionEXT(extension);
-        ASSERT_NE(nullptr, record);
-        EXPECT_EQ(GltfExtensionSupportEXT::ParsedButIgnored, record->support);
-        EXPECT_FALSE(record->claimed)
-            << "a file requiring the extension must remain refused until a renderer consumes it";
+    const GltfExtensionRecordEXT* ior = FindGltfExtensionEXT("KHR_materials_ior");
+    ASSERT_NE(nullptr, ior);
+    EXPECT_EQ(GltfExtensionSupportEXT::Implemented, ior->support);
+    EXPECT_TRUE(ior->claimed);
+    EXPECT_TRUE(warningFor("KHR_materials_ior").empty())
+        << "a fully consumed IOR factor is still reported as a limitation";
 
-        const std::string warning = warningFor(extension);
-        ASSERT_FALSE(warning.empty()) << "the partially carried extension was silent";
-        EXPECT_NE(std::string::npos, warning.find("L6"))
-            << "the report hides the factor transport that did land: " << warning;
-        EXPECT_NE(std::string::npos, warning.find("no renderer"))
-            << "the report does not name the shader-side residue: " << warning;
-    }
+    const GltfExtensionRecordEXT* specular =
+        FindGltfExtensionEXT("KHR_materials_specular");
+    ASSERT_NE(nullptr, specular);
+    EXPECT_EQ(GltfExtensionSupportEXT::ImplementedWithNamedLimit, specular->support);
+    EXPECT_FALSE(specular->claimed)
+        << "a required use may include either texture input CNA cannot import";
 
-    EXPECT_NE(std::string::npos, warningFor("KHR_materials_specular").find("textures"))
-        << "KHR_materials_specular's two missing texture inputs are not named";
+    const std::string warning = warningFor("KHR_materials_specular");
+    ASSERT_FALSE(warning.empty()) << "the missing specular texture inputs were silent";
+    EXPECT_NE(std::string::npos, warning.find("specularTexture"))
+        << "the scalar specular texture residue is not named: " << warning;
+    EXPECT_NE(std::string::npos, warning.find("specularColorTexture"))
+        << "the colour specular texture residue is not named: " << warning;
 }
 
 TEST(GltfExtensionRegistry, RequiredMeshQuantizationIsClaimedAndValidated)

@@ -215,14 +215,14 @@ validation. The only clamp is the one the extension specification requires in th
 
 **Migration.** None.
 
-**Implemented boundary.** Factor consumption now exists on EasyGL's rigid and skinned PBR
-programs. A `uDielectricFresnel` vec4 carries RGB F0 plus scalar F90; the dielectric endpoint is
-mixed with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint
-is always one. The core defaults are algebraically identical to the former constants. Other PBR
-renderers still need the same consumption, and the extension's two optional textures still need
-additional bindings plus per-map colour-space/UV handling. The registry therefore remains
-`PARSED_BUT_IGNORED`: a required use is not claimed while either cross-renderer factor parity or
-texture inputs are absent.
+**Implemented boundary.** Factor consumption exists on the rigid and skinned programs of all 15
+PBR renderers. Each native ABI carries RGB F0 plus scalar F90; the dielectric endpoint is mixed
+with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the grazing endpoint is
+always one. The core defaults are algebraically identical to the former constants. The repository-
+wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
+test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed because its two
+optional textures still need bindings plus per-map colour-space/UV handling.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
 2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
@@ -231,7 +231,8 @@ multiply. L3, direct L6 and `.cnj` parity compare those values against the fixtu
 `EasyGL_Pbr_FresnelFactors` then uses a black, fully rough analytic scene where normal-incidence
 output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core and `(2,9,43)` for the
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
-`(33,33,33)` versus `(15,15,15)`. Texture and non-EasyGL renderer work stays explicitly open.
+`(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
+shader paths are compiler-verified, and the two specular texture inputs stay explicitly open.
 
 ---
 

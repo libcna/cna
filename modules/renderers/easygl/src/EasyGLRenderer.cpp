@@ -5849,10 +5849,9 @@ CNA_GL_RT_SAMPLE_UV_DECL
     // vertex tangent (re-orthogonalized against the interpolated normal) and glTF's own
     // bitangent-handedness-sign convention (Bitangent = cross(Normal,Tangent.xyz)*Tangent.w),
     // including GLTF-176's per-draw determinant correction under mirrored direction transforms.
-    // Only the EasyGL renderer implements this program (CNB-58 explicitly scopes other renderers to
-    // separate follow-ups, CNB-61) -- PbrEffect::FillGpuDrawParams() still fills GpuDrawParams
-    // completely, so a non-EasyGL renderer simply ignores the new pbr*/texture fields already,
-    // matching this codebase's established "unimplemented field is safely ignored" convention.
+    // This was CNA's first PBR program (CNB-58); the same normalized GpuDrawParams contract and
+    // reference BRDF are now implemented by every PBR-capable renderer, with a cross-renderer
+    // source audit guarding the fields whose native bindings necessarily differ by backend.
     void EasyGLRenderer::EnsurePbrProgram()
     {
         if (prog_pbr_.ready) return;

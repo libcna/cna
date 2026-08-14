@@ -3596,13 +3596,16 @@ namespace CNA::Internal::GltfImport
                  "including effect, vertex layout, textures and samplers, on both direct glTF and "
                  "offline .cnj paths while leaving the default mapping unchanged.",
                  "GLTF-341"},
-                {"KHR_materials_ior", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "The factor reaches PBR effect state and shader-ready dielectric F0 at L6, but "
-                 "no renderer consumes it yet.",
+                {"KHR_materials_ior", GltfExtensionSupportEXT::Implemented, true,
+                 "IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR "
+                 "shaders on all 15 PBR renderers. Analytic factor-only and grazing pixel "
+                 "witnesses cover the core default and authored endpoints.",
                  "GLTF-343"},
-                {"KHR_materials_specular", GltfExtensionSupportEXT::ParsedButIgnored, false,
-                 "Factor and colour reach PBR effect state and dielectric F0/F90 at L6. The two "
-                 "optional textures are not imported and no renderer consumes the factors yet.",
+                {"KHR_materials_specular", GltfExtensionSupportEXT::ImplementedWithNamedLimit,
+                 false,
+                 "Factor and colour are converted to dielectric F0/F90 and consumed by all 15 "
+                 "PBR renderers. The optional specularTexture and specularColorTexture are not "
+                 "imported, so required use remains refused and optional use is warned by name.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,
                  "A second specular lobe -- a large shader change.",

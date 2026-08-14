@@ -275,6 +275,11 @@ TEST(GltfContainerValidation, SupportedExtensionsAreTheOnesCnaActuallyImplements
     // GLTF-341/342 preserve the source table and sparse mappings and expose selection on Model;
     // the direct and offline paths both swap the complete material-dependent part state.
     EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_variants"));
+    // GLTF-343 carries IOR through both effects into F0/F90 consumed by every PBR renderer.
+    EXPECT_TRUE(IsGltfExtensionSupportedEXT("KHR_materials_ior"));
+    // GLTF-344's factor-only state is consumed too, but a required use may contain either of the
+    // two optional texture inputs the importer still cannot represent.
+    EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_specular"));
 
     EXPECT_FALSE(IsGltfExtensionSupportedEXT("KHR_materials_pbrSpecularGlossiness"))
         << "detecting an extension is not implementing it";

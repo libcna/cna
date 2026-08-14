@@ -92,6 +92,40 @@ the paths. `EveryPbrShaderHonorsColorSpaceDeclarations` additionally requires al
 and all three shader equations in every one of the 15 PBR implementations. It requires two copies
 for separately stored rigid/skinned fragments, so one corrected variant cannot hide a stale sibling.
 
+## PBR dielectric Fresnel endpoints (`GLTF-343`, `GLTF-344`)
+
+`GpuDrawParams::pbrDielectricF0` carries the RGB normal-incidence endpoint after applying
+`KHR_materials_ior` and factor-only `KHR_materials_specular`; `pbrDielectricF90` separately carries
+the grazing endpoint after specular strength. Every PBR shader mixes F0 with base-colour albedo by
+metallic, mixes F90 with one by metallic, and evaluates Schlick as `F0 + (F90 - F0) * (1-V·H)^5`.
+Reconstructing F90 as one would make reduced `specularFactor` wrong at grazing angles even when the
+normal-incidence image looked correct.
+
+| Renderer | Native F0/F90 carrier | Focused evidence |
+|---|---|---|
+| Bgfx | `u_dielectricFresnel` | four shader dialects compile; OpenGL rigid/skinned pixel test |
+| Diligent | fourth PBR `float4`, `g_PbrDielectricFresnel` | Vulkan and OpenGL rigid/skinned pixel tests |
+| DirectX 9 | pixel constant `c13` | Microsoft `ps_3_0` compile/disassembly plus WineD3D diagnostic |
+| DirectX 11 / 12 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
+| EasyGL | `uDielectricFresnel` | OPENGLES2/3 analytic rigid/skinned pixel test |
+| LLGL | final `vec4` in the 92-float PBR block | Vulkan and OpenGL registrations plus shader compilation |
+| Magnum | `uDielectricFresnel` | generated GLSL compile and rigid/skinned pixel test |
+| Metal | `PbrUniforms::dielectricFresnel` | MSL source/ABI unit tests on Linux; device execution remains platform-owned |
+| OpenGL 2 / 4 | `uDielectricFresnel` | each backend's rigid/skinned pixel test |
+| SDL GPU | fourth `PbrParams` vec4 | regenerated SPIR-V and rigid/skinned pixel test |
+| Vulkan | `dielectricFresnel` at bytes 240–255 of its 256-byte dynamic PBR UBO | rigid/skinned SPIR-V pixel test |
+| WebGPU | fourth `PbrFactors` vec4 | rigid and skinned WGSL pixel test |
+| Wicked | `cb.pbrDielectricFresnel` | runtime DXC plus rigid/skinned Vulkan pixel test |
+
+The shared six-check oracle uses a fully rough black dielectric. At normal incidence the direct
+light reduces to `F0/(4π)`, yielding byte 11 for core F0 and channel-separated `(2,9,43)` for the
+authored extension factors. A grazing pair holds F0 at `.04` and changes only F90 from 1 to .3,
+yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` separately inventories
+all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
+for separately stored rigid/skinned shader sources. The optional `specularTexture` and
+`specularColorTexture` are not part of this factor-only slice and remain the named `GLTF-344`
+limit.
+
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 
 The effect boundary carries one four-component alpha-test vector. `MASK` maps to

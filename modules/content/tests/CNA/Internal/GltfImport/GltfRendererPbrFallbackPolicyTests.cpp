@@ -610,6 +610,82 @@ namespace
             R"(const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);)"}}},
     }};
 
+    struct RendererPbrFresnelAudit
+    {
+        const char* name;
+        const char* dielectricF0;
+        const char* dielectricF90;
+        const char* schlickEndpoints;
+        std::size_t shaderCopies;
+    };
+
+    // GLTF-343/344: both public draw fields must reach every PBR shader, and Schlick must use the
+    // transported grazing endpoint instead of silently rebuilding core glTF's constant F90=1.
+    // The copy count distinguishes separately stored rigid/skinned fragment programs and LLGL's
+    // GL/Vulkan plus generated-GL sources from backends that share one fragment program.
+    constexpr std::array<RendererPbrFresnelAudit, 15> kPbrFresnelAudits{{
+        {"bgfx",
+         "vec3 F0 = mix(u_dielectricFresnel.xyz, albedo, metallic)",
+         "vec3 F90 = mix(vec3_splat(u_dielectricFresnel.w), vec3_splat(1.0), metallic)",
+         "vec3 F = F0 + (F90 - F0) *", 1},
+        {"diligent",
+         "float3 F0 = lerp(g_PbrDielectricFresnel.xyz, albedo, metallic)",
+         "float3 F90 = lerp(float3(g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F = F0 + (F90 - F0) *", 1},
+        {"directx9",
+         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
+         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F = F0 + (F90 - F0) *", 2},
+        {"directx11",
+         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
+         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F = F0 + (F90 - F0) *", 2},
+        {"directx12",
+         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
+         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F = F0 + (F90 - F0) *", 2},
+        {"easygl",
+         "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic)",
+         "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic)",
+         "vec3 F=F0+(F90-F0)*", 2},
+        {"llgl",
+         "vec3 F0 = mix(dielectricFresnel.xyz, albedo, metallic)",
+         "vec3 F90 = mix(vec3(dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F = F0 + (F90 - F0) *", 3},
+        {"magnum",
+         "vec3 f0 = mix(uDielectricFresnel.xyz, albedo, metallic)",
+         "vec3 f90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 fresnel = f0 + (f90 - f0) *", 1},
+        {"metal",
+         "float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic)",
+         "float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic)",
+         "float3 F = F0 + (F90-F0) *", 1},
+        {"opengl2",
+         "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic)",
+         "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic)",
+         "vec3 F=F0+(F90-F0)*", 1},
+        {"opengl4",
+         "vec3 F0 = mix(uDielectricFresnel.xyz, albedo, metallic)",
+         "vec3 F90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F = F0 + (F90 - F0) *", 1},
+        {"sdl-gpu",
+         "vec3 F0 = mix(pbrp.dielectricFresnel.xyz, albedo, metallic)",
+         "vec3 F90 = mix(vec3(pbrp.dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F = F0 + (F90 - F0) *", 1},
+        {"vulkan",
+         "vec3 F0 = mix(pbr.dielectricFresnel.xyz, albedo, metallic)",
+         "vec3 F90 = mix(vec3(pbr.dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F = F0 + (F90 - F0) *", 2},
+        {"webgpu",
+         "let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic)",
+         "let f90 = mix(vec3f(pf.dielectricFresnel.w), vec3f(1.0), metallic)",
+         "let f = f0 + (f90 - f0) *", 2},
+        {"wicked",
+         "const float3 F0 = lerp(cb.pbrDielectricFresnel.xyz, albedo, metallic)",
+         "const float3 F90 = lerp(float3(cb.pbrDielectricFresnel.w, cb.pbrDielectricFresnel.w, cb.pbrDielectricFresnel.w), float3(1.0f, 1.0f, 1.0f), metallic)",
+         "const float3 F = F0 + (F90 - F0) *", 1},
+    }};
+
     struct RendererPbrColorSpaceAudit
     {
         const char* name;
@@ -984,18 +1060,18 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
         }
     }
 
-    // Rigid and skinned WebGPU pipelines share the same three-vec4 PbrFactors ABI. The old 16-byte
-    // minimum accepted the first vector but caused Dawn to reject both pipelines as the alpha and
-    // colour-transfer vectors expanded the WGSL structure to 48 bytes.
+    // Rigid and skinned WebGPU pipelines share the same four-vec4 PbrFactors ABI. The old 16-byte
+    // minimum accepted the first vector but caused Dawn to reject both pipelines as alpha coverage,
+    // colour transfer and Fresnel endpoints expanded the WGSL structure to 64 bytes.
     const std::string webgpu = RendererSlotText(renderers, "webgpu");
     const std::string pbrFactorsSize = Normalize(
-        "uboEntries[2].buffer.minBindingSize = 12 * sizeof(float)");
+        "uboEntries[2].buffer.minBindingSize = 16 * sizeof(float)");
     std::size_t pbrFactorsSizeCount = 0;
     for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
          at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
         ++pbrFactorsSizeCount;
     EXPECT_EQ(2u, pbrFactorsSizeCount)
-        << "both WebGPU PBR pipeline layouts must expose the complete 48-byte factors block";
+        << "both WebGPU PBR pipeline layouts must expose the complete 64-byte factors block";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsColorSpaceDeclarations)
@@ -1022,6 +1098,30 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsColorSpaceDeclarations)
             const std::string normalized = Normalize(evidence);
             EXPECT_GE(CountOccurrences(source, normalized), audit.shaderCopies)
                 << "missing PBR colour-transfer evidence: " << evidence;
+        }
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoints)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrFresnelAudit& audit : kPbrFresnelAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+
+        EXPECT_NE(std::string::npos, source.find("pbrDielectricF0"))
+            << "the renderer does not upload the transported dielectric F0";
+        EXPECT_NE(std::string::npos, source.find("pbrDielectricF90"))
+            << "the renderer does not upload the transported dielectric F90";
+
+        for (const char* evidence :
+             {audit.dielectricF0, audit.dielectricF90, audit.schlickEndpoints})
+        {
+            EXPECT_GE(CountOccurrences(source, Normalize(evidence)), audit.shaderCopies)
+                << "missing rigid/skinned PBR Fresnel evidence: " << evidence;
         }
     }
 }
