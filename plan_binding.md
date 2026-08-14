@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: PLANNED — no implementation authorized or started (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — Phase B0 completed (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -12,7 +12,7 @@
 
 ## Goal
 
-Expose a deliberately small, documented and testable **C ABI** over canonical CNA C++.
+Expose a documented, testable and eventually complete **C ABI** over canonical CNA C++.
 
 ```text
 C application
@@ -32,6 +32,8 @@ separate `cna-c` repository. It must be able to evolve atomically with the CNA m
 In scope:
 
 - a C-compatible, versioned ABI inside this repository;
+- a documented C-native equivalent for every public CNA C++ type, member, overload, constant and
+  event, using handles, POD values and callbacks where C cannot express the original C++ form;
 - C applications that link the native CNA library and use only public C headers;
 - the C API's own lifecycle, graphics, input, content, audio, data-transfer and callback contracts;
 - C-only compile/link/runtime tests, native adapter tests, documentation, export inspection and
@@ -42,8 +44,12 @@ Out of scope:
 - a language-specific binding, wrapper, package, generator or sample for any language other than C;
 - a separate C engine or a second implementation of CNA;
 - exporting arbitrary C++ classes, Sharp Runtime, STL, renderer-private or platform-private objects;
-- promising a complete one-to-one C projection of every current or future XNA/CNA C++ member;
 - declaring ABI 1.0 before experimental releases are exercised by real C applications.
+
+"Complete" means behavioral and conceptual coverage of the public CNA API, not a false claim that
+C can use C++ inheritance, templates, exceptions, overload resolution or Sharp Runtime object
+layouts directly. Every such member must instead have a documented C mapping or a documented,
+testable native limitation in the C API coverage matrix; omissions are tracked as incomplete.
 
 ## Non-negotiable ABI invariants
 
@@ -106,6 +112,7 @@ docs/c-api/
 ├── CALLBACKS_AND_THREADING.md
 ├── RENDERERS_AND_CAPABILITIES.md
 └── SHARP_RUNTIME_BOUNDARY.md
+└── COVERAGE.md
 ```
 
 The module's exported target and CMake options must be selected during `CBIND-007`; the plan does
@@ -125,7 +132,7 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 | B3 | Runtime/game callback vertical slice | B2 handle/error contracts green |
 | B4 | Minimal usable 2D graphics and input | B3 real C loop green |
 | B5 | Content and expanded input/audio | B4 ownership and renderer matrix green |
-| B6 | Advanced graphics and explicit streams/async | A concrete C use case authorizes each API family |
+| B6 | Full public CNA API coverage | B5 foundation and the coverage inventory are green |
 | B7 | Hardening, packaging and experimental release | B3–B6 selected scope is complete |
 
 ## Planning baseline
@@ -138,12 +145,12 @@ task. Do not start a later broad API phase merely because an earlier skeleton co
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-001 | Freeze the C ABI charter | ⬜ | Add `docs/c-api/README.md` stating scope, experimental status, C++-canonical ownership, no language-specific binding scope, supported platform policy, and the non-negotiable invariants above. |
-| CBIND-002 | Define ABI naming, export and version policy | ⬜ | Specify `CNA_*` types, `cna_*` functions, a platform export macro, ABI semantic-version encoding/query, experimental/stable tiers, deprecation rules, and a no-breaking-change-within-major policy. |
-| CBIND-003 | Define primitive and POD layout policy | ⬜ | Select fixed-width integer, float, boolean, enum and length/count representations; define struct alignment/initialization rules, `struct_size`/`struct_version` use, nullability, overflow conversion and C standard baseline. Do not use `size_t` as an ABI field or parameter unless the owner explicitly accepts its platform dependence. |
-| CBIND-004 | Define handles and ownership model | ⬜ | Specify the opaque-handle encoding, slot/generation validation, runtime type checks, retain/release policy, borrowed-callback validity, parent/child lifetime, thread-affine release policy and teardown behavior. Include stale/double-release outcomes. |
-| CBIND-005 | Define error, UTF-8, buffer and collection contracts | ⬜ | Specify complete `CNA_Result` and error-category sets; thread-local/error-object retrieval and invalidation; UTF-8 validation and embedded-NUL policy; caller-buffer query/copy convention; pointer-plus-count bulk transfers; capacity/written semantics; and overflow/error behavior. |
-| CBIND-006 | Define callback, threading and re-entrancy contract | ⬜ | Specify game callback table shape, callback result propagation, callback context lifetime, registration/unregistration, allowed re-entry, main/graphics/audio thread requirements, cross-thread calls and shutdown order. |
+| CBIND-001 | Freeze the C ABI charter | ✅ | `docs/c-api/README.md` states scope, experimental status, C++-canonical ownership, complete-public-API coverage requirement, no language-specific binding scope, supported platform policy, and the non-negotiable invariants above. |
+| CBIND-002 | Define ABI naming, export and version policy | ✅ | `docs/c-api/ABI_VERSIONING.md` specifies `CNA_*` types, `cna_*` functions, a platform export macro, ABI semantic-version encoding/query, experimental/stable tiers, deprecation rules, and a no-breaking-change-within-major policy. |
+| CBIND-003 | Define primitive and POD layout policy | ✅ | `docs/c-api/ABI_VERSIONING.md` and `docs/c-api/STRINGS_AND_BUFFERS.md` select fixed-width integer, float, boolean, enum and length/count representations; define struct alignment/initialization rules, `struct_size`/`struct_version` use, nullability, overflow conversion and C17 baseline. They prohibit `size_t` in ABI fields/parameters. |
+| CBIND-004 | Define handles and ownership model | ✅ | `docs/c-api/HANDLES.md` and `docs/c-api/OWNERSHIP.md` specify opaque-handle encoding, slot/generation validation, runtime type checks, retain/release policy, borrowed-callback validity, parent/child lifetime, thread-affine release policy and teardown behavior. |
+| CBIND-005 | Define error, UTF-8, buffer and collection contracts | ✅ | `docs/c-api/ERRORS.md` and `docs/c-api/STRINGS_AND_BUFFERS.md` specify `CNA_Result`, error categories, per-thread error retrieval, UTF-8 validation, caller-buffer query/copy semantics, pointer/count bulk transfers, capacity/written semantics and overflow behavior. |
+| CBIND-006 | Define callback, threading and re-entrancy contract | ✅ | `docs/c-api/CALLBACKS_AND_THREADING.md` specifies callback result propagation, context lifetime, registration/unregistration, permitted re-entry, thread requirements, cross-thread calls and shutdown order. |
 
 **B0 gate:** the six documents form one reviewed contract. No public C header or exported function is
 added before their decisions are consistent with each other and with current CNA renderer behavior.
@@ -216,19 +223,21 @@ they do not export C++ collections or attempt to mirror C++ overload sets mechan
 | CBIND-031 | Add pure-C content/audio regression programs | ⬜ | Verify UTF-8 paths, predictable load failures, handle ownership, audio shutdown and unavailable-device behavior using fixtures that do not rely on a future language binding. |
 | CBIND-032 | Extend capability reporting | ⬜ | Report feature/platform availability through stable C APIs so a C application can degrade gracefully instead of hard-coding build or renderer assumptions. |
 
-## Phase B6 — advanced API families, only when justified
+## Phase B6 — complete public CNA API coverage
 
-No row in this phase is a promise to export the entire CNA surface. Each begins with a small
-design review that confirms it has a C use case, a clear resource/ownership model, a renderer
-support policy and a pure-C test strategy.
+This phase is the commitment to complete coverage of the public CNA surface. Each API family still
+needs a C-native design review: complete coverage never permits a raw C++ ABI leak or an untested
+mechanical wrapper.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-033 | Add render targets, sprite fonts and graphics state as needed | ⬜ | Expose compact handles/POD descriptors and capability/error behavior; verify resource ownership and renderer-specific refusal paths from C. |
-| CBIND-034 | Add 3D resources and draw submission as needed | ⬜ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. |
-| CBIND-035 | Add stream callbacks only for a demonstrated native-reads-foreign-data need | ⬜ | Define read/seek/length/close callbacks, context ownership, callback threading, cancellation and error conversion. Never expose `System::IO::Stream` or a C++ stream pointer. |
-| CBIND-036 | Add neutral asynchronous-operation APIs only for an inherently asynchronous CNA feature | ⬜ | Define operation handles, poll/cancel/wait/callback semantics, result retrieval and shutdown. Never expose `Task`, `std::future` or Sharp Runtime task objects. |
-| CBIND-037 | Add collection/enumeration APIs only as count/copy or stable-handle operations | ⬜ | Prohibit public container layouts. Test mutation during enumeration, insufficient capacity, ownership and thread rules. |
+| CBIND-033 | Inventory the complete public CNA surface | ⬜ | Generate and review `docs/c-api/COVERAGE.md` from every installed/public header, excluding only explicitly internal paths. Each source symbol receives a C mapping, tests and status; no untracked public symbol is treated as covered. |
+| CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ⬜ | Expose compact handles/POD descriptors and capability/error behavior for every public member in this family; verify resource ownership and renderer-specific refusal paths from C. |
+| CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ⬜ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. |
+| CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
+| CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
+| CBIND-043 | Maintain a machine-checked coverage gate | ⬜ | A CI checker compares the public-header inventory to `COVERAGE.md` and fails if a public type/member/constant/event has no mapping/status. New C++ public API cannot land without its C API row and tests in the same change. |
+| CBIND-044 | Close the public API coverage matrix | ⬜ | Every row is implemented and tested, or carries an owner-approved native limitation with a callable C API that reports it. No unspecified omission remains. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -272,7 +281,7 @@ Before adding an API family or function, answer and document all of the followin
 9. Does it expose an internal Sharp Runtime, STL, C++ or renderer-private concept? If so, redesign it.
 10. Is the ABI extension additive within its current ABI major? If not, stop for an explicit versioning decision.
 
-## Completion criteria for the initial C ABI milestone
+## Completion criteria for the C ABI foundation
 
 The initial milestone is complete only when all selected B0–B4 rows are ✅ and the following
 statement is demonstrably true:
@@ -282,12 +291,19 @@ statement is demonstrably true:
 > read a documented input snapshot, retrieve a UTF-8 error on failure, and release every owned
 > resource without leaking or using a C++/Sharp Runtime ABI type.
 
-This is an **experimental C ABI milestone**, not a promise of XNA-wide C coverage, ABI 1.0, or a
-future language-specific binding.
+This is an **experimental C ABI foundation**, not ABI 1.0 or a future language-specific binding.
+
+## Completion criteria for full public CNA API coverage
+
+The C API is not complete until `CBIND-044` is ✅ and the machine-checked coverage matrix proves
+that every public CNA API symbol has a documented C-native mapping and the required C-only tests.
+The full surface must preserve the behavior of the canonical C++ implementation (and FNA/XNA where
+applicable), including constants, overload-specific behavior, errors, lifetime and renderer
+capability limits. A raw C++ type, exception, container, callback/delegate, stream, task or Sharp
+Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-All tasks `CBIND-001` through `CBIND-042` are ⬜ **not started**. This planning task added no C
-headers, C/C++ source, CMake target, generated code, language-specific binding, package, test
-binary or ABI commitment. The next action requires the owner's explicit authorization to begin
-Phase B0.
+`CBIND-000` through `CBIND-006` are ✅. `CBIND-007` through `CBIND-044` are ⬜ **not started**.
+Phase B0 added the contract only: no C headers, C/C++ source, CMake target, generated code,
+language-specific binding, package, test binary or released ABI exists yet. Phase B1 is next.
