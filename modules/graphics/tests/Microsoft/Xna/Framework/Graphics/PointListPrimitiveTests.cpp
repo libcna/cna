@@ -15,13 +15,14 @@
 // what separates real point topology from a triangle-list approximation covering thousands of
 // pixels.
 //
-// Renderer scope. Bgfx, EasyGL and WebGPU render points and support backbuffer readback, so they
-// carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but implements no
+// Renderer scope. Bgfx, EasyGL, Vulkan and WebGPU render points and support backbuffer readback, so
+// they carry the permanent pixel coverage here. SDL_GPU maps PointListEXT natively but implements no
 // backbuffer readback, so it is covered by a separate practical control. Software explicitly
 // rejects every non-TriangleList topology (its documented v1 boundary) and is asserted as a
-// rejection, never as approximate geometry. Vulkan, D3D9, D3D11 and D3D12 still route PointListEXT
-// through their triangle-list default -- an independent defect recorded as REMED-GFX-114 -- so they
-// are deliberately not yet in the pixel guard below.
+// rejection, never as approximate geometry. D3D9, D3D11 and D3D12 still route PointListEXT through
+// their triangle-list default -- an independent defect recorded as REMED-GFX-114 -- so they are
+// deliberately not yet in the pixel guard below. Vulkan joined this matrix with plan_gltf.md
+// GLTF-393.
 
 #include <algorithm>
 #include <array>
@@ -37,6 +38,7 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
@@ -50,6 +52,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -62,11 +65,15 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTangentTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 #ifdef CNA_RENDERER_BGFX
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
+#endif
+#ifdef CNA_RENDERER_VULKAN
+#include "CNA/Internal/Renderers/Vulkan/VulkanRenderer.hpp"
 #endif
 
 using CNA::GraphicsCapability;
@@ -75,6 +82,7 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::BlendState;
 using Microsoft::Xna::Framework::Graphics::BufferUsage;
@@ -88,6 +96,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::IndexElementSize;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::RasterizerState;
 using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
 using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
@@ -100,6 +109,7 @@ using Microsoft::Xna::Framework::Graphics::VertexElement;
 using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
 using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTangentTexture;
 using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
@@ -340,6 +350,20 @@ namespace
                 GTEST_SKIP() << "Renderer explicitly does not support 3D rendering";
         }
 
+        void TearDown() override
+        {
+#ifdef CNA_RENDERER_VULKAN
+            auto* renderer =
+                dynamic_cast<CNA::Internal::Renderers::Vulkan::VulkanRenderer*>(
+                    &device.GetRenderer());
+            ASSERT_NE(nullptr, renderer);
+            const auto& messages = renderer->GetValidationMessagesEXT();
+            EXPECT_TRUE(messages.empty())
+                << "Vulkan point topology emitted a validation warning/error: "
+                << (messages.empty() ? std::string{} : messages.front());
+#endif
+        }
+
         void RequirePointRendering()
         {
             if (!device.SupportsCapability(GraphicsCapability::ThreeD))
@@ -372,7 +396,7 @@ namespace
 }
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU)
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 
 // The canonical depthless non-indexed case: four points at distinct pixel centres, four distinct
 // colours, one framebuffer snapshot. A triangle-list approximation of this draw fills the whole
@@ -411,6 +435,50 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListRendersEveryRequestedPoint)
     ExpectPointRendered(pixels, plan[3], "non-indexed point 3");
     ExpectPointCoverageBudget(pixels, Color::Black, 4, "non-indexed point list");
 }
+
+#ifdef CNA_RENDERER_VULKAN
+// glTF's generated POINTS witness uses the stride-48 PBR layout. The generic point tests above
+// exercise BasicEffect; this companion makes Vulkan create the actual PBR point pipeline too, so
+// the validation-message assertion in TearDown guards pbr3d.vert.glsl's required PointSize write.
+TEST_F(PointListPrimitiveTest, VulkanPbrPointUsesTheNativePointPipeline)
+{
+    RequirePointRendering();
+
+    const int width = BackbufferWidth();
+    const int height = BackbufferHeight();
+    const PointSpec point{width / 2, height / 2, Color::Red, 0.5f};
+    const VertexPositionColor positioned = MakePoint(width, height, point);
+    const VertexPositionNormalTangentTexture vertex(
+        positioned.Position,
+        Vector3(0.0f, 0.0f, 1.0f),
+        Vector4(1.0f, 0.0f, 0.0f, 1.0f),
+        Vector2::Zero);
+
+    VertexBuffer vertexBuffer(
+        device,
+        VertexPositionNormalTangentTexture::getVertexDeclarationStatic(),
+        1,
+        BufferUsage::None);
+    vertexBuffer.SetData(&vertex, 1);
+
+    PbrEffect effect(device);
+    effect.setDiffuseColorProperty(Vector3(1.0f, 0.0f, 0.0f));
+    effect.setAmbientLightColorProperty(Vector3::One);
+    effect.setEncodeOutputToSrgbEXTProperty(false);
+    effect.getDirectionalLight0Property().setEnabledProperty(false);
+    effect.getDirectionalLight1Property().setEnabledProperty(false);
+    effect.getDirectionalLight2Property().setEnabledProperty(false);
+
+    device.Clear(Color::Black);
+    device.SetVertexBuffer(&vertexBuffer);
+    effect.Apply();
+    device.DrawPrimitives(PrimitiveType::PointListEXT, 0, 1);
+
+    const FrameSnapshot pixels = CaptureBackbuffer(device);
+    ExpectPointRendered(pixels, point, "Vulkan PBR point");
+    ExpectPointCoverageBudget(pixels, Color::Black, 1, "Vulkan PBR point");
+}
+#endif
 
 // The exact case REMED-GFX-106 discovered: one indexed point must produce one point.
 TEST_F(PointListPrimitiveTest, IndexedPointListRendersEveryRequestedPoint)
@@ -1173,7 +1241,7 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 #endif
 
 #if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU)
+    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //

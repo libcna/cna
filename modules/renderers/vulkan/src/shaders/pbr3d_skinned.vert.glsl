@@ -76,6 +76,7 @@ void main() {
     // REMED-GFX-011: matches skinned3d.vert.glsl, which does flip (the comment previously here
     // claimed it never does). Renderer-wide convention -- see pbr3d.vert.glsl.
     gl_Position.y = -gl_Position.y;
+    gl_PointSize = 1.0;
     mat3 skinNormalMat = mat3(skinMat);
     // REMED-GFX-006 (Variant B): the normal takes the inverse-transpose of World, not raw World.
     // The previous comment justified raw mat3(pbr.world) as deliberate fidelity to

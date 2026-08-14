@@ -246,6 +246,7 @@ namespace CNA::Internal::Renderers::Vulkan
         case PrimitiveType::TriangleStrip: return n + 2;
         case PrimitiveType::LineList:      return n * 2;
         case PrimitiveType::LineStrip:     return n + 1;
+        case PrimitiveType::PointListEXT:  return n;
         }
         return 0;
     }
@@ -257,6 +258,7 @@ namespace CNA::Internal::Renderers::Vulkan
         case PrimitiveType::TriangleStrip: return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
         case PrimitiveType::LineList:      return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         case PrimitiveType::LineStrip:     return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+        case PrimitiveType::PointListEXT:  return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
         }
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     }

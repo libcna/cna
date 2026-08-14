@@ -27,5 +27,6 @@ void main() {
     vec4 pos = pc.mvp * vec4(inPos, 1.0);
     pos.y = -pos.y;                      // Vulkan NDC Y is inverted vs OpenGL
     gl_Position = pos;
+    gl_PointSize = 1.0;
     fragColor = (pc.vertexColorEnabled > 0.5) ? inColor * pc.diffuseColor : pc.diffuseColor;
 }

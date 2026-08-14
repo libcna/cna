@@ -61,6 +61,7 @@ void main() {
     // not a per-family choice -- omitting it renders PbrEffect vertically mirrored relative to
     // every other effect in the same frame.
     gl_Position.y = -gl_Position.y;
+    gl_PointSize = 1.0;
     // World's inverse-transpose upper-left 3x3 (mirrors lit_textured3d.vert.glsl's Task 898 fix
     // and EnvironmentMapEffect's own already-correct env_map3d.vert.glsl pattern).
     mat3 normalMatrix = transpose(inverse(mat3(pbr.world)));

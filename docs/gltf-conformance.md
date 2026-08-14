@@ -908,6 +908,13 @@ without testing the corpus.
 it has no 3D pipeline, and a golden captured from a renderer that draws nothing would be a golden
 bug of exactly the kind `docs/gltf-center-collapse-verdict.md` §5 warns about.
 
+The glTF-specific capability table in `docs/graphics-renderer-feature-matrix.md` (`GLTF-393`) keeps
+that distinction explicit for STUB, HEADLESS, OPENGLES3 and Vulkan across 32-bit indices,
+point/line topology, MRT and the PBR sRGB contract. Its point-topology audit found a real Vulkan
+gap: `PointListEXT` fell through to triangle topology with a zero vertex count. The fixed renderer
+now passes the shared 15-case framebuffer suite, including 32-bit indices and the actual PBR point
+pipeline, with no Vulkan validation messages.
+
 The layers below it are unaffected: L1–L6 are renderer-independent by construction (they read the
 file, the importer's output and the effect's own parameter block), which is what `GLTF-017` asserts
 directly. When the corpus image matrix lands, `cmake/UnitTests.cmake` gains a

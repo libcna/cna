@@ -56,6 +56,35 @@ exists purely as the smallest possible complete `IGraphicsRenderer` implementati
 reference and a dependency-free placeholder, not a pixel-parity or diagnostic tool. See
 `docs/stub-renderer.md` for its current capability boundary.
 
+## glTF campaign companion matrix (`GLTF-393`)
+
+The glTF differential campaign has a deliberately narrower executable renderer set than the
+project-wide tables below: STUB establishes importer independence, HEADLESS observes the native
+draw boundary without rasterising, and OPENGLES3 plus Vulkan provide independent real graphics APIs
+and framebuffer evidence. This table records the four renderer-sensitive features named by
+`plan_gltf.md`; it does not turn a boundary-only result into pixel support.
+
+Status here is specific: ✅ means a real native draw or framebuffer assertion; ◇ means the complete
+value/topology reaches an observable non-rasterising boundary; ❌ means the renderer explicitly has
+no such route. The general feature tables remain authoritative for renderers outside this campaign,
+while `gltf-renderer-pbr-fallbacks.md` carries the separate 15-PBR-renderer shader inventory.
+
+| Renderer | 32-bit index draw | `POINTS` | line modes | MRT | glTF PBR sRGB contract | Evidence boundary |
+|---|---:|---:|---:|---:|---:|---|
+| STUB | ❌ | ❌ | ❌ | ❌ | ◇ | Imports and L1–L6 effect capture run, but `SupportsCapability(ThreeD)` is false and no draw is submitted. |
+| HEADLESS | ◇ | ◇ | ◇ | ◇ | ◇ | `HeadlessIndexBufferRenderer`, topology/MRT trace and `GpuDrawParams` are observable; no pixel is produced. |
+| OPENGLES3 / EasyGL | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; `PointListPrimitiveTest`, its interleaved line control, EasyGL MRT tests and `EasyGL_Pbr_SrgbTransfer`. |
+| Vulkan | ✅ | ✅ | ✅ | ✅ | ✅ | Full glTF selection 520/520; 15/15 `PointListPrimitiveTest` cases include a 32-bit indexed point and the real PBR point pipeline, assert zero validation messages, and sit beside Vulkan MRT and `Vulkan_Pbr_SrgbTransfer` tests. |
+
+MRT is recorded because a conformance/viewer harness may render diagnostic outputs to several
+attachments; core glTF itself has one material colour result and does not require MRT. Likewise,
+“sRGB” here means the glTF semantic contract — decode only base-colour/emissive samples, keep
+normal/MR/occlusion and factors linear, mix fog in linear space, then optionally encode the final
+RGB. It is not a claim that every native texture or swap-chain format is sRGB. The ordinary
+`GltfRendererPbrFallbackPolicy.EveryPbrShaderHonorsColorSpaceDeclarations` source audit prevents the
+other eleven PBR implementations from silently diverging even when this machine cannot execute
+them.
+
 The **Wicked Engine** renderer (`CNA_GRAPHICS_RENDERER=WICKED`, tracked in `../plan_wicked.md`) is
 **not** a column here for the same reason WebGPU is not: its feature surface is a first baseline,
 and — more importantly — nothing in it has been executed on real hardware yet, so it has no cell
