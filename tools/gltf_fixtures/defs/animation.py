@@ -574,6 +574,8 @@ def anim_cubicspline() -> Fixture:
     })
 
     l4 = world_positions(b, {mesh: list(TRIANGLE_POSITIONS)})
+    maximum_error_time = (3.0 - math.sqrt(3.0)) / 6.0
+    maximum_error_fraction = math.sqrt(3.0) / 18.0
     l4["animation"] = {
         "animationCount": 1,
         "clipNames": ["Ease"],
@@ -594,6 +596,18 @@ def anim_cubicspline() -> Fixture:
             "linearWouldBe": [2.5, 0.0, 0.0],
             "note": "The midpoint is where smoothstep and lerp agree, so it cannot tell them "
                     "apart. h01(0.25) = -2(0.015625) + 3(0.0625) = 0.15625.",
+        },
+        "resamplingError": {
+            "quarterPointAbsolute": 0.9375,
+            "quarterPointPercentOfValueSpan": 9.375,
+            "maximumTimes": [maximum_error_time, 1.0 - maximum_error_time],
+            "maximumAbsoluteOnThisCurve": 10.0 * maximum_error_fraction,
+            "maximumPercentOfValueSpan": 100.0 * maximum_error_fraction,
+            "universalPercentBound": None,
+            "decision": "Accept the current piecewise-linear playback approximation and report "
+                        "that resampling happened. These numbers bound only this zero-tangent "
+                        "smoothstep fixture; unconstrained authored CUBICSPLINE tangents can "
+                        "overshoot the endpoint span, so no universal percentage bound exists.",
         },
     }
     return Fixture(

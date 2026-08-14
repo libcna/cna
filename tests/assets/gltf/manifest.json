@@ -2850,8 +2850,8 @@
     },
     {
       "path": "anim-cubicspline.expected.json",
-      "bytes": 9915,
-      "sha256": "e4cfbb7ceb9757212ee01dccc1f60813951e0b5c62ad5183934ebd5a3f875897"
+      "bytes": 10589,
+      "sha256": "2830925f520cc56cac8d3c687f49f676c0536d8747272a5bf5fe1c32482d3cfe"
     },
     {
       "path": "anim-cubicspline.glb",

@@ -544,6 +544,18 @@ both components — every source key exactly, and an interpolation between them.
 channel drives is filled from the node's **own rest pose**, not from identity, or a node authored
 with a rotation and animated only in translation would snap upright the moment the clip started.
 
+For `CUBICSPLINE`, that bake is exact only at the union keys: `AnimationClipEXT` and `.cnj` keep
+complete T/R/S values but not the source interpolation mode or tangents, so playback uses lerp/slerp
+between the baked keys. `anim-cubicspline` measures the loss rather than calling it negligible. Its
+zero-tangent translation is `10(3t^2-2t^3)`; the baked keys at `0`, `.5`, `1` replay as `10t`. At
+`t=.25` the source is `1.5625`, playback is `2.5`, and the absolute error is `0.9375` — **9.375% of
+the 10-unit endpoint span**. The maximum on that fixture is `10sqrt(3)/18 = 0.962250449`, or
+**9.622504%**, at `t=(3-sqrt(3))/6` and its reflection. This is deliberately accepted as the current
+compatibility approximation and `resampledTrackCount` exposes when it can occur. It is not a global
+error bound: arbitrary authored tangents can overshoot the endpoint span, so no finite percentage of
+that span bounds every glTF spline. Preserving the exact curve would require an additive clip/`.cnj`
+schema plus lazy runtime evaluation, as the morph path already carries separately.
+
 **Sampler input must be ascending, and the two ways of breaking that get different answers.** §3.11
 requires strictly increasing input, and every reader here relies on it. A **decreasing** step is
 refused with a named error: the curve doubles back, so a time inside the reversed span has two

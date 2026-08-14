@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-114 / GLTF-252 (Phase 5): the scene-graph <-> ModelBone structural contract.
+// plan_gltf.md GLTF-114 / GLTF-252 / GLTF-297 (Phase 5): the scene-graph <-> ModelBone contract.
 //
 // GLTF-113/GLTF-114 gave the imported model a real ModelBone per glTF scene node, and everything
 // downstream leans on one invariant that was, until this file existed, only implicit:
@@ -894,6 +894,68 @@ TEST(GltfRigidAnimation, PosingTheModelRotatesTheAnimatedNodesBone)
             model.getBonesProperty()[bone]->getTransformProperty());
     EXPECT_NEAR(0.70710678f, halfway.X, 1e-4f);
     EXPECT_NEAR(0.70710678f, halfway.Y, 1e-4f);
+}
+
+TEST(GltfRigidAnimation, CubicSplineUnionBakeHasAMeasuredPlaybackError)
+{
+    // GLTF-297. Extraction evaluates CUBICSPLINE exactly at the union of a node's T/R/S channel
+    // times, but AnimationClipEXT carries neither interpolation modes nor tangents. Playback then
+    // linearly interpolates those baked values. anim-cubicspline has zero tangents, hence the
+    // source X curve is 10 * smoothstep(t); a scale key at t=.5 forces baked translation keys at
+    // 0, .5 and 1. Those three points are collinear, so runtime playback is 10*t. The midpoint
+    // cannot expose the loss; the quarter point and the analytic maximum do.
+    using Microsoft::Xna::Framework::Graphics::ApplyClipToBonesEXT;
+    using Microsoft::Xna::Framework::Graphics::ModelAnimationsEXT;
+
+    const LoadedFixture fixture("anim-cubicspline");
+    ASSERT_TRUE(fixture.Ok()) << fixture.Error();
+    const CNA::Internal::JsonValue& animation = Path(fixture.Expected(), "l4.animation");
+    const CNA::Internal::JsonValue& quarter = Member(animation, "quarterPoint");
+    const CNA::Internal::JsonValue& error = Member(animation, "resamplingError");
+    const double quarterTime = NumberOr(quarter, "time", -1.0);
+    const std::vector<double> hermite = Numbers(Member(quarter, "hermite"));
+    const std::vector<double> bakedLinear = Numbers(Member(quarter, "linearWouldBe"));
+    ASSERT_EQ(3u, hermite.size());
+    ASSERT_EQ(3u, bakedLinear.size());
+
+    GraphicsDevice gd;
+    ContentManager cm(nullptr, CorpusDirectory().string());
+    cm.setGraphicsDevice(gd);
+    Model model = cm.Load<Model>("anim-cubicspline");
+    auto* animations = dynamic_cast<ModelAnimationsEXT*>(model.getTagProperty());
+    ASSERT_NE(nullptr, animations);
+    const auto& clip = animations->Clips.at("Ease");
+    ASSERT_EQ(1u, clip.Tracks.size());
+    const int bone = clip.Tracks[0].BoneIndex;
+    ASSERT_GE(bone, 0);
+    ASSERT_LT(bone, model.getBonesProperty().getCountProperty());
+
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(quarterTime));
+    const double actualQuarter = model.getBonesProperty()[bone]->getTransformProperty().M41;
+    EXPECT_NEAR(bakedLinear[0], actualQuarter, 1e-6)
+        << "runtime unexpectedly preserved the source spline; revisit GLTF-297's decision";
+    const double quarterError = std::abs(actualQuarter - hermite[0]);
+    EXPECT_NEAR(NumberOr(error, "quarterPointAbsolute", -1.0), quarterError, 1e-6);
+    EXPECT_NEAR(NumberOr(error, "quarterPointPercentOfValueSpan", -1.0),
+                100.0 * quarterError / 10.0, 1e-6);
+
+    // For e(t) = 10 * (t - 3t^2 + 2t^3), e'(t)=0 first at (3-sqrt(3))/6 and
+    // |e|max = 10*sqrt(3)/18. This is a bound for THIS fixture, not for arbitrary tangents.
+    const double maximumTime = (3.0 - std::sqrt(3.0)) / 6.0;
+    const double sourceAtMaximum =
+        10.0 * (3.0 * maximumTime * maximumTime
+                - 2.0 * maximumTime * maximumTime * maximumTime);
+    ApplyClipToBonesEXT(model, clip, System::TimeSpan::FromSeconds(maximumTime));
+    const double actualAtMaximum = model.getBonesProperty()[bone]->getTransformProperty().M41;
+    EXPECT_NEAR(10.0 * maximumTime, actualAtMaximum, 1e-6);
+    const double maximumError = std::abs(actualAtMaximum - sourceAtMaximum);
+    EXPECT_NEAR(NumberOr(error, "maximumAbsoluteOnThisCurve", -1.0), maximumError, 1e-6);
+    EXPECT_NEAR(NumberOr(error, "maximumPercentOfValueSpan", -1.0),
+                100.0 * maximumError / 10.0, 1e-5)
+        << "the runtime matrix stores floats while the manifest carries the analytic double";
+    EXPECT_EQ(CNA::Internal::JsonType::Null, Member(error, "universalPercentBound").type)
+        << "arbitrary authored tangents can overshoot their endpoint span, so no finite global "
+           "percentage bound may be claimed";
 }
 
 TEST(GltfRigidAnimation, APaletteClipIsRefusedRatherThanPosingTheWrongBones)

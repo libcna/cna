@@ -411,6 +411,18 @@
           0.0
         ],
         "note": "The midpoint is where smoothstep and lerp agree, so it cannot tell them apart. h01(0.25) = -2(0.015625) + 3(0.0625) = 0.15625."
+      },
+      "resamplingError": {
+        "quarterPointAbsolute": 0.9375,
+        "quarterPointPercentOfValueSpan": 9.375,
+        "maximumTimes": [
+          0.21132486540518713,
+          0.7886751345948129
+        ],
+        "maximumAbsoluteOnThisCurve": 0.9622504486493761,
+        "maximumPercentOfValueSpan": 9.622504486493762,
+        "universalPercentBound": null,
+        "decision": "Accept the current piecewise-linear playback approximation and report that resampling happened. These numbers bound only this zero-tangent smoothstep fixture; unconstrained authored CUBICSPLINE tangents can overshoot the endpoint span, so no universal percentage bound exists."
       }
     }
   },
