@@ -8,6 +8,7 @@
 
 #include "Microsoft/Xna/Framework/BoundingSphere.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GltfImportReportEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshCollection.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "System/Object.hpp"
@@ -290,6 +291,24 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setSkinsEXTProperty(std::vector<ModelSkinEXT> value);
 
         /**
+         * @brief Gets structured diagnostics from this model's glTF import.
+         *
+         * @note CNAEXT — not part of the XNA 4.0 API (`GLTF-034`). The direct glTF reader and
+         * `gltf_to_cnj`/Model `.cnj` path populate the same carrier. Other content paths return an
+         * empty report, so reading this property never requires testing how the Model was built.
+         *
+         * @return The import report owned by this model.
+         */
+        CNAEXT [[nodiscard]] const GltfImportReportEXT&
+        getGltfImportReportEXTProperty() const;
+
+        /**
+         * @brief Replaces this model's glTF import report.
+         * @param value The complete replacement report.
+         */
+        CNAEXT void setGltfImportReportEXTProperty(GltfImportReportEXT value);
+
+        /**
          * @brief Gets one sphere containing every mesh at its current parent-bone placement.
          *
          * @note CNAEXT — not part of the XNA 4.0 API (plan_gltf.md `GLTF-128`). XNA exposes a
@@ -383,6 +402,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         std::vector<ModelCameraEXT> cameras_;
         std::vector<ModelSkinEXT> skins_;
+        GltfImportReportEXT gltfImportReport_;
         std::shared_ptr<CNA::Internal::Graphics::ModelMaterialVariantsEXT> materialVariants_;
         ModelBoneCollection bones_;
         ModelMeshCollection meshes_;

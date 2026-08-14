@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GltfImportReportEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
@@ -913,11 +914,9 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief What one file's node graph turned into (plan_gltf.md `GLTF-145`).
      *
-     * @note CNAEXT — not part of the XNA 4.0 API, and deliberately **internal**: `GLTF-034`'s
-     * programmatically reachable import report is deferred by the `GLTF-025` gate
-     * (`docs/gltf-api-change-review.md` §2.3) for want of a consumer, so this is the same
-     * information collected where it is computed and logged, rather than a second public surface
-     * invented ahead of a caller for it.
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal, computation-oriented form feeds
+     * the public @c GltfImportReportEXT attached to @c Model; keeping it separate avoids coupling
+     * cgltf-specific traversal state to the stable graphics API.
      *
      * Every field answers a question that is otherwise only answerable by re-reading the file: how
      * much of it arrived, how deep it was, and whether its meshes are shared.
@@ -984,8 +983,8 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief What one primitive's morph targets turned into (plan_gltf.md `GLTF-291`).
      *
-     * @note CNAEXT — not part of the XNA 4.0 API, and internal for the same reason
-     * @ref NodeGraphReportEXT is: `GLTF-034`'s public report is deferred by the `GLTF-025` gate.
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
+     * @c GltfImportReportEXT.
      *
      * A morph target may carry any subset of `POSITION`, `NORMAL` and `TANGENT` deltas (§3.7.2.2),
      * and a target missing one is not an error — it simply does not move that stream. But a
@@ -1185,8 +1184,8 @@ namespace CNA::Internal::GltfImport
     /**
      * @brief What one file's animations turned into (plan_gltf.md `GLTF-315`).
      *
-     * @note CNAEXT — not part of the XNA 4.0 API, and internal for the same reason
-     * @ref NodeGraphReportEXT is: `GLTF-034`'s public report is deferred by the `GLTF-025` gate.
+     * @note CNAEXT — not part of the XNA 4.0 API. This internal form feeds the public aggregate
+     * @c GltfImportReportEXT.
      *
      * Every field is a place where an animation arrives **incompletely**, and each is invisible in
      * the result on its own. A channel whose target is outside the default scene, and a channel on
@@ -1221,6 +1220,65 @@ namespace CNA::Internal::GltfImport
         /** @brief The longest clip's duration, in seconds. */
         double longestClipDuration = 0.0;
     };
+
+    /** @brief Copies scene summary counts and node-level losses into a public import report. */
+    void AppendGltfNodeGraphReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const NodeGraphReportEXT& source);
+
+    /** @brief Makes advisory validation warnings reachable through the public import report. */
+    void AppendGltfValidationWarningsEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const std::vector<std::string>& warnings);
+
+    /** @brief Appends losses caused by one mesh placement (for example mirrored winding). */
+    void AppendGltfInstanceReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MeshInstanceOut& instance, const std::string& subject);
+
+    /**
+     * @brief Appends every import outcome carried by one extracted primitive.
+     * @param countPrimitive False for a material-variant state of an already-counted primitive.
+     */
+    void AppendGltfMeshReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MeshOut& mesh, const std::string& subject, bool countPrimitive = true);
+
+    /** @brief Appends morph-target outcomes that require the resolved default weights. */
+    void AppendGltfMorphReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const MorphReportEXT& source, const std::string& subject, bool normalMapped);
+
+    /** @brief Appends dropped and approximated punctual-light outcomes. */
+    void AppendGltfLightReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const LightReportEXT& source, std::size_t importedLightCount);
+
+    /** @brief Appends skipped, empty and resampled animation outcomes. */
+    void AppendGltfAnimationReportEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const AnimationReportEXT& source);
+
+    /**
+     * @brief Reports scene-node animation tracks that a skinned Model cannot retain in its Tag.
+     * @param destination The public report to append to.
+     * @param clipName The source animation/clip name.
+     * @param droppedTrackCount Scene-node tracks not already carried through a skin palette.
+     */
+    void AppendGltfRigidAnimationDropEXT(
+        Microsoft::Xna::Framework::Graphics::GltfImportReportEXT& destination,
+        const std::string& clipName, std::size_t droppedTrackCount);
+
+    /**
+     * @brief Counts scene-node tracks that are not already carried by any supplied skin palette.
+     * @param clip A clip whose track indices address @p scene.
+     * @param scene The scene-node index space used by the clip.
+     * @param skins Skin palettes retained by the Model being reported.
+     * @return Tracks whose target is invalid or absent from every supplied skin.
+     */
+    std::size_t CountGltfRigidAnimationDropsEXT(
+        const ClipOut& clip, const SceneGraphOut& scene,
+        const std::vector<const SkeletonResult*>& skins);
 
     /**
      * @brief Extracts every animation in a glTF file as a resampled, per-bone keyframe clip.

@@ -57,6 +57,8 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <cmath>
+#include <limits>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -1363,6 +1365,142 @@ namespace Microsoft::Xna::Framework::Content
             return result;
         }
 
+        Graphics::GltfImportReportEXT ParseGltfImportReportEXT(const std::string& json)
+        {
+            using CNA::Internal::JsonType;
+            using CNA::Internal::JsonValue;
+
+            Graphics::GltfImportReportEXT result;
+            const JsonValue document = CNA::Internal::ParseJson(json);
+            const JsonValue* report = document.FindMember("gltfImportReport");
+            if (report == nullptr) { return result; }
+            if (report->type != JsonType::Object)
+            {
+                throw ContentLoadException(
+                    "Model .cnj field 'gltfImportReport' must be an object.");
+            }
+
+            const auto readCount = [&](const JsonValue& object, const char* field) -> std::size_t
+            {
+                const JsonValue* value = object.FindMember(field);
+                if (value == nullptr) { return 0; }
+                if (value->type != JsonType::Number || !std::isfinite(value->numberValue) ||
+                    value->numberValue < 0.0 || std::floor(value->numberValue) != value->numberValue ||
+                    static_cast<long double>(value->numberValue) >
+                        static_cast<long double>(std::numeric_limits<std::size_t>::max()))
+                {
+                    throw ContentLoadException(
+                        "Model .cnj gltfImportReport field '" + std::string(field) +
+                        "' must be a non-negative integer.");
+                }
+                return static_cast<std::size_t>(value->numberValue);
+            };
+            const auto readString = [&](const JsonValue& object, const char* field) -> std::string
+            {
+                const JsonValue* value = object.FindMember(field);
+                if (value == nullptr) { return {}; }
+                if (value->type != JsonType::String)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj gltfImportReport field '" + std::string(field) +
+                        "' must be a string.");
+                }
+                return value->stringValue;
+            };
+
+            result.NodeCount = readCount(*report, "nodeCount");
+            result.MeshInstanceCount = readCount(*report, "meshInstanceCount");
+            result.DistinctMeshCount = readCount(*report, "distinctMeshCount");
+            result.SharedMeshCount = readCount(*report, "sharedMeshCount");
+            result.MaxNodeDepth = readCount(*report, "maxNodeDepth");
+            result.CameraNodeCount = readCount(*report, "cameraNodeCount");
+            result.LightNodeCount = readCount(*report, "lightNodeCount");
+            result.ImportedLightCount = readCount(*report, "importedLightCount");
+            result.PrimitiveCount = readCount(*report, "primitiveCount");
+            result.SkinCount = readCount(*report, "skinCount");
+            result.AnimationCount = readCount(*report, "animationCount");
+            result.ClipCount = readCount(*report, "clipCount");
+
+            const JsonValue* diagnostics = report->FindMember("diagnostics");
+            if (diagnostics == nullptr) { return result; }
+            if (diagnostics->type != JsonType::Array)
+            {
+                throw ContentLoadException(
+                    "Model .cnj gltfImportReport field 'diagnostics' must be an array.");
+            }
+            for (const JsonValue& value : diagnostics->arrayValue)
+            {
+                if (value.type != JsonType::Object)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj gltfImportReport diagnostics must be objects.");
+                }
+                Graphics::GltfImportDiagnosticEXT diagnostic;
+                diagnostic.Code = readString(value, "code");
+                diagnostic.Subject = readString(value, "subject");
+                diagnostic.Message = readString(value, "message");
+                diagnostic.Count = readCount(value, "count");
+
+                if (const JsonValue* magnitude = value.FindMember("worstMagnitude"))
+                {
+                    if (magnitude->type != JsonType::Number ||
+                        !std::isfinite(magnitude->numberValue) || magnitude->numberValue < 0.0)
+                    {
+                        throw ContentLoadException(
+                            "Model .cnj gltfImportReport field 'worstMagnitude' must be numeric.");
+                    }
+                    diagnostic.WorstMagnitude = magnitude->numberValue;
+                }
+
+                const std::string severity = readString(value, "severity");
+                if (severity == "Information")
+                    diagnostic.Severity = Graphics::GltfImportDiagnosticSeverityEXT::Information;
+                else if (severity == "Warning")
+                    diagnostic.Severity = Graphics::GltfImportDiagnosticSeverityEXT::Warning;
+                else
+                    throw ContentLoadException(
+                        "Model .cnj gltfImportReport has unknown diagnostic severity '" +
+                        severity + "'.");
+
+                const std::string kind = readString(value, "kind");
+                if (kind == "Information")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::Information;
+                else if (kind == "GeneratedData")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::GeneratedData;
+                else if (kind == "InvalidSourceData")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::InvalidSourceData;
+                else if (kind == "Approximation")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::Approximation;
+                else if (kind == "DroppedData")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::DroppedData;
+                else if (kind == "UnsupportedFeature")
+                    diagnostic.Kind = Graphics::GltfImportDiagnosticKindEXT::UnsupportedFeature;
+                else
+                    throw ContentLoadException(
+                        "Model .cnj gltfImportReport has unknown diagnostic kind '" + kind + "'.");
+
+                if (const JsonValue* details = value.FindMember("details"))
+                {
+                    if (details->type != JsonType::Array)
+                    {
+                        throw ContentLoadException(
+                            "Model .cnj gltfImportReport field 'details' must be an array.");
+                    }
+                    for (const JsonValue& detail : details->arrayValue)
+                    {
+                        if (detail.type != JsonType::String)
+                        {
+                            throw ContentLoadException(
+                                "Model .cnj gltfImportReport details must be strings.");
+                        }
+                        diagnostic.Details.push_back(detail.stringValue);
+                    }
+                }
+                result.Diagnostics.push_back(std::move(diagnostic));
+            }
+            return result;
+        }
+
         // Task 941: shared by SkinnedModelTypeReader (.skinnedmodel.json's "animations" section)
         // and ModelTypeReader (.model.json's own new "animations" section, added for real-Model
         // skeletal animation, Phase 77) -- both use the exact same .clip.bin binary format, so
@@ -2137,6 +2275,7 @@ namespace Microsoft::Xna::Framework::Content
                     std::to_string(static_cast<int>(parseResult)) + ").");
             }
             struct DataGuard { cgltf_data* d; ~DataGuard() { cgltf_free(d); } } guard{data};
+            Graphics::GltfImportReportEXT importReport;
 
             // plan_gltf.md GLTF-032/GLTF-198: refuse a file that names something outside its own
             // directory, BEFORE cgltf_load_buffers -- that call resolves external buffer URIs
@@ -2182,6 +2321,7 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     CNA::Logger::Warn(warning);
                 }
+                AppendGltfValidationWarningsEXT(importReport, validationWarnings);
             }
 
             // plan_gltf.md GLTF-113/GLTF-114 (Phase 5): the default scene's node graph, flattened
@@ -2195,11 +2335,10 @@ namespace Microsoft::Xna::Framework::Content
                 throw ContentLoadException("glTF file '" + path + "' contains no mesh instances to import.");
             }
 
-            // plan_gltf.md GLTF-145: what the node graph turned into, at a glance. Logged rather
-            // than exposed, because GLTF-034's programmatically reachable report is deferred by
-            // the GLTF-025 gate for want of a consumer -- but "how much of this file arrived"
-            // should not require re-reading the file with a second tool.
+            // plan_gltf.md GLTF-145: retain the human-readable debug summary as well as copying
+            // the same facts into Model's programmatically reachable GLTF-034 report.
             const NodeGraphReportEXT graphReport = BuildNodeGraphReportEXT(sceneGraph, groups);
+            AppendGltfNodeGraphReportEXT(importReport, graphReport);
             CNA::Logger::Debug(
                 "glTF file '" + path + "': " + std::to_string(graphReport.nodeCount) +
                 " node(s), depth " + std::to_string(graphReport.maxDepth) + ", " +
@@ -2234,12 +2373,16 @@ namespace Microsoft::Xna::Framework::Content
             const bool hasSkin = std::any_of(
                 groups.begin(), groups.end(),
                 [](const MeshGroup& group) { return group.skin != nullptr; });
+            importReport.SkinCount = static_cast<std::size_t>(std::count_if(
+                groups.begin(), groups.end(),
+                [](const MeshGroup& group) { return group.skin != nullptr; }));
 
             // CNB-97 (Phase 14H): KHR_lights_punctual, approximated as up to 3 directional lights
             // (see ExtractPunctualLightsEXT's own doc comment) -- applied to every mesh part's
             // effect below via ApplyPunctualLightsEXT, for whichever ones implement IEffectLights.
             LightReportEXT lightReport;
             const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
+            AppendGltfLightReportEXT(importReport, lightReport, punctualLights.size());
             // plan_gltf.md GLTF-242: how many lights actually reached the effects, always -- not
             // only when something was dropped. `PbrEffect` defaults to zero ambient with every
             // light disabled, which is correct XNA behaviour and renders **black**; a file that
@@ -2375,6 +2518,7 @@ namespace Microsoft::Xna::Framework::Content
                     AnimationReportEXT animReport;
                     const std::vector<ClipOut> clips =
                         ExtractClips(data, skeleton, 1.0f, warnings, &animReport);
+                    AppendGltfAnimationReportEXT(importReport, animReport);
                     // These were gathered and then dropped on the floor before GLTF-315: a
                     // channel a skinned import could not place said nothing at all on this path,
                     // which is the same silence D6 was made of.
@@ -2415,6 +2559,33 @@ namespace Microsoft::Xna::Framework::Content
                     }
                     groupSkinningData[gi] = skinningDataPtr;
                 }
+
+                // Scene-node clips cannot share Model::Tag with SkinningData. Joint tracks are
+                // already retained by one of the palettes above; report only the remaining rigid
+                // tracks, rather than falsely calling the scene-space copy of a joint track lost.
+                std::vector<std::string> ignoredSceneWarnings;
+                const std::vector<ClipOut> sceneNodeClips = ExtractSceneNodeClips(
+                    data, sceneGraph, 1.0f, ignoredSceneWarnings);
+                std::vector<const SkeletonResult*> retainedSkeletons;
+                retainedSkeletons.reserve(groupSkeletons.size());
+                for (const std::optional<SkeletonResult>& candidate : groupSkeletons)
+                {
+                    if (candidate.has_value()) { retainedSkeletons.push_back(&*candidate); }
+                }
+                for (const ClipOut& clip : sceneNodeClips)
+                {
+                    const std::size_t droppedTrackCount = CountGltfRigidAnimationDropsEXT(
+                        clip, sceneGraph, retainedSkeletons);
+                    if (droppedTrackCount == 0) { continue; }
+                    AppendGltfRigidAnimationDropEXT(
+                        importReport, clip.name, droppedTrackCount);
+                    CNA::Logger::Warn(
+                        "Clip '" + clip.name + "' has " +
+                        std::to_string(droppedTrackCount) +
+                        " scene-node track(s) not carried by this Model's skins, but Model::Tag "
+                        "already contains SkinningData, so those rigid tracks were dropped "
+                        "(GLTF-295).");
+                }
             }
             else
             {
@@ -2425,6 +2596,7 @@ namespace Microsoft::Xna::Framework::Content
                 AnimationReportEXT animReport;
                 const std::vector<ClipOut> rigidClips =
                     ExtractSceneNodeClips(data, sceneGraph, 1.0f, clipWarnings, &animReport);
+                AppendGltfAnimationReportEXT(importReport, animReport);
                 for (const std::string& warning : clipWarnings) { CNA::Logger::Warn(warning); }
                 LogAnimationReport(path, animReport);
                 if (!rigidClips.empty())
@@ -2687,6 +2859,10 @@ namespace Microsoft::Xna::Framework::Content
             {
                 const MeshInstanceOut& instance = *entry.instance;
                 const cgltf_mesh* mesh = instance.mesh;
+                const std::string instanceSubject =
+                    instance.node != nullptr && instance.node->name != nullptr
+                        ? instance.node->name : "<unnamed>";
+                AppendGltfInstanceReportEXT(importReport, instance, instanceSubject);
                 // plan_gltf.md GLTF-116/GLTF-117: a mirroring placement. §3.7.4 asks for the
                 // winding to be reversed at draw time; CNA carries the fact rather than applying
                 // it, for the same reason GLTF-231 carries `doubleSided` -- the cull mode is
@@ -2728,6 +2904,7 @@ namespace Microsoft::Xna::Framework::Content
                         ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                         : ("mesh" + std::to_string(meshCounter));
                     MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, entry.skeleton, 1.0f);
+                    AppendGltfMeshReportEXT(importReport, meshOut, partName);
                     std::vector<std::uint8_t> boundsVertexBytes = meshOut.vertexBytes;
 
                     const int numVertices = meshOut.stride > 0
@@ -3085,6 +3262,8 @@ namespace Microsoft::Xna::Framework::Content
                         // buffer that silently did not change.
                         const MorphReportEXT morphReport =
                             BuildMorphReportEXT(meshOut, morph->Weights);
+                        AppendGltfMorphReportEXT(
+                            importReport, morphReport, meshOut.name, meshOut.usePbr);
                         CNA::Logger::Debug(
                             "glTF file '" + path + "': primitive '" + meshOut.name + "' has " +
                             std::to_string(morphReport.targetCount) + " morph target(s); " +
@@ -3172,6 +3351,10 @@ namespace Microsoft::Xna::Framework::Content
                         for (const MaterialVariantOutEXT& variant : variants)
                         {
                             const MeshOut& variantMesh = variant.mesh;
+                            AppendGltfMeshReportEXT(
+                                importReport, variantMesh,
+                                partName + " variant " + std::to_string(variant.variantIndex),
+                                false);
                             std::vector<std::uint8_t> variantVertexBytes =
                                 variantMesh.vertexBytes;
                             System::Object* variantTag = nullptr;
@@ -3420,6 +3603,7 @@ namespace Microsoft::Xna::Framework::Content
                 }
                 model.setCamerasEXTProperty(std::move(cameras));
             }
+            model.setGltfImportReportEXTProperty(std::move(importReport));
             return model;
         }
 
@@ -3448,6 +3632,8 @@ namespace Microsoft::Xna::Framework::Content
                 }
 
                 const std::string json = ReadTextFile(path);
+                Graphics::GltfImportReportEXT gltfImportReport =
+                    ParseGltfImportReportEXT(json);
 
                 const CNA::Internal::CnjEnvelope envelope = CNA::Internal::ParseCnjEnvelope(json);
                 // plan_gltf.md GLTF-129: Model is the one type with a version 2 -- it adds the
@@ -4432,6 +4618,7 @@ namespace Microsoft::Xna::Framework::Content
                 {
                     Graphics::ApplyBindPoseBoneTransformsEXT(model, *res->skinningData);
                 }
+                model.setGltfImportReportEXTProperty(std::move(gltfImportReport));
                 return model;
             }
         };

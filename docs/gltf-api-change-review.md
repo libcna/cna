@@ -767,12 +767,40 @@ else in this file and has no consumer until texture work begins.
 
 ### 2.3 Import diagnostics — `GLTF-034`
 
-Deferred. An additive CNAEXT container with no current consumer. Worth noting as *partially
-pre-empted*: `GLTF-024`'s ignored-extension reporting already emits warnings through `CNA::Logger`
-on the runtime path and the tool's own warning list offline, so the eventual `GltfImportReportEXT`
-should collect what already exists rather than introduce a second channel. Every report added since
-— `NodeGraphReportEXT`, `SkinReportEXT`, `MorphReportEXT`, `LightReportEXT`, `AnimationReportEXT` —
-is deliberately **internal** for this reason, and is the material that container would gather.
+**Approved and landed after the original deferral.** The owner explicitly approved adding the
+surface once `cna-gltf-viewer` became its first consumer (`GLTF-431`). It gathers the existing
+internal reports rather than introducing a competing diagnostics channel; the logger and converter
+warnings remain useful human-readable output, while the model now carries the same outcomes in a
+machine-readable form.
+
+**Shape.** `Model::getGltfImportReportEXTProperty()` returns a const
+`GltfImportReportEXT&`. The report contains source-scene summary counts and an ordered vector of
+`GltfImportDiagnosticEXT`. Each diagnostic has a stable lower-case `Code`, severity, kind, subject,
+occurrence `Count`, optional `WorstMagnitude` and `Details`, and a human-readable `Message` whose
+wording is not API. Kinds separate exact information, generated data, invalid source data,
+approximations, dropped data and unsupported optional features. Convenience queries count warning
+entries, dropped occurrences and approximated occurrences; callers that need policy decisions use
+the stable code and kind rather than parsing messages.
+
+**Both load paths.** Direct `.gltf`/`.glb` import builds the report while it builds the model.
+`gltf_to_cnj` writes the same object as the optional top-level `gltfImportReport`, and the Model
+`.cnj` reader restores it. Old `.cnj` files and non-glTF models receive the all-zero empty default.
+Absolute source paths are stripped from serialized validation messages so generated content remains
+relocatable and reproducible.
+
+**Compatibility.** Additive CNAEXT source surface. Adding the value member changes `Model`'s CNA
+binary layout, as other campaign-added Model properties do; CNA does not promise a stable C++ ABI
+across library versions. The optional `.cnj` member needs no envelope version bump because old
+readers ignore unknown object members and the current reader treats absence as the default.
+
+**Migration.** None. Existing logging and converter output remain. Consumers may begin with
+`AnythingLost()` and display `Message`, then use `Code` when suppressing or promoting a particular
+diagnostic.
+
+**Test.** `GltfImportReport` asserts defaults, severity/kind/count semantics and every loss named by
+`GLTF-035`. `GltfToCnjToolTest.StructuredImportDiagnosticsSurviveBothLoadPaths` runs the real
+converter and compares reports loaded directly and through `.cnj` for unsupported animation paths,
+excess lights and ignored extensions.
 
 The imported-**camera** list was deferred here alongside it and has since been approved and landed;
 see §1.11.

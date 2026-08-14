@@ -2803,3 +2803,63 @@ TEST(GltfToCnjToolTest, TheOfflineAndRuntimePathsProduceIdenticalAnimationClipsF
     }
     EXPECT_GT(compared, 0u) << "every anim fixture was skipped -- the sweep proved nothing";
 }
+
+// plan_gltf.md GLTF-034/GLTF-035: diagnostics are part of the loaded Model, not merely stdout.
+// Exercise one loss from each major source (animation, light budget and extension validation)
+// through both real entry points and prove the converter's JSON reader preserves the same count.
+TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
+{
+    const std::filesystem::path corpus = std::filesystem::path("tests") / "assets" / "gltf";
+    if (!std::filesystem::exists(corpus)) { GTEST_SKIP() << "the fixture corpus is not present"; }
+
+    GraphicsDevice gd;
+    if (!gd.SupportsCapability(CNA::GraphicsCapability::ThreeD))
+        GTEST_SKIP() << "renderer has no 3D pipeline (GraphicsCapability::ThreeD is false)";
+
+    struct Case { const char* fixture; const char* code; std::size_t minimumCount; };
+    const Case cases[] = {
+        {"anim-weights-path", "animation-paths-unsupported", 1u},
+        {"lights-over-budget", "lights-dropped", 2u},
+        {"mat-unimplemented-extensions", "ignored-extension", 3u},
+    };
+
+    const auto countCode = [](const GltfImportReportEXT& report, const std::string& code)
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : report.Diagnostics)
+        {
+            if (diagnostic.Code == code) { count += diagnostic.Count; }
+        }
+        return count;
+    };
+
+    for (const Case& testCase : cases)
+    {
+        SCOPED_TRACE(testCase.fixture);
+        ScratchDir contentRoot;
+        ASSERT_EQ(0, RunGltfToCnjTool(
+                         (corpus / (std::string(testCase.fixture) + ".gltf")).string(),
+                         contentRoot.path().string(), "reported"));
+
+        ContentManager directContent(nullptr, corpus.string());
+        directContent.setGraphicsDevice(gd);
+        Model direct = directContent.Load<Model>(testCase.fixture);
+
+        ContentManager offlineContent(nullptr, contentRoot.path().string());
+        offlineContent.setGraphicsDevice(gd);
+        Model offline = offlineContent.Load<Model>("reported");
+
+        const GltfImportReportEXT& directReport = direct.getGltfImportReportEXTProperty();
+        const GltfImportReportEXT& offlineReport = offline.getGltfImportReportEXTProperty();
+        EXPECT_TRUE(directReport.AnythingLost());
+        EXPECT_TRUE(offlineReport.AnythingLost());
+        EXPECT_GE(countCode(directReport, testCase.code), testCase.minimumCount);
+        EXPECT_EQ(countCode(directReport, testCase.code),
+                  countCode(offlineReport, testCase.code));
+        EXPECT_EQ(directReport.NodeCount, offlineReport.NodeCount);
+        EXPECT_EQ(directReport.MeshInstanceCount, offlineReport.MeshInstanceCount);
+        EXPECT_EQ(directReport.DistinctMeshCount, offlineReport.DistinctMeshCount);
+        EXPECT_EQ(directReport.PrimitiveCount, offlineReport.PrimitiveCount);
+        EXPECT_EQ(directReport.ImportedLightCount, offlineReport.ImportedLightCount);
+    }
+}

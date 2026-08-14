@@ -26,10 +26,13 @@ a promise.
   `…EXT`/report identifier this file cites that the header no longer declares. A renamed field
   therefore breaks the document that promised it, rather than leaving a dead name behind.
 
-The reports themselves are **internal** (`CNA::Internal::GltfImport`), not public API. That is
-`GLTF-034`'s deferral, recorded in `docs/gltf-api-change-review.md` §2.3: the structured
-`GltfImportReportEXT` a game could query does not exist yet, and until it does these fields are
-reachable from the importer and from the CLI's stdout diagnostics, not from `Model`.
+The fine-grained source reports remain internal (`CNA::Internal::GltfImport`) because they carry
+cgltf-oriented intermediate state. They now feed the public
+`Model::getGltfImportReportEXTProperty()` on both direct `.gltf`/`.glb` loads and Model `.cnj`
+documents emitted by `gltf_to_cnj` (`GLTF-034`/`GLTF-035`). Each public diagnostic has a stable
+`Code`; its `Message` is display text and may change. The public kinds distinguish exact
+information, generated data, invalid source data, approximations, dropped data and unsupported
+optional features. Old `.cnj` files and non-glTF models return an empty report.
 
 ---
 

@@ -509,6 +509,33 @@ pre-campaign behaviour for that asset; the *file* is still version 2 whenever it
 | `"lights"` | no imported lights | `KHR_lights_punctual`, at most three directional. |
 | `"animations"` | none | each entry names a standalone `AnimationClip` `.cnj`. |
 
+### Structured glTF import report (optional root object)
+
+`GLTF-034` subsequently added an optional top-level `"gltfImportReport"` object. Current
+`gltf_to_cnj` output always writes it; documents produced before that task omit it and load with an
+empty report. This does not raise `cnjVersion`: old readers already ignore unknown root members,
+and no existing member changed meaning.
+
+The summary members are non-negative integers: `nodeCount`, `meshInstanceCount`,
+`distinctMeshCount`, `sharedMeshCount`, `maxNodeDepth`, `cameraNodeCount`, `lightNodeCount`,
+`importedLightCount`, `primitiveCount`, `skinCount`, `animationCount` and `clipCount`.
+`diagnostics` is an ordered array whose entries contain:
+
+| Member | Meaning |
+|---|---|
+| `code` | Stable lower-case machine-readable identifier. |
+| `severity` | `Information` or `Warning`. |
+| `kind` | `Information`, `GeneratedData`, `InvalidSourceData`, `Approximation`, `DroppedData` or `UnsupportedFeature`. |
+| `subject` | Affected primitive, node, clip or extension; may be empty. |
+| `count` | Non-negative occurrence count represented by this entry. |
+| `worstMagnitude` | Finite measured maximum, or zero when the code defines no magnitude. |
+| `details` | Array of affected map, attribute or extension names. |
+| `message` | Display text; consumers must not treat its wording as stable API. |
+
+The reader rejects wrong types, negative/fractional/non-finite/overflowing counts, non-finite
+magnitudes and unknown enum names. Serialized validation messages omit the converter machine's
+absolute input path, keeping generated content relocatable and reproducible.
+
 ### Morph-sidecar compatibility
 
 The `_morph.bin` prefix remains the CNB-82 layout: target count, then each target's position deltas

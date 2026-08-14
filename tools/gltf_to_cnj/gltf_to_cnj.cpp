@@ -52,6 +52,10 @@
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT;
+using Microsoft::Xna::Framework::Graphics::GltfImportReportEXT;
 using namespace CNA::Internal::GltfImport;
 
 namespace
@@ -212,6 +216,62 @@ namespace
         return out;
     }
 
+    const char* DiagnosticSeverityNameEXT(GltfImportDiagnosticSeverityEXT severity)
+    {
+        return severity == GltfImportDiagnosticSeverityEXT::Warning ? "Warning" : "Information";
+    }
+
+    const char* DiagnosticKindNameEXT(GltfImportDiagnosticKindEXT kind)
+    {
+        switch (kind)
+        {
+            case GltfImportDiagnosticKindEXT::Information:        return "Information";
+            case GltfImportDiagnosticKindEXT::GeneratedData:      return "GeneratedData";
+            case GltfImportDiagnosticKindEXT::InvalidSourceData:  return "InvalidSourceData";
+            case GltfImportDiagnosticKindEXT::Approximation:      return "Approximation";
+            case GltfImportDiagnosticKindEXT::DroppedData:        return "DroppedData";
+            case GltfImportDiagnosticKindEXT::UnsupportedFeature: return "UnsupportedFeature";
+        }
+        return "Information";
+    }
+
+    void WriteGltfImportReportEXT(std::ostringstream& json, const GltfImportReportEXT& report)
+    {
+        json << "  \"gltfImportReport\": {\n"
+             << "    \"nodeCount\": " << report.NodeCount
+             << ", \"meshInstanceCount\": " << report.MeshInstanceCount
+             << ", \"distinctMeshCount\": " << report.DistinctMeshCount
+             << ", \"sharedMeshCount\": " << report.SharedMeshCount
+             << ", \"maxNodeDepth\": " << report.MaxNodeDepth << ",\n"
+             << "    \"cameraNodeCount\": " << report.CameraNodeCount
+             << ", \"lightNodeCount\": " << report.LightNodeCount
+             << ", \"importedLightCount\": " << report.ImportedLightCount
+             << ", \"primitiveCount\": " << report.PrimitiveCount
+             << ", \"skinCount\": " << report.SkinCount
+             << ", \"animationCount\": " << report.AnimationCount
+             << ", \"clipCount\": " << report.ClipCount << ",\n"
+             << "    \"diagnostics\": [\n";
+        for (std::size_t i = 0; i < report.Diagnostics.size(); ++i)
+        {
+            const GltfImportDiagnosticEXT& diagnostic = report.Diagnostics[i];
+            json << "      { \"code\": \"" << JsonEscape(diagnostic.Code)
+                 << "\", \"severity\": \"" << DiagnosticSeverityNameEXT(diagnostic.Severity)
+                 << "\", \"kind\": \"" << DiagnosticKindNameEXT(diagnostic.Kind)
+                 << "\", \"subject\": \"" << JsonEscape(diagnostic.Subject)
+                 << "\", \"count\": " << diagnostic.Count
+                 << ", \"worstMagnitude\": " << diagnostic.WorstMagnitude
+                 << ", \"details\": [";
+            for (std::size_t d = 0; d < diagnostic.Details.size(); ++d)
+            {
+                json << "\"" << JsonEscape(diagnostic.Details[d]) << "\""
+                     << (d + 1 < diagnostic.Details.size() ? ", " : "");
+            }
+            json << "], \"message\": \"" << JsonEscape(diagnostic.Message) << "\" }"
+                 << (i + 1 < report.Diagnostics.size() ? "," : "") << "\n";
+        }
+        json << "    ]\n  },\n";
+    }
+
     // Strips characters unsafe/awkward for a filename component (spaces, path separators, etc.)
     // down to alnum/underscore/hyphen, for names sourced from arbitrary glTF author-supplied
     // strings (skin/material names) rather than this tool's own fixed field names.
@@ -248,9 +308,15 @@ namespace
                        const std::filesystem::path& gltfDir, const std::filesystem::path& outputDir,
                        std::unordered_map<const cgltf_image*, std::string>& writtenTextures,
                        std::unordered_map<const cgltf_image*, std::string>& remappedOcclusionTextures,
-                       float unitScale, std::vector<std::string>& warnings)
+                       float unitScale, const std::vector<std::string>& validationWarnings,
+                       std::vector<std::string>& warnings)
     {
         const bool hasSkin = group.skin != nullptr;
+        GltfImportReportEXT importReport;
+        AppendGltfValidationWarningsEXT(importReport, validationWarnings);
+        AppendGltfNodeGraphReportEXT(
+            importReport, BuildNodeGraphReportEXT(sceneGraph, std::vector<MeshGroup>{group}));
+        importReport.SkinCount = hasSkin ? 1u : 0u;
         SkeletonResult skeleton;
         if (hasSkin)
         {
@@ -317,12 +383,17 @@ namespace
         {
             const cgltf_mesh* mesh = instance.mesh;
             ++placementIndex;
+            AppendGltfInstanceReportEXT(
+                importReport, instance,
+                instance.node != nullptr && instance.node->name != nullptr
+                    ? instance.node->name : "<unnamed>");
             for (cgltf_size p = 0; p < mesh->primitives_count; ++p)
             {
                 const std::string partName = mesh->name
                     ? (std::string(mesh->name) + (mesh->primitives_count > 1 ? "_" + std::to_string(p) : ""))
                     : ("mesh" + std::to_string(meshCounter));
                 MeshOut meshOut = ExtractMesh(data, mesh->primitives[p], partName, hasSkin ? &skeleton : nullptr, unitScale);
+                AppendGltfMeshReportEXT(importReport, meshOut, partName);
 
                 // Morph target CLI/.cnj serialization: write the position/normal deltas to a
                 // binary sidecar (BuildMorphBytes) plus the default weights and (if present) the
@@ -341,6 +412,9 @@ namespace
                     // two instances with distinct default poses round-trip as the same pose.
                     morphWeights = GetMeshDefaultWeights(mesh, targetCount, instance.node);
                     morphWeightTrack = ExtractMorphWeightTrack(data, mesh, targetCount);
+                    AppendGltfMorphReportEXT(
+                        importReport, BuildMorphReportEXT(meshOut, morphWeights),
+                        partName, meshOut.usePbr);
                 }
 
                 // Per-map UV set selection: PbrEffect/SkinnedPbrEffect sample every map from a
@@ -594,6 +668,9 @@ namespace
                          hasSkin ? &skeleton : nullptr, unitScale))
                 {
                     const MeshOut& variantMesh = variant.mesh;
+                    AppendGltfMeshReportEXT(
+                        importReport, variantMesh,
+                        partName + " variant " + std::to_string(variant.variantIndex), false);
                     MeshEntry variantEntry;
                     variantEntry.name = partName;
                     variantEntry.variantOf = defaultEntryIndex;
@@ -742,10 +819,13 @@ namespace
 
         if (hasSkin)
         {
-            for (const ClipOut& clip : ExtractClips(data, skeleton, unitScale, warnings))
+            AnimationReportEXT animationReport;
+            for (const ClipOut& clip :
+                 ExtractClips(data, skeleton, unitScale, warnings, &animationReport))
             {
                 clipEntries.push_back({clip.name, writeClip(clip)});
             }
+            AppendGltfAnimationReportEXT(importReport, animationReport);
         }
 
         // plan_gltf.md GLTF-293: rigid (non-joint) node animation. Before this, a channel targeting
@@ -761,7 +841,13 @@ namespace
         //
         // GLTF-295: extraction is unconditional. A file with no skin at all still reaches this
         // loop, which is what the task's own acceptance asks for.
-        for (const ClipOut& clip : ExtractSceneNodeClips(data, sceneGraph, unitScale, warnings))
+        AnimationReportEXT sceneAnimationReport;
+        const std::vector<ClipOut> sceneNodeClips =
+            ExtractSceneNodeClips(
+                data, sceneGraph, unitScale, warnings, &sceneAnimationReport);
+        if (hasSkin) { sceneAnimationReport.clipCount = 0; }
+        AppendGltfAnimationReportEXT(importReport, sceneAnimationReport);
+        for (const ClipOut& clip : sceneNodeClips)
         {
             // Model::Tag holds one object, and a skinned model already uses it for SkinningData.
             // A file with both a skin and rigid node animation therefore has nowhere to put these
@@ -769,10 +855,14 @@ namespace
             // is the property D6 was really about.
             if (hasSkin)
             {
+                const std::size_t droppedTrackCount = CountGltfRigidAnimationDropsEXT(
+                    clip, sceneGraph, {&skeleton});
+                if (droppedTrackCount == 0) { continue; }
                 warnings.push_back(
-                    "Clip '" + clip.name + "' animates " + std::to_string(clip.tracks.size()) +
-                    " scene node(s), but this model is skinned and its Tag already carries the "
-                    "skeleton, so the clip is not written (GLTF-295).");
+                    "Clip '" + clip.name + "' has " + std::to_string(droppedTrackCount) +
+                    " scene-node track(s) not carried by this model's skin, but its Tag already "
+                    "contains SkinningData, so those rigid tracks are not written (GLTF-295).");
+                AppendGltfRigidAnimationDropEXT(importReport, clip.name, droppedTrackCount);
                 continue;
             }
             clipEntries.push_back({clip.name, writeClip(clip)});
@@ -821,6 +911,7 @@ namespace
         // lights are emitted into every mesh group's own .cnj output.
         LightReportEXT lightReport;
         const std::vector<LightOut> punctualLights = ExtractPunctualLightsEXT(data, lightReport);
+        AppendGltfLightReportEXT(importReport, lightReport, punctualLights.size());
         // plan_gltf.md GLTF-326: what the three-directional-light approximation cost this file.
         if (lightReport.droppedLightCount > 0)
         {
@@ -881,6 +972,7 @@ namespace
             }
             json << "],\n";
         }
+        WriteGltfImportReportEXT(json, importReport);
         json << "  \"meshes\": [\n";
         for (std::size_t i = 0; i < meshEntries.size(); ++i)
         {
@@ -1097,6 +1189,7 @@ namespace
         // and an ignored-extension report, before anything is decoded. Deliberately after
         // cgltf_load_buffers, because the sparse index-bound check needs buffer data to run at all.
         ValidateGltfEXT(data, opts.inputPath.string(), warnings);
+        const std::vector<std::string> validationWarnings = warnings;
 
         // plan_gltf.md GLTF-113: build the node graph once and share it across every group, so
         // each group's emitted "bones" array indexes the same scene-node identity space.
@@ -1125,7 +1218,7 @@ namespace
                 }
             }
             ConvertGroup(data, sceneGraph, groups[g], outName, gltfDir, opts.outputDir, writtenTextures,
-                         remappedOcclusionTextures, opts.unitScale, warnings);
+                         remappedOcclusionTextures, opts.unitScale, validationWarnings, warnings);
         }
 
         if (groups.size() > 1)

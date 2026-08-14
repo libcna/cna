@@ -134,6 +134,7 @@ loss at run time — is `docs/gltf-limitations.md`.
 |---|---|---|
 | Runtime load — `Content.Load<Model>("character.glb")` | ✅ | No offline step. `ContentManager`'s `ModelTypeReader` resolves `.gltf`/`.glb` through `CNA::Internal::GltfImport::GltfImportCore`. |
 | Offline conversion — `tools/gltf_to_cnj` | ✅ | Produces `.cnj` + sidecars (`.skeleton.bin`, `_morph.bin`, textures). The two loaders are held to the same output by per-fixture parity sweeps (`GltfToCnjToolTest`), including all 13 material fixtures at the L6 effect boundary. |
+| Structured import diagnostics | ✅ | `Model::getGltfImportReportEXTProperty()` exposes summary counts plus stable coded warnings, drops and approximations on both direct and offline paths. Non-glTF models and old `.cnj` files return an empty report. |
 | Geometry: `POSITION`, `NORMAL`, `TEXCOORD_0`, indices | ✅ | Byte-exact against committed L5 goldens for every corpus fixture. |
 | Whole-model bounds | ✅ | `Model::getBoundingSphereEXTProperty()` merges every mesh's XNA bounding sphere after its current absolute parent-bone transform. The result is in model-root space before the caller's draw-time `world`; imported mesh spheres cover all primitives and authored default morph weights. |
 | Material variants | ✅ | `KHR_materials_variants` names and sparse primitive mappings survive direct glTF and offline `.cnj`. `Model::getMaterialVariantNamesEXTProperty()` exposes source order and `setMaterialVariantEXTProperty(index)` selects a complete part state; `-1` restores the core/default mapping. |
@@ -169,6 +170,13 @@ loss at run time — is `docs/gltf-limitations.md`.
 **Malformed input** is refused by name rather than imported wrongly: structural validation
 (§3.6.2.4 alignment, accessor spans, `extensionsRequired`), a container fuzz, and a rule that every
 refusal is a `std::runtime_error` naming the file and the problem.
+
+**Diagnostics API (CNAEXT):** include
+`Microsoft/Xna/Framework/Graphics/GltfImportReportEXT.hpp` and query
+`model.getGltfImportReportEXTProperty()`. `AnythingLost()` is the quick display decision;
+`Diagnostics` contains stable `Code`, `Severity`, `Kind`, `Count`, `WorstMagnitude`, `Subject` and
+`Details` fields. Do not branch on `Message` or vector order. `getWarningCountProperty()` counts
+entries, while dropped/approximation helpers sum occurrence counts.
 
 **Vertex formats (CNAEXT):** `VertexPositionNormalTangentTexture` (stride 48, tangent as `vec4` with
 glTF bitangent‑handedness sign in `w`), `VertexPositionNormalTangentTextureSkinned` (stride 68), and

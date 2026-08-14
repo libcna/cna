@@ -130,6 +130,47 @@ namespace Microsoft::Xna::Framework::Graphics
         return result;
     }
 
+    std::size_t GltfImportReportEXT::getWarningCountProperty() const
+    {
+        return static_cast<std::size_t>(std::count_if(
+            Diagnostics.begin(), Diagnostics.end(), [](const GltfImportDiagnosticEXT& diagnostic)
+            {
+                return diagnostic.Severity == GltfImportDiagnosticSeverityEXT::Warning;
+            }));
+    }
+
+    std::size_t GltfImportReportEXT::getDroppedFeatureCountProperty() const
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : Diagnostics)
+        {
+            if (diagnostic.Kind == GltfImportDiagnosticKindEXT::DroppedData ||
+                diagnostic.Kind == GltfImportDiagnosticKindEXT::UnsupportedFeature)
+            {
+                count += diagnostic.Count;
+            }
+        }
+        return count;
+    }
+
+    std::size_t GltfImportReportEXT::getApproximationCountProperty() const
+    {
+        std::size_t count = 0;
+        for (const GltfImportDiagnosticEXT& diagnostic : Diagnostics)
+        {
+            if (diagnostic.Kind == GltfImportDiagnosticKindEXT::Approximation)
+            {
+                count += diagnostic.Count;
+            }
+        }
+        return count;
+    }
+
+    bool GltfImportReportEXT::AnythingLost() const
+    {
+        return getWarningCountProperty() != 0;
+    }
+
     const std::vector<ModelCameraEXT>& Model::getCamerasEXTProperty() const { return cameras_; }
 
     void Model::setCamerasEXTProperty(std::vector<ModelCameraEXT> value)
@@ -142,6 +183,16 @@ namespace Microsoft::Xna::Framework::Graphics
     void Model::setSkinsEXTProperty(std::vector<ModelSkinEXT> value)
     {
         skins_ = std::move(value);
+    }
+
+    const GltfImportReportEXT& Model::getGltfImportReportEXTProperty() const
+    {
+        return gltfImportReport_;
+    }
+
+    void Model::setGltfImportReportEXTProperty(GltfImportReportEXT value)
+    {
+        gltfImportReport_ = std::move(value);
     }
 
     std::optional<BoundingSphere> Model::getBoundingSphereEXTProperty() const

@@ -67,6 +67,38 @@ namespace CNA::Internal::GltfImport
 {
     namespace
     {
+        using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticEXT;
+        using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT;
+        using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT;
+        using Microsoft::Xna::Framework::Graphics::GltfImportReportEXT;
+
+        void AddImportDiagnosticEXT(
+            GltfImportReportEXT& report, std::string code,
+            GltfImportDiagnosticKindEXT kind, std::string message,
+            std::size_t count = 1, double worstMagnitude = 0.0,
+            std::string subject = {}, std::vector<std::string> details = {})
+        {
+            if (count == 0) { return; }
+            GltfImportDiagnosticEXT diagnostic;
+            diagnostic.Code = std::move(code);
+            diagnostic.Severity = kind == GltfImportDiagnosticKindEXT::Information ||
+                                  kind == GltfImportDiagnosticKindEXT::GeneratedData
+                ? GltfImportDiagnosticSeverityEXT::Information
+                : GltfImportDiagnosticSeverityEXT::Warning;
+            diagnostic.Kind = kind;
+            diagnostic.Subject = std::move(subject);
+            diagnostic.Count = count;
+            diagnostic.WorstMagnitude = worstMagnitude;
+            diagnostic.Details = std::move(details);
+            diagnostic.Message = std::move(message);
+            report.Diagnostics.push_back(std::move(diagnostic));
+        }
+
+        std::size_t NonNegativeSizeEXT(int value)
+        {
+            return value > 0 ? static_cast<std::size_t>(value) : 0;
+        }
+
         // Whether this build can actually decode Draco geometry. The extension registry's own
         // `claimed` column reads this rather than repeating the #ifdef: claiming Draco in a build
         // without the decoder would accept a file whose geometry then arrives empty, which is the
@@ -936,6 +968,349 @@ namespace CNA::Internal::GltfImport
             }
             return reachable;
         }
+    }
+
+    void AppendGltfNodeGraphReportEXT(GltfImportReportEXT& destination,
+                                      const NodeGraphReportEXT& source)
+    {
+        destination.NodeCount = NonNegativeSizeEXT(source.nodeCount);
+        destination.MeshInstanceCount = NonNegativeSizeEXT(source.meshInstanceCount);
+        destination.DistinctMeshCount = NonNegativeSizeEXT(source.distinctMeshCount);
+        destination.SharedMeshCount = NonNegativeSizeEXT(source.sharedMeshCount);
+        destination.MaxNodeDepth = NonNegativeSizeEXT(source.maxDepth);
+        destination.CameraNodeCount = NonNegativeSizeEXT(source.cameraNodeCount);
+        destination.LightNodeCount = NonNegativeSizeEXT(source.lightNodeCount);
+        AddImportDiagnosticEXT(
+            destination, "gpu-instancing-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+            "Per-instance transforms from EXT_mesh_gpu_instancing were not imported; each node "
+            "keeps only its own single placement.",
+            NonNegativeSizeEXT(source.gpuInstancedNodeCount));
+    }
+
+    void AppendGltfValidationWarningsEXT(GltfImportReportEXT& destination,
+                                         const std::vector<std::string>& warnings)
+    {
+        for (const std::string& warning : warnings)
+        {
+            const bool ignoredExtension = warning.find(" uses extension '") != std::string::npos;
+            std::string portableMessage = warning;
+            if (ignoredExtension)
+            {
+                // ValidateGltfEXT includes sourceName before this phrase. Reports serialized into
+                // .cnj must remain relocatable and reproducible, so retain the useful extension
+                // diagnosis without embedding an absolute build-machine path.
+                const std::size_t phrase = warning.find(" uses extension '");
+                portableMessage = "The source asset" + warning.substr(phrase);
+            }
+            AddImportDiagnosticEXT(
+                destination, ignoredExtension ? "ignored-extension" : "accessor-bounds-mismatch",
+                ignoredExtension ? GltfImportDiagnosticKindEXT::UnsupportedFeature
+                                 : GltfImportDiagnosticKindEXT::InvalidSourceData,
+                std::move(portableMessage));
+        }
+    }
+
+    void AppendGltfInstanceReportEXT(GltfImportReportEXT& destination,
+                                     const MeshInstanceOut& instance,
+                                     const std::string& subject)
+    {
+        if (!instance.mirroredEXT) { return; }
+        AddImportDiagnosticEXT(
+            destination, "mirrored-winding-unapplied", GltfImportDiagnosticKindEXT::DroppedData,
+            "The placement has a negative world determinant, but CNA leaves shared triangle "
+            "winding unchanged; the application must reverse culling for this draw.",
+            1, 0.0, subject);
+    }
+
+    void AppendGltfMeshReportEXT(GltfImportReportEXT& destination, const MeshOut& mesh,
+                                 const std::string& subject, bool countPrimitive)
+    {
+        if (countPrimitive) { ++destination.PrimitiveCount; }
+        if (!mesh.unsupportedMaterialModelEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "material-model-dropped",
+                GltfImportDiagnosticKindEXT::DroppedData,
+                "The selected vertex layout cannot carry this material model; its factors and "
+                "maps were not applied.", 1, 0.0, subject,
+                {mesh.unsupportedMaterialModelEXT});
+        }
+        if (mesh.convertedFromSpecularGlossinessEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "specular-glossiness-converted",
+                GltfImportDiagnosticKindEXT::Approximation,
+                "KHR_materials_pbrSpecularGlossiness was converted to metallic-roughness and "
+                "its coloured specular term cannot be represented exactly.",
+                1, mesh.droppedSpecularStrengthEXT, subject);
+        }
+        if (!mesh.unrepresentableForStrideEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "vertex-layout-limit", GltfImportDiagnosticKindEXT::Information,
+                "The chosen CNA vertex layout cannot carry every authored stream or material "
+                "feature.", 1, 0.0, subject, {mesh.unrepresentableForStrideEXT});
+        }
+        if (mesh.droppedNormalForStrideEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "normal-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+                "The primitive authored NORMAL, but the selected vertex layout has no normal slot.",
+                1, 0.0, subject);
+        }
+        if (mesh.droppedTangentForStrideEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "tangent-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+                "The primitive authored TANGENT, but the selected vertex layout has no tangent slot.",
+                1, 0.0, subject);
+        }
+        if (mesh.droppedIncompleteIndicesEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "incomplete-indices-dropped",
+                GltfImportDiagnosticKindEXT::DroppedData,
+                "Trailing indices that did not form a complete primitive were dropped.",
+                mesh.droppedIncompleteIndicesEXT, 0.0, subject);
+        }
+        if (!mesh.unsupportedTextureSourcesEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "texture-source-unsupported",
+                GltfImportDiagnosticKindEXT::UnsupportedFeature,
+                "Texture maps whose encoded source CNA cannot decode were not applied.",
+                mesh.unsupportedTextureSourcesEXT.size(), 0.0, subject,
+                mesh.unsupportedTextureSourcesEXT);
+        }
+        if (!mesh.mipmappedSamplerMapsWithoutMipChainEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "mip-chain-missing", GltfImportDiagnosticKindEXT::Approximation,
+                "The maps request mip filtering, but imported PNG/JPEG textures contain only "
+                "level zero.", mesh.mipmappedSamplerMapsWithoutMipChainEXT.size(), 0.0, subject,
+                mesh.mipmappedSamplerMapsWithoutMipChainEXT);
+        }
+        if (!mesh.unbakedTextureTransformsEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "texture-transform-unbaked",
+                GltfImportDiagnosticKindEXT::DroppedData,
+                "Only one texture transform can be baked into CNA's shared UV channel; these "
+                "maps use the base-colour coordinates instead of their own.",
+                mesh.unbakedTextureTransformsEXT.size(), 0.0, subject,
+                mesh.unbakedTextureTransformsEXT);
+        }
+        if (mesh.extraInfluenceSetsEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "influence-sets-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+                "Joint influence sets beyond JOINTS_0/WEIGHTS_0 were dropped.",
+                mesh.extraInfluenceSetsEXT, mesh.worstDroppedInfluenceEXT, subject);
+        }
+        if (mesh.generatedNormalsEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "normals-generated", GltfImportDiagnosticKindEXT::GeneratedData,
+                "The primitive authored no NORMAL, so CNA generated normals.", 1, 0.0, subject);
+        }
+        if (mesh.smoothedNormalVertexCountEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "generated-normals-smoothed",
+                GltfImportDiagnosticKindEXT::Approximation,
+                "Generated normals on vertices shared by differently oriented faces were "
+                "averaged instead of duplicating vertices for exact flat shading.",
+                mesh.smoothedNormalVertexCountEXT, 0.0, subject);
+        }
+        if (mesh.renormalisedWeightVertexCountEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "weights-renormalised", GltfImportDiagnosticKindEXT::Approximation,
+                "Joint weights that did not sum to one were renormalised.",
+                mesh.renormalisedWeightVertexCountEXT, mesh.worstWeightSumDeviationEXT, subject);
+        }
+        if (mesh.zeroWeightVertexCountEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "zero-weight-vertices", GltfImportDiagnosticKindEXT::DroppedData,
+                "Vertices whose joint weights sum to zero remain unweighted rather than being "
+                "assigned to an arbitrary joint.", mesh.zeroWeightVertexCountEXT, 0.0, subject);
+        }
+        if (mesh.transmissionApproximatedEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "transmission-approximated",
+                GltfImportDiagnosticKindEXT::Approximation,
+                "KHR_materials_transmission was approximated as alpha blending; refraction, "
+                "roughness blur and physical energy behaviour are not represented.",
+                1, mesh.transmissionFactorEXT, subject);
+        }
+        if (mesh.transmissionHasTextureEXT)
+        {
+            AddImportDiagnosticEXT(
+                destination, "transmission-texture-dropped",
+                GltfImportDiagnosticKindEXT::DroppedData,
+                "The per-texel transmission texture cannot be represented by the scalar alpha "
+                "approximation and was dropped.", 1, 0.0, subject);
+        }
+        if (!mesh.uvSetMismatchedMapsEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "uv-set-mismatch", GltfImportDiagnosticKindEXT::DroppedData,
+                "These maps select a different TEXCOORD set than CNA's one shared UV channel.",
+                mesh.uvSetMismatchedMapsEXT.size(), 0.0, subject,
+                mesh.uvSetMismatchedMapsEXT);
+        }
+        if (mesh.extraColorSetsEXT > 0)
+        {
+            AddImportDiagnosticEXT(
+                destination, "color-sets-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+                "Colour attribute sets beyond COLOR_0 were dropped.",
+                NonNegativeSizeEXT(mesh.extraColorSetsEXT), 0.0, subject);
+        }
+        if (!mesh.ignoredCustomAttributesEXT.empty())
+        {
+            AddImportDiagnosticEXT(
+                destination, "custom-attributes-ignored", GltfImportDiagnosticKindEXT::DroppedData,
+                "Application-specific vertex attributes were ignored as glTF permits.",
+                mesh.ignoredCustomAttributesEXT.size(), 0.0, subject,
+                mesh.ignoredCustomAttributesEXT);
+        }
+        if (mesh.sourceTopology != mesh.topology)
+        {
+            AddImportDiagnosticEXT(
+                destination, "topology-converted", GltfImportDiagnosticKindEXT::Information,
+                "The primitive topology was converted exactly and its index list was rewritten.",
+                1, 0.0, subject,
+                {PrimitiveTopologyName(mesh.sourceTopology), PrimitiveTopologyName(mesh.topology)});
+        }
+    }
+
+    void AppendGltfMorphReportEXT(GltfImportReportEXT& destination,
+                                  const MorphReportEXT& source,
+                                  const std::string& subject, bool normalMapped)
+    {
+        if (source.targetCount <= 0) { return; }
+        AddImportDiagnosticEXT(
+            destination, "morph-target-summary", GltfImportDiagnosticKindEXT::Information,
+            source.hasNonZeroDefaultWeights
+                ? "Morph targets were imported and non-zero default weights were applied."
+                : "Morph targets were imported with zero default weights.",
+            NonNegativeSizeEXT(source.targetCount), 0.0, subject);
+        if (normalMapped && source.targetsWithoutTangents == source.targetCount &&
+            source.targetsWithoutPositions < source.targetCount)
+        {
+            AddImportDiagnosticEXT(
+                destination, "morph-tangents-missing",
+                GltfImportDiagnosticKindEXT::DroppedData,
+                "The normal-mapped primitive morphs positions without tangent deltas, so the "
+                "deformed surface keeps its rest-pose tangent basis.",
+                NonNegativeSizeEXT(source.targetsWithoutTangents), 0.0, subject);
+        }
+    }
+
+    void AppendGltfLightReportEXT(GltfImportReportEXT& destination,
+                                  const LightReportEXT& source,
+                                  std::size_t importedLightCount)
+    {
+        destination.ImportedLightCount = importedLightCount;
+        AddImportDiagnosticEXT(
+            destination, "lights-dropped", GltfImportDiagnosticKindEXT::DroppedData,
+            "Lights beyond the three slots provided by XNA stock effects were dropped.",
+            source.droppedLightCount);
+        AddImportDiagnosticEXT(
+            destination, "point-lights-approximated",
+            GltfImportDiagnosticKindEXT::Approximation,
+            "Point lights were approximated as directional lights aimed at the scene origin.",
+            source.approximatedPointLightCount);
+        AddImportDiagnosticEXT(
+            destination, "spot-lights-approximated",
+            GltfImportDiagnosticKindEXT::Approximation,
+            "Spot lights were approximated as directional lights aimed at the scene origin.",
+            source.approximatedSpotLightCount);
+        AddImportDiagnosticEXT(
+            destination, "light-intensity-clamped",
+            GltfImportDiagnosticKindEXT::Approximation,
+            "Photometric light colour times intensity exceeded one and was clamped.",
+            source.clampedIntensityLightCount, source.worstPreClampChannelEXT);
+        AddImportDiagnosticEXT(
+            destination, "light-range-ignored", GltfImportDiagnosticKindEXT::DroppedData,
+            "Finite point/spot light ranges were ignored by the directional-light approximation.",
+            source.ignoredRangeCount);
+        AddImportDiagnosticEXT(
+            destination, "spot-cone-ignored", GltfImportDiagnosticKindEXT::DroppedData,
+            "Spot-light cone angles were ignored by the directional-light approximation.",
+            source.ignoredConeAngleCount);
+    }
+
+    void AppendGltfAnimationReportEXT(GltfImportReportEXT& destination,
+                                      const AnimationReportEXT& source)
+    {
+        destination.AnimationCount = std::max(
+            destination.AnimationCount, NonNegativeSizeEXT(source.animationCount));
+        destination.ClipCount += NonNegativeSizeEXT(source.clipCount);
+        AddImportDiagnosticEXT(
+            destination, "animations-empty", GltfImportDiagnosticKindEXT::DroppedData,
+            "Animations that resolved to no supported in-scene track produced no clip.",
+            NonNegativeSizeEXT(source.emptyAnimationCount));
+        AddImportDiagnosticEXT(
+            destination, "animation-targets-unavailable",
+            GltfImportDiagnosticKindEXT::DroppedData,
+            "Animation channels whose target node is absent from this Model's scene-node or "
+            "joint-palette target space were skipped.",
+            NonNegativeSizeEXT(source.skippedOutOfSceneChannels));
+        AddImportDiagnosticEXT(
+            destination, "animation-paths-unsupported",
+            GltfImportDiagnosticKindEXT::UnsupportedFeature,
+            "Animation channels whose target path CNA cannot drive were skipped.",
+            NonNegativeSizeEXT(source.skippedUnsupportedPathChannels));
+        AddImportDiagnosticEXT(
+            destination, "animation-tracks-resampled",
+            GltfImportDiagnosticKindEXT::Approximation,
+            "Animation tracks were resampled onto the union of sibling channel key times.",
+            NonNegativeSizeEXT(source.resampledTrackCount));
+        AddImportDiagnosticEXT(
+            destination, "animation-input-times-duplicated",
+            GltfImportDiagnosticKindEXT::Approximation,
+            "Adjacent animation input samples repeat a time; the hard cut is retained with one "
+            "value at that instant.", NonNegativeSizeEXT(source.duplicateInputTimeCount));
+    }
+
+    void AppendGltfRigidAnimationDropEXT(GltfImportReportEXT& destination,
+                                         const std::string& clipName,
+                                         std::size_t droppedTrackCount)
+    {
+        AddImportDiagnosticEXT(
+            destination, "rigid-animation-dropped-on-skinned-model",
+            GltfImportDiagnosticKindEXT::DroppedData,
+            "Scene-node animation tracks that are not carried by this Model's skin palettes "
+            "cannot be retained because Model::Tag already contains SkinningData.",
+            droppedTrackCount, 0.0, clipName);
+    }
+
+    std::size_t CountGltfRigidAnimationDropsEXT(
+        const ClipOut& clip, const SceneGraphOut& scene,
+        const std::vector<const SkeletonResult*>& skins)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            clip.tracks.begin(), clip.tracks.end(),
+            [&](const TrackOut& track)
+            {
+                if (track.boneIndex < 0 ||
+                    static_cast<std::size_t>(track.boneIndex) >= scene.nodes.size())
+                {
+                    return true;
+                }
+                const cgltf_node* node =
+                    scene.nodes[static_cast<std::size_t>(track.boneIndex)].node;
+                return std::none_of(
+                    skins.begin(), skins.end(),
+                    [&](const SkeletonResult* skin)
+                    {
+                        return skin != nullptr &&
+                            skin->nodeToNewIndex.find(node) != skin->nodeToNewIndex.end();
+                    });
+            }));
     }
 
     SkeletonResult BuildSkeleton(const cgltf_skin* skin, float unitScale)
