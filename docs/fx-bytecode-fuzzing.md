@@ -98,8 +98,7 @@ the campaign.
 Every finding was in the pinned MojoShader, none in CNA. Each is now fixed by
 `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`, and each fix was confirmed by
 the campaign running measurably deeper afterwards: on the GLSL profile the first crash moved from
-iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400 and finally past 8,700, with one seed
-now running 10,000 iterations clean.
+iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then away entirely.
 
 | Site | Defect |
 |---|---|
@@ -117,6 +116,9 @@ now running 10,000 iterations clean.
 | `mojoshader_effects.c` shader-array selector | The selector a preshader computes was converted to an integer before being range-checked. Converting an out-of-range float is undefined and yields `INT_MIN` on x86, which then indexed far below the parameter's values. It is now range-checked as a float, which also rejects NaN |
 | `mojoshader_effects.c` `run_preshader`, preshader register copy | The bounds added above were written as `index + span > count`, which wraps for an index near `UINT_MAX` and passes. All of them now subtract instead |
 | `mojoshader_profile_spirv.c` `spv_check_read_reg_id` | `assert()` on a sampler or texture register in a shader model that cannot declare one |
+| `mojoshader_effects.c` `readstring` | Took a base pointer and an offset but no length, so the file's own length prefix chose how many bytes to copy and from where -- upstream's `// !!! FIXME: sanity checks!` and `// !!! FIXME: verify this doesn't go past EOF looking for a null.` The payload length is now threaded through the parser, and the copy is NUL-terminated, which it never was |
+| `mojoshader_effects.c` `MOJOSHADER_compileEffect` | Parameter, technique and object counts read from the file, used both to size allocations and to bound the loops that fill them, with no bound and no overflow check on the size multiplication |
+| `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Its local `COPY_STRING` dereferenced without a NULL check, unlike the file's other one -- and `readstring` returns NULL for a zero-length string, which is ordinary content rather than hostile content |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
@@ -125,16 +127,8 @@ asserted and then dereferenced -- was found earlier by the deterministic in-buil
 
 Two distinct areas, and they differ by driver.
 
-**On FNA3D's OpenGL driver (GLSL profile)** the campaign now runs 10,000 iterations clean on one
-seed and reaches roughly 8,700 on another, where it stops in `MOJOSHADER_cloneEffect` copying a
-technique name. The root cause is upstream's own `readstring()`, which carries the comments
-`// !!! FIXME: sanity checks!` and `// !!! FIXME: verify this doesn't go past EOF looking for a
-null.` -- it takes a base pointer and an offset but no length, so bounding it means threading the
-payload length through the parser rather than adding another local check. Reproduce with:
-
-```sh
-./cna_compiled_effect_fuzzer --campaign fx-corpus 8800 0x434E41464658
-```
+**On FNA3D's OpenGL driver (GLSL profile)** the campaign is clean: 10,000 iterations on each of
+two independent seeds with no crash, no assert and no sanitizer report.
 
 **On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign stops much earlier, in the SPIR-V
 emitter's own asserts (`spv_loadreg`, and others behind it). That emitter validates untrusted
