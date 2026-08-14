@@ -1150,7 +1150,7 @@ camera, browser/GPU identity, two process timings and maximum RSS.
 The 2026-08-14 final run passed all 15 cases without changing these thresholds. Minimum mask IoU
 was **0.998719**, coverage ranged from **0.999891 to 1.000422**, and maximum RGB MAE was **67.04**.
 The Sponza resource closure was **52,686,624 bytes** with **262,267 triangles**; its two viewer runs
-used at most **793,836 KiB** RSS in the recorded campaign. The audit record is
+used at most **794,568 KiB** RSS in the recorded campaign. The audit record is
 [`gltf-viewer-retake-report.json`](gltf-viewer-retake-report.json). PNGs are deliberately disposable:
 the report preserves their hashes and all reproduction state while avoiding a second large image
 corpus.
