@@ -1,5 +1,18 @@
 # NEXT.md
 
+## C BINDING / C ABI — PLANNED, AWAITING EXPLICIT IMPLEMENTATION AUTHORIZATION (2026-08-14)
+
+> `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
+> the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
+> **No C ABI code exists yet and no implementation task is authorized by this entry.** The planned
+> work is an opt-in `modules/c-api/` module, C-compatible public headers, an exported native
+> library, generation-checked handles, explicit UTF-8/error/ownership/threading contracts, and
+> pure-C compile/link/runtime tests. The plan deliberately contains no C#, .NET, JavaScript,
+> Rust, Python, Java, Zig, Go, Swift, or other language-binding work.
+
+> First action only after owner approval: complete `CBIND-001` through `CBIND-006` as one design
+> gate, then obtain an explicit decision before adding any production C ABI surface.
+
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
 > Ten frozen feature lanes integrated one at a time into `11branches`, which started at exactly the

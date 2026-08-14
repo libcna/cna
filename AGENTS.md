@@ -16,6 +16,20 @@ The authoritative behavioral and API reference is the local FNA source tree:
 
 Do **not** treat old CNA code or AI-generated stubs as authoritative if they conflict with the FNA reference API.
 
+### Binding Analysis Sources
+
+The following project-design documents are **read-only source material**. Do not edit, reformat,
+move, or delete them. Derive C-binding decisions and planning artifacts from them instead:
+
+```text
+analysis_binding.md
+analysis_binding_sharp_runtime.md
+```
+
+The current approved planning boundary is limited to CNA's native C API/C ABI. Do not create
+plans or implementations for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go,
+Swift, or other language-specific bindings unless the project owner explicitly authorizes them.
+
 ---
 
 ## Code Generation Rules

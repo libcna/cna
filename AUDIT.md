@@ -9,6 +9,11 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
+> **C ABI tracking note (2026-08-14):** CNA has no C API implementation or C API audit rows yet.
+> Its design and implementation status are tracked separately in `plan_binding.md`; this XNA C++
+> API audit remains unchanged until an implemented C ABI adapter needs a corresponding native API
+> audit.
+
 ---
 
 ## `Microsoft::Xna::Framework` (root)
