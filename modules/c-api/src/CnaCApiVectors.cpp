@@ -7,6 +7,7 @@
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
+#include "Microsoft/Xna/Framework/Vector4.hpp"
 
 #include <cstring>
 #include <limits>
@@ -21,6 +22,7 @@ using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Vector4;
 
 [[nodiscard]] Vector2 ToNative(const CNA_Vector2 value)
 {
@@ -30,6 +32,11 @@ using Microsoft::Xna::Framework::Vector3;
 [[nodiscard]] Vector3 ToNative(const CNA_Vector3 value)
 {
     return Vector3(value.x, value.y, value.z);
+}
+
+[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value)
+{
+    return Vector4(value.x, value.y, value.z, value.w);
 }
 
 [[nodiscard]] Quaternion ToNative(const CNA_Quaternion value)
@@ -54,6 +61,11 @@ using Microsoft::Xna::Framework::Vector3;
 [[nodiscard]] CNA_Vector3 ToC(const Vector3 value) noexcept
 {
     return CNA_Vector3{value.X, value.Y, value.Z};
+}
+
+[[nodiscard]] CNA_Vector4 ToC(const Vector4 value) noexcept
+{
+    return CNA_Vector4{value.X, value.Y, value.Z, value.W};
 }
 
 template<typename TValue, typename TCallable>
@@ -218,6 +230,66 @@ template<typename TCallable>
         }
         for (uint64_t index = 0U; index < length; ++index) {
             const Vector3 input = ToNative(source[sourceIndex + index]);
+            destination[destinationIndex + index] = ToC(callable(input));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+[[nodiscard]] CNA_Result ValidateArrayRange(
+    const CNA_Vector4* const source,
+    const uint64_t sourceCount,
+    const uint64_t sourceIndex,
+    CNA_Vector4* const destination,
+    const uint64_t destinationCount,
+    const uint64_t destinationIndex,
+    const uint64_t length) noexcept
+{
+    if ((source == nullptr && sourceCount != 0U) ||
+        (destination == nullptr && destinationCount != 0U) ||
+        sourceIndex > sourceCount || length > sourceCount - sourceIndex ||
+        destinationIndex > destinationCount || length > destinationCount - destinationIndex) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The Vector4 array pointer, count, index or length is invalid.");
+    }
+    constexpr uint64_t MaximumSize = static_cast<uint64_t>(
+        std::numeric_limits<std::size_t>::max());
+    if (sourceCount > MaximumSize || destinationCount > MaximumSize) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "A Vector4 array count cannot be represented by the native platform.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result TransformArray(
+    const CNA_Vector4* const source,
+    const uint64_t sourceCount,
+    const uint64_t sourceIndex,
+    CNA_Vector4* const destination,
+    const uint64_t destinationCount,
+    const uint64_t destinationIndex,
+    const uint64_t length,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        const CNA_Result validation = ValidateArrayRange(
+            source,
+            sourceCount,
+            sourceIndex,
+            destination,
+            destinationCount,
+            destinationIndex,
+            length);
+        if (validation != CNA_RESULT_SUCCESS) {
+            return validation;
+        }
+        for (uint64_t index = 0U; index < length; ++index) {
+            const Vector4 input = ToNative(source[sourceIndex + index]);
             destination[destinationIndex + index] = ToC(callable(input));
         }
         return CNA_RESULT_SUCCESS;
@@ -1187,5 +1259,490 @@ CNA_Result cna_vector3_transform_normal_array(
         length,
         [&nativeMatrix](const Vector3 value) {
             return Vector3::TransformNormal(value, nativeMatrix);
+        });
+}
+
+CNA_Result cna_vector4_init(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4());
+    });
+}
+
+CNA_Result cna_vector4_init_xyzw(
+    const float x,
+    const float y,
+    const float z,
+    const float w,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4(x, y, z, w));
+    });
+}
+
+CNA_Result cna_vector4_init_vector2_zw(
+    const CNA_Vector2 value,
+    const float z,
+    const float w,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4(ToNative(value), z, w));
+    });
+}
+
+CNA_Result cna_vector4_init_vector3_w(
+    const CNA_Vector3 value,
+    const float w,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4(ToNative(value), w));
+    });
+}
+
+CNA_Result cna_vector4_init_scalar(
+    const float value,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4(value));
+    });
+}
+
+CNA_Result cna_vector4_get_zero(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::Zero);
+    });
+}
+
+CNA_Result cna_vector4_get_one(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::One);
+    });
+}
+
+CNA_Result cna_vector4_get_unit_x(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::UnitX);
+    });
+}
+
+CNA_Result cna_vector4_get_unit_y(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::UnitY);
+    });
+}
+
+CNA_Result cna_vector4_get_unit_z(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::UnitZ);
+    });
+}
+
+CNA_Result cna_vector4_get_unit_w(CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [] {
+        return ToC(Vector4::UnitW);
+    });
+}
+
+CNA_Result cna_vector4_equals(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Bool* const outEqual)
+{
+    return StoreOutput(outEqual, "The Boolean output is null.", [=] {
+        return ToNative(left).Equals(ToNative(right)) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_vector4_not_equals(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Bool* const outNotEqual)
+{
+    return StoreOutput(outNotEqual, "The Boolean output is null.", [=] {
+        return ToNative(left) != ToNative(right) ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_vector4_get_hash_code(
+    const CNA_Vector4 value,
+    int32_t* const outHash)
+{
+    return StoreOutput(outHash, "The hash output is null.", [=] {
+        return static_cast<int32_t>(ToNative(value).GetHashCode());
+    });
+}
+
+CNA_Result cna_vector4_length(
+    const CNA_Vector4 value,
+    float* const outLength)
+{
+    return StoreOutput(outLength, "The float output is null.", [=] {
+        return ToNative(value).Length();
+    });
+}
+
+CNA_Result cna_vector4_length_squared(
+    const CNA_Vector4 value,
+    float* const outLengthSquared)
+{
+    return StoreOutput(outLengthSquared, "The float output is null.", [=] {
+        return ToNative(value).LengthSquared();
+    });
+}
+
+CNA_Result cna_vector4_normalize_in_place(CNA_Vector4* const value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Vector4 is null.");
+        }
+        Vector4 native = ToNative(*value);
+        native.Normalize();
+        *value = ToC(native);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_vector4_get_string_size(
+    const CNA_Vector4 value,
+    uint64_t* const outBytes)
+{
+    return StoreOutput(outBytes, "The required-byte output is null.", [=] {
+        return static_cast<uint64_t>(ToNative(value).ToString().size());
+    });
+}
+
+CNA_Result cna_vector4_copy_string(
+    const CNA_Vector4 value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CopyFormattedString(destination, capacity, outBytes, [=] {
+        return ToNative(value).ToString();
+    });
+}
+
+CNA_Result cna_vector4_add(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Add(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_barycentric(
+    const CNA_Vector4 value1,
+    const CNA_Vector4 value2,
+    const CNA_Vector4 value3,
+    const float amount1,
+    const float amount2,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Barycentric(
+            ToNative(value1), ToNative(value2), ToNative(value3), amount1, amount2));
+    });
+}
+
+CNA_Result cna_vector4_catmull_rom(
+    const CNA_Vector4 value1,
+    const CNA_Vector4 value2,
+    const CNA_Vector4 value3,
+    const CNA_Vector4 value4,
+    const float amount,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::CatmullRom(
+            ToNative(value1), ToNative(value2), ToNative(value3), ToNative(value4), amount));
+    });
+}
+
+CNA_Result cna_vector4_clamp(
+    const CNA_Vector4 value,
+    const CNA_Vector4 minimum,
+    const CNA_Vector4 maximum,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Clamp(ToNative(value), ToNative(minimum), ToNative(maximum)));
+    });
+}
+
+CNA_Result cna_vector4_distance(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    float* const outDistance)
+{
+    return StoreOutput(outDistance, "The float output is null.", [=] {
+        return Vector4::Distance(ToNative(left), ToNative(right));
+    });
+}
+
+CNA_Result cna_vector4_distance_squared(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    float* const outDistanceSquared)
+{
+    return StoreOutput(outDistanceSquared, "The float output is null.", [=] {
+        return Vector4::DistanceSquared(ToNative(left), ToNative(right));
+    });
+}
+
+CNA_Result cna_vector4_divide(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Divide(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_divide_scalar(
+    const CNA_Vector4 value,
+    const float divider,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Divide(ToNative(value), divider));
+    });
+}
+
+CNA_Result cna_vector4_dot(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    float* const outValue)
+{
+    return StoreOutput(outValue, "The float output is null.", [=] {
+        return Vector4::Dot(ToNative(left), ToNative(right));
+    });
+}
+
+CNA_Result cna_vector4_hermite(
+    const CNA_Vector4 value1,
+    const CNA_Vector4 tangent1,
+    const CNA_Vector4 value2,
+    const CNA_Vector4 tangent2,
+    const float amount,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Hermite(
+            ToNative(value1), ToNative(tangent1), ToNative(value2), ToNative(tangent2), amount));
+    });
+}
+
+CNA_Result cna_vector4_lerp(
+    const CNA_Vector4 value1,
+    const CNA_Vector4 value2,
+    const float amount,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Lerp(ToNative(value1), ToNative(value2), amount));
+    });
+}
+
+CNA_Result cna_vector4_max(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Max(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_min(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Min(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_multiply(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Multiply(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_multiply_scalar(
+    const CNA_Vector4 value,
+    const float scale,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Multiply(ToNative(value), scale));
+    });
+}
+
+CNA_Result cna_vector4_negate(
+    const CNA_Vector4 value,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Negate(ToNative(value)));
+    });
+}
+
+CNA_Result cna_vector4_normalize(
+    const CNA_Vector4 value,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Normalize(ToNative(value)));
+    });
+}
+
+CNA_Result cna_vector4_smooth_step(
+    const CNA_Vector4 value1,
+    const CNA_Vector4 value2,
+    const float amount,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::SmoothStep(ToNative(value1), ToNative(value2), amount));
+    });
+}
+
+CNA_Result cna_vector4_subtract(
+    const CNA_Vector4 left,
+    const CNA_Vector4 right,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Subtract(ToNative(left), ToNative(right)));
+    });
+}
+
+CNA_Result cna_vector4_transform_vector2_matrix(
+    const CNA_Vector2 value,
+    const CNA_Matrix matrix,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(matrix)));
+    });
+}
+
+CNA_Result cna_vector4_transform_vector3_matrix(
+    const CNA_Vector3 value,
+    const CNA_Matrix matrix,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(matrix)));
+    });
+}
+
+CNA_Result cna_vector4_transform_matrix(
+    const CNA_Vector4 value,
+    const CNA_Matrix matrix,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(matrix)));
+    });
+}
+
+CNA_Result cna_vector4_transform_matrix_array(
+    const CNA_Vector4* const source,
+    const uint64_t sourceCount,
+    const uint64_t sourceIndex,
+    const CNA_Matrix matrix,
+    CNA_Vector4* const destination,
+    const uint64_t destinationCount,
+    const uint64_t destinationIndex,
+    const uint64_t length)
+{
+    const Matrix nativeMatrix = ToNative(matrix);
+    return TransformArray(
+        source,
+        sourceCount,
+        sourceIndex,
+        destination,
+        destinationCount,
+        destinationIndex,
+        length,
+        [&nativeMatrix](const Vector4 value) {
+            return Vector4::Transform(value, nativeMatrix);
+        });
+}
+
+CNA_Result cna_vector4_transform_vector2_quaternion(
+    const CNA_Vector2 value,
+    const CNA_Quaternion rotation,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(rotation)));
+    });
+}
+
+CNA_Result cna_vector4_transform_vector3_quaternion(
+    const CNA_Vector3 value,
+    const CNA_Quaternion rotation,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(rotation)));
+    });
+}
+
+CNA_Result cna_vector4_transform_quaternion(
+    const CNA_Vector4 value,
+    const CNA_Quaternion rotation,
+    CNA_Vector4* const outValue)
+{
+    return StoreOutput(outValue, "The Vector4 output is null.", [=] {
+        return ToC(Vector4::Transform(ToNative(value), ToNative(rotation)));
+    });
+}
+
+CNA_Result cna_vector4_transform_quaternion_array(
+    const CNA_Vector4* const source,
+    const uint64_t sourceCount,
+    const uint64_t sourceIndex,
+    const CNA_Quaternion rotation,
+    CNA_Vector4* const destination,
+    const uint64_t destinationCount,
+    const uint64_t destinationIndex,
+    const uint64_t length)
+{
+    const Quaternion nativeRotation = ToNative(rotation);
+    return TransformArray(
+        source,
+        sourceCount,
+        sourceIndex,
+        destination,
+        destinationCount,
+        destinationIndex,
+        length,
+        [&nativeRotation](const Vector4 value) {
+            return Vector4::Transform(value, nativeRotation);
         });
 }

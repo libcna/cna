@@ -76,14 +76,15 @@ helper's signed-shift/overflow edge case.
 
 ## Vector operations
 
-`vectors.h` provides the complete Vector2 and Vector3 surfaces. Constructors and named constants become
+`vectors.h` provides the complete Vector2, Vector3 and Vector4 surfaces. Constructors and named constants become
 initialization/get operations; value-returning and out-ref native overload pairs collapse to one
 fallible C result-plus-output operation. Named C operations also represent every arithmetic
 operator. Vector3 additionally exposes all XNA direction constants and cross products. Float
 division retains canonical IEEE infinity/NaN behavior, including zero divisors,
 and zero-vector normalization likewise follows the native result rather than inventing validation.
 
-Matrix, quaternion and normal transformations support both a single value and raw-array ranges.
+Matrix and quaternion transformations support single values and raw-array ranges; Vector2/3 also
+provide normal transforms, while Vector4 accepts explicitly typed Vector2/3/4 single-value inputs.
 The bulk form takes source/destination counts, indices and a length, validates the complete range
 before writing anything, and permits the same sequential aliasing behavior as the native indexed
 loop. A zero-length operation accepts null zero-count arrays. No `std::vector` layout crosses the C

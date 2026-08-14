@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — VECTOR3 COMPLETE THROUGH CBIND-035B2c (2026-08-14)
+## C BINDING / C ABI — MATHHELPER AND VECTORS COMPLETE THROUGH CBIND-035B2d (2026-08-14)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -67,7 +67,11 @@
 > through 50 C operations, including direction constants, cross products and the full
 > matrix/quaternion/normal single and bulk transform families. Every entry point is covered by
 > strict-C normal, IEEE, alias, string, null and range-atomicity cases. The inventory is now 1,213
-> implemented, 21 partial, 5,111 planned and 70 N/A. CBIND-035B2d Vector4 is next.
+> implemented, 21 partial, 5,111 planned and 70 N/A. B2d now maps all 81 remaining Vector4 rows
+> through 46 C operations, including Vector2/3/4 input transforms and validated Vector4 bulk
+> ranges. All entry points have strict-C normal, IEEE, alias, string, null and range-atomicity
+> coverage. The complete B2 MathHelper/Vector2/3/4 slice is closed; the inventory is now 1,294
+> implemented, 21 partial, 5,030 planned and 70 N/A. CBIND-035B3 Quaternion/Matrix is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
