@@ -914,7 +914,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         // pbr3d.frag.glsl's tertiary PbrParams block: one material-factor/map-scale vec4 followed
         // by the alpha coverage vector used by glTF MASK draws.
-        void FillPbrParams(std::array<float, 8>& out, const GpuDrawParams& p)
+        void FillPbrParams(std::array<float, 12>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -924,6 +924,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[5] = p.alphaTest[1];
             out[6] = p.alphaTest[2];
             out[7] = p.alphaTest[3];
+            out[8] = p.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+            out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+            out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
+            out[11] = 0.0f;
         }
 
         // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::

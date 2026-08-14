@@ -53,7 +53,20 @@ layout(set = 3, binding = 2) uniform PbrParams {
     float normalScale;
     float occlusionStrength;
     vec4 alphaTest;
+    vec4 srgbFlags; // x=decode base, y=decode emissive, z=encode output
 } pbrp;
+
+vec3 cnaSrgbToLinear(vec3 c) {
+    vec3 lo = c / 12.92;
+    vec3 hi = pow((c + 0.055) / 1.055, vec3(2.4));
+    return mix(lo, hi, step(vec3(0.04045), c));
+}
+
+vec3 cnaLinearToSrgb(vec3 c) {
+    vec3 lo = c * 12.92;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    return mix(lo, hi, step(vec3(0.0031308), c));
+}
 
 // GGX/Trowbridge-Reitz D, Smith-Schlick-GGX visibility (direct-lighting k=(roughness+1)^2/8), and
 // Schlick Fresnel -- the glTF 2.0 spec's own reference BRDF (Appendix B.3.3/B.3.4/B.3.2). Mirrors
@@ -89,7 +102,8 @@ vec3 safeNormalize(vec3 v) {
 
 void main() {
     vec4 baseColorTex = texture(uTexture, fragUV);
-    vec3 albedo = baseColorTex.rgb * pc.diffuseColor.rgb;
+    vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
+    vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
     bool passesAlphaTest = (pbrp.alphaTest.y > 0.0)
         ? (abs(alpha - pbrp.alphaTest.x) < pbrp.alphaTest.y)
@@ -119,9 +133,13 @@ void main() {
     float occlusionSample = texture(uOcclusionMap, fragUV).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
-    vec3 emissive = lp.emissiveColor_pad.xyz * texture(uEmissiveMap, fragUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, fragUV).rgb;
+    emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y);
+    vec3 emissive = lp.emissiveColor_pad.xyz * emissiveSample;
 
     outColor = vec4(ambient + Lo + emissive, alpha);
     // REMED-GFX-009: blend toward FogColor (RGB only). fragFog.a = keep (1 no fog, 0 full fog).
-    outColor.rgb = mix(fragFog.rgb, outColor.rgb, fragFog.a);
+    vec3 fogLinear = mix(fragFog.rgb, cnaSrgbToLinear(fragFog.rgb), pbrp.srgbFlags.z);
+    outColor.rgb = mix(fogLinear, outColor.rgb, fragFog.a);
+    outColor.rgb = mix(outColor.rgb, cnaLinearToSrgb(outColor.rgb), pbrp.srgbFlags.z);
 }
