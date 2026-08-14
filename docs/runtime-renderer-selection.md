@@ -203,6 +203,7 @@ Not every pair of renderers can be linked into one binary. Incompatible combinat
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
+| `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 
 Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
 238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
@@ -215,8 +216,14 @@ their availability probe had failed. It exists so a configured fallback chain ca
 without breaking a driver to do it:
 
 ```bash
-CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame     # forces the chain's next entry
+CNA_DEBUG_UNAVAILABLE_RENDERERS=HEADLESS ./mygame   # fails the availability probe
+CNA_DEBUG_FAIL_RENDERER_INIT=SDL_RENDERER ./mygame  # fails during initialization
 ```
+
+The two are materially different. A failed probe happens before any window exists; a failed
+initialization happens after, so a candidate needing a different window kind forces CNA to destroy
+and recreate the window. That second path is otherwise unreachable without a genuinely broken
+driver.
 
 It sits alongside the renderer-specific debug variables this project already has
 (`CNA_BGFX_TRACE_*`, `CNA_LLGL_DEBUG`) — a named test seam, not something the resolution path does

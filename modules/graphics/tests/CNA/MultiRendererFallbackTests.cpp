@@ -16,6 +16,7 @@
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 
 #include "System/InvalidOperationException.hpp"
@@ -38,11 +39,13 @@ namespace
         {
             GraphicsRendererSelection::ResetForTestingEXT();
             SDL_unsetenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            SDL_unsetenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT");
         }
 
         void TearDown() override
         {
             SDL_unsetenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            SDL_unsetenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT");
             GraphicsRendererSelection::ResetForTestingEXT();
         }
 
@@ -57,6 +60,35 @@ namespace
                 value += CNA::getGraphicsRendererName(type);
             }
             SDL_setenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS", value.c_str(), 1);
+        }
+
+        /// Marks renderers as failing during initialization -- after their window already exists.
+        static void ForceInitFailure(const std::vector<GraphicsRendererType>& types)
+        {
+            std::string value;
+            for (const GraphicsRendererType type : types)
+            {
+                if (!value.empty())
+                    value += ',';
+                value += CNA::getGraphicsRendererName(type);
+            }
+            SDL_setenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT", value.c_str(), 1);
+        }
+
+        /// The first compiled-in renderer whose window kind differs from @p from's.
+        [[nodiscard]] static const CNA::Internal::Renderers::GraphicsRendererDescriptor*
+        FindDifferentWindowKind(GraphicsRendererType from)
+        {
+            namespace Renderers = CNA::Internal::Renderers;
+            const auto* origin = Renderers::GraphicsRendererRegistry::Find(from);
+            if (origin == nullptr)
+                return nullptr;
+            for (const auto& candidate : Renderers::GraphicsRendererRegistry::All())
+            {
+                if (candidate.type != from && candidate.windowKind != origin->windowKind)
+                    return &candidate;
+            }
+            return nullptr;
         }
 
         [[nodiscard]] static std::vector<GraphicsRendererType> Available()
@@ -221,6 +253,51 @@ TEST_F(MultiRendererFallbackTest, ReconstructionKeepsTheSubstitutedRendererNotTh
     EXPECT_NO_THROW(device.RecreateRendererForMultiSampleCount(1));
     EXPECT_EQ(device.GetGraphicsRendererType(), available[1]);
     EXPECT_EQ(GraphicsRendererSelection::GetFallbackHistory().size(), 1u);
+}
+
+TEST_F(MultiRendererFallbackTest, InitializationFailureAfterTheWindowExistsFallsThrough)
+{
+    // RTR-P8-6. Materially different from a failed probe: by the time construction throws, the
+    // window has already been created for the candidate that failed.
+    const auto available = Available();
+    GraphicsRendererSelection::SetFallbackChain(std::vector<GraphicsRendererType>{available[1]});
+    GraphicsRendererSelection::SetPreferred(available[0]);
+    ForceInitFailure({available[0]});
+
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+
+    EXPECT_EQ(device.GetGraphicsRendererType(), available[1]);
+
+    const auto history = GraphicsRendererSelection::GetFallbackHistory();
+    ASSERT_EQ(history.size(), 1u);
+    EXPECT_EQ(history.front().type, available[0]);
+    EXPECT_EQ(history.front().reason, GraphicsRendererFallbackReason::InitializationFailed);
+    // The renderer's own message has to survive into the record, or a real driver failure would be
+    // reduced to "it did not work".
+    EXPECT_NE(history.front().message.find("CNA_DEBUG_FAIL_RENDERER_INIT"), std::string::npos);
+}
+
+TEST_F(MultiRendererFallbackTest, FallingBackAcrossWindowKindsRecreatesTheWindow)
+{
+    // RTR-P5-12 / design decision 8, the case that needs BOTH a real multi build and a failure that
+    // happens after a window exists: SDL refuses a window carrying two graphics-API flags, so
+    // crossing from one window kind to another means destroying and recreating it.
+    const auto available = Available();
+    const auto* crossing = FindDifferentWindowKind(available[0]);
+    if (crossing == nullptr)
+        GTEST_SKIP() << "this build has no two renderers with different window kinds";
+
+    GraphicsRendererSelection::SetFallbackChain(
+        std::vector<GraphicsRendererType>{crossing->type});
+    GraphicsRendererSelection::SetPreferred(available[0]);
+    ForceInitFailure({available[0]});
+
+    Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+
+    EXPECT_EQ(device.GetGraphicsRendererType(), crossing->type);
+    // The device has to be genuinely usable afterwards -- a recreated window that nothing draws
+    // into would satisfy a weaker assertion.
+    EXPECT_NO_THROW(device.Clear(Microsoft::Xna::Framework::Color::CornflowerBlue));
 }
 
 #endif  // CNA_MULTI_RENDERER

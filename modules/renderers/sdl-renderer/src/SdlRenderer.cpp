@@ -935,8 +935,13 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> SdlRenderer::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<SdlRenderer::SdlRenderer>(args.window, args.virtualWidth, args.virtualHeight,
-                                                                 args.presentationMode, args.swapInterval);
+        // Fully qualified from the global namespace on purpose: this family's namespace and its
+        // class are both called SdlRenderer, so inside the qualified definition above the name
+        // SdlRenderer resolves to the NAMESPACE and SdlRenderer::SdlRenderer no longer names the
+        // class. The only family where the P2 rename collides with its own naming.
+        return std::make_unique<::CNA::Internal::Renderers::SdlRenderer::SdlRenderer>(
+            args.window, args.virtualWidth, args.virtualHeight,
+            args.presentationMode, args.swapInterval);
     }
 #endif
 }

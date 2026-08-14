@@ -42,6 +42,32 @@ namespace CNA::Internal::Renderers::EasyGL
         }
     }
 
+    namespace
+    {
+        /// Which of the five public GL identities this archive was compiled for.
+        ///
+        /// Deliberately derived from THIS TARGET's own CNA_GL_PROFILE_* define rather than from
+        /// CNA::getCurrentGraphicsRendererType(). That accessor reads the project-wide renderer
+        /// macros, which in a multi-renderer build name the BUILD DEFAULT -- so in a
+        /// SDL_RENDERER;OPENGLES3 build this descriptor reported SDL_RENDERER, the registry held
+        /// SDL_RENDERER twice, and OPENGLES3 was unreachable. Found by actually selecting each
+        /// renderer in a five-renderer binary.
+        [[nodiscard]] constexpr CNA::GraphicsRendererType ProfileIdentity()
+        {
+#if defined(CNA_GL_PROFILE_OPENGL33)
+            return CNA::GraphicsRendererType::OpenGL33;
+#elif defined(CNA_GL_PROFILE_WEBGL1)
+            return CNA::GraphicsRendererType::WebGL1;
+#elif defined(CNA_GL_PROFILE_WEBGL2)
+            return CNA::GraphicsRendererType::WebGL2;
+#elif defined(CNA_GL_PROFILE_OPENGLES2)
+            return CNA::GraphicsRendererType::OpenGLES2;
+#else // CNA_GL_PROFILE_OPENGLES3 -- the default within the EasyGL family
+            return CNA::GraphicsRendererType::OpenGLES3;
+#endif
+        }
+    }
+
     /**
      * @brief The EasyGL family's descriptor.
      *
@@ -50,8 +76,8 @@ namespace CNA::Internal::Renderers::EasyGL
     const GraphicsRendererDescriptor& GetDescriptor()
     {
         static const GraphicsRendererDescriptor descriptor{
-            .type                     = CNA::getCurrentGraphicsRendererType(),
-            .name                     = CNA::getCurrentGraphicsRendererName(),
+            .type                     = ProfileIdentity(),
+            .name                     = CNA::getGraphicsRendererName(ProfileIdentity()),
             .windowKind               = RendererWindowKind::OpenGL,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,

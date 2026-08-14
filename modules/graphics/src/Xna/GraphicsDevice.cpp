@@ -111,9 +111,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /// debug variables this project already has (CNA_BGFX_TRACE_*, CNA_LLGL_DEBUG) and the
         /// existing DebugSimulateContextLoss() channel: a deliberate, named test seam rather than
         /// something the resolution path does on its own.
-        [[nodiscard]] bool isDebugForcedUnavailable(std::string_view rendererName)
+        /// Shared by the two debug seams below: is rendererName listed in this variable?
+        [[nodiscard]] bool isRendererListedIn(const char* variable, std::string_view rendererName)
         {
-            const char* raw = SDL_getenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            const char* raw = SDL_getenv(variable);
             if (raw == nullptr || *raw == '\0')
                 return false;
 
@@ -141,6 +142,22 @@ namespace Microsoft::Xna::Framework::Graphics
                 }
             }
             return false;
+        }
+
+        /// CNA_DEBUG_UNAVAILABLE_RENDERERS: treat these renderers' availability probe as failing.
+        [[nodiscard]] bool isDebugForcedUnavailable(std::string_view rendererName)
+        {
+            return isRendererListedIn("CNA_DEBUG_UNAVAILABLE_RENDERERS", rendererName);
+        }
+
+        /// CNA_DEBUG_FAIL_RENDERER_INIT: treat these renderers as failing during INITIALIZATION,
+        /// which is a materially different path from failing the probe -- by then the window
+        /// already exists, so a candidate needing a different window kind forces CNA to destroy and
+        /// recreate it (plan_runtimerenderer.md design decision 8). That transition is otherwise
+        /// unreachable without a genuinely broken driver.
+        [[nodiscard]] bool isDebugForcedInitFailure(std::string_view rendererName)
+        {
+            return isRendererListedIn("CNA_DEBUG_FAIL_RENDERER_INIT", rendererName);
         }
 
         /// plan_runtimerenderer.md RTR-P4: the single point where the runtime selection meets the
@@ -2413,6 +2430,13 @@ namespace Microsoft::Xna::Framework::Graphics
                     createOrAttachWindow();
                     applyPresentationParametersToWindow();
                 }
+                if (isDebugForcedInitFailure(candidate->name))
+                {
+                    throw std::runtime_error(
+                        std::string(candidate->name) +
+                        ": initialization failed (forced by CNA_DEBUG_FAIL_RENDERER_INIT)");
+                }
+
                 createRenderer();
             }
             catch (const std::exception& e)

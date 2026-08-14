@@ -628,7 +628,7 @@ substitution, which arrives with P8.
 | RTR-P5-9 | ✅ | Fallback disabled (the default) → the first failure propagates unchanged, exactly as today. Regression test that the existing exception type and message survive. |
 | RTR-P5-10 | ✅ | `CNA::Logger` warning per fallback step: what was tried, why it failed, what is being tried next (design decision 7). |
 | RTR-P5-11 | ✅ | Window-kind conflict detection: comparing `RendererWindowKind` of the failed and candidate renderers (design decision 8). |
-| RTR-P5-12 | 🟨 | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
+| RTR-P5-12 | ✅ | Cross-kind fallback with `ownsWindow_ == true`: destroy and recreate the SDL window with the candidate's flags, re-publishing `Mouse`/`TextInputEXT` window handles. |
 | RTR-P5-13 | 🟨 | Cross-kind fallback with a caller-supplied `DeviceWindowHandle`: record `WindowKindConflict` and skip that candidate with a clear log line — never silently reuse an incompatible window. |
 | RTR-P5-14 | ✅ | `applyPreWindowAttributes` must re-run for the candidate before its window is recreated (`OPENGL1`'s GLX visual would otherwise be wrong). |
 | RTR-P5-15 | ✅ | Fallback across `needsVideoSubsystem` (e.g. `VULKAN` → `HEADLESS`): `SDL_QuitSubSystem(SDL_INIT_VIDEO)` handling, and the reverse direction. |
@@ -706,7 +706,7 @@ and CI-runnable. This is where fallback substitution is proven for the first tim
 | RTR-P8-3 | ✅ | `SetPreferred()` before `Game::Run()` reaches the right renderer end to end. |
 | RTR-P8-4 | ✅ | Env-var selection verified in the same binary. |
 | RTR-P8-5 | ✅ | **First real fallback:** an injected `isAvailable() == false` on the preferred renderer substitutes the next in chain; `GetFallbackHistory()` records it. |
-| RTR-P8-6 | 🟨 | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
+| RTR-P8-6 | ✅ | **First real init-failure fallback:** an injected constructor throw substitutes the next in chain. |
 | RTR-P8-7 | ✅ | Exhausted-chain behaviour verified end to end. |
 | RTR-P8-8 | ✅ | Latch verified end to end: `SetPreferred()` after `GraphicsDevice` construction throws `System::InvalidOperationException`. |
 | RTR-P8-9 | ✅ | Two `GraphicsDevice` lifetimes in one process, same renderer both times. |
@@ -759,10 +759,10 @@ Each set is its own task because each will surface its own third-party integrati
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P10-1 | ⬜ | `SDL_RENDERER + SOFTWARE + HEADLESS + STUB` — first set with a real window. |
-| RTR-P10-2 | ⬜ | `SDL_RENDERER + OPENGLES3` — first set crossing `RendererWindowKind::Plain` → `OpenGL`, exercising window recreation on fallback. |
+| RTR-P10-1 | ✅ | `SDL_RENDERER + SOFTWARE + HEADLESS + STUB` — first set with a real window. |
+| RTR-P10-2 | ✅ | `SDL_RENDERER + OPENGLES3` — first set crossing `RendererWindowKind::Plain` → `OpenGL`, exercising window recreation on fallback. |
 | RTR-P10-3 | ⬜ | `OPENGLES3 + VULKAN` — the `OpenGL`/`Vulkan` window-flag conflict (design decision 8) proven end to end, including the refusal path with a caller-supplied window. |
-| RTR-P10-4 | ⬜ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
+| RTR-P10-4 | ✅ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
 | RTR-P10-5 | ⬜ | `+ SDL_GPU`. |
 | RTR-P10-6 | ⬜ | `+ SKIA` — first heavy external artifact in a multi build. |
 | RTR-P10-7 | ⬜ | `+ BLEND2D`. |
