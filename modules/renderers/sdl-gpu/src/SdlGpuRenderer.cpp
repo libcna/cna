@@ -913,8 +913,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // pbr3d.frag.glsl's tertiary PbrParams block: material/map factors, alpha coverage,
-        // transfer flags, and the glTF dielectric Fresnel endpoints (four std140 vec4s).
-        void FillPbrParams(std::array<float, 16>& out, const GpuDrawParams& p)
+        // transfer flags, dielectric Fresnel endpoints, and ten affine texture-transform rows.
+        void FillPbrParams(std::array<float, 56>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -932,6 +932,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[13] = p.pbrDielectricF0[1];
             out[14] = p.pbrDielectricF0[2];
             out[15] = p.pbrDielectricF90;
+            for (int row = 0; row < 10; ++row)
+                for (int component = 0; component < 4; ++component)
+                    out[16 + row * 4 + component] =
+                        p.pbrTextureTransformRows[row][component];
         }
 
         // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::

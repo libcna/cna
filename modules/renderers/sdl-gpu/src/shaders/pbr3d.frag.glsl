@@ -55,6 +55,7 @@ layout(set = 3, binding = 2) uniform PbrParams {
     vec4 alphaTest;
     vec4 srgbFlags; // x=decode base, y=decode emissive, z=encode output
     vec4 dielectricFresnel; // xyz=dielectric F0, w=dielectric F90
+    vec4 textureTransformRows[10];
 } pbrp;
 
 vec3 cnaSrgbToLinear(vec3 c) {
@@ -101,8 +102,14 @@ vec3 safeNormalize(vec3 v) {
     return len2 > 0.0 ? v * inversesqrt(len2) : vec3(0.0);
 }
 
+vec2 cnaPbrTransformUV(vec2 uv, int slot) {
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, pbrp.textureTransformRows[slot * 2].xyz),
+                dot(value, pbrp.textureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main() {
-    vec4 baseColorTex = texture(uTexture, fragUV);
+    vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(fragUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
     vec3 albedo = baseColor * pc.diffuseColor.rgb;
     float alpha = baseColorTex.a * pc.diffuseColor.a;
@@ -115,11 +122,11 @@ void main() {
     vec3 T = normalize(fragTangent - N * dot(N, fragTangent));
     vec3 B = cross(N, T) * fragBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(uNormalMap, fragUV).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(uNormalMap, cnaPbrTransformUV(fragUV, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= pbrp.normalScale;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
-    vec4 mr = texture(uMetallicRoughnessMap, fragUV);
+    vec4 mr = texture(uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2));
     float roughness = clamp(mr.g * pbrp.roughnessFactor, 0.045, 1.0);
     float metallic  = clamp(mr.b * pbrp.metallicFactor, 0.0, 1.0);
 
@@ -132,10 +139,10 @@ void main() {
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light1Dir_pad.xyz), lp.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, safeNormalize(-lp.light2Dir_pad.xyz), lp.light2Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusionSample = texture(uOcclusionMap, fragUV).r;
+    float occlusionSample = texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4)).r;
     float occlusion = 1.0 + pbrp.occlusionStrength * (occlusionSample - 1.0);
     vec3 ambient = pc.ambientColor * albedo * occlusion;
-    vec3 emissiveSample = texture(uEmissiveMap, fragUV).rgb;
+    vec3 emissiveSample = texture(uEmissiveMap, cnaPbrTransformUV(fragUV, 3)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), pbrp.srgbFlags.y);
     vec3 emissive = lp.emissiveColor_pad.xyz * emissiveSample;
 
