@@ -740,6 +740,19 @@ it is worth doing is not tidiness: a compile-time gate can only describe ONE ren
 multi-renderer build a test meaning "this is how SOFTWARE behaves" does not run at all when SOFTWARE
 is compiled in but is not the default — and reports nothing, not even a skip.
 
+**The classification is conservative, deliberately.** It marks a whole file header-dependent as soon
+as it includes any renderer-family header, even when that include is itself `#ifdef`-guarded and
+only some of the file's tests need it — `PointListPrimitiveTests.cpp` is exactly that shape, mixing
+a guarded `Bgfx/BgfxRenderer.hpp` include with several tests whose bodies use nothing but the public
+XNA API. So 752 is a floor, not an estimate, and per-file conversion has to be decided per test
+rather than per file.
+
+**Converting a gate to a skip is only half the job.** A runtime-gated test that merely skips when
+its renderer is not the default has the same coverage as before — it is just honest about it now.
+Making it actually *run* per renderer needs the fixture to select the renderer, the way
+`CrossRendererContractTest::ForEachRenderer` does. That is the pattern the remaining conversion
+should follow, and it is why the batches are worth doing carefully rather than mechanically.
+
 The largest volume of work: 892 `#ifdef` sites, 86 CMake conditions. Single-renderer builds must
 keep compiling the corpus exactly as today throughout.
 
@@ -852,22 +865,36 @@ Each set is its own task because each will surface its own third-party integrati
 
 ## Task count
 
-| Phase | Tasks |
-|---|---|
-| P0 Foundations | 10 |
-| P1 Pre-window contract | 8 + 43 descriptors = 51 |
-| P2 Factory + registry | 8 + 42 renames = 50 |
-| P3 XNA-layer cleanup | 19 |
-| P4 Selection API | 16 |
-| P5 Fallback API | 23 |
-| P6 CMake multi-build | 24 |
-| P7 Identity reporting | 11 |
-| P8 First multi set | 12 |
-| P9 Test/example corpus | 27 |
-| P10 Wider multi sets | 25 |
-| P11 EasyGL runtime profile | 12 |
-| P12 Documentation and gates | 15 |
-| **Total** | **295** |
+| Phase | Done | Partial | Total |
+|---|---:|---:|---:|
+| P0 Foundations | 10 | 0 | 10 |
+| P1 Pre-window contract | 50 | 1 | 51 |
+| P2 Factory + registry | 48 | 1 | 50 |
+| P3 XNA-layer cleanup | 18 | 1 | 19 |
+| P4 Selection API | 16 | 0 | 16 |
+| P5 Fallback API | 22 | 1 | 23 |
+| P6 CMake multi-build | 21 | 2 | 24 |
+| P7 Identity reporting | 11 | 0 | 11 |
+| P8 First multi set | 12 | 0 | 12 |
+| P9 Test/example corpus | 9 | 0 | 27 |
+| P10 Wider multi sets | 6 | 0 | 25 |
+| P11 EasyGL runtime profile | 0 | 0 | 12 |
+| P12 Documentation and gates | 12 | 0 | 15 |
+| **Total** | **235** | **6** | **295** |
 
-P0–P5 (169 tasks) change no observable behaviour and are individually valuable refactors. P6
-onward introduces the second build mode.
+Status as of 2026-08-15. ✅ = implemented **and** verified against its stated acceptance criteria;
+🟨 = implemented but not verifiable in this environment (a Windows/macOS/Emscripten target, or a
+third-party dependency not present).
+
+P0–P5 change no observable behaviour and are individually valuable refactors; P6 onward introduces
+the second build mode. Both halves are complete and verified.
+
+What remains is concentrated in three places, none of which blocks the feature:
+
+- **P9** — the bulk corpus conversion (752 sites). The idiom, the audit and a cross-renderer suite
+  are in place; the mechanical work is not.
+- **P10** — multi sets needing a platform or dependency this environment does not have: the Windows
+  DirectX sets, the Emscripten browser set, macOS Metal, and the heavier middleware families
+  (BGFX, LLGL, DILIGENT, FNA3D, WICKED, SOKOL, MAGNUM, SKIA, WEBGPU).
+- **P11** — EasyGL's GL profile as a runtime choice, which is what would let the five GL identities
+  coexist. Until then the configure step refuses that combination with a message saying so.

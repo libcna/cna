@@ -7,14 +7,23 @@ compile-time selection remains the default and recommended mode. Design, decisio
 task breakdown: `plan_runtimerenderer.md`. User-facing documentation:
 `docs/runtime-renderer-selection.md`.
 
-**Verified build sets** (all with the full `CnaTests` suite):
+**Verified build sets** (all with the full `CnaTests` suite; 235 of the plan's 295 tasks done,
+6 partial):
 
 | Set | Result |
 |---|---|
-| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | 6379 passed, 0 failed |
-| `HEADLESS;SOFTWARE;STUB` | 6181 passed, 0 failed |
+| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | 6385 passed, 0 failed |
+| `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | 6385 passed, 0 failed — nine renderers, four independent GL families |
+| `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | 6269 passed, 0 failed |
+| `HEADLESS;SOFTWARE;STUB` | 6188 passed, 0 failed (the CI reference set) |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | 16 failures, identical by name to a single-renderer `SDL_RENDERER` build's — pre-existing, none from this feature |
-| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` / `SDL_RENDERER` | unchanged |
+| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` / `SDL_RENDERER` | unchanged: 6369 / 6172 / 6253 passed |
+
+**Four latent bugs were found only by building combinations**, not by review — each invisible until
+a second renderer was present: `sdl-renderer`'s class/namespace name collision, `opengl4`'s stray
+forward declaration shadowing the real `GraphicsRendererCreateArgs`, EasyGL's descriptor taking its
+identity from the build default, and `CNA_RENDERER_DEFINE` (which rides `cna_build_flags INTERFACE`
+into every module) holding the *last* identity's macro rather than the default's.
 
 **What remains** (phase numbers refer to `plan_runtimerenderer.md`):
 
