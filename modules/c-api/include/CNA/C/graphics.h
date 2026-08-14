@@ -249,6 +249,30 @@ typedef uint32_t CNA_SurfaceFormat;
 /** @brief CNA extension for an unsigned 16-bit single-channel format. */
 #define CNA_SURFACE_FORMAT_USHORT_EXT UINT32_C(26)
 
+/** @brief Fixed-width SpriteBatch draw ordering mode. */
+typedef uint32_t CNA_SpriteSortMode;
+
+/** @brief Defers sprites until end and preserves submission order. */
+#define CNA_SPRITE_SORT_MODE_DEFERRED UINT32_C(0)
+/** @brief Sends each sprite to the renderer during submission. */
+#define CNA_SPRITE_SORT_MODE_IMMEDIATE UINT32_C(1)
+/** @brief Defers sprites and groups them by texture. */
+#define CNA_SPRITE_SORT_MODE_TEXTURE UINT32_C(2)
+/** @brief Defers sprites and orders them from greater to lesser layer depth. */
+#define CNA_SPRITE_SORT_MODE_BACK_TO_FRONT UINT32_C(3)
+/** @brief Defers sprites and orders them from lesser to greater layer depth. */
+#define CNA_SPRITE_SORT_MODE_FRONT_TO_BACK UINT32_C(4)
+
+/** @brief Fixed-width bit set of SpriteBatch mirroring effects. */
+typedef uint32_t CNA_SpriteEffects;
+
+/** @brief Applies no sprite mirroring. */
+#define CNA_SPRITE_EFFECT_NONE UINT32_C(0)
+/** @brief Mirrors a sprite horizontally. */
+#define CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY (UINT32_C(1) << 0)
+/** @brief Mirrors a sprite vertically. */
+#define CNA_SPRITE_EFFECT_FLIP_VERTICALLY (UINT32_C(1) << 1)
+
 /**
  * @brief Describes the active CNA graphics renderer and its current device capabilities.
  */
@@ -320,6 +344,58 @@ typedef struct CNA_Texture2DInfo {
     /** @brief Texture surface format. */
     CNA_SurfaceFormat format;
 } CNA_Texture2DInfo;
+
+/**
+ * @brief Configures one SpriteBatch begin/end interval.
+ */
+typedef struct CNA_SpriteBatchBeginInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Native sprite ordering mode. */
+    CNA_SpriteSortMode sort_mode;
+
+    /** @brief Reserved for future state selection; callers must initialize this to zero. */
+    uint32_t reserved;
+} CNA_SpriteBatchBeginInfo;
+
+/**
+ * @brief Describes one textured quad in a batched SpriteBatch submission.
+ */
+typedef struct CNA_SpriteCommand {
+    /** @brief Size of this array element in bytes; version 1 requires exact current size. */
+    uint32_t struct_size;
+
+    /** @brief Version of this array element. */
+    uint32_t struct_version;
+
+    /** @brief Owned Color Texture2D handle sampled by this command. */
+    CNA_Handle texture;
+
+    /** @brief Destination rectangle in screen-space pixels. */
+    CNA_Rectangle destination;
+
+    /** @brief Source rectangle in texture pixels. */
+    CNA_Rectangle source;
+
+    /** @brief Per-channel tint multiplied with the sampled texture. */
+    CNA_Color color;
+
+    /** @brief Clockwise rotation in radians. Must be finite. */
+    float rotation;
+
+    /** @brief Rotation origin in source-texture pixels. Both components must be finite. */
+    CNA_Vector2 origin;
+
+    /** @brief Zero or more `CNA_SPRITE_EFFECT_*` bits. */
+    CNA_SpriteEffects effects;
+
+    /** @brief Sort depth consumed by depth-based modes. Must be finite. */
+    float layer_depth;
+} CNA_SpriteCommand;
 
 /**
  * @brief Borrows the active graphics device during a game lifecycle callback.
@@ -456,6 +532,81 @@ CNA_C_API CNA_Result cna_texture2d_get_data_rgba8(
  * after success; a second destroy returns `CNA_RESULT_INVALID_HANDLE`.
  */
 CNA_C_API CNA_Result cna_texture2d_destroy(CNA_Handle texture);
+
+/**
+ * @brief Creates an owned SpriteBatch bound to a borrowed graphics device.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_sprite_batch Receives an owned SpriteBatch handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses SpriteBatch,
+ * or a documented argument/handle/thread/native failure.
+ *
+ * The SpriteBatch outlives the callback that creates it, remains a child of the active game and
+ * must be destroyed before @ref cna_game_destroy.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_create(
+    CNA_Handle graphics_device,
+    CNA_Handle* out_sprite_batch);
+
+/**
+ * @brief Begins a SpriteBatch interval using a native sort mode and fixed default XNA states.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @param begin_info Versioned sort-mode configuration.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` if already begun,
+ * `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the requested operation, or another
+ * documented argument/handle/thread/native failure.
+ *
+ * This initial slice always uses AlphaBlend, LinearClamp, DepthStencilState.None,
+ * CullCounterClockwise, the identity transform and no custom effect.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_begin(
+    CNA_Handle sprite_batch,
+    const CNA_SpriteBatchBeginInfo* begin_info);
+
+/**
+ * @brief Submits an array of textured-quad commands through one C ABI transition.
+ *
+ * @param sprite_batch Owned SpriteBatch handle inside a begin/end interval.
+ * @param commands Caller-owned commands copied during this call, or null only when
+ * @p command_count is zero.
+ * @param command_count Number of elements beginning at @p commands.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside a begin/end interval,
+ * `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the requested operation, or another
+ * documented argument/handle/thread/native failure.
+ *
+ * All handles and POD fields are validated before native submission starts. Every texture must
+ * belong to the same game as the SpriteBatch and cannot be destroyed until a successful
+ * @ref cna_sprite_batch_end releases the batch's references. Version 1 arrays use a fixed stride,
+ * so every command's @ref CNA_SpriteCommand::struct_size must equal `sizeof(CNA_SpriteCommand)`.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_submit_many(
+    CNA_Handle sprite_batch,
+    const CNA_SpriteCommand* commands,
+    uint64_t command_count);
+
+/**
+ * @brief Flushes queued sprites and ends the active SpriteBatch interval.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no interval is active,
+ * `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the operation, or another documented
+ * handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_end(CNA_Handle sprite_batch);
+
+/**
+ * @brief Disposes and releases an owned SpriteBatch.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. A second destroy
+ * returns `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * Destroying during an active interval cancels that interval without flushing deferred commands
+ * and releases all retained texture references. Commands already emitted by Immediate mode cannot
+ * be undone. This cleanup route remains available after a native end/flush failure.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_destroy(CNA_Handle sprite_batch);
 
 #ifdef __cplusplus
 }

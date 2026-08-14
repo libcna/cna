@@ -62,6 +62,16 @@ capacity validation. Other surface formats and mip/sub-rectangle transfers remai
 this initial slice and return the documented argument or not-supported result rather than silently
 changing representation.
 
+`cna_sprite_batch_submit_many` accepts a contiguous array of versioned `CNA_SpriteCommand` POD
+values and crosses the C ABI once for the whole array. The adapter checks the complete array,
+including every handle, structure version, effect mask and finite floating-point field, before
+native submission begins. Version 1 has a fixed `sizeof(CNA_SpriteCommand)` stride and therefore
+requires that exact `struct_size` on every element; a later larger element layout will use an
+explicit stride or a new submission entry point rather than ambiguous pointer arithmetic. The
+adapter copies each command into native `Rectangle`, `Vector2`, `Color` and SpriteBatch values;
+neither the caller's array nor any C layout is retained. Native deferred queues hold their texture
+resources through `End`, not the caller's command storage.
+
 ## Collections
 
 No `std::vector`, Sharp Runtime collection, iterator or container pointer crosses the boundary.

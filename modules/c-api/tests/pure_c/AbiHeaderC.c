@@ -40,3 +40,21 @@ _Static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U,
                "CNA_Texture2DCreateInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Texture2DInfo) == 24U,
                "CNA_Texture2DInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Vector2) == 8U && sizeof(CNA_Rectangle) == 16U,
+               "CNA two-dimensional value layouts must remain stable");
+_Static_assert(sizeof(CNA_SpriteSortMode) == sizeof(uint32_t) &&
+                   CNA_SPRITE_SORT_MODE_DEFERRED == UINT32_C(0) &&
+                   CNA_SPRITE_SORT_MODE_IMMEDIATE == UINT32_C(1) &&
+                   CNA_SPRITE_SORT_MODE_TEXTURE == UINT32_C(2) &&
+                   CNA_SPRITE_SORT_MODE_BACK_TO_FRONT == UINT32_C(3) &&
+                   CNA_SPRITE_SORT_MODE_FRONT_TO_BACK == UINT32_C(4),
+               "CNA SpriteBatch sort identities must remain stable");
+_Static_assert(sizeof(CNA_SpriteEffects) == sizeof(uint32_t) &&
+                   CNA_SPRITE_EFFECT_NONE == UINT32_C(0) &&
+                   CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY == UINT32_C(1) &&
+                   CNA_SPRITE_EFFECT_FLIP_VERTICALLY == UINT32_C(2),
+               "CNA SpriteBatch effect bits must remain stable");
+_Static_assert(sizeof(CNA_SpriteBatchBeginInfo) == 16U,
+               "CNA_SpriteBatchBeginInfo layout must remain stable");
+_Static_assert(sizeof(CNA_SpriteCommand) == 72U,
+               "CNA_SpriteCommand layout must remain stable");

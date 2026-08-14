@@ -27,6 +27,16 @@ A recognized capability that is unavailable is a successful query returning `CNA
 unset bit. An operation that requires it returns `CNA_RESULT_NOT_SUPPORTED` and leaves documented
 outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_ARGUMENT`.
 
+## Initial SpriteBatch state boundary
+
+The initial batched C path maps every native `SpriteSortMode` and the two `SpriteEffects` bits. Its
+begin state is intentionally fixed to XNA's defaults: AlphaBlend, LinearClamp,
+DepthStencilState.None, CullCounterClockwise, identity transform and no custom effect. State-object
+and effect handles are later coverage work; the adapter does not invent approximate replacements.
+If a renderer raises `System::NotSupportedException` while creating, beginning, submitting or
+ending this path, the exception barrier returns `CNA_RESULT_NOT_SUPPORTED`. The active-batch
+destroy route remains available for cleanup after a failed flush.
+
 ## Test policy
 
 HEADLESS is the deterministic lifecycle/state control. It can prove C callback order, handle

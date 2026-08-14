@@ -43,6 +43,11 @@ The current game callbacks may call `cna_game_request_exit`, `cna_game_clear` an
 `CNA_RESULT_INVALID_STATE`. Game timing is non-null only for update and draw; it is null for load,
 unload and exit notifications.
 
+Owned textures and SpriteBatch objects may be created from the callback-scoped graphics-device
+handle, retained after the callback and used later on the same creation/graphics thread. Their
+handles do not inherit the callback's generation lifetime; they instead follow explicit destroy
+and child-before-game ordering.
+
 A callback result other than `CNA_RESULT_SUCCESS` is handled as described in
 [`ERRORS.md`](ERRORS.md); C code must return normally. Throwing a C++ exception, `longjmp` across a
 CNA frame or freeing a live callback context is unsupported behavior.

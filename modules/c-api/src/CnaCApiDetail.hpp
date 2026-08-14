@@ -5,6 +5,8 @@
 
 #include "CNA/C/core.h"
 
+#include "System/NotSupportedException.hpp"
+
 #include <cstdint>
 #include <cstddef>
 #include <exception>
@@ -71,6 +73,8 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const std::ios_base::failure& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const System::NotSupportedException& exception) {
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const std::exception& exception) {
         return Fail(CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_INTERNAL, exception.what());
     } catch (...) {

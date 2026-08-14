@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 complete; B4 underway through CBIND-023 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 complete; B4 underway through CBIND-024 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -201,7 +201,7 @@ conversion, and shut down cleanly without any C++ source or header dependency.
 |---|---|---|---|
 | CBIND-022 | Expose borrowed graphics-device access and capability discovery | ✅ | `graphics.h` defines callback-scoped device borrowing, stable identities for every canonical `GraphicsRendererType`, versioned renderer info, UTF-8 renderer-name count/copy and the complete canonical `GraphicsCapability` query/bit set. Callback return generation-invalidates the borrowed handle; identity, maximum texture size and support answers delegate to CNA rather than a duplicate renderer feature table. |
 | CBIND-023 | Expose `Texture2D` ownership and bulk upload | ✅ | All canonical `SurfaceFormat` identities are frozen; the initial supported Color subset provides versioned create/info, full-level bulk RGBA8 `SetData`/readback and explicit dispose/release. Pointer/count, dimensions, capacity, stale/double-destroy and parent-before-child errors are C-tested under HEADLESS and SDL_RENDERER; game destruction refuses live C graphics children. |
-| CBIND-024 | Expose a batched `SpriteBatch` command path | ⬜ | Add begin/submit-many/end semantics with a POD command array, not one ABI transition per sprite. Define texture reference/lifetime during a batch, sort/state limits and behavior for unsupported renderer features. |
+| CBIND-024 | Expose a batched `SpriteBatch` command path | ✅ | All five native sort identities and both effect bits are frozen; an owned same-game SpriteBatch accepts a fully prevalidated, versioned POD command array through one C ABI call. The initial state set is explicitly fixed to XNA defaults, textures are retained through successful `End`, active destruction cancels safely, and native `NotSupportedException` maps to `CNA_RESULT_NOT_SUPPORTED`; HEADLESS and SDL_RENDERER C tests cover state, validation, lifetime and stale handles. |
 | CBIND-025 | Expose input as snapshots | ⬜ | Add keyboard (then mouse/game-pad only when each is specified) snapshots and query helpers with explicit frame/thread semantics. Do not expose live internal input classes or per-key callbacks. |
 | CBIND-026 | Validate 2D results through C | ⬜ | Add a C test that creates/uploads a texture and emits a deterministic sprite batch. Use HEADLESS for lifecycle/state assertions and a supported real renderer for pixel assertions where available. |
 | CBIND-027 | Document the initial C API feature matrix | ⬜ | Publish exact supported operations, renderer limits, error behavior, resource ownership and intentionally unavailable XNA/C++ features. Do not label the surface as full XNA coverage. |
@@ -304,9 +304,9 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-023` are ✅; `CBIND-024` through `CBIND-044` are ⬜ **not started**. The
+`CBIND-000` through `CBIND-024` are ✅; `CBIND-025` through `CBIND-044` are ⬜ **not started**. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
-owned Color `Texture2D` bulk transfer, not complete public CNA coverage. No language-specific
-binding exists. B4 batched `SpriteBatch`, input snapshots and the complete public-surface inventory
-remain subsequent work.
+owned Color `Texture2D` bulk transfer and batched textured-quad submission, not complete public CNA
+coverage. No language-specific binding exists. B4 input snapshots, rendering validation and the
+complete public-surface inventory remain subsequent work.

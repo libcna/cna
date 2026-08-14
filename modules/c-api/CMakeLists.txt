@@ -147,7 +147,10 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
-    target_link_libraries(cna_c_api_handle_registry_test PRIVATE Threads::Threads)
+    target_link_libraries(cna_c_api_handle_registry_test PRIVATE
+        Threads::Threads
+        sharp_runtime_core_base
+    )
     cna_c_api_enable_strict_warnings(cna_c_api_handle_registry_test)
     add_test(NAME CApi_HandleRegistry COMMAND cna_c_api_handle_registry_test)
 
@@ -160,6 +163,7 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
     )
+    target_link_libraries(cna_c_api_boundary_detail_test PRIVATE sharp_runtime_core_base)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)
     add_test(NAME CApi_BoundaryDetail COMMAND cna_c_api_boundary_detail_test)
 endif()

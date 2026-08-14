@@ -44,6 +44,16 @@ int main()
         return 2;
     }
 
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::NotSupportedException("unsupported operation");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "unsupported operation")) {
+        return 3;
+    }
+
     SetLastError(
         CNA_RESULT_INTERNAL,
         CNA_ERROR_CATEGORY_INTERNAL,
@@ -65,7 +75,7 @@ int main()
         requiredBytes != 19U || message[0] != '\0' ||
         cna_error_copy_last_message(message, sizeof(message), &requiredBytes) != CNA_RESULT_SUCCESS ||
         requiredBytes != 19U || std::string_view(message, requiredBytes) != "boundary diagnostic") {
-        return 3;
+        return 4;
     }
 
     const char validUtf8[] = "CNA \xF0\x9F\x8E\xAE";
@@ -74,20 +84,20 @@ int main()
     if (ValidateStringView(valid, true) != CNA_RESULT_SUCCESS ||
         CopyStringView(valid, true, &copied) != CNA_RESULT_SUCCESS ||
         copied != validUtf8) {
-        return 4;
+        return 5;
     }
 
     const char overlong[] = "\xC0\x80";
     const CNA_StringView invalid = {overlong, sizeof(overlong) - 1U};
     if (ValidateStringView(invalid, false) != CNA_RESULT_ENCODING ||
         ValidateStringView({nullptr, 1U}, false) != CNA_RESULT_INVALID_ARGUMENT) {
-        return 5;
+        return 6;
     }
 
     const char embeddedNul[] = {'a', '\0', 'b'};
     if (ValidateStringView({embeddedNul, sizeof(embeddedNul)}, true) != CNA_RESULT_ENCODING ||
         ValidateStringView({embeddedNul, sizeof(embeddedNul)}, false) != CNA_RESULT_SUCCESS) {
-        return 6;
+        return 7;
     }
 
     std::size_t byteCount = 0U;
@@ -103,7 +113,7 @@ int main()
             std::numeric_limits<uint64_t>::max(),
             2U,
             &byteCount) != CNA_RESULT_OVERFLOW) {
-        return 7;
+        return 8;
     }
 
     return 0;

@@ -5,10 +5,16 @@
 
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -28,7 +34,12 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using Microsoft::Xna::Framework::Color;
+using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SpriteBatch;
+using Microsoft::Xna::Framework::Graphics::SpriteEffects;
+using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 
@@ -37,7 +48,48 @@ constexpr uint32_t StructureVersion = UINT32_C(1);
 struct Texture2DResource final {
     std::shared_ptr<Texture2D> value;
     CNA_Handle parentGame;
+    uint64_t activeBatchReferenceCount;
 };
+
+struct SpriteBatchResource final {
+    std::shared_ptr<SpriteBatch> value;
+    CNA_Handle parentGame;
+    bool begun;
+    std::vector<std::shared_ptr<Texture2DResource>> retainedTextures;
+};
+
+struct ResolvedSpriteCommand final {
+    CNA_SpriteCommand value;
+    std::shared_ptr<Texture2DResource> texture;
+};
+
+[[nodiscard]] bool TryMapSpriteSortMode(
+    const CNA_SpriteSortMode mode,
+    SpriteSortMode* const outMode) noexcept
+{
+    if (outMode == nullptr) {
+        return false;
+    }
+    switch (mode) {
+        case CNA_SPRITE_SORT_MODE_DEFERRED:
+            *outMode = SpriteSortMode::Deferred;
+            return true;
+        case CNA_SPRITE_SORT_MODE_IMMEDIATE:
+            *outMode = SpriteSortMode::Immediate;
+            return true;
+        case CNA_SPRITE_SORT_MODE_TEXTURE:
+            *outMode = SpriteSortMode::Texture;
+            return true;
+        case CNA_SPRITE_SORT_MODE_BACK_TO_FRONT:
+            *outMode = SpriteSortMode::BackToFront;
+            return true;
+        case CNA_SPRITE_SORT_MODE_FRONT_TO_BACK:
+            *outMode = SpriteSortMode::FrontToBack;
+            return true;
+        default:
+            return false;
+    }
+}
 
 [[nodiscard]] bool TryMapGraphicsCapability(
     const CNA_GraphicsCapability capability,
@@ -207,6 +259,33 @@ struct Texture2DResource final {
         result,
         ErrorCategoryForResult(result),
         "The owned Texture2D handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetSpriteBatch(
+    const CNA_Handle handle,
+    std::shared_ptr<SpriteBatchResource>* const outSpriteBatch)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle,
+        ObjectKind::SpriteBatch,
+        outSpriteBatch);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned SpriteBatch handle is invalid for this call.");
+}
+
+void ReleaseBatchTextureReferences(SpriteBatchResource& spriteBatch) noexcept
+{
+    for (const std::shared_ptr<Texture2DResource>& texture : spriteBatch.retainedTextures) {
+        if (texture->activeBatchReferenceCount != 0U) {
+            --texture->activeBatchReferenceCount;
+        }
+    }
+    spriteBatch.retainedTextures.clear();
 }
 
 [[nodiscard]] uint64_t GetTexturePixelCount(const Texture2D& texture) noexcept
@@ -421,7 +500,7 @@ CNA_Result cna_texture2d_create(
             createInfo->mip_map == CNA_TRUE,
             SurfaceFormat::Color);
         const auto resource = std::make_shared<Texture2DResource>(
-            Texture2DResource{texture, graphicsDevice->parentGame});
+            Texture2DResource{texture, graphicsDevice->parentGame, 0U});
         const CNA_Result result = GetRuntimeHandles().Create(
             ObjectKind::Texture2D,
             resource,
@@ -566,6 +645,12 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (texture->activeBatchReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Texture2D is retained by an active SpriteBatch interval.");
+        }
         texture->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(textureHandle);
         if (releaseResult != CNA_RESULT_SUCCESS) {
@@ -573,6 +658,234 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
                 releaseResult,
                 ErrorCategoryForResult(releaseResult),
                 "The owned Texture2D handle could not be released.");
+        }
+        RemoveOwnedGraphicsResource();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Handle* const outSpriteBatch)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outSpriteBatch == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch output handle is null.");
+        }
+        *outSpriteBatch = CNA_INVALID_HANDLE;
+
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const auto nativeSpriteBatch = std::make_shared<SpriteBatch>(*graphicsDevice->value);
+        const auto resource = std::make_shared<SpriteBatchResource>(SpriteBatchResource{
+            nativeSpriteBatch,
+            graphicsDevice->parentGame,
+            false,
+            {}});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::SpriteBatch,
+            resource,
+            outSpriteBatch);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned SpriteBatch handle could not be created.");
+        }
+        AddOwnedGraphicsResource();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_begin(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteBatchBeginInfo* const beginInfo)
+{
+    return CallWithExceptionBarrier([&]() {
+        SpriteSortMode nativeSortMode{};
+        if (beginInfo == nullptr ||
+            beginInfo->struct_size < sizeof(CNA_SpriteBatchBeginInfo) ||
+            beginInfo->struct_version != StructureVersion || beginInfo->reserved != 0U ||
+            !TryMapSpriteSortMode(beginInfo->sort_mode, &nativeSortMode)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch begin configuration is invalid.");
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch already has an active begin/end interval.");
+        }
+
+        spriteBatch->value->Begin(
+            nativeSortMode,
+            Microsoft::Xna::Framework::Graphics::BlendState::AlphaBlend);
+        spriteBatch->begun = true;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_submit_many(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteCommand* const commands,
+    const uint64_t commandCount)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::size_t ignoredByteCount = 0U;
+        if (const CNA_Result validationResult = CheckedElementByteCount(
+                commands,
+                commandCount,
+                sizeof(CNA_SpriteCommand),
+                &ignoredByteCount);
+            validationResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                validationResult,
+                ErrorCategoryForResult(validationResult),
+                "The SpriteBatch command array is invalid.");
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch has no active begin/end interval.");
+        }
+
+        std::vector<ResolvedSpriteCommand> resolvedCommands;
+        if (commandCount > resolvedCommands.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The SpriteBatch command count exceeds the native collection range.");
+        }
+        resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
+        constexpr CNA_SpriteEffects ValidEffects =
+            CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
+        for (uint64_t index = 0U; index < commandCount; ++index) {
+            const CNA_SpriteCommand& command = commands[index];
+            if (command.struct_size != sizeof(CNA_SpriteCommand) ||
+                command.struct_version != StructureVersion ||
+                (command.effects & ~ValidEffects) != 0U ||
+                !std::isfinite(command.rotation) || !std::isfinite(command.origin.x) ||
+                !std::isfinite(command.origin.y) || !std::isfinite(command.layer_depth)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A SpriteBatch command contains an invalid version, effect or "
+                    "floating-point value.");
+            }
+
+            std::shared_ptr<Texture2DResource> texture;
+            if (const CNA_Result result = GetTexture2D(command.texture, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (texture->parentGame != spriteBatch->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_HANDLE,
+                    CNA_ERROR_CATEGORY_HANDLE,
+                    "A SpriteBatch command texture belongs to a different game.");
+            }
+            resolvedCommands.push_back(ResolvedSpriteCommand{command, std::move(texture)});
+        }
+
+        for (const ResolvedSpriteCommand& resolved : resolvedCommands) {
+            if (resolved.texture->activeBatchReferenceCount ==
+                std::numeric_limits<uint64_t>::max()) {
+                return Fail(
+                    CNA_RESULT_OVERFLOW,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The SpriteBatch texture reference count overflowed.");
+            }
+            spriteBatch->retainedTextures.push_back(resolved.texture);
+            ++resolved.texture->activeBatchReferenceCount;
+            const CNA_SpriteCommand& command = resolved.value;
+            spriteBatch->value->Draw(
+                *resolved.texture->value,
+                Rectangle(
+                    command.destination.x,
+                    command.destination.y,
+                    command.destination.width,
+                    command.destination.height),
+                Rectangle(
+                    command.source.x,
+                    command.source.y,
+                    command.source.width,
+                    command.source.height),
+                Color(command.color.r, command.color.g, command.color.b, command.color.a),
+                command.rotation,
+                Vector2(command.origin.x, command.origin.y),
+                static_cast<SpriteEffects>(command.effects),
+                command.layer_depth);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_end(const CNA_Handle spriteBatchHandle)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch has no active begin/end interval.");
+        }
+
+        spriteBatch->value->End();
+        spriteBatch->begun = false;
+        ReleaseBatchTextureReferences(*spriteBatch);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (spriteBatch->begun) {
+            spriteBatch->begun = false;
+            ReleaseBatchTextureReferences(*spriteBatch);
+        }
+
+        spriteBatch->value->Dispose();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(spriteBatchHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned SpriteBatch handle could not be released.");
         }
         RemoveOwnedGraphicsResource();
         return CNA_RESULT_SUCCESS;

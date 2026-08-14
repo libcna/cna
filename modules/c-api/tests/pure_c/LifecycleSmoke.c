@@ -17,6 +17,7 @@ typedef struct LifecycleState {
     CNA_Bool supports_three_d;
     uint64_t renderer_name_bytes;
     CNA_Handle texture;
+    CNA_Handle sprite_batch;
 } LifecycleState;
 
 typedef struct WrongThreadState {
@@ -156,7 +157,46 @@ static CNA_Result on_load(
         required_pixels != 4U || memcmp(readback, pixels, sizeof(pixels)) != 0) {
         return CNA_RESULT_INVALID_STATE;
     }
+    CNA_Handle sprite_batch = CNA_INVALID_HANDLE;
+    if (cna_sprite_batch_create(graphics_device, &sprite_batch) != CNA_RESULT_SUCCESS ||
+        sprite_batch == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    const CNA_SpriteSortMode sort_modes[] = {
+        CNA_SPRITE_SORT_MODE_DEFERRED,
+        CNA_SPRITE_SORT_MODE_IMMEDIATE,
+        CNA_SPRITE_SORT_MODE_TEXTURE,
+        CNA_SPRITE_SORT_MODE_FRONT_TO_BACK
+    };
+    CNA_SpriteBatchBeginInfo sort_probe = {
+        sizeof(CNA_SpriteBatchBeginInfo), UINT32_C(1), UINT32_MAX, 0U
+    };
+    if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    for (size_t index = 0U; index < sizeof(sort_modes) / sizeof(sort_modes[0]); ++index) {
+        sort_probe.sort_mode = sort_modes[index];
+        if (cna_sprite_batch_begin(sprite_batch, &sort_probe) != CNA_RESULT_SUCCESS ||
+            cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+    CNA_Handle cancelled_sprite_batch = CNA_INVALID_HANDLE;
+    const CNA_SpriteBatchBeginInfo cancelled_begin_info = {
+        sizeof(CNA_SpriteBatchBeginInfo),
+        UINT32_C(1),
+        CNA_SPRITE_SORT_MODE_DEFERRED,
+        0U
+    };
+    if (cna_sprite_batch_create(graphics_device, &cancelled_sprite_batch) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_begin(cancelled_sprite_batch, &cancelled_begin_info) !=
+            CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_destroy(cancelled_sprite_batch) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_destroy(cancelled_sprite_batch) != CNA_RESULT_INVALID_HANDLE) {
+        return CNA_RESULT_INVALID_STATE;
+    }
     state->texture = texture;
+    state->sprite_batch = sprite_batch;
     ++state->lifecycle_stage;
     ++state->load_count;
     return CNA_RESULT_SUCCESS;
@@ -201,6 +241,56 @@ static CNA_Result on_draw(
     }
     if (cna_game_clear(game, (CNA_Color){UINT8_C(10), UINT8_C(20), UINT8_C(30), UINT8_C(255)}) !=
         CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    CNA_SpriteBatchBeginInfo begin_info = {
+        sizeof(CNA_SpriteBatchBeginInfo),
+        UINT32_C(1),
+        CNA_SPRITE_SORT_MODE_BACK_TO_FRONT,
+        0U
+    };
+    CNA_SpriteCommand commands[2] = {
+        {
+            sizeof(CNA_SpriteCommand),
+            UINT32_C(1),
+            state->texture,
+            {0, 0, 2, 2},
+            {0, 0, 2, 2},
+            {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)},
+            0.0F,
+            {0.0F, 0.0F},
+            CNA_SPRITE_EFFECT_NONE,
+            0.25F
+        },
+        {
+            sizeof(CNA_SpriteCommand),
+            UINT32_C(1),
+            state->texture,
+            {2, 0, 2, 2},
+            {0, 0, 2, 2},
+            {UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(128)},
+            0.0F,
+            {1.0F, 1.0F},
+            CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY,
+            0.75F
+        }
+    };
+    if (cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_INVALID_STATE ||
+        cna_sprite_batch_begin(state->sprite_batch, &begin_info) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_begin(state->sprite_batch, &begin_info) != CNA_RESULT_INVALID_STATE ||
+        cna_sprite_batch_submit_many(state->sprite_batch, 0, 0U) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    commands[0].effects = UINT32_C(4);
+    if (cna_sprite_batch_submit_many(state->sprite_batch, commands, 2U) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    commands[0].effects = CNA_SPRITE_EFFECT_NONE;
+    if (cna_sprite_batch_submit_many(state->sprite_batch, commands, 2U) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_destroy(state->texture) != CNA_RESULT_INVALID_STATE ||
+        cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_INVALID_STATE) {
         return CNA_RESULT_INVALID_STATE;
     }
     ++state->lifecycle_stage;
@@ -337,7 +427,8 @@ int main(void)
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         state.load_count != 1 || state.update_count < 1 || state.draw_count != 1 ||
         state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
-        state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE) {
+        state.renderer_name_bytes == 0U || state.texture == CNA_INVALID_HANDLE ||
+        state.sprite_batch == CNA_INVALID_HANDLE) {
         return 4;
     }
     CNA_RendererInfo stale_renderer_info = {
@@ -354,6 +445,10 @@ int main(void)
     if (cna_texture2d_get_info(state.texture, &live_texture_info) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
+        cna_game_destroy(game) != CNA_RESULT_INVALID_STATE ||
+        cna_sprite_batch_destroy(state.sprite_batch) != CNA_RESULT_SUCCESS ||
+        cna_sprite_batch_destroy(state.sprite_batch) != CNA_RESULT_INVALID_HANDLE ||
+        cna_sprite_batch_end(state.sprite_batch) != CNA_RESULT_INVALID_HANDLE ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_INVALID_HANDLE ||
         cna_texture2d_get_info(state.texture, &live_texture_info) != CNA_RESULT_INVALID_HANDLE) {
         return 6;
@@ -373,6 +468,8 @@ int main(void)
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run(game) != CNA_RESULT_SUCCESS || state.texture == CNA_INVALID_HANDLE ||
+        state.sprite_batch == CNA_INVALID_HANDLE ||
+        cna_sprite_batch_destroy(state.sprite_batch) != CNA_RESULT_SUCCESS ||
         cna_texture2d_destroy(state.texture) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 2 || state.exit_count != 2 || state.lifecycle_stage != 9) {

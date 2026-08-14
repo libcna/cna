@@ -103,6 +103,34 @@ typedef struct CNA_Color {
 } CNA_Color;
 
 /**
+ * @brief Represents a two-component single-precision vector value.
+ */
+typedef struct CNA_Vector2 {
+    /** @brief X component. */
+    float x;
+
+    /** @brief Y component. */
+    float y;
+} CNA_Vector2;
+
+/**
+ * @brief Represents an integer rectangle as position and size.
+ */
+typedef struct CNA_Rectangle {
+    /** @brief X coordinate of the top-left corner. */
+    int32_t x;
+
+    /** @brief Y coordinate of the top-left corner. */
+    int32_t y;
+
+    /** @brief Rectangle width. */
+    int32_t width;
+
+    /** @brief Rectangle height. */
+    int32_t height;
+} CNA_Rectangle;
+
+/**
  * @brief Gets the most recent error information for the calling thread.
  *
  * @param out_info Caller-provided versioned structure to receive the error information.

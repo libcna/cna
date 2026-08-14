@@ -31,6 +31,13 @@ any owned C graphics child is live; callers must destroy those children first. T
 performs canonical `Dispose`, releases its generation-checked handle and makes a second destroy a
 deterministic `CNA_RESULT_INVALID_HANDLE`.
 
+An owned C `SpriteBatch` follows the same game-child rule. A successful bulk submission retains
+each referenced texture until `cna_sprite_batch_end` flushes successfully, so destroying such a
+texture returns `CNA_RESULT_INVALID_STATE`. Destroying the batch during an active interval is the
+explicit recovery path: it cancels unflushed deferred commands, releases texture references and
+invalidates the batch handle. Immediate-mode commands already sent to the renderer cannot be
+undone. Texture commands are rejected unless texture and batch belong to the same game.
+
 ## Values, strings and arrays
 
 POD input values are copied on entry. String views and arrays are borrowed only for the duration of
