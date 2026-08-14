@@ -3199,6 +3199,9 @@ namespace CNA::Internal::Renderers::Wicked
                 constants.pbrFactors[1] = params->pbrRoughnessFactor;
                 constants.pbrFactors[2] = params->pbrNormalScale;
                 constants.pbrFactors[3] = params->pbrOcclusionStrength;
+                constants.pbrSrgb[0] = params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[1] = params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
+                constants.pbrSrgb[2] = params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
             }
         }
         else

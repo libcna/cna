@@ -58,6 +58,7 @@ struct CnaConstants
     float4 envMapParams;    // x = amount, y = fresnel enabled, z = fresnel factor
     float4 envMapSpecular;  // rgb = EnvironmentMapEffect.EnvironmentMapSpecular
     float4 pbrFactors;      // x=metallic, y=roughness, z=normal scale, w=occlusion strength
+    float4 pbrSrgb;         // x=decode base, y=decode emissive, z=encode output
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -439,6 +440,22 @@ PbrVSOut PbrSkinned68VS(float3 position : POSITION, float3 normal : NORMAL,
     return o;
 }
 
+float3 CnaSrgbToLinear(float3 color)
+{
+    const float3 low = color / 12.92f;
+    const float3 high = pow((color + 0.055f) / 1.055f, float3(2.4f, 2.4f, 2.4f));
+    return lerp(low, high, step(float3(0.04045f, 0.04045f, 0.04045f), color));
+}
+
+float3 CnaLinearToSrgb(float3 color)
+{
+    const float3 low = color * 12.92f;
+    const float exponent = 1.0f / 2.4f;
+    const float3 high = 1.055f * pow(max(color, 0.0f),
+                                    float3(exponent, exponent, exponent)) - 0.055f;
+    return lerp(low, high, step(float3(0.0031308f, 0.0031308f, 0.0031308f), color));
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
                 float roughness, float metallic)
 {
@@ -466,7 +483,8 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 float4 PbrPS(PbrVSOut input) : SV_Target
 {
     const float4 baseColorTex = texture0.Sample(sampler0, input.uv);
-    const float3 albedo = baseColorTex.rgb * cb.diffuse.rgb;
+    const float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), cb.pbrSrgb.x);
+    const float3 albedo = baseColor * cb.diffuse.rgb;
     const float alpha = baseColorTex.a * cb.diffuse.a;
 
     const float3 N = normalize(input.normalWS);
@@ -495,7 +513,9 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     const float occlusionSample = occlusionMap.Sample(sampler0, input.uv).r;
     const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);
     const float3 ambient = cb.ambient.rgb * albedo * occlusion;
-    const float3 emissive = cb.emissive.rgb * emissiveMap.Sample(sampler0, input.uv).rgb;
+    const float3 emissiveRaw = emissiveMap.Sample(sampler0, input.uv).rgb;
+    const float3 emissiveSample = lerp(emissiveRaw, CnaSrgbToLinear(emissiveRaw), cb.pbrSrgb.y);
+    const float3 emissive = cb.emissive.rgb * emissiveSample;
 
     const float selected = (cb.alphaTest.y > 0.0f)
         ? ((abs(alpha - cb.alphaTest.x) < cb.alphaTest.y) ? cb.alphaTest.z : cb.alphaTest.w)
@@ -506,8 +526,10 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     if (cb.fogColor.w != 0.0f)
     {
         const float keep = 1.0f - saturate(dot(input.positionOS, cb.fogVector));
-        rgb = lerp(cb.fogColor.rgb, rgb, keep);
+        const float3 fogLinear = lerp(cb.fogColor.rgb, CnaSrgbToLinear(cb.fogColor.rgb), cb.pbrSrgb.z);
+        rgb = lerp(fogLinear, rgb, keep);
     }
+    rgb = lerp(rgb, CnaLinearToSrgb(rgb), cb.pbrSrgb.z);
     return float4(rgb, alpha);
 }
 

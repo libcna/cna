@@ -230,6 +230,7 @@ namespace CNA::Internal::Renderers::Wicked
         float envMapParams[4] = {};      ///< x=amount, y=Fresnel enabled, z=Fresnel factor.
         float envMapSpecular[4] = {};    ///< `EnvironmentMapEffect.EnvironmentMapSpecular` RGB.
         float pbrFactors[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< metallic, roughness, normal scale, occlusion strength.
+        float pbrSrgb[4] = {};           ///< decode base, decode emissive, encode PBR output.
     };
 
     /**
