@@ -3,9 +3,10 @@
 ## Status
 
 The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
-the ABI/error substrate plus a HEADLESS-tested `Game` lifecycle slice (`CNA_GameTime`, clear and
-UTF-8 title). It is not complete public CNA coverage. The contract in this directory is binding on
-implementation until the release gate in
+the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
+(`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery). It
+is not complete public CNA coverage. The contract in this directory is binding on implementation
+until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
 
 ## Purpose
@@ -51,7 +52,7 @@ no row is incomplete, even if a similar operation happens to work indirectly.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
-`abi.h`, `core.h` and `runtime.h`; `graphics.h`, `input.h`, `content.h`, `audio.h` and later family
+`abi.h`, `core.h`, `runtime.h` and `graphics.h`; `input.h`, `content.h`, `audio.h` and later family
 headers follow as coverage requires.
 
 ## Supported configurations

@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 vertical slice completed under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B3 complete; B4 underway through CBIND-022 under HEADLESS and SDL_RENDERER (2026-08-14).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -199,7 +199,7 @@ conversion, and shut down cleanly without any C++ source or header dependency.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-022 | Expose borrowed graphics-device access and capability discovery | ⬜ | Define the callback-scoped graphics-device handle, active renderer identity, device capabilities and not-supported behavior. Renderer names/capabilities are queried from CNA rather than duplicated in the C API. |
+| CBIND-022 | Expose borrowed graphics-device access and capability discovery | ✅ | `graphics.h` defines callback-scoped device borrowing, stable identities for every canonical `GraphicsRendererType`, versioned renderer info, UTF-8 renderer-name count/copy and the complete canonical `GraphicsCapability` query/bit set. Callback return generation-invalidates the borrowed handle; identity, maximum texture size and support answers delegate to CNA rather than a duplicate renderer feature table. |
 | CBIND-023 | Expose `Texture2D` ownership and bulk upload | ⬜ | Add create, dimensions, format subset, bulk `SetData`/readback where CNA supports it, and release semantics. Validate source spans and map failures through `CNA_Result`; test texture lifetime through normal CNA teardown. |
 | CBIND-024 | Expose a batched `SpriteBatch` command path | ⬜ | Add begin/submit-many/end semantics with a POD command array, not one ABI transition per sprite. Define texture reference/lifetime during a batch, sort/state limits and behavior for unsupported renderer features. |
 | CBIND-025 | Expose input as snapshots | ⬜ | Add keyboard (then mouse/game-pad only when each is specified) snapshots and query helpers with explicit frame/thread semantics. Do not expose live internal input classes or per-key callbacks. |
@@ -304,8 +304,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-021` are ✅; `CBIND-022` through `CBIND-044` are ⬜ **not started**. The
-exported ABI is still experimental `0.1.0`: it contains the version/error substrate and the
-HEADLESS- and SDL_RENDERER-tested C game lifecycle slice, not complete public CNA coverage. No
-language-specific binding exists. B4 2D graphics/input and the complete public-surface inventory
-remain subsequent work.
+`CBIND-000` through `CBIND-022` are ✅; `CBIND-023` through `CBIND-044` are ⬜ **not started**. The
+exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
+and SDL_RENDERER-tested C game lifecycle slice and callback-scoped graphics capability discovery,
+not complete public CNA coverage. No language-specific binding exists. B4 `Texture2D`, batched
+`SpriteBatch`, input snapshots and the complete public-surface inventory remain subsequent work.

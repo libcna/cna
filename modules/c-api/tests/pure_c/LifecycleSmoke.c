@@ -13,6 +13,9 @@ typedef struct LifecycleState {
     int exit_count;
     int saw_time;
     int lifecycle_stage;
+    CNA_Handle borrowed_graphics_device;
+    CNA_Bool supports_three_d;
+    uint64_t renderer_name_bytes;
 } LifecycleState;
 
 typedef struct WrongThreadState {
@@ -44,6 +47,57 @@ static CNA_Result on_load(
     if (state->lifecycle_stage != 0 && state->lifecycle_stage != 5) {
         return CNA_RESULT_INVALID_STATE;
     }
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    CNA_Handle same_graphics_device = CNA_INVALID_HANDLE;
+    CNA_RendererInfo renderer_info = {
+        sizeof(CNA_RendererInfo),
+        UINT32_C(1),
+        0U,
+        0U,
+        0U,
+        0U
+    };
+    CNA_Bool supports_three_d = CNA_FALSE;
+    uint64_t renderer_name_bytes = 0U;
+    char renderer_name[32] = {0};
+    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        graphics_device == CNA_INVALID_HANDLE ||
+        cna_game_get_graphics_device(game, &same_graphics_device) != CNA_RESULT_SUCCESS ||
+        same_graphics_device != graphics_device ||
+        cna_graphics_device_get_renderer_info(graphics_device, &renderer_info) !=
+            CNA_RESULT_SUCCESS ||
+        renderer_info.renderer_name_byte_length == 0U ||
+        renderer_info.renderer_name_byte_length >= sizeof(renderer_name) ||
+        renderer_info.renderer_type == CNA_GRAPHICS_RENDERER_UNKNOWN ||
+        renderer_info.max_texture_dimension == 0U ||
+        cna_graphics_device_get_renderer_name_size(graphics_device, &renderer_name_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        renderer_name_bytes != renderer_info.renderer_name_byte_length ||
+        cna_graphics_device_copy_renderer_name(
+            graphics_device,
+            renderer_name,
+            renderer_name_bytes - 1U,
+            &renderer_name_bytes) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        cna_graphics_device_copy_renderer_name(
+            graphics_device,
+            renderer_name,
+            sizeof(renderer_name),
+            &renderer_name_bytes) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_supports_capability(
+            graphics_device,
+            CNA_GRAPHICS_CAPABILITY_THREE_D,
+            &supports_three_d) != CNA_RESULT_SUCCESS ||
+        (((renderer_info.capability_flags & CNA_GRAPHICS_CAPABILITY_FLAG_THREE_D) != 0U) !=
+         (supports_three_d == CNA_TRUE)) ||
+        cna_graphics_device_supports_capability(
+            graphics_device,
+            UINT32_MAX,
+            &supports_three_d) != CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->borrowed_graphics_device = graphics_device;
+    state->supports_three_d = supports_three_d;
+    state->renderer_name_bytes = renderer_name_bytes;
     ++state->lifecycle_stage;
     ++state->load_count;
     return CNA_RESULT_SUCCESS;
@@ -207,26 +261,40 @@ int main(void)
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS || game == CNA_INVALID_HANDLE) {
         return 1;
     }
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    if (cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_INVALID_STATE ||
+        graphics_device != CNA_INVALID_HANDLE) {
+        return 2;
+    }
     WrongThreadState wrong_thread_state = {game, CNA_RESULT_SUCCESS};
     thrd_t wrong_thread;
     int wrong_thread_return = 0;
     if (thrd_create(&wrong_thread, set_title_on_wrong_thread, &wrong_thread_state) != thrd_success ||
         thrd_join(wrong_thread, &wrong_thread_return) != thrd_success ||
         wrong_thread_return != 0 || wrong_thread_state.result != CNA_RESULT_THREAD) {
-        return 2;
+        return 3;
     }
     if (cna_game_set_window_title(game, (CNA_StringView){"C API title", 11U}) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS ||
         state.load_count != 1 || state.update_count < 1 || state.draw_count != 1 ||
-        state.saw_time != 1) {
-        return 3;
+        state.saw_time != 1 || state.borrowed_graphics_device == CNA_INVALID_HANDLE ||
+        state.renderer_name_bytes == 0U) {
+        return 4;
+    }
+    CNA_RendererInfo stale_renderer_info = {
+        sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
+    };
+    if (cna_graphics_device_get_renderer_info(
+            state.borrowed_graphics_device,
+            &stale_renderer_info) != CNA_RESULT_INVALID_HANDLE) {
+        return 5;
     }
     if (cna_game_request_exit(game) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 1 || state.exit_count != 1 ||
         state.lifecycle_stage != 5 ||
         cna_game_run_one_frame(game) != CNA_RESULT_INVALID_HANDLE) {
-        return 4;
+        return 6;
     }
 
     callbacks.update = on_update_and_exit;
@@ -238,7 +306,7 @@ int main(void)
         cna_game_run(game) != CNA_RESULT_SUCCESS ||
         cna_game_destroy(game) != CNA_RESULT_SUCCESS ||
         state.unload_count != 2 || state.exit_count != 2 || state.lifecycle_stage != 9) {
-        return 5;
+        return 7;
     }
 
     callbacks.load_content = on_failing_load;
@@ -250,7 +318,7 @@ int main(void)
     create_info = make_create_info(&callbacks, "", 0U);
     if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
         cna_game_run_one_frame(game) != CNA_RESULT_CALLBACK) {
-        return 6;
+        return 8;
     }
 
     CNA_ErrorInfo error_info = {sizeof(CNA_ErrorInfo), UINT32_C(1), 0U, 0U, 0U};
@@ -264,7 +332,7 @@ int main(void)
             CNA_RESULT_SUCCESS ||
         message_bytes != 21U || memcmp(message, "test callback failure", 21U) != 0 ||
         cna_game_destroy(game) != CNA_RESULT_CALLBACK) {
-        return 7;
+        return 9;
     }
 
     return 0;

@@ -6,7 +6,9 @@ Callbacks use an explicitly typed C function pointer and a caller-owned `void* c
 implemented callback table is `CNA_GameCallbacks`, copied by `cna_game_create`. Its function
 pointers and context remain caller-owned and must remain valid until `cna_game_destroy` returns.
 The game handle supplied to a lifecycle callback is borrowed for that callback duration; it may be
-used with callback-safe operations but must not be retained or destroyed.
+used with callback-safe operations but must not be retained or destroyed. A callback may derive a
+borrowed graphics-device handle with `cna_game_get_graphics_device`; CNA generation-invalidates
+that child handle before returning to the native game loop.
 
 Each game lifecycle callback receives a CNA-initialized `CNA_CallbackError`. If the callback returns
 anything other than `CNA_RESULT_SUCCESS`, it may fill the versioned `message` string view. CNA

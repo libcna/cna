@@ -9,5 +9,6 @@
 #include "CNA/C/abi.h"
 #include "CNA/C/core.h"
 #include "CNA/C/runtime.h"
+#include "CNA/C/graphics.h"
 
 #endif

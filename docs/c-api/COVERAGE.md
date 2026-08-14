@@ -20,6 +20,8 @@ unsupported or complete.
 | `GameTime` getters | Fixed-layout value snapshot | `runtime.h`: `CNA_GameTime` | Borrowed callback value | `AbiHeaderC.c`, `AbiHeaderCpp.cpp`, `LifecycleSmoke.c` | Implemented slice |
 | `GameWindow::setTitleProperty` | UTF-8 string view | `runtime.h`: `cna_game_set_window_title` | Creation thread; copies text | `LifecycleSmoke.c` | Implemented slice |
 | `GraphicsDevice::Clear(Color)` | `CNA_Color` POD + game operation | `core.h`, `runtime.h`: `CNA_Color`, `cna_game_clear` | Creation thread; callback-safe | `AbiHeaderC.c`, `AbiHeaderCpp.cpp`, `LifecycleSmoke.c` | Implemented slice |
+| `Game::getGraphicsDeviceProperty` | Callback-scoped borrowed handle | `graphics.h`: `cna_game_get_graphics_device` | Valid only during the active lifecycle callback; never caller-released | `LifecycleSmoke.c` | Implemented slice |
+| `GraphicsRendererType`, `GraphicsDevice::GetGraphicsRendererType`, `GetGraphicsRendererName`, `GetMaxTextureDimension`, `SupportsCapability` | Stable renderer identity, versioned renderer POD, UTF-8 count/copy and fixed capability query | `graphics.h`: `CNA_GraphicsRendererType`, `CNA_RendererInfo`, `cna_graphics_device_get_renderer_info`, `cna_graphics_device_get_renderer_name_size`, `cna_graphics_device_copy_renderer_name`, `cna_graphics_device_supports_capability` | Callback-scoped borrowed device; creation thread | `AbiHeaderC.c`, `AbiHeaderCpp.cpp`, `LifecycleSmoke.c` | Implemented slice |
 
 ## Source inventory boundary
 

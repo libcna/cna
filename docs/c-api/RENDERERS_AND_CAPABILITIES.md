@@ -11,11 +11,21 @@ documented output parameter unchanged. It must not silently substitute different
 
 ## Capability queries
 
-The initial core API will expose a versioned `CNA_RendererInfo` and a capability bit/query API.
-Names are returned through the UTF-8 query/copy protocol rather than raw native string pointers.
-Capability reporting covers the actual selected build, including meaningful limits such as 2D-only
-rendering, depth/stencil, effects, render targets, texture formats, input devices and platform
-services. It does not hard-code renderer facts in C headers that can drift from CNA.
+`cna_game_get_graphics_device` returns one callback-scoped borrowed device handle. Repeated queries
+within the same callback return the same handle; CNA invalidates it before the callback returns.
+The handle cannot be obtained outside a lifecycle callback and has no release operation.
+
+`CNA_RendererInfo` reports a stable `CNA_GraphicsRendererType`, the canonical renderer name length,
+the device's maximum single-axis texture dimension and a capability bit set. The matching
+one-capability query is authoritative when new capabilities no longer fit the current structure
+version. Renderer names use the UTF-8
+query/copy protocol rather than raw native string pointers. Every answer delegates to
+`GraphicsDevice::GetGraphicsRendererName`, `GetMaxTextureDimension` or `SupportsCapability`; the C
+adapter does not maintain a renderer-name feature table that could drift from CNA.
+
+A recognized capability that is unavailable is a successful query returning `CNA_FALSE` and an
+unset bit. An operation that requires it returns `CNA_RESULT_NOT_SUPPORTED` and leaves documented
+outputs unchanged. An unknown capability identifier returns `CNA_RESULT_INVALID_ARGUMENT`.
 
 ## Test policy
 
