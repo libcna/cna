@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: MS-PL
+
+#ifndef CNA_C_GEOMETRY_H
+#define CNA_C_GEOMETRY_H
+
+#include "CNA/C/math_values.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** @brief Initializes a zero plane. @param out_value Receives the plane. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_init(CNA_Plane* out_value);
+/** @brief Initializes a plane from Vector4. @param value XYZ normal and W distance. @param out_value Receives the plane. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_init_vector4(CNA_Vector4 value, CNA_Plane* out_value);
+/** @brief Initializes a plane from normal and distance. @param normal Plane normal. @param d Plane distance. @param out_value Receives the plane. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_init_normal_d(
+    CNA_Vector3 normal,
+    float d,
+    CNA_Plane* out_value);
+/** @brief Initializes a plane through three points. @param a First point. @param b Second point. @param c Third point. @param out_value Receives the plane. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_init_points(
+    CNA_Vector3 a,
+    CNA_Vector3 b,
+    CNA_Vector3 c,
+    CNA_Plane* out_value);
+/** @brief Initializes a plane from four coefficients. @param a Normal X. @param b Normal Y. @param c Normal Z. @param d Distance. @param out_value Receives the plane. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_init_abcd(
+    float a,
+    float b,
+    float c,
+    float d,
+    CNA_Plane* out_value);
+/** @brief Computes a plane/Vector4 dot product. @param plane Source plane. @param value Source vector. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_dot(
+    CNA_Plane plane,
+    CNA_Vector4 value,
+    float* out_value);
+/** @brief Computes normal dot coordinate plus D. @param plane Source plane. @param value Coordinate. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_dot_coordinate(
+    CNA_Plane plane,
+    CNA_Vector3 value,
+    float* out_value);
+/** @brief Computes a plane-normal dot product. @param plane Source plane. @param value Direction. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_dot_normal(
+    CNA_Plane plane,
+    CNA_Vector3 value,
+    float* out_value);
+/** @brief Normalizes a plane in place. @param value Plane to mutate. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_normalize_in_place(CNA_Plane* value);
+/** @brief Classifies a box against a plane. @param plane Source plane. @param box Box to classify. @param out_intersection Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_intersects_box(
+    CNA_Plane plane,
+    CNA_BoundingBox box,
+    CNA_PlaneIntersectionType* out_intersection);
+/** @brief Classifies a sphere against a plane. @param plane Source plane. @param sphere Sphere to classify. @param out_intersection Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_intersects_sphere(
+    CNA_Plane plane,
+    CNA_BoundingSphere sphere,
+    CNA_PlaneIntersectionType* out_intersection);
+/** @brief Classifies a frustum against a plane. @param plane Source plane. @param frustum Frustum to classify. @param out_intersection Receives the classification. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_intersects_frustum(
+    CNA_Plane plane,
+    CNA_BoundingFrustum frustum,
+    CNA_PlaneIntersectionType* out_intersection);
+/** @brief Tests plane equality. @param left First plane. @param right Second plane. @param out_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_equals(CNA_Plane left, CNA_Plane right, CNA_Bool* out_equal);
+/** @brief Tests plane inequality. @param left First plane. @param right Second plane. @param out_not_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_not_equals(
+    CNA_Plane left,
+    CNA_Plane right,
+    CNA_Bool* out_not_equal);
+/** @brief Computes a plane hash. @param value Source plane. @param out_hash Receives the hash. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_get_hash_code(CNA_Plane value, int32_t* out_hash);
+/** @brief Gets a plane string byte count. @param value Plane to format. @param out_bytes Receives the count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_get_string_size(CNA_Plane value, uint64_t* out_bytes);
+/** @brief Copies the canonical plane UTF-8 string without a terminator. @param value Plane to format. @param destination Destination bytes, or null only for zero capacity. @param capacity Destination capacity. @param out_bytes Receives the required count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_copy_string(
+    CNA_Plane value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+/** @brief Returns a normalized plane. @param value Source plane. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_normalize(CNA_Plane value, CNA_Plane* out_value);
+/** @brief Transforms a plane by a matrix. @param value Source plane. @param matrix Transformation matrix. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_transform_matrix(
+    CNA_Plane value,
+    CNA_Matrix matrix,
+    CNA_Plane* out_value);
+/** @brief Transforms a plane by a quaternion. @param value Source plane. @param rotation Quaternion rotation. @param out_value Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_plane_transform_quaternion(
+    CNA_Plane value,
+    CNA_Quaternion rotation,
+    CNA_Plane* out_value);
+
+/** @brief Initializes a zero ray. @param out_value Receives the ray. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_init(CNA_Ray* out_value);
+/** @brief Initializes a ray. @param position Ray origin. @param direction Ray direction. @param out_value Receives the ray. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_init_position_direction(
+    CNA_Vector3 position,
+    CNA_Vector3 direction,
+    CNA_Ray* out_value);
+/** @brief Tests ray equality. @param left First ray. @param right Second ray. @param out_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_equals(CNA_Ray left, CNA_Ray right, CNA_Bool* out_equal);
+/** @brief Tests ray inequality. @param left First ray. @param right Second ray. @param out_not_equal Receives the result. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_not_equals(CNA_Ray left, CNA_Ray right, CNA_Bool* out_not_equal);
+/** @brief Computes a ray hash. @param value Source ray. @param out_hash Receives the hash. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_get_hash_code(CNA_Ray value, int32_t* out_hash);
+
+/**
+ * @brief Intersects a ray with a box.
+ * @param ray Source ray.
+ * @param box Box to test.
+ * @param out_hit Receives whether an intersection exists.
+ * @param out_distance Receives the distance, or zero when no intersection exists.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_ray_intersects_box(
+    CNA_Ray ray,
+    CNA_BoundingBox box,
+    CNA_Bool* out_hit,
+    float* out_distance);
+/** @brief Intersects a ray with a sphere. @param ray Source ray. @param sphere Sphere to test. @param out_hit Receives whether an intersection exists. @param out_distance Receives the distance, or zero on no hit. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_intersects_sphere(
+    CNA_Ray ray,
+    CNA_BoundingSphere sphere,
+    CNA_Bool* out_hit,
+    float* out_distance);
+/** @brief Intersects a ray with a plane. @param ray Source ray. @param plane Plane to test. @param out_hit Receives whether an intersection exists. @param out_distance Receives the distance, or zero on no hit. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_intersects_plane(
+    CNA_Ray ray,
+    CNA_Plane plane,
+    CNA_Bool* out_hit,
+    float* out_distance);
+/** @brief Intersects a ray with a frustum. @param ray Source ray. @param frustum Frustum to test. @param out_hit Receives whether an intersection exists. @param out_distance Receives the distance, or zero on no hit. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_intersects_frustum(
+    CNA_Ray ray,
+    CNA_BoundingFrustum frustum,
+    CNA_Bool* out_hit,
+    float* out_distance);
+/** @brief Gets a ray string byte count. @param value Ray to format. @param out_bytes Receives the count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_get_string_size(CNA_Ray value, uint64_t* out_bytes);
+/** @brief Copies the canonical ray UTF-8 string without a terminator. @param value Ray to format. @param destination Destination bytes, or null only for zero capacity. @param capacity Destination capacity. @param out_bytes Receives the required count. @return A CNA result code. */
+CNA_C_API CNA_Result cna_ray_copy_string(
+    CNA_Ray value,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

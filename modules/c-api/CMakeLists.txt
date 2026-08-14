@@ -18,6 +18,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiDisplay.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiGraphicsState.cpp
+    src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
     src/CnaCApiSpriteFont.cpp
     src/CnaCApiInput.cpp
@@ -192,6 +193,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_matrix_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_matrix_smoke)
     add_test(NAME CApi_MatrixSmoke COMMAND cna_c_api_matrix_smoke)
+
+    add_executable(cna_c_api_geometry_smoke
+        tests/pure_c/GeometrySmoke.c
+    )
+    set_target_properties(cna_c_api_geometry_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_geometry_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_geometry_smoke)
+    add_test(NAME CApi_GeometrySmoke COMMAND cna_c_api_geometry_smoke)
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c

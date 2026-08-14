@@ -113,3 +113,14 @@ exceptions from perspective factories become `CNA_RESULT_INVALID_ARGUMENT` witho
 output. Decomposition reports its native Boolean separately while returning scale/Identity
 rotation/translation even for singular scale; singular inversion retains canonical IEEE
 non-finite components.
+
+## Plane and ray operations
+
+`geometry.h` begins with complete Plane and Ray surfaces. Plane construction, dot products,
+normalization, box/sphere/frustum classification and matrix/quaternion transforms use fixed-layout
+values and fallible outputs. Ray construction, equality/hash/string and box/sphere/plane/frustum
+intersection are likewise value-only operations.
+
+Native `std::optional<float>` ray distances cross the ABI as `out_hit` plus `out_distance`. A miss
+is a successful query with `CNA_FALSE` and a deterministic zero distance; both outputs are required
+and validated before either is written.

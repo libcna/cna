@@ -258,7 +258,7 @@ mechanical wrapper.
 | CBIND-035B1 | Complete Point and Rectangle operations | ✅ | `math.h` maps both complete source headers through 37 exported operations covering constructors, named zero/empty values, every property/overload/operator, hashes and exact UTF-8 count/copy strings. Unsigned-bit arithmetic preserves C# unchecked 32-bit wraparound without C++ signed-overflow UB; division rejects zero and the unrepresentable minimum/-1 quotient without partial output. `MathValuesSmoke.c` calls every entry point and covers boundaries, mutation, half-open containment, intersection/union, capacity and null failures under HEADLESS, SDL_RENDERER and ASan+UBSan. |
 | CBIND-035B2 | Complete MathHelper and Vector2/3/4 operations | ✅ | `math.h` and `vectors.h` map every MathHelper and Vector2/3/4 public inventory row through exact constants and fallible scalar/value/bulk operations. All overload-equivalent, finite/non-finite, exact-string, null/range-atomicity and sequential-aliasing contracts are covered in strict C under HEADLESS, SDL_RENDERER and ASan+UBSan. Completed as CBIND-035B2a–B2d. |
 | CBIND-035B3 | Complete Quaternion and Matrix operations | ✅ | `quaternion.h` and `matrix.h` map every remaining public row through 85 fallible operations. Both constructors/constants/properties and all member/static/operator math, decomposition/interpolation/transformation/factory routes are covered with row-major, singular, projection-failure, non-finite and aliasing evidence under both backends and ASan+UBSan. Completed as CBIND-035B3a–B3b. |
-| CBIND-035B4 | Complete planes, rays and bounding-volume operations | ⬜ | Map every construction, containment, intersection, merge, corner and equality/string/hash route with optional-hit and caller-capacity forms. |
+| CBIND-035B4 | Complete planes, rays and bounding-volume operations | 🟨 | Map every construction, containment, intersection, merge, corner and equality/string/hash route with optional-hit and caller-capacity forms. Work is decomposed into CBIND-035B4a–B4d below. |
 | CBIND-035B5 | Complete Curve value, collection and evaluation operations | ⬜ | Map Curve, CurveKey and CurveKeyCollection through C-owned/bulk values without leaking `std::vector`, including loop/tangent/evaluation and mutation behavior. |
 | CBIND-035B6 | Complete Color operations and named constants | ⬜ | Map all constructors/conversions, channels, packed value, arithmetic/interpolation/equality/string/hash routes and every public named Color constant with exact packed values. |
 | CBIND-035B7 | Complete PackedVector operations and close math coverage | ⬜ | Map all concrete packed constructors, float/vector conversions, equality/string/hash behavior and interface-equivalent storage routes; leave no planned math/PackedVector CBIND-035 row. |
@@ -278,6 +278,15 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035B3a | Complete Quaternion | ✅ | `quaternion.h` maps all 50 remaining Quaternion rows through 28 exported operations: both constructors, identity, complete member/static/operator math, axis/matrix/yaw-pitch-roll factories, concatenation, inversion, Lerp/Slerp and exact UTF-8 count/copy. Value/out-ref overloads share the result-plus-output form. `QuaternionSmoke.c` calls every entry point and covers rotation identities, normalized interpolation, IEEE zero normalization, aliasing, exact strings and null/capacity failures under both backends and ASan+UBSan. |
 | CBIND-035B3b | Complete Matrix and close parent B3 | ✅ | `matrix.h` maps all 98 remaining Matrix rows through 57 exported operations: both constructors, Identity, all seven directional/translation get/set properties, decomposition, determinant, equality/hash/string, every billboard/rotation/view/projection/scale/shadow/translation/reflection/world factory and complete arithmetic/transformation operators. Nullable pointers represent optional billboard directions. `MatrixSmoke.c` calls every entry point and covers row-major fields, property signs, decomposition success/failure outputs, projection rejection without output mutation, singular IEEE inversion and exact strings under both backends and ASan+UBSan. This closes parent CBIND-035B3. |
+
+##### CBIND-035B4 geometry slices
+
+| # | Task | Status | Acceptance criteria |
+|---|---|---|---|
+| CBIND-035B4a | Complete Plane and Ray | ✅ | `geometry.h` maps all 42 remaining Plane/Ray rows through 31 operations: all constructors, dot/normalization/transforms, volume classification, equality/hash/string and box/sphere/plane/frustum ray intersection. Native optional distances become an explicit hit flag plus distance, with zero distance on miss. `GeometrySmoke.c` calls every entry point and covers classifications, matrix/quaternion transforms, hit/miss distances, frustum containment, exact strings and null/capacity failures under both backends and ASan+UBSan. |
+| CBIND-035B4b | Complete BoundingBox | ⬜ | Map all constructors, corners, containment/intersection overloads, factories, merge, equality/hash/string and optional ray distances with caller-capacity arrays. |
+| CBIND-035B4c | Complete BoundingSphere | ⬜ | Map all constructors, containment/intersection overloads, factories, merge, transform, equality/hash/string and optional ray distances. |
+| CBIND-035B4d | Complete BoundingFrustum and close parent B4 | ⬜ | Map matrix/plane/corner properties, containment/intersection overloads, equality/hash/string and fixed/caller-capacity corner copies; close parent B4. |
 
 ## Phase B7 — hardening, documentation and experimental release
 
@@ -360,5 +369,6 @@ owned render targets and SpriteFonts. CBIND-035A establishes the public 3D value
 without claiming its still-unimplemented operations. CBIND-035B1 completes the Point and Rectangle
 operation families, and completed CBIND-035B2a–B2d cover stateless MathHelper plus all Vector2/3/4
 rows. Completed CBIND-035B3a–B3b cover Quaternion and Matrix. The current snapshot is 1,442
-implemented, 21 partial, 4,882 planned and 70 not applicable; CBIND-035B4 Plane, Ray and bounding
-volume operations are next.
+implemented, 21 partial, 4,882 planned and 70 not applicable. CBIND-035B4a completes Plane and Ray;
+the current snapshot is 1,484 implemented, 21 partial, 4,840 planned and 70 not applicable, with
+CBIND-035B4b BoundingBox next.

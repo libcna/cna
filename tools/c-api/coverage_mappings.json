@@ -819,6 +819,26 @@
       "tests": "every entry point, overload-equivalent operations, row-major fields, properties, decomposition/singularity, projection failures, IEEE inversion and exact strings in strict-C `MatrixSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035B3b"
+    },
+    {
+      "id": "plane-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Plane\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "`cna_plane_*` construction, dot, normalization, volume classification, equality/hash/string and matrix/quaternion transform operations",
+      "tests": "every entry point, overload-equivalent operations, classifications, transforms, IEEE normalization, exact strings and null/capacity failures in strict-C `GeometrySmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B4a"
+    },
+    {
+      "id": "ray-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Ray\\.hpp$",
+      "kinds": ["constructor", "method", "operator"],
+      "mapping": "`cna_ray_*` construction, equality/hash/string and explicit hit-plus-distance box/sphere/plane/frustum intersection operations",
+      "tests": "every entry point, hit/miss distances, frustum containment, exact strings and null/capacity failures in strict-C `GeometrySmoke.c`",
+      "status": "implemented",
+      "task": "CBIND-035B4a"
     }
   ]
 }
