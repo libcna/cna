@@ -83,6 +83,10 @@ namespace
         p.pbrBaseColorTextureIsSrgb = false;
         p.pbrEmissiveTextureIsSrgb = true;
         p.pbrEncodeOutputToSrgb = false;
+        p.pbrDielectricF0[0] = 65;
+        p.pbrDielectricF0[1] = 66;
+        p.pbrDielectricF0[2] = 67;
+        p.pbrDielectricF90 = 68;
         p.lightingEnabled = true;
         return p;
     }
@@ -276,6 +280,7 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.fogColorEnabled, 54,55,56,1);
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);
     ExpectVec4Eq(pu.srgbFlags, 0,1,0,0);
+    ExpectVec4Eq(pu.dielectricFresnel, 65,66,67,68);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)
@@ -300,6 +305,7 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.pbrFactors[i], referencePu.pbrFactors[i], kEps);
         EXPECT_NEAR(pu.fogColorEnabled[i], referencePu.fogColorEnabled[i], kEps);
         EXPECT_NEAR(pu.srgbFlags[i], referencePu.srgbFlags[i], kEps);
+        EXPECT_NEAR(pu.dielectricFresnel[i], referencePu.dielectricFresnel[i], kEps);
     }
 
     // SkinnedPbrTransform's own fields: wvp/world and the world inverse-transpose copied from the

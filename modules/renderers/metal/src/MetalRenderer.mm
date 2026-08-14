@@ -268,7 +268,6 @@ struct EnvUniforms {
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
-    float4 srgbFlags;       // x=base decode, y=emissive decode, z=output encode
 };
 struct VEnvOut { float4 position [[position]]; float3 worldNormal; float3 eyeDir; float2 uv; float fresnel; float fogFactor; };
 vertex VEnvOut cna_v3d_envmap(V3NormalTexIn in [[stage_in]], constant EnvTransform& t [[buffer(1)]], constant EnvUniforms& eu [[buffer(2)]]) {
@@ -469,6 +468,8 @@ struct PbrUniforms {
     float4 alphaTest;
     float4 fogColorEnabled;
     float4 fogVector;
+    float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode
+    float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
 };
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
@@ -488,7 +489,7 @@ vertex VPbrOut cna_v3d_pbr(VPbrIn in [[stage_in]], constant PbrTransform& t [[bu
     o.fogFactor = 1.0 - clamp(dot(float4(in.position, 1.0), pu.fogVector), 0.0, 1.0);
     return o;
 }
-inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float roughness, float metallic) {
+inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0, float3 F90, float roughness, float metallic) {
     float3 H = normalize(V + L);
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 1e-4);
@@ -499,7 +500,7 @@ inline float3 cna_pbr_light(float3 N, float3 V, float3 L, float3 lightColor, flo
     float D = a2 / (3.14159265*dTerm*dTerm + 1e-7);
     float k = (roughness+1.0); k = k*k/8.0;
     float G = (NdotV/(NdotV*(1.0-k)+k)) * (NdotL/(NdotL*(1.0-k)+k));
-    float3 F = F0 + (float3(1.0)-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
+    float3 F = F0 + (F90-F0) * pow(clamp(1.0-VdotH, 0.0, 1.0), 5.0);
     float3 specular = (D*G*F) / max(4.0*NdotV*NdotL, 1e-4);
     float3 diffuseColor = albedo * (1.0-metallic);
     float3 kd = float3(1.0) - F;
@@ -538,11 +539,12 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
     float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
     float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
-    float3 F0 = mix(float3(0.04), albedo, metallic);
+    float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic);
+    float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic);
     float3 Lo = float3(0.0);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, roughness, metallic);
-    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
+    Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     float occlusionSample = occlusionMap.sample(occlusionSmp, in.uv).r;
     float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;

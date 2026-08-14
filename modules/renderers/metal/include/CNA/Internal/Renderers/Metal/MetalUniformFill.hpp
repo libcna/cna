@@ -85,6 +85,7 @@ namespace CNA::Internal::Renderers::Metal
         float alphaTest[4];
         float fogColorEnabled[4], fogVector[4];
         float srgbFlags[4];    // x=base decode, y=emissive decode, z=output encode
+        float dielectricFresnel[4]; // xyz=dielectric F0, w=dielectric F90
     };
 
     // Plain C++ mirror of kMetalShaderSource's `SkinnedPbrTransform` (reuses `MetalPbrUniforms`
@@ -280,6 +281,10 @@ namespace CNA::Internal::Renderers::Metal
         pu.srgbFlags[1]=params.pbrEmissiveTextureIsSrgb?1.0f:0.0f;
         pu.srgbFlags[2]=params.pbrEncodeOutputToSrgb?1.0f:0.0f;
         pu.srgbFlags[3]=0.0f;
+        pu.dielectricFresnel[0]=params.pbrDielectricF0[0];
+        pu.dielectricFresnel[1]=params.pbrDielectricF0[1];
+        pu.dielectricFresnel[2]=params.pbrDielectricF0[2];
+        pu.dielectricFresnel[3]=params.pbrDielectricF90;
     }
 
     // plan_metal.md METAL-82: fills SkinnedPbrTransform/PbrUniforms from GpuDrawParams. The uniform
