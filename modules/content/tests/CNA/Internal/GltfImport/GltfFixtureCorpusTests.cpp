@@ -29,6 +29,7 @@
 #include <iomanip>
 #include <iterator>
 #include <map>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <string>
@@ -394,6 +395,51 @@ TEST(GltfFixtureCorpus, SampleAssetsFetcherIsPinnedSparseExplicitAndDeveloperOnl
     EXPECT_NE(std::string::npos, text.find("No model licence was reviewed by this fetch"));
     EXPECT_EQ(std::string::npos, text.find("rm -"))
         << "the fetcher must never erase an existing or partial checkout";
+}
+
+TEST(GltfFixtureCorpus, ViewerRetakeMatrixIsPinnedCompleteAndStrict)
+{
+    // GLTF-429 is an opt-in system retake, but its definition is permanent conformance state.
+    // Check the matrix and protocol without a display, browser, network or third-party checkout;
+    // the real harness separately proves that all of these cases pass.
+    const std::filesystem::path script =
+        CorpusDirectory().parent_path().parent_path().parent_path()
+        / "scripts" / "gltf-viewer-retake.py";
+    std::ifstream file(script, std::ios::binary);
+    ASSERT_TRUE(file.is_open()) << script.string();
+    const std::string text((std::istreambuf_iterator<char>(file)),
+                           std::istreambuf_iterator<char>());
+
+    EXPECT_NE(std::string::npos, text.find(
+        "863b981fb755359063e370ff7b6e956bda0716e2"));
+    EXPECT_NE(std::string::npos, text.find(
+        "2bac6f8c57bf471df0d2a1e8a8ec023c7801dddf"));
+    EXPECT_NE(std::string::npos, text.find("MINIMUM_MASK_IOU = 0.99"));
+    EXPECT_NE(std::string::npos, text.find("MAXIMUM_RGB_MAE = 100.0"));
+    EXPECT_NE(std::string::npos, text.find("twoProcessPngByteIdentical"));
+    EXPECT_NE(std::string::npos, text.find("fixed animation equals bind/time-zero"));
+    EXPECT_NE(std::string::npos, text.find("footprint[\"bytes\"] < 50 * 1024 * 1024"));
+    EXPECT_NE(std::string::npos, text.find("rows != list(range(1, 15))"));
+    EXPECT_NE(std::string::npos, text.find("len(results) != 15"));
+
+    std::set<std::string> caseIds;
+    std::set<int> rows;
+    const std::regex declaration(
+        R"(RetakeCase\(([0-9]+),\s*\"([a-z0-9-]+)\")");
+    for (std::sregex_iterator it(text.begin(), text.end(), declaration), end; it != end; ++it)
+    {
+        rows.insert(std::stoi((*it)[1].str()));
+        EXPECT_TRUE(caseIds.insert((*it)[2].str()).second)
+            << "duplicate retake case " << (*it)[2].str();
+    }
+    EXPECT_EQ(15u, caseIds.size());
+    EXPECT_EQ(14u, rows.size());
+    for (int row = 1; row <= 14; ++row)
+    {
+        EXPECT_NE(rows.end(), rows.find(row)) << "Gate C row " << row << " is absent";
+    }
+    EXPECT_NE(caseIds.end(), caseIds.find("sparse-attribute"));
+    EXPECT_NE(caseIds.end(), caseIds.find("sparse-index"));
 }
 
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
