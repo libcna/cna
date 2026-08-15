@@ -153,5 +153,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME RendererIdentityRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
+
+        # plan_binding.md CBIND-043: the C API coverage matrix is a GATE, not a report.
+        #
+        # docs/c-api/COVERAGE.md is generated from every public Microsoft/** and CNA/** header, so
+        # a new public C++ symbol that arrives without its C API row makes the checked-in inventory
+        # stale. Verified to catch exactly that: adding one declaration to CNAHelper.hpp turns this
+        # from pass to "Coverage inventory is stale", naming the command that fixes it.
+        #
+        # Deliberately NOT inside if(CNA_BUILD_C_API): the check reads headers and the matrix and
+        # builds nothing, and the rule it enforces is about the C++ surface. Gating it on the C API
+        # being built would mean the ordinary build -- the one most changes are made in -- never
+        # notices that a new public symbol went unmapped.
+        add_test(NAME CApiCoverageMatrix
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
     endif()
 endif()
