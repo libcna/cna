@@ -954,3 +954,10 @@ _Static_assert(sizeof(CNA_KeyState) == sizeof(uint32_t) &&
                    CNA_KEY_MODIFIER_MODE == UINT32_C(0x80) &&
                    CNA_KEY_MODIFIER_ALL == UINT32_C(0xFF),
                "CNA keyboard identities must remain stable");
+
+_Static_assert(sizeof(CNA_MouseCursorHandle) == 8U &&
+                   sizeof(CNA_MouseEventRegistrationHandle) == 8U &&
+                   sizeof(CNA_MouseCursorStock) == sizeof(uint32_t) &&
+                   CNA_MOUSE_CURSOR_STOCK_ARROW == UINT32_C(0) &&
+                   CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW == UINT32_C(11),
+               "CNA mouse cursor identities must remain stable");

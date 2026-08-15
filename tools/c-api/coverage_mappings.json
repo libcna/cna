@@ -3170,6 +3170,90 @@
       "tests": "`InputSnapshotsSmoke.c` subscribes, raises a click and asserts the handler ran with the right button, releases and asserts it stops running, covers double release and a never-created handle as `CNA_RESULT_INVALID_HANDLE`, and covers the null-callback and null-output refusals; the reset case proves a cleared event still releases cleanly. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b"
+    },
+    {
+      "id": "mouse-cursor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor(?:::(?:FromTexture2D|Dispose|~MouseCursor))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_MouseCursorHandle`. `cna_mouse_cursor_create_ext` reproduces the default constructor \u2014 a cursor with nothing behind it, which is a real handle that can be set and released \u2014 and `cna_mouse_cursor_create_from_texture2d` maps the canonical factory, refusing a non-color texture format exactly as it does. The canonical destructor becomes `cna_mouse_cursor_destroy` and `Dispose` its own idempotent route, so a caller can release the native resource without giving up the handle",
+      "tests": "`InputSnapshotsSmoke.c` covers the empty cursor end to end, double disposal, double release refused as `CNA_RESULT_INVALID_HANDLE`, and a texture-derived cursor probed by **behavior**: whichever documented answer the backend gives, the success path is exercised fully and the refusal path is required to leave the output handle invalid. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-cursor-sdl-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::MouseCursor$",
+      "signature_regex": "^\\(SDL_Cursor \\*sdlCursor, bool owning=false\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: this constructor adopts a raw `SDL_Cursor*`, a native backend pointer that must never cross the ABI. C creates cursors through the default constructor, the texture factory or the stock accessor",
+      "tests": "Doxygen declaration inventory; the three C-reachable creation paths are covered by `InputSnapshotsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-cursor-moves",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::(?:MouseCursor|operator=)$",
+      "signature_regex": "^\\(MouseCursor &&other\\)( noexcept)?$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: a handle is the only name C has for a cursor, so there is no second name to move from. The canonical move operations exist so the C++ factory can return by value, which the C factory expresses by handing back an owned handle instead",
+      "tests": "Doxygen declaration inventory; ownership transfer is covered by the create/destroy round trips in `InputSnapshotsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-cursor-sdl-accessor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::GetSDLCursor$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: it returns a raw `SDL_Cursor*`. Exposing it would put a native backend pointer in the ABI and let a C consumer outlive or double-free the cursor behind the handle",
+      "tests": "Doxygen declaration inventory; every operation a C consumer needs is reachable through the handle",
+      "status": "not-applicable",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-cursor-stock",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::get(?:Arrow|Crosshair|Hand|IBeam|No|SizeAll|SizeNESW|SizeNS|SizeNWSE|SizeWE|Wait|WaitArrow)Property$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "all twelve collapse into `cna_mouse_cursor_get_stock_ext` with a `CNA_MOUSE_CURSOR_STOCK_*` identity, because the canonical accessors differ only in which singleton they return. The canonical stock cursors are **process-lifetime singletons whose disposal is a deliberate no-op**, so the handle is a borrowed view: destroying it releases the handle and never frees the shared native cursor, and disposing it succeeds without doing anything, exactly as the canonical `Dispose` does",
+      "tests": "`InputSnapshotsSmoke.c` resolves, sets and releases all twelve identities, refuses a thirteenth and a null output, and proves the no-op disposal by disposing and releasing one identity and then using a fresh handle for the same identity successfully, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-set-cursor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Mouse::SetCursor$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_mouse_set_cursor_ext`, taking an owned or stock cursor handle. **Re-partitioned into CBIND-037B4c** from the mouse slice, because it cannot be mapped before a cursor handle exists. The canonical operation returns nothing, so a backend that cannot change the cursor \u2014 and a cursor with nothing behind it \u2014 succeed and change nothing",
+      "tests": "`InputSnapshotsSmoke.c` sets the empty cursor, every stock cursor and a texture-derived cursor when the backend produces one, and refuses a never-created handle, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4c"
+    },
+    {
+      "id": "mouse-cursor-default-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::MouseCursor$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_mouse_cursor_create_ext`, which produces a cursor with nothing behind it \u2014 a real handle that can be set and released, exactly as the canonical default-constructed value can",
+      "tests": "`InputSnapshotsSmoke.c` creates one, sets it, disposes it twice and releases it, then refuses a second release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4c"
     }
   ]
 }

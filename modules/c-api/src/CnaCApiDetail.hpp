@@ -110,6 +110,7 @@ enum class ObjectKind : uint32_t {
     SignedInGamer = 63,
     NetworkSessionEventRegistration = 64,
     MouseEventRegistration = 65,
+    MouseCursor = 66,
     Test = UINT32_MAX
 };
 

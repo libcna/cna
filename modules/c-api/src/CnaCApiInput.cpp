@@ -4,6 +4,8 @@
 #include "CNA/C/input_gamepad.h"
 #include "CNA/C/input_keyboard.h"
 #include "CNA/C/input_mouse.h"
+#include "CNA/C/input_cursor.h"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
@@ -27,6 +29,7 @@
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
+#include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "System/MulticastAction.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
@@ -3171,6 +3174,212 @@ CNA_Result cna_mouse_reset_for_tests_ext(const CNA_Handle gameHandle)
             return result;
         }
         Mouse::ResetForTests();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Input::MouseCursor;
+
+// A created cursor owns its native resource; a stock cursor is a process-lifetime singleton the C
+// layer must never free, so the resource only points at it.
+struct MouseCursorResource final {
+    std::unique_ptr<MouseCursor> owned;
+    MouseCursor* value = nullptr;
+};
+
+[[nodiscard]] CNA_Result CreateCursorHandle(
+    std::shared_ptr<MouseCursorResource> resource,
+    CNA_MouseCursorHandle* const outCursor)
+{
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+        CNA::C::Detail::ObjectKind::MouseCursor,
+        std::move(resource),
+        outCursor);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        CNA::C::Detail::ErrorCategoryForResult(result),
+        "The owned MouseCursor handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result GetCursorResource(
+    const CNA_MouseCursorHandle handle,
+    std::shared_ptr<MouseCursorResource>* const outResource)
+{
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
+        handle,
+        CNA::C::Detail::ObjectKind::MouseCursor,
+        outResource);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        CNA::C::Detail::ErrorCategoryForResult(result),
+        "The MouseCursor handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result BorrowStockCursor(
+    const CNA_MouseCursorStock stock,
+    MouseCursor** const outCursor)
+{
+    switch (stock) {
+        case CNA_MOUSE_CURSOR_STOCK_ARROW: *outCursor = &MouseCursor::getArrowProperty(); break;
+        case CNA_MOUSE_CURSOR_STOCK_CROSSHAIR:
+            *outCursor = &MouseCursor::getCrosshairProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_HAND: *outCursor = &MouseCursor::getHandProperty(); break;
+        case CNA_MOUSE_CURSOR_STOCK_IBEAM: *outCursor = &MouseCursor::getIBeamProperty(); break;
+        case CNA_MOUSE_CURSOR_STOCK_NO: *outCursor = &MouseCursor::getNoProperty(); break;
+        case CNA_MOUSE_CURSOR_STOCK_SIZE_ALL:
+            *outCursor = &MouseCursor::getSizeAllProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_SIZE_NESW:
+            *outCursor = &MouseCursor::getSizeNESWProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_SIZE_NS:
+            *outCursor = &MouseCursor::getSizeNSProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_SIZE_NWSE:
+            *outCursor = &MouseCursor::getSizeNWSEProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_SIZE_WE:
+            *outCursor = &MouseCursor::getSizeWEProperty();
+            break;
+        case CNA_MOUSE_CURSOR_STOCK_WAIT: *outCursor = &MouseCursor::getWaitProperty(); break;
+        case CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW:
+            *outCursor = &MouseCursor::getWaitArrowProperty();
+            break;
+        default:
+            return InvalidInput("The requested stock cursor is not a canonical identity.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_mouse_cursor_create_ext(CNA_MouseCursorHandle* const outCursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCursor == nullptr) {
+            return InvalidInput("The MouseCursor output handle is null.");
+        }
+        *outCursor = CNA_INVALID_HANDLE;
+        auto resource = std::make_shared<MouseCursorResource>();
+        resource->owned = std::make_unique<MouseCursor>();
+        resource->value = resource->owned.get();
+        return CreateCursorHandle(std::move(resource), outCursor);
+    });
+}
+
+CNA_Result cna_mouse_cursor_get_stock_ext(
+    const CNA_Handle gameHandle,
+    const CNA_MouseCursorStock stock,
+    CNA_MouseCursorHandle* const outCursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCursor == nullptr) {
+            return InvalidInput("The MouseCursor output handle is null.");
+        }
+        *outCursor = CNA_INVALID_HANDLE;
+        MouseCursor* stockCursor = nullptr;
+        if (const CNA_Result result = BorrowStockCursor(stock, &stockCursor);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<MouseCursorResource>();
+        resource->value = stockCursor;
+        return CreateCursorHandle(std::move(resource), outCursor);
+    });
+}
+
+CNA_Result cna_mouse_cursor_create_from_texture2d(
+    const CNA_Handle gameHandle,
+    const CNA_Handle textureHandle,
+    const int32_t originX,
+    const int32_t originY,
+    CNA_MouseCursorHandle* const outCursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCursor == nullptr) {
+            return InvalidInput("The MouseCursor output handle is null.");
+        }
+        *outCursor = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+        if (const CNA_Result result =
+                CNA::C::Detail::GetOwnedTexture2D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<MouseCursorResource>();
+        resource->owned = std::make_unique<MouseCursor>(MouseCursor::FromTexture2D(
+            *texture->value,
+            static_cast<int>(originX),
+            static_cast<int>(originY)));
+        resource->value = resource->owned.get();
+        return CreateCursorHandle(std::move(resource), outCursor);
+    });
+}
+
+CNA_Result cna_mouse_cursor_dispose(const CNA_MouseCursorHandle cursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MouseCursorResource> resource;
+        if (const CNA_Result result = GetCursorResource(cursor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_cursor_destroy(const CNA_MouseCursorHandle cursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MouseCursorResource> resource;
+        if (const CNA_Result result = GetCursorResource(cursor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result releaseResult = CNA::C::Detail::GetRuntimeHandles().Release(cursor);
+        if (releaseResult == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            releaseResult,
+            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
+            "The MouseCursor handle could not be released.");
+    });
+}
+
+CNA_Result cna_mouse_set_cursor_ext(
+    const CNA_Handle gameHandle,
+    const CNA_MouseCursorHandle cursor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MouseCursorResource> resource;
+        if (const CNA_Result result = GetCursorResource(cursor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::SetCursor(*resource->value);
         return CNA_RESULT_SUCCESS;
     });
 }

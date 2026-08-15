@@ -760,3 +760,7 @@ static_assert(sizeof(CNA_KeyModifiers) == sizeof(uint32_t));
 static_assert(CNA_KEY_STATE_DOWN == UINT32_C(1));
 static_assert(CNA_KEY_MODIFIER_MODE == UINT32_C(0x80));
 static_assert(CNA_KEY_MODIFIER_ALL == UINT32_C(0xFF));
+
+static_assert(sizeof(CNA_MouseCursorHandle) == 8U);
+static_assert(sizeof(CNA_MouseEventRegistrationHandle) == 8U);
+static_assert(CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW == UINT32_C(11));

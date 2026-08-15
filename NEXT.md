@@ -406,6 +406,19 @@
 > dropping every subscription — including ones this API handed out — so a release afterwards is a
 > no-op rather than a failure, which the test proves. The inventory is now 4,164 implemented, 30
 > partial, 2,104 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4c then closes the mouse cursor. All twelve stock accessors collapse into one route
+> taking a stock identity, and the handle it returns is a **borrowed view** — precisely because the
+> canonical stock cursors are process-lifetime singletons whose disposal is a deliberate no-op, so
+> destroying the handle must never free the shared native cursor. The test proves that by disposing
+> and releasing one identity and then using a fresh handle for the same identity successfully.
+> Four rows are recorded `not-applicable` with reasons rather than forced into the ABI: the
+> `SDL_Cursor*` constructor and `GetSDLCursor` would expose a native backend pointer, and the two
+> move operations have no counterpart because a handle is the only name C has for a cursor. The
+> texture-derived cursor is probed by behavior, not by renderer identity: whichever documented
+> answer the backend gives, the success path is exercised fully and the refusal path must leave the
+> output handle invalid. The inventory is now 4,182 implemented, 30 partial, 2,082 planned and 121
+> N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

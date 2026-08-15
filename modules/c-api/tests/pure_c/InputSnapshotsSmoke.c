@@ -1220,6 +1220,104 @@ static int validate_mouse_queries(const CNA_Handle game)
     return cna_mouse_set_window_handle(game, restored) == CNA_RESULT_SUCCESS;
 }
 
+/* The cursor family is probed by behavior, never by renderer identity: a backend with no real
+   video device still hands back usable handles, and a texture-derived cursor either works or
+   reports a documented failure. Both outcomes are asserted, neither is assumed. */
+static int validate_cursor_family(const CNA_Handle game)
+{
+    static const CNA_Color pixels[4] = {
+        {255U, 0U, 0U, 255U}, {0U, 255U, 0U, 255U},
+        {0U, 0U, 255U, 255U}, {255U, 255U, 255U, 255U}
+    };
+    CNA_MouseCursorHandle cursor = CNA_INVALID_HANDLE;
+    CNA_MouseCursorHandle again = CNA_INVALID_HANDLE;
+    CNA_MouseCursorHandle empty = CNA_INVALID_HANDLE;
+    CNA_MouseCursorHandle rejected = CNA_INVALID_HANDLE;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_MouseCursorStock stock = UINT32_C(0);
+
+    /* An empty cursor is a real handle that can be set and released. */
+    if (cna_mouse_cursor_create_ext(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_cursor_create_ext(&empty) != CNA_RESULT_SUCCESS ||
+        empty == CNA_INVALID_HANDLE ||
+        cna_mouse_set_cursor_ext(game, empty) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_dispose(empty) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_dispose(empty) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_destroy(empty) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_destroy(empty) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* All twelve stock identities resolve; a thirteenth does not. */
+    for (stock = UINT32_C(0); stock <= CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW; ++stock) {
+        if (cna_mouse_cursor_get_stock_ext(game, stock, &cursor) != CNA_RESULT_SUCCESS ||
+            cursor == CNA_INVALID_HANDLE ||
+            cna_mouse_set_cursor_ext(game, cursor) != CNA_RESULT_SUCCESS ||
+            cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    if (cna_mouse_cursor_get_stock_ext(game, UINT32_C(12), &cursor) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_cursor_get_stock_ext(game, CNA_MOUSE_CURSOR_STOCK_ARROW, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Disposing a stock cursor is a deliberate no-op: the singleton must survive, so a second
+       handle for the same identity is still usable afterwards. */
+    if (cna_mouse_cursor_get_stock_ext(game, CNA_MOUSE_CURSOR_STOCK_ARROW, &cursor) !=
+            CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_dispose(cursor) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_get_stock_ext(game, CNA_MOUSE_CURSOR_STOCK_ARROW, &again) !=
+            CNA_RESULT_SUCCESS ||
+        cna_mouse_set_cursor_ext(game, again) != CNA_RESULT_SUCCESS ||
+        cna_mouse_cursor_destroy(again) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_mouse_set_cursor_ext(game, rejected) != CNA_RESULT_INVALID_HANDLE ||
+        cna_mouse_cursor_dispose(rejected) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* A texture-derived cursor either works or refuses; both are documented answers. */
+    if (cna_texture2d_create_cpu_only_rgba8(
+            2U, 2U, CNA_SURFACE_FORMAT_COLOR, pixels, UINT64_C(4), &texture) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        const CNA_Result created =
+            cna_mouse_cursor_create_from_texture2d(game, texture, 0, 0, &cursor);
+        if (created == CNA_RESULT_SUCCESS) {
+            if (cursor == CNA_INVALID_HANDLE ||
+                cna_mouse_set_cursor_ext(game, cursor) != CNA_RESULT_SUCCESS ||
+                cna_mouse_cursor_dispose(cursor) != CNA_RESULT_SUCCESS ||
+                cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS) {
+                (void)cna_texture2d_destroy(texture);
+                return 0;
+            }
+        } else if (created != CNA_RESULT_INTERNAL && created != CNA_RESULT_NOT_SUPPORTED &&
+            created != CNA_RESULT_INVALID_ARGUMENT) {
+            (void)cna_texture2d_destroy(texture);
+            return 0;
+        } else if (cursor != CNA_INVALID_HANDLE) {
+            (void)cna_texture2d_destroy(texture);
+            return 0;
+        }
+    }
+    if (cna_mouse_cursor_create_from_texture2d(game, rejected, 0, 0, &cursor) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_mouse_cursor_create_from_texture2d(game, texture, 0, 0, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_texture2d_destroy(texture);
+        return 0;
+    }
+    return cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1306,7 +1404,7 @@ static CNA_Result on_update(
     }
 
     if (!validate_device_queries(game) || !validate_keyboard_queries(game) ||
-        !validate_mouse_queries(game)) {
+        !validate_mouse_queries(game) || !validate_cursor_family(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
