@@ -303,6 +303,7 @@ TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclar
         {"normalized-u8-color", 24},
         {"mat-unlit", 32},
         {"mat-authored-tangent", 48},
+        {"uv1-material", 60},
         {"skin-unlit", 52},
         {"skin-vertex-color", 56},
         {"skin-parented-joints", 68},
@@ -361,7 +362,7 @@ TEST(RendererStrideConformance, EveryGltfStrideReachesTheNativeDrawBoundary)
     cm.setGraphicsDevice(gd);
     const char* fixtures[] = {
         "tex-dual-texture-stride", "normalized-u8-color", "mat-unlit",
-        "mat-authored-tangent", "skin-unlit", "skin-vertex-color",
+        "mat-authored-tangent", "uv1-material", "skin-unlit", "skin-vertex-color",
         "skin-parented-joints",
     };
     const auto identity = Microsoft::Xna::Framework::Matrix::getIdentityProperty();

@@ -1584,10 +1584,11 @@ namespace CNA::Internal::Renderers::Software
         /// Transforms a vertex whose byte layout is inferred from `stride` (plan_software.md
         /// design decision 2: 16=VertexPositionColor, 20=VertexPositionTexture,
         /// 24=VertexPositionColorTexture, 32=VertexPositionNormalTexture (SOFTWARE-82,
-        /// EnvironmentMapEffect), 48=VertexPositionNormalTangentTexture,
+        /// EnvironmentMapEffect), 48/60=VertexPositionNormalTangentTexture with one/two UV sets,
         /// 52=VertexPositionNormalTextureSkinned (SOFTWARE-82, SkinnedEffect),
         /// 56=the same skinned layout plus Color, and
-        /// 68=VertexPositionNormalTangentTextureSkinned) into clip space, for the
+        /// 68/76=VertexPositionNormalTangentTextureSkinned with one/two UV sets) into clip space,
+        /// for the
         /// DrawPrimitivesEx/DrawIndexedPrimitivesEx path.
         /// `params.vertexColorEnabled` mirrors GpuDrawParams' own flag -- when false (or for a
         /// stride with no Color field at all), vertex color is treated as opaque white so it
@@ -1625,17 +1626,19 @@ namespace CNA::Internal::Renderers::Software
             Vector3 normal(0.0f, 0.0f, 1.0f);
             bool haveNormal = false;
 
-            const bool skinnedLayout = stride == 52 || stride == 56 || stride == 68;
+            const bool skinnedLayout =
+                stride == 52 || stride == 56 || stride == 68 || stride == 76;
             if (skinnedLayout && params.skinned)
             {
                 // The stride-52/56 layouts carry BlendWeight@32 and BlendIndices@48; the
-                // tangent-bearing stride-68 layout carries them at 48/64. Blend up to
+                // tangent-bearing stride-68/76 layouts carry them at 48/64. Blend up to
                 // weightsPerVertex bone matrices (column-major, GpuDrawParams::boneTransforms'
                 // own layout -- Task 895's "only sum the first N pairs" behavior) and apply the
                 // blended matrix to Position/Normal BEFORE the standard World*View*Projection
                 // transform below, mirroring FNA's own Skin(vin, boneCount) step.
-                const int blendWeightOffset = stride == 68 ? 48 : 32;
-                const int blendIndicesOffset = stride == 68 ? 64 : 48;
+                const bool tangentSkinned = stride == 68 || stride == 76;
+                const int blendWeightOffset = tangentSkinned ? 48 : 32;
+                const int blendIndicesOffset = tangentSkinned ? 64 : 48;
                 Vector4 blendWeight;
                 std::memcpy(&blendWeight, raw.At(blendWeightOffset), sizeof(Vector4));
                 std::uint8_t blendIndices[4];
@@ -1686,15 +1689,20 @@ namespace CNA::Internal::Renderers::Software
                 std::memcpy(&out.u, raw.At(24), sizeof(float));
                 std::memcpy(&out.v, raw.At(28), sizeof(float));
             }
-            else if (stride == 48)
+            else if (stride == 48 || stride == 60)
             {
-                // VertexPositionNormalTangentTexture: the v1 Software shader does not evaluate
-                // tangent-space normal maps, but it must still consume the canonical record
-                // faithfully rather than reject or reinterpret it.
+                // VertexPositionNormalTangentTexture, optionally followed by TextureCoordinate1.
+                // The Software PBR fallback samples the base-colour texture, so consume that map's
+                // selector (mask bit 0) without pretending to evaluate the other PBR maps here.
                 std::memcpy(&normal, raw.At(12), sizeof(Vector3));
                 haveNormal = true;
                 std::memcpy(&out.u, raw.At(40), sizeof(float));
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
+                if (stride == 60 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                {
+                    std::memcpy(&out.u, raw.At(48), sizeof(float));
+                    std::memcpy(&out.v, raw.At(52), sizeof(float));
+                }
             }
             else if (stride == 52 || stride == 56)
             {
@@ -1703,10 +1711,29 @@ namespace CNA::Internal::Renderers::Software
                 if (stride == 56)
                     UnpackColorBytes(raw.At(52), out.r, out.g, out.b, out.a);
             }
-            else if (stride == 68)
+            else if (stride == 68 || stride == 76)
             {
                 std::memcpy(&out.u, raw.At(40), sizeof(float));
                 std::memcpy(&out.v, raw.At(44), sizeof(float));
+                if (stride == 76 && (params.pbrTextureCoordinateSetMask & 1u) != 0u)
+                {
+                    std::memcpy(&out.u, raw.At(68), sizeof(float));
+                    std::memcpy(&out.v, raw.At(72), sizeof(float));
+                }
+            }
+
+            if (stride == 48 || stride == 60 || stride == 68 || stride == 76)
+            {
+                // PbrEffect's base-colour transform is slot zero. Identity rows make this an exact
+                // no-op for old callers and materials without KHR_texture_transform.
+                const float u = out.u;
+                const float v = out.v;
+                out.u = u * params.pbrTextureTransformRows[0][0] +
+                        v * params.pbrTextureTransformRows[0][1] +
+                        params.pbrTextureTransformRows[0][2];
+                out.v = u * params.pbrTextureTransformRows[1][0] +
+                        v * params.pbrTextureTransformRows[1][1] +
+                        params.pbrTextureTransformRows[1][2];
             }
 
             if (haveNormal && params.envMapping)
@@ -3050,7 +3077,7 @@ namespace CNA::Internal::Renderers::Software
     // REMED-GFX-DECL-GUARD: the declaration-fidelity boundary. BuildGenericClipVertex reads its
     // attributes at byte offsets chosen by the stride alone (REMED-GFX-217), so a declaration
     // those offsets cannot represent is refused before any vertex is fetched. A stride outside the
-    // canonical 16/20/24/32/48/52/56/68 set is left to this renderer's own established
+    // canonical 16/20/24/32/48/52/56/60/68/76 set is left to this renderer's own established
     // out-of-table rejection, which is already loud and deterministic.
     static void RequireFaithfulDeclarationEXT(const IVertexBufferRenderer& vb, const char* route)
     {
@@ -3098,10 +3125,11 @@ namespace CNA::Internal::Renderers::Software
         // single buffer is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 68)
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/48/52/56/68 supported in v1)");
+                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
 
         const std::uint8_t* base = swVb.Data().data();
 
@@ -3246,10 +3274,11 @@ namespace CNA::Internal::Renderers::Software
         // per-vertex streams' strides, identical to this one stream's whenever one is bound.
         const std::size_t stride = CombinedVertexStrideOr(params, swVb.Stride());
         if (stride != 16 && stride != 20 && stride != 24 && stride != 32 &&
-            stride != 48 && stride != 52 && stride != 56 && stride != 68)
+            stride != 48 && stride != 52 && stride != 56 && stride != 60 &&
+            stride != 68 && stride != 76)
             throw std::runtime_error(
                 "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported vertex stride "
-                "(only 16/20/24/32/48/52/56/68 supported in v1)");
+                "(only 16/20/24/32/48/52/56/60/68/76 supported in v1)");
 
         if (g_cubeTrace.enabled) { ++g_cubeTrace.drawId; g_cubeTrace.family = "DrawIndexedPrimitives"; }
 
