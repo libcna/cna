@@ -73,7 +73,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
-          ref: 52c0e10346601130b06934b4a21bcab4671695f8
+          ref: 74a8fe5ad32c60af3365f4ee40d6afd31229866f
           path: sharp-runtime
 
       - name: Checkout pinned TinyGL
