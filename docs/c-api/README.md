@@ -90,8 +90,8 @@ python3 tools/c-api/generate_coverage_inventory.py --check
 `tools/c-api/coverage_mappings.json` records reviewed mappings to the existing C API. Unmapped
 callable declarations remain `planned`; useful but incomplete routes remain `partial`; explicitly
 deleted C++ operations are retained as `not applicable` so the source inventory stays complete
-without inventing a C operation. CBIND-043 will promote `--check` to a mandatory configured/CI
-gate.
+without inventing a C operation. `--check` is a mandatory gate (CBIND-043): the CTest test
+`CApiCoverageMatrix` and the `c-api-coverage-gate` workflow both fail on an unmapped public symbol.
 
 ## Public naming and language baseline
 

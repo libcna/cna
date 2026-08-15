@@ -27,8 +27,9 @@ python3 tools/c-api/generate_coverage_inventory.py --write
 python3 tools/c-api/generate_coverage_inventory.py --check
 ```
 
-`--check` is available now for deterministic review. Making it a mandatory configured/CI
-gate is deliberately reserved for CBIND-043.
+`--check` is a mandatory gate (CBIND-043), enforced in two places: the CTest test
+`CApiCoverageMatrix`, registered under `CNA_BUILD_TESTS`, and the build-free
+`.github/workflows/c-api-coverage-gate.yml` workflow, which runs on every push.
 
 ## Module summary
 

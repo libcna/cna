@@ -6,7 +6,8 @@
 The scanner deliberately uses Doxygen's C++ parser instead of a collection of regular
 expressions.  Doxygen expands CNA's SharpRuntime property macros, preserves overload signatures,
 reports access levels and emits stable source locations.  The generated Markdown remains a
-reviewable snapshot; CBIND-043 is responsible for promoting ``--check`` into a mandatory CI gate.
+reviewable snapshot; ``--check`` is a mandatory gate (CBIND-043): the CTest test
+``CApiCoverageMatrix`` and the ``c-api-coverage-gate`` workflow both run it.
 """
 
 from __future__ import annotations
@@ -583,8 +584,9 @@ def render_markdown(
         "python3 tools/c-api/generate_coverage_inventory.py --check",
         "```",
         "",
-        "`--check` is available now for deterministic review. Making it a mandatory configured/CI",
-        "gate is deliberately reserved for CBIND-043.",
+        "`--check` is a mandatory gate (CBIND-043), enforced in two places: the CTest test",
+        "`CApiCoverageMatrix`, registered under `CNA_BUILD_TESTS`, and the build-free",
+        "`.github/workflows/c-api-coverage-gate.yml` workflow, which runs on every push.",
         "",
         "## Module summary",
         "",

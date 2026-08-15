@@ -51,7 +51,7 @@
 > identities. Strict C17 and C++23 assertions cover sizes, offsets and ordinals; no constructor,
 > numeric operation or resource behavior is claimed by this layout-only foundation. The inventory
 > is now 983 implemented, 21 partial, 5,341 planned and 70 explicitly deleted/not applicable.
-> Deterministic `--check` detects drift; wiring it into CI remains reserved for CBIND-043.
+> Deterministic `--check` detects drift, and CBIND-043 has since wired it into both CTest and CI.
 > CBIND-035B is further split into B1–B7. B1 now maps every Point and Rectangle constructor,
 > constant, property, overload, operator, hash and exact UTF-8 count/copy string through 37 C
 > operations. Its defined unsigned-bit calculations preserve unchecked 32-bit behavior without

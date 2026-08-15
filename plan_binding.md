@@ -547,7 +547,8 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 ### What remains
 
 Everything still open belongs to `CBIND-037` (1,849 rows), the B7 hardening phase
-(`CBIND-038`–`042`), the CI coverage gate (`CBIND-043`) and the final close (`CBIND-044`).
+(`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
+done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
 later one composes the earlier ones:
 
@@ -560,8 +561,8 @@ later one composes the earlier ones:
 | 5 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
 | 6 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
 
-After `CBIND-037` closes: `CBIND-043` (make the coverage matrix a configured/CI gate — it already
-passes `--check` deterministically, so this is small and high-leverage), then `CBIND-038`–`042`,
+`CBIND-043` is done — the matrix is a gate in both CTest and CI, so an unmapped public symbol now
+fails a build rather than merely showing up in a report. After `CBIND-037` closes: `CBIND-038`–`042`,
 then `CBIND-044`.
 
 ### Judgment calls that produced the closed slices
