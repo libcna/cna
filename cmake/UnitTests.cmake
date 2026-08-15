@@ -248,6 +248,24 @@ if(CNA_BUILD_TESTS)
         endif()
     endforeach()
 
+    # plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
+    # its PUBLIC headers include a third-party library's headers in turn. LLGL is the case that
+    # showed it -- modules/renderers/llgl/include/.../LlglSdlSurface.hpp opens with
+    # `#include <LLGL/Surface.h>`, and LLGL's include directory reaches the llgl module through the
+    # LLGL target it links, not through any directory of CNA's own. Adding only CNA's root moved the
+    # failure from "no tests" to "LLGL/Surface.h: No such file or directory" in a multi build
+    # containing LLGL.
+    #
+    # Giving this executable each present renderer target's OWN include list keeps that generic:
+    # whatever a renderer module compiles against, its device-free suites can compile against too,
+    # without this file having to know which third-party library each family uses.
+    foreach(_cna_present_target IN LISTS CNA_RENDERER_TARGETS)
+        if(TARGET ${_cna_present_target})
+            target_include_directories(CnaTests PRIVATE
+                "$<TARGET_PROPERTY:${_cna_present_target},INCLUDE_DIRECTORIES>")
+        endif()
+    endforeach()
+
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
