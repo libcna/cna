@@ -66,6 +66,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -120,12 +125,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedVertexColorTests.cpp's own suite set, for the same reason.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
-#define CNA_INSTANCED_DIFFUSE_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool InstancedDiffuse()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
+                            DirectX12);
+}
 
 // The renderers whose instanced route this file has MEASURED on a real display. D3D9/D3D11/D3D12
 // stay outside it because no D3D display is reachable here (SDL reports "x11 not available" under
@@ -141,28 +147,17 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #define CNA_INSTANCED_DIFFUSE_MEASURED 1
 #endif
 
-#ifdef CNA_INSTANCED_DIFFUSE_ORACLE
 
 namespace
 {
-    constexpr const char* kRendererName =
-#if defined(CNA_RENDERER_EASYGL)
-        "EasyGL";
-#elif defined(CNA_RENDERER_VULKAN)
-        "Vulkan";
-#elif defined(CNA_RENDERER_BGFX)
-        "bgfx";
-#elif defined(CNA_RENDERER_WEBGPU)
-        "WebGPU";
-#elif defined(CNA_RENDERER_DIRECTX9)
-        "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        "DIRECTX12";
-#else
-        "unknown";
-#endif
+    // plan_runtimerenderer.md RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
+    // names, which had to be extended for every new renderer and answered "unknown" when it was
+    // not. The runtime API already knows the active renderer's name, and knows it for all 46.
+    inline std::string RendererName()
+    {
+        return std::string(CNA::getGraphicsRendererName(
+            CNA::GraphicsRendererSelection::GetSelected()));
+    }
 
     /// Square render target: 256 = 4 * 64, so the column axis divides exactly.
     constexpr int kTargetSize = 256;
@@ -569,7 +564,7 @@ namespace
 
     void PrintMeasurement(const char* leg, const FrameSnapshot& snapshot)
     {
-        std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg << ':'
+        std::cout << "[ GFX-215  ] " << RendererName() << ' ' << leg << ':'
                   << DescribeFrame(snapshot) << std::endl;
     }
 
@@ -790,6 +785,9 @@ protected:
 
 TEST_F(InstancedDiffuseColorTest, NonNeutralDiffuseColorMultipliesVertexColorOnBothRoutes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
@@ -819,6 +817,9 @@ TEST_F(InstancedDiffuseColorTest, NonNeutralDiffuseColorMultipliesVertexColorOnB
 
 TEST_F(InstancedDiffuseColorTest, VertexColorDisabledYieldsDiffuseColorOnBothRoutes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
@@ -857,6 +858,9 @@ TEST_F(InstancedDiffuseColorTest, VertexColorDisabledYieldsDiffuseColorOnBothRou
 
 TEST_F(InstancedDiffuseColorTest, NeutralDiffuseColorCannotDistinguishRawColor0)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     // The arithmetic first, with no GPU involved: this is why a white-DiffuseColor oracle certified
@@ -905,6 +909,9 @@ TEST_F(InstancedDiffuseColorTest, NeutralDiffuseColorCannotDistinguishRawColor0)
 
 TEST_F(InstancedDiffuseColorTest, NonTrivialAlphaAppliesToBothTerms)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kAlphaColumnColors);
@@ -943,6 +950,9 @@ TEST_F(InstancedDiffuseColorTest, NonTrivialAlphaAppliesToBothTerms)
 
 TEST_F(InstancedDiffuseColorTest, ColorStateTransitionsDoNotLeakBetweenFrames)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
@@ -997,6 +1007,9 @@ TEST_F(InstancedDiffuseColorTest, ColorStateTransitionsDoNotLeakBetweenFrames)
 
 TEST_F(InstancedDiffuseColorTest, ReplacedGeometryColorBufferIsRereadNotCached)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> first = BuildPackedMesh(false, kColumnColors);
@@ -1037,6 +1050,9 @@ TEST_F(InstancedDiffuseColorTest, ReplacedGeometryColorBufferIsRereadNotCached)
 
 TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     // Draw A owns columns 0 and 1, draw B owns columns 2 and 3, so both survive in one frame.
@@ -1117,6 +1133,9 @@ TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
 
 TEST_F(InstancedDiffuseColorTest, PackedColorTextureStrideKeepsTheFullContract)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedTexVertex> mesh = BuildPackedTexMesh();
@@ -1149,6 +1168,9 @@ TEST_F(InstancedDiffuseColorTest, PackedColorTextureStrideKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, GeometryVertexOffsetKeepsTheFullContract)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(true, kColumnColors);
@@ -1185,6 +1207,9 @@ TEST_F(InstancedDiffuseColorTest, GeometryVertexOffsetKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     // One quad in column 0 carrying column 0's own COLOR0. Every instance takes a zero shift, so
@@ -1254,6 +1279,9 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
 
 TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhenColorDisabled)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PositionOnlyVertex> mesh = BuildPositionOnlyMesh();
@@ -1319,13 +1347,13 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
     const auto report = [&](const char* leg, const RouteResult& r) {
         if (!r.rendered)
         {
-            std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg
+            std::cout << "[ GFX-215  ] " << RendererName() << ' ' << leg
                       << ": REJECTED -- \"" << r.rejection << '"' << std::endl;
             return std::vector<std::pair<Rgba, int>>{};
         }
         PrintMeasurement(leg, r.frame);
         const auto lit = DistinctLitColors(r.frame);
-        std::cout << "[ GFX-215  ] " << kRendererName << ' ' << leg
+        std::cout << "[ GFX-215  ] " << RendererName() << ' ' << leg
                   << " distinct lit colours:" << DescribeLitColors(lit) << std::endl;
         return lit;
     };
@@ -1491,6 +1519,9 @@ protected:
 
 TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesTheCache)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
@@ -1557,6 +1588,9 @@ TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesThe
 
 TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedDiffuse())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false, kColumnColors);
@@ -1649,4 +1683,3 @@ TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
 
 #endif   // CNA_RENDERER_BGFX
 
-#endif   // CNA_INSTANCED_DIFFUSE_ORACLE

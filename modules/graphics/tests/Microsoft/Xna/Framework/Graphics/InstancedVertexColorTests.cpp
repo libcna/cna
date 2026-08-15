@@ -51,6 +51,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -101,12 +106,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers whose stock instanced path rasterizes and whose RenderTarget2D::GetData reads the
 // result back -- InstancedDrawMultiStreamTests.cpp's own permanent suite set, for the same reason.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
-#define CNA_INSTANCED_VERTEX_COLOR_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool InstancedVertexColor()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
+                            DirectX12);
+}
 
 // The renderers whose instanced route this file has MEASURED on a real display, and which therefore
 // carry an assertion in one direction or the other. D3D9/D3D11/D3D12 stay outside it because no
@@ -139,28 +145,17 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 #define CNA_INSTANCED_VERTEX_COLOR_CONTRACT 1
 #endif
 
-#ifdef CNA_INSTANCED_VERTEX_COLOR_ORACLE
 
 namespace
 {
-    constexpr const char* kRendererName =
-#if defined(CNA_RENDERER_EASYGL)
-        "EasyGL";
-#elif defined(CNA_RENDERER_VULKAN)
-        "Vulkan";
-#elif defined(CNA_RENDERER_BGFX)
-        "bgfx";
-#elif defined(CNA_RENDERER_WEBGPU)
-        "WebGPU";
-#elif defined(CNA_RENDERER_DIRECTX9)
-        "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        "DIRECTX12";
-#else
-        "unknown";
-#endif
+    // plan_runtimerenderer.md RTR-P9-5: was a hand-maintained #if/#elif chain of renderer display
+    // names, which had to be extended for every new renderer and answered "unknown" when it was
+    // not. The runtime API already knows the active renderer's name, and knows it for all 46.
+    inline std::string RendererName()
+    {
+        return std::string(CNA::getGraphicsRendererName(
+            CNA::GraphicsRendererSelection::GetSelected()));
+    }
 
     /// Square render target: 256 = 4 * 64, so the column axis divides exactly.
     constexpr int kTargetSize = 256;
@@ -513,7 +508,7 @@ namespace
 
     void PrintMeasurement(const char* leg, const FrameSnapshot& snapshot)
     {
-        std::cout << "[ GFX-212  ] " << kRendererName << ' ' << leg << ':'
+        std::cout << "[ GFX-212  ] " << RendererName() << ' ' << leg << ':'
                   << DescribeFrame(snapshot) << std::endl;
     }
 
@@ -659,6 +654,9 @@ protected:
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledTrueConsumesGeometryColorOnBothRoutes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false);
@@ -708,6 +706,9 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledTrueConsumesGeometryColorOnBo
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBothRoutes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false);
@@ -774,6 +775,9 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledFalseIgnoresGeometryColorOnBo
 
 TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOnBothRoutes)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedTexVertex> mesh = BuildPackedTexMesh();
@@ -835,7 +839,7 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
     }
     else
     {
-        std::cout << "[ GFX-212  ] " << kRendererName
+        std::cout << "[ GFX-212  ] " << RendererName()
                   << " stride24/ordinary-route: REJECTED -- " << ordinaryRejection
                   << " (REMED-GFX-214, an ordinary-route boundary this leg does not close)"
                   << std::endl;
@@ -848,6 +852,9 @@ TEST_F(InstancedVertexColorTest, PackedColorTextureStrideConsumesGeometryColorOn
 
 TEST_F(InstancedVertexColorTest, ThirtyTwoBitIndicesConsumeGeometryColorOnTheInstancedRoute)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false);
@@ -885,6 +892,9 @@ TEST_F(InstancedVertexColorTest, ThirtyTwoBitIndicesConsumeGeometryColorOnTheIns
 
 TEST_F(InstancedVertexColorTest, GeometryVertexOffsetSkipsTheDecoyAndKeepsItsOwnColors)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(true);
@@ -919,6 +929,9 @@ TEST_F(InstancedVertexColorTest, GeometryVertexOffsetSkipsTheDecoyAndKeepsItsOwn
 
 TEST_F(InstancedVertexColorTest, InstanceFrequencyTwoRepeatsARecordWithoutTouchingTheColor)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     // One quad, in column 0, carrying column 0's own COLOR0. Two instances at frequency two both
@@ -976,6 +989,9 @@ TEST_F(InstancedVertexColorTest, InstanceFrequencyTwoRepeatsARecordWithoutTouchi
 
 TEST_F(InstancedVertexColorTest, VertexColorEnabledTransitionsDoNotLeakBetweenFrames)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false);
@@ -1035,6 +1051,9 @@ TEST_F(InstancedVertexColorTest, VertexColorEnabledTransitionsDoNotLeakBetweenFr
 
 TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStateAndData)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     // Draw A owns columns 0 and 1, draw B owns columns 2 and 3, so both survive in one frame.
@@ -1125,6 +1144,9 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawsKeepTheirOwnVertexColorStat
 
 TEST_F(InstancedVertexColorTest, QueuedInstancedDrawSurvivesItsGeometryWrapperBeingDestroyed)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!InstancedVertexColor())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireInstancedRendering();
 
     const std::vector<PackedVertex> mesh = BuildPackedMesh(false);
@@ -1170,4 +1192,3 @@ TEST_F(InstancedVertexColorTest, QueuedInstancedDrawSurvivesItsGeometryWrapperBe
     ExpectColumns(CaptureTarget(target), true, Route::Instanced, "lifetime/destroyed-wrapper");
 }
 
-#endif   // CNA_INSTANCED_VERTEX_COLOR_ORACLE
