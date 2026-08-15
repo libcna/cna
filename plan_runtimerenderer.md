@@ -796,10 +796,10 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-19 | ✅ | `cmake/UnitTests.cmake` (19 references) — list-aware. |
 | RTR-P9-20 | ✅ | `cmake/Harnesses.cmake` (4 references) — list-aware. |
 | RTR-P9-21 | ✅ | `cmake/Tests/ModuleProbes.cmake` and `cmake/Tests/WickedTests.cmake` — list-aware. |
-| RTR-P9-22 | ⬜ | `scripts/run-all-renderer-smoke-tests.sh` — teach it the multi mode (build once, run N times with different `CNA_GRAPHICS_RENDERER` values). This is where multi builds actually pay for themselves in CI time. |
+| RTR-P9-22 | ✅ | `scripts/run-all-renderer-smoke-tests.sh` — teach it the multi mode (build once, run N times with different `CNA_GRAPHICS_RENDERER` values). This is where multi builds actually pay for themselves in CI time. |
 | RTR-P9-23 | ✅ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
 | RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
-| RTR-P9-25 | ⬜ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
+| RTR-P9-25 | ✅ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
 | RTR-P9-26 | ✅ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |
 | RTR-P9-27 | ⬜ | **Phase gate.** Single-renderer test counts unchanged; the P8 multi set runs the converted corpus. |
 

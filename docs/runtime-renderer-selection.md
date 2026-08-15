@@ -268,6 +268,20 @@ was **created**, and the renderer's own diagnostic reaches the history verbatim 
 reduced to "it did not work". Without the chain argument the same command fails outright, which is
 the default.
 
+### Smoke-testing several renderers from one build
+
+`scripts/run-all-renderer-smoke-tests.sh` gained a multi-renderer mode, which is where this build
+mode pays for itself in CI time — N renderers cost one build instead of N:
+
+```bash
+scripts/run-all-renderer-smoke-tests.sh --multi "HEADLESS;SOFTWARE;STUB"
+```
+
+It configures one build, then selects each renderer in turn through the `CNA_GRAPHICS_RENDERER`
+environment variable. A renderer with no smoke test registered in that build is reported as
+**skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
+would otherwise look like success.
+
 ### Verifying a fallback chain
 
 `CNA_DEBUG_UNAVAILABLE_RENDERERS` is a comma-separated list of renderer names to treat as though
