@@ -194,7 +194,25 @@
 > without claiming pixel evidence. Adding the third tree exposed three suites that branched on
 > renderer *identity* instead of capability; they now probe actual behavior, which also turned
 > SOFTWARE's real cube storage, mip upload and exact drawn texels into new positive evidence. All
-> three trees run the same 47 tests green. CBIND-036 is next.
+> three trees run the same 47 tests green.
+>
+> CBIND-036 is partitioned into five dependency-ordered slices totaling exactly 406 rows.
+> CBIND-036A closes the first 42: the whole `storage` module. Storage is independent of the
+> graphics device and of the `Game` lifecycle, so its handles are not game children; ownership
+> instead nests device -> container -> stream, and each level refuses destruction while it
+> still has a live child. The canonical fake-async `BeginShowSelector`/`EndShowSelector` and
+> `BeginOpenContainer`/`EndOpenContainer` pairs complete before `Begin` returns, so each maps
+> to one synchronous C call that still invokes the completion callback -- no `IAsyncResult`
+> or invented operation handle. `System::IO::Stream` stays behind the adapter: a C stream
+> handle exposes read/write/seek/position/length/set-length/flush/capability/close only, and
+> wider-than-Int32 counts are refused instead of truncated. Directory and file listings are a
+> count plus an indexed copy because the canonical getters rebuild an unordered vector per
+> call. Three boundary conversions were added centrally while doing it --
+> `filesystem_error` and `System::IO::IOException` to `CNA_RESULT_IO`, and
+> `StorageDeviceNotConnectedException` to `CNA_RESULT_INVALID_STATE` -- all three proven in
+> the adapter test rather than inferred. The inventory is now 3,518 implemented, 23 partial,
+> 2,801 planned and 73 N/A. All three trees run the same 48 tests green. CBIND-036B
+> (content, 97 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -727,3 +727,17 @@ _Static_assert(sizeof(CNA_RenderPipelineSettings) == 28U &&
                    offsetof(CNA_RenderPipelineSettings, hdr_enabled) == 24U &&
                    offsetof(CNA_RenderPipelineSettings, shadows_enabled) == 27U,
                "CNA_RenderPipelineSettings layout must remain stable");
+_Static_assert(sizeof(CNA_StorageDeviceHandle) == 8U &&
+                   sizeof(CNA_StorageContainerHandle) == 8U &&
+                   sizeof(CNA_StorageStreamHandle) == 8U &&
+                   sizeof(CNA_FileMode) == sizeof(uint32_t) &&
+                   sizeof(CNA_FileAccess) == sizeof(uint32_t) &&
+                   sizeof(CNA_FileShare) == sizeof(uint32_t) &&
+                   sizeof(CNA_SeekOrigin) == sizeof(uint32_t) &&
+                   CNA_FILE_MODE_CREATE_NEW == UINT32_C(1) &&
+                   CNA_FILE_MODE_APPEND == UINT32_C(6) &&
+                   CNA_FILE_ACCESS_READ_WRITE == UINT32_C(3) &&
+                   CNA_FILE_SHARE_NONE == UINT32_C(0) &&
+                   CNA_FILE_SHARE_INHERITABLE == UINT32_C(16) &&
+                   CNA_SEEK_ORIGIN_END == UINT32_C(2),
+               "CNA storage identities must remain stable");

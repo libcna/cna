@@ -14,8 +14,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > model/animation families are mapped, and the graphics-device family now has its Viewport values,
 > clear/status/2D-policy identities, complete device state, events and exception conversion, and
 > stage-addressed texture collections, frame control, buffer binding, complete draw submission,
-> SpriteBatch text, occlusion queries and the complete extended graphics layer. The generated
-> inventory currently records 3,476 implemented, 23 partial, 2,843 planned and 73
+> SpriteBatch text, occlusion queries and the complete extended graphics layer. `CBIND-036A` adds
+> the complete `storage` module: owned storage devices, containers and file streams, count/copy
+> directory and file listings, and synchronous equivalents of the canonical fake-async selector and
+> container pairs that still invoke the completion callback. The generated
+> inventory currently records 3,518 implemented, 23 partial, 2,801 planned and 73
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

@@ -2,10 +2,14 @@
 
 #include "CnaCApiDetail.hpp"
 
+#include "System/IO/FileNotFoundException.hpp"
+
 #include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 
 namespace {
 
@@ -146,6 +150,43 @@ int main()
             CNA_ERROR_CATEGORY_NOT_SUPPORTED,
             "No suitable graphics device found.")) {
         return 11;
+    }
+
+    // File-facing failures must not land in the generic internal arm either: the storage, content
+    // and texture routes all reach real filesystem calls.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::filesystem::filesystem_error(
+                "listing failed",
+                std::make_error_code(std::errc::no_such_file_or_directory));
+        }) != CNA_RESULT_IO ||
+        GetLastError().category != CNA_ERROR_CATEGORY_IO) {
+        return 12;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw System::IO::FileNotFoundException("missing asset");
+        }) != CNA_RESULT_IO ||
+        !HasLastError(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, "missing asset")) {
+        return 13;
+    }
+
+    using Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException;
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw StorageDeviceNotConnectedException();
+        }) != CNA_RESULT_INVALID_STATE ||
+        GetLastError().category != CNA_ERROR_CATEGORY_STATE) {
+        return 14;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw StorageDeviceNotConnectedException("storage device removed");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "storage device removed")) {
+        return 15;
     }
 
     return 0;

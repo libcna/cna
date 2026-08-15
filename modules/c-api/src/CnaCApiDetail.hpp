@@ -12,7 +12,13 @@
 #include "Microsoft/Xna/Framework/Graphics/DeviceNotResetException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
+// A disconnected storage device is a state failure rather than a generic internal one. Catching it
+// needs only the type's weakly emitted RTTI, not its out-of-line constructors, so this stays a
+// compile-time dependency and adds no link edge to any translation unit that never throws one.
+#include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
+
 #include "System/ArgumentException.hpp"
+#include "System/IO/IOException.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
 #include "System/InvalidOperationException.hpp"
@@ -20,6 +26,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <exception>
+#include <filesystem>
 #include <ios>
 #include <memory>
 #include <mutex>
@@ -80,6 +87,11 @@ enum class ObjectKind : uint32_t {
     GraphicsDeviceEventRegistration = 44,
     OcclusionQuery = 45,
     AsciiPostProcessEffect = 46,
+    StorageDevice = 47,
+    StorageContainer = 48,
+    StorageStream = 49,
+    StorageDeviceEventRegistration = 50,
+    StorageContainerEventRegistration = 51,
     Test = UINT32_MAX
 };
 
@@ -123,6 +135,13 @@ template<typename TCallable>
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const std::ios_base::failure& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const std::filesystem::filesystem_error& exception) {
+        return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const System::IO::IOException& exception) {
+        return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (
+        const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const System::NotImplementedException& exception) {

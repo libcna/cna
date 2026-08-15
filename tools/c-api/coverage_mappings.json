@@ -4,7 +4,10 @@
     {
       "id": "graphics-renderer-identities",
       "qualified_name_regex": "^CNA::GraphicsRendererType(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_GraphicsRendererType` and `CNA_GRAPHICS_RENDERER_*`",
       "tests": "ABI header tests, renderer identity audit and `LifecycleSmoke.c`",
       "status": "implemented",
@@ -13,7 +16,10 @@
     {
       "id": "graphics-capability-identities",
       "qualified_name_regex": "^CNA::GraphicsCapability(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_GraphicsCapability` and `CNA_GRAPHICS_CAPABILITY_*`",
       "tests": "ABI header tests and `LifecycleSmoke.c` capability queries",
       "status": "implemented",
@@ -22,7 +28,10 @@
     {
       "id": "player-index-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::PlayerIndex(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_PlayerIndex` and `CNA_PLAYER_INDEX_*`",
       "tests": "ABI header tests and `InputSnapshotsSmoke.c` all-player capture",
       "status": "implemented",
@@ -31,7 +40,10 @@
     {
       "id": "surface-format-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SurfaceFormat(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_SurfaceFormat` and `CNA_SURFACE_FORMAT_*`",
       "tests": "ABI header tests and `LifecycleSmoke.c` Color-format transfer",
       "status": "implemented",
@@ -40,7 +52,10 @@
     {
       "id": "sprite-sort-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteSortMode(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_SpriteSortMode` and `CNA_SPRITE_SORT_MODE_*`",
       "tests": "ABI header tests and `LifecycleSmoke.c` all sort modes",
       "status": "implemented",
@@ -49,7 +64,10 @@
     {
       "id": "sprite-effect-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteEffects(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_SpriteEffects` and `CNA_SPRITE_EFFECT_*`",
       "tests": "ABI header tests and `LifecycleSmoke.c` effect-bit validation",
       "status": "implemented",
@@ -58,7 +76,10 @@
     {
       "id": "keyboard-key-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keys(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_Key` and all canonical `CNA_KEY_*` identities",
       "tests": "key identity audit plus C/C++ ABI header tests",
       "status": "implemented",
@@ -67,7 +88,10 @@
     {
       "id": "button-state-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::ButtonState(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "snapshot button bits/booleans using `CNA_Bool` or fixed flag sets",
       "tests": "`InputSnapshotsSmoke.c` mouse/gamepad state snapshots",
       "status": "implemented",
@@ -76,7 +100,10 @@
     {
       "id": "gamepad-dead-zone-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadDeadZone(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_GamePadDeadZone` and `CNA_GAMEPAD_DEAD_ZONE_*`",
       "tests": "ABI header tests and exact normalization cases in `InputSnapshotsSmoke.c`",
       "status": "implemented",
@@ -85,7 +112,10 @@
     {
       "id": "gamepad-button-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Buttons(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_GamePadButtonFlags` and `CNA_GAMEPAD_BUTTON_*`",
       "tests": "button identity audit, ABI header tests and local button queries",
       "status": "implemented",
@@ -94,7 +124,10 @@
     {
       "id": "touch-state-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchLocationState(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_TouchLocationState` and `CNA_TOUCH_LOCATION_*`",
       "tests": "ABI header tests and `InputSnapshotsSmoke.c` location helpers",
       "status": "implemented",
@@ -103,7 +136,10 @@
     {
       "id": "audio-channel-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioChannels(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_AudioChannels` and `CNA_AUDIO_CHANNELS_*`",
       "tests": "ABI header tests and `AudioSmoke.c` PCM creation",
       "status": "implemented",
@@ -112,7 +148,10 @@
     {
       "id": "sound-state-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundState(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_SoundState` and `CNA_SOUND_STATE_*`",
       "tests": "ABI header tests and `AudioSmoke.c` state transitions",
       "status": "implemented",
@@ -121,7 +160,10 @@
     {
       "id": "core-pod-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::(Color|Vector2|Rectangle)$",
-      "kinds": ["struct", "class"],
+      "kinds": [
+        "struct",
+        "class"
+      ],
       "mapping": "`CNA_Color`, `CNA_Vector2` or `CNA_Rectangle` fixed-layout POD",
       "tests": "C/C++ ABI header layout tests and `LifecycleSmoke.c` value transfer",
       "status": "implemented",
@@ -130,7 +172,9 @@
     {
       "id": "vector-rectangle-fields",
       "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Vector2::[XY]|Rectangle::(?:X|Y|Width|Height))$",
-      "kinds": ["field"],
+      "kinds": [
+        "field"
+      ],
       "mapping": "same-named field in `CNA_Vector2` or `CNA_Rectangle`",
       "tests": "C/C++ ABI header layout tests and `LifecycleSmoke.c`",
       "status": "implemented",
@@ -139,7 +183,9 @@
     {
       "id": "color-channel-properties",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Color::(?:get|set)(?:R|G|B|A)Property$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "direct `r`, `g`, `b`, `a` fields in `CNA_Color`",
       "tests": "C/C++ ABI header layout tests and clear/texture pixel tests",
       "status": "implemented",
@@ -148,7 +194,9 @@
     {
       "id": "game-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Game$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "owned/callback-borrowed `CNA_Handle` game",
       "tests": "`LifecycleSmoke.c` ownership, stale handle, callbacks and threading",
       "status": "implemented",
@@ -157,7 +205,11 @@
     {
       "id": "game-lifecycle-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:Game|~Game|RunOneFrame|Run|Exit|Dispose)$",
-      "kinds": ["constructor", "destructor", "method"],
+      "kinds": [
+        "constructor",
+        "destructor",
+        "method"
+      ],
       "mapping": "`cna_game_create/run_one_frame/run/request_exit/destroy`",
       "tests": "`LifecycleSmoke.c` success, reentrancy, callback failure and teardown",
       "status": "implemented",
@@ -166,7 +218,9 @@
     {
       "id": "game-callback-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(?:LoadContent|UnloadContent|Update|Draw|OnExiting)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "matching `CNA_GameCallbacks` lifecycle callback",
       "tests": "`LifecycleSmoke.c` callback order/time/error/context coverage",
       "status": "implemented",
@@ -175,7 +229,10 @@
     {
       "id": "game-time-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::GameTime$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "callback-borrowed `CNA_GameTime` POD snapshot",
       "tests": "C/C++ ABI header layout tests and lifecycle timing callbacks",
       "status": "implemented",
@@ -184,7 +241,9 @@
     {
       "id": "game-time-properties",
       "qualified_name_regex": "^Microsoft::Xna::Framework::GameTime::get(?:TotalGameTime|ElapsedGameTime|IsRunningSlowly)Property$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "corresponding field in `CNA_GameTime`",
       "tests": "`LifecycleSmoke.c` update/draw timing snapshots",
       "status": "implemented",
@@ -193,7 +252,9 @@
     {
       "id": "game-window-title",
       "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::setTitleProperty$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_game_set_window_title` UTF-8 copy",
       "tests": "`LifecycleSmoke.c` valid/malformed/embedded-NUL UTF-8",
       "status": "implemented",
@@ -202,7 +263,9 @@
     {
       "id": "graphics-device-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "callback-scoped borrowed graphics-device `CNA_Handle`",
       "tests": "`LifecycleSmoke.c` borrow identity, expiry and wrong context",
       "status": "implemented",
@@ -211,7 +274,9 @@
     {
       "id": "game-graphics-device-property",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Game::getGraphicsDeviceProperty$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_game_get_graphics_device`",
       "tests": "`LifecycleSmoke.c` callback-scoped borrow and expiry",
       "status": "implemented",
@@ -220,7 +285,9 @@
     {
       "id": "graphics-discovery-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:GetGraphicsRendererType|GetGraphicsRendererName|GetMaxTextureDimension|SupportsCapability)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "renderer info/name/capability C query family",
       "tests": "ABI header tests, identity audits and `LifecycleSmoke.c`",
       "status": "implemented",
@@ -230,7 +297,9 @@
       "id": "graphics-clear-color",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::Clear$",
       "signature_regex": "^\\(const Color &color\\)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_game_clear` with `CNA_Color`",
       "tests": "`LifecycleSmoke.c` callback/thread checks and SDL backbuffer pixel",
       "status": "implemented",
@@ -240,7 +309,9 @@
       "id": "backbuffer-readback-color",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
       "signature_regex": "^\\(Color \\*data, int elementCount\\)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_get_backbuffer_data_rgba8`",
       "tests": "HEADLESS refusal and exact SDL_RENDERER pixels in `LifecycleSmoke.c`",
       "status": "implemented",
@@ -250,7 +321,14 @@
       "id": "texture-and-texture2d-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:2D)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field"
+      ],
       "mapping": "owned standalone or game-child `CNA_Handle` resources; versioned common/2D/storage snapshots; all constructors and factories through device, file, encoded-memory, RGBA8 and CPU-only creation; every typed full/mip/rectangle transfer through `CNA_Texture2DTransfer` plus `CNA_TextureDataType`; direct raw-RGBA8 upload through the native SetDataRGBA route; Texture format/block/alignment validation helpers; exact type-name count/copy; and PNG/JPEG memory/file encoding. Stream objects, native renderer pointers, weak pointers, protected construction and copy/move storage remain behind the adapter; their safe observable state is exposed without crossing the ABI",
       "tests": "all 27 formats, 18 transfer representations, constructors/factories, common and 2D properties, full/rectangle/mip transfers, PNG/JPEG memory and file round-trips, both stream-decode variants, storage/type-name snapshots, lifecycle, atomic capacity failures and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -260,7 +338,14 @@
       "id": "texture3d-and-texturecube-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:3D|Cube)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field"
+      ],
       "mapping": "owned game-child `CNA_Handle` resources; versioned 3D/cube create, property and full/mip/box/face/rectangle Color transfer descriptors; direct Texture3D raw-byte SetDataPointerEXT route; exact native type-name count/copy; generic Texture/GraphicsResource operations; RenderTargetCube inheritance; and copied-memory DDS cube decoding. Native renderer pointers, protected construction, copy/move storage and Sharp Runtime streams remain behind the adapter; missing storage returns an explicit atomic NOT_SUPPORTED result",
       "tests": "all six cube faces, full/rectangle/mip transfers and validation, Texture3D capability refusal, DDS memory decoding refusal, common Texture and GraphicsResource state, RenderTargetCube inheritance, disposal/parent order and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureVolumeSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -270,7 +355,14 @@
       "id": "vertex-buffer-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Dynamic)?VertexBuffer\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "event"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "event"
+      ],
       "mapping": "owned game-child `CNA_VertexBufferHandle` resources created as static or dynamic buffers; copied declaration metadata, versioned info and caller-array transfer descriptors; all seven typed SetData/GetData families, raw-byte upload, dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter",
       "tests": "all seven built-in vertex types through count and source/destination-window transfers, all four dynamic option overloads, raw upload, copied declaration independence, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `VertexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan",
       "status": "implemented",
@@ -280,7 +372,14 @@
       "id": "index-buffer-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Dynamic)?IndexBuffer\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "event"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "event"
+      ],
       "mapping": "owned game-child `CNA_IndexBufferHandle` resources created as static or dynamic 16/32-bit buffers; versioned create/info and caller-array transfer descriptors; count and window SetData/GetData routes, all dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter",
       "tests": "16-bit and 32-bit count/source-window/destination-window transfers, static and dynamic construction, Discard/NoOverwrite, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `IndexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan",
       "status": "implemented",
@@ -289,7 +388,10 @@
     {
       "id": "effect-parameter-identities",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::EffectParameter(?:Class|Type)(?:::[A-Za-z0-9_]+)?$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h`",
       "tests": "strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -299,7 +401,14 @@
       "id": "effect-annotation-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectAnnotation(?:Collection)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "alias"
+      ],
       "mapping": "owned immutable `CNA_EffectAnnotationHandle` values created from copied UTF-8 metadata/raw float storage plus owned mutable `CNA_EffectAnnotationCollectionHandle` snapshots; versioned metadata, exact string count/copy, all typed getters and copied count/index/name collection operations replace native vectors, references and iterators",
       "tests": "all metadata/string/scalar/vector/matrix getters, empty fallbacks, raw Boolean/Int32 bits, collection add/count/index/name lookup, copy independence, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectAnnotationSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -309,7 +418,14 @@
       "id": "effect-parameter-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectParameter(?:Collection)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "alias"
+      ],
       "mapping": "owned mutable `CNA_EffectParameterHandle` values and stable collection-element aliases plus owned `CNA_EffectParameterCollectionHandle` views; versioned copied metadata, exact strings, tagged scalar/array values, distinct matrix-transpose and texture overload identities, retained texture handles, nested element/member/annotation views and count/index/name/semantic operations replace native pointers, references, vectors and iterators",
       "tests": "all scalar and array overloads including matrix transpose, empty defaults, metadata/strings, nested collections and annotations, stable aliases across growth/destruction, all texture overload dispatch plus Texture2D retention, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectParameterSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -319,7 +435,14 @@
       "id": "effect-technique-pass-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Effect(?:Pass|Technique)(?:Collection)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "alias"
+      ],
       "mapping": "owned `CNA_EffectPassHandle` / `CNA_EffectTechniqueHandle` values and stable collection-element aliases plus owned mutable pass/technique collection views; exact UTF-8 names, stable non-pointer technique identities, nested annotation/pass views, canonical Apply dispatch and count/index/name operations replace native owner pointers, references, unique-pointer vectors and iterators",
       "tests": "default/named construction, canonical P0 creation, stable unique technique identities, ownerless Apply dispatch, annotation/pass nesting, collection add/count/index/name behavior, stable aliases across growth/destruction, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectTechniqueSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -329,7 +452,15 @@
       "id": "effect-lifecycle-and-concrete-effects-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Effect|EffectMaterial|ShaderEffect|SpriteEffect)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "alias"
+      ],
       "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; explicit compiled-bytecode NOT_SUPPORTED behavior; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations",
       "tests": "base/material/shader/sprite construction and same-type clones, compiled-bytecode refusal, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -339,7 +470,15 @@
       "id": "basic-effect-directional-light-and-interfaces-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:BasicEffect|DirectionalLight|IEffectFog|IEffectLights|IEffectMatrices)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "alias"
+      ],
       "mapping": "owned `CNA_EffectHandle` BasicEffect game children plus standalone or stable nested `CNA_DirectionalLightHandle` values; generic IEffectMatrices/IEffectFog/IEffectLights operations, exact three-light indexed views and default lighting; all BasicEffect transform, vertex-color, material, alpha, texture, fog and lighting properties; same-device retained Texture2D handles and clone-aware ownership. Renderer-only GpuDrawParams remain private and are consumed through Apply/draw paths",
       "tests": "exact BasicEffect and DirectionalLight defaults, all matrix/fog/light/material/texture properties, three stable shared light aliases, default three-point lighting constants, generic interface success/refusal, same-type state clone and texture retention, nested-light lifetime after parent destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `BasicEffectSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
@@ -349,7 +488,15 @@
       "id": "alpha-dual-and-environment-map-effects-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "alias"
+      ],
       "mapping": "owned `CNA_EffectHandle` game children with shared base clone/dispose/apply/type, reusable IEffectMatrices/IEffectFog/IEffectLights operations, and type-specific diffuse/emissive/alpha/vertex-color/alpha-test/two-layer/environment-map properties; indexed retained Texture2D layers and retained TextureCube environment maps require the same graphics device and clone independently; ReferenceAlpha preserves the native unclamped signed value and CompareFunction is validated at the C boundary; renderer-only GpuDrawParams remain private behind Apply/draw",
       "tests": "exact defaults and type identities, every generic interface and concrete property, unclamped ReferenceAlpha boundaries, all valid CompareFunction identities plus invalid enum/bool/index refusal, EnvironmentMapEffect's always-on lighting rule and stable light views, same-device texture ownership, Texture2D/TextureCube retention and clone release ordering, cross-owner refusal, Apply, stale/wrong-kind/wrong-thread paths in strict-C `StockEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
       "status": "implemented",
@@ -359,7 +506,16 @@
       "id": "skinned-effect-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedEffect\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned `CNA_EffectHandle` SkinnedEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed 72-bone maximum, bounded copied set and atomic count/capacity copy operations; complete diffuse/emissive/specular/alpha/per-pixel/weights/vertex-color state; retained same-device Texture2D assignment copied independently by clones. Always-on lighting maps false to INVALID_STATE and renderer-only GpuDrawParams remain private behind Apply/draw",
       "tests": "exact defaults including all 72 identity bones, type and maximum constant, every generic and concrete property, all valid and invalid weights, bone count bounds, exact round-trip and atomic insufficient-capacity behavior, always-on lighting/default lights, same-device texture ownership and clone retention, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `SkinnedEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze MaxBones",
       "status": "implemented",
@@ -369,7 +525,16 @@
       "id": "color-matrix-and-pbr-effects-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:ColorMatrixEffect|PbrEffect|SkinnedPbrEffect)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned `CNA_EffectHandle` ColorMatrixEffect, PbrEffect and SkinnedPbrEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed-layout finite color matrix and offset operations; complete PBR base-color/alpha/metallic/roughness/emissive state and five fixed retained Texture2D slots shared by both PBR variants; fixed 72-bone maximum plus bounded copied set and atomic count/capacity copy operations for SkinnedPbrEffect. Always-on PBR lighting maps false to INVALID_STATE, while renderer-only draw parameters remain private behind Apply/draw",
       "tests": "exact defaults and type identities for all three extensions, finite matrix/offset validation, grayscale/reset/clone, every generic PBR matrix/fog/light/material property, fixed texture-slot identities, same-device ownership and five-slot clone retention, all valid and invalid weights, all 72 identity bones, bone bounds/round-trip/capacity atomicity, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `PbrEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze POD layout, texture slots and MaxBones",
       "status": "implemented",
@@ -379,7 +544,16 @@
       "id": "model-bone-and-collection-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBone(?:Collection)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_ModelBoneHandle` nodes plus owned live `CNA_ModelBoneCollectionHandle` views; exact UTF-8 names, signed indices, copied transforms, optional parent views, retained child relationships and count/index/name/contains operations replace raw pointers, references, vectors and iterators. The C safety boundary rejects self-parenting and ancestor cycles and uses weak parent metadata so an independently retained child never exposes a dangling parent",
       "tests": "default and named construction including UTF-8, exact name count/copy and capacity atomicity, index/identity transform/mutation, empty collections, live children growth, parent and multiple child aliases, index/name/contains behavior, hierarchy retention after original-handle destruction, expired optional parents, cycle refusal and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelBoneSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles",
       "status": "implemented",
@@ -389,7 +563,16 @@
       "id": "model-mesh-part-and-collection-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPart(?:Collection)?\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_ModelMeshPartHandle` objects with exact signed scalar state, optional retained same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag; owned `CNA_ModelMeshPartCollectionHandle` snapshots retain shared part objects and replace raw pointers and iterators with count/index access. Indexed handles alias the same mutable part, and the representation also supports future ModelMesh-owned live views",
       "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag",
       "status": "implemented",
@@ -399,7 +582,16 @@
       "id": "model-mesh-and-collections-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:ModelMesh|ModelMeshCollection|ModelEffectCollection)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_ModelMeshHandle` game children with copied UTF-8 names, bounding spheres, retained parts and optional parent bones, opaque C tags, live part/effect views and capability-gated Draw; `CNA_ModelMeshCollectionHandle` snapshots replace mesh pointers/name indexers/iterators with count/index/find/contains aliases; `CNA_ModelEffectCollectionHandle` live views preserve duplicate Add, first-match Remove and identity semantics while retaining same-device effects",
       "tests": "both constructors, UTF-8/capacity, exact signed part mutation through live aliases, bounding sphere and tag state, retained parent bones, dynamic unique effects from part mutation, explicit duplicate add/first removal/contains/index and disposal protection, mesh snapshot index/find/contains and transitive alias lifetime, safe surviving detached parts, renderer-capability Draw, invalid arrays/names/re-parenting and wrong-thread paths in strict-C `ModelMeshSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze all handles and the tag",
       "status": "implemented",
@@ -409,7 +601,16 @@
       "id": "model-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_ModelHandle` with default, device aggregate and explicit mesh-parent/root constructors; retained immutable bone/mesh collection views, optional root, opaque 64-bit C tag, C context/release-callback ownership replacing `shared_ptr<void>`, count/copy local and absolute matrix operations, copied transform input and capability-gated Draw",
       "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle and tag",
       "status": "implemented",
@@ -419,7 +620,18 @@
       "id": "morph-target-extension-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/MorphTargetEXT\\.hpp$",
-      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias", "function"],
+      "kinds": [
+        "class",
+        "struct",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias",
+        "function"
+      ],
       "mapping": "deep-copied fixed `CNA_MorphWeightKeyframeEXTDescriptor`, `CNA_MorphWeightTrackEXTDescriptor`, `CNA_MorphTargetDeltaEXTDescriptor` values plus an owned validated `CNA_MorphTargetDataEXTHandle`; count/copy access replaces nested vectors, standalone track evaluation and data blending use atomic caller buffers, and retained ModelMeshPart attachment exposes native SetMorphWeightsEXT without leaking System::Object pointers",
       "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
       "status": "implemented",
@@ -429,7 +641,17 @@
       "id": "skinned-model-extension-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT\\.hpp$",
-      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "struct",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_SkinnedModelEXTHandle` with deep-copied fixed skeleton, keyframe, bone-track and named-clip descriptors; atomic count/copy access replaces vectors, maps and TimeSpan values, and native transform sampling accepts seconds plus a canonical C boolean. A lifetime sidecar safely retains same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D handles while exposing ordered part views, replace-by-name attach/remove and native owned-resource counts",
       "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and SDL_RENDERER with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts",
       "status": "implemented",
@@ -439,7 +661,17 @@
       "id": "skinning-data-animation-player-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/AnimationPlayer\\.hpp$",
-      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "kinds": [
+        "class",
+        "struct",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "field",
+        "constant",
+        "alias"
+      ],
       "mapping": "owned stable `CNA_SkinningDataHandle` and `CNA_AnimationPlayerHandle` values; SkinningData deeply copies fixed skeleton/root-prefix/named-clip descriptors and exposes deterministic count/copy/name access, while a player retains its SkinningData, selects clips by copied UTF-8 name, accepts finite seconds and canonical booleans, and atomically copies local/world/final skin matrices",
       "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout",
       "status": "implemented",
@@ -448,7 +680,9 @@
     {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "owned game-child SpriteBatch `CNA_Handle`",
       "tests": "`LifecycleSmoke.c` creation/state/lifetime under two renderers",
       "status": "implemented",
@@ -458,7 +692,9 @@
       "id": "spritebatch-constructor",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::SpriteBatch$",
       "signature_regex": "^\\(GraphicsDevice &graphicsDevice\\)$",
-      "kinds": ["constructor"],
+      "kinds": [
+        "constructor"
+      ],
       "mapping": "`cna_sprite_batch_create`",
       "tests": "`LifecycleSmoke.c` create, wrong handle/thread and parent ordering",
       "status": "implemented",
@@ -467,7 +703,9 @@
     {
       "id": "spritebatch-begin-partial",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Begin$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_sprite_batch_begin` plus `cna_sprite_batch_begin_with_states`; Effect and transform-matrix variants remain planned in CBIND-035",
       "tests": "all sort modes/defaults in `LifecycleSmoke.c` and explicit state/backend-refusal cases in `GraphicsSurfaceSmoke.c`",
       "status": "partial",
@@ -476,7 +714,9 @@
     {
       "id": "spritebatch-draw-partial",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::Draw$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_sprite_batch_submit_many` rectangle-texture command subset",
       "tests": "command validation/lifetime plus exact SDL_RENDERER pixels",
       "status": "partial",
@@ -486,7 +726,9 @@
       "id": "spritebatch-end",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::End$",
       "signature_regex": "^\\(\\)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_sprite_batch_end`",
       "tests": "`LifecycleSmoke.c` state, native refusal and retained-texture release",
       "status": "implemented",
@@ -495,7 +737,10 @@
     {
       "id": "keyboard-snapshot-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "copied `CNA_KeyboardState` POD",
       "tests": "ABI layout and `LifecycleSmoke.c` capture/local queries",
       "status": "implemented",
@@ -505,7 +750,9 @@
       "id": "keyboard-get-state",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keyboard::GetState$",
       "signature_regex": "^\\(\\)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_keyboard_get_state`",
       "tests": "HEADLESS/SDL_RENDERER capture and wrong-thread cases",
       "status": "implemented",
@@ -514,7 +761,10 @@
     {
       "id": "keyboard-state-queries",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState::(?:IsKeyDown|IsKeyUp|GetPressedKeys|operator\\[\\])$",
-      "kinds": ["method", "operator"],
+      "kinds": [
+        "method",
+        "operator"
+      ],
       "mapping": "local `cna_keyboard_state_*` POD query family",
       "tests": "synthetic multiword key/count/copy/capacity cases",
       "status": "implemented",
@@ -523,7 +773,10 @@
     {
       "id": "mouse-state-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "copied `CNA_MouseState` POD",
       "tests": "ABI layout and HEADLESS/SDL_RENDERER snapshot tests",
       "status": "implemented",
@@ -533,7 +786,9 @@
       "id": "mouse-get-state",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Mouse::GetState$",
       "signature_regex": "^\\(\\)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_mouse_get_state`",
       "tests": "HEADLESS/SDL_RENDERER absence and wrong-thread snapshots",
       "status": "implemented",
@@ -542,7 +797,9 @@
     {
       "id": "mouse-state-readable-properties",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState::get(?:X|Y|ScrollWheelValue|HorizontalScrollWheelValue|LeftButton|MiddleButton|RightButton|XButton1|XButton2)Property$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "corresponding field/bit in `CNA_MouseState`",
       "tests": "ABI layout and `InputSnapshotsSmoke.c`",
       "status": "implemented",
@@ -551,7 +808,10 @@
     {
       "id": "gamepad-state-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::(?:GamePadState|GamePadButtons|GamePadDPad|GamePadThumbSticks|GamePadTriggers)$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "flattened copied `CNA_GamePadState`/`CNA_GamePadAnalogState` POD",
       "tests": "ABI layout and all-player/dead-zone snapshot tests",
       "status": "implemented",
@@ -560,7 +820,9 @@
     {
       "id": "gamepad-get-state-overloads",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::GetState$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_gamepad_get_state` or `cna_gamepad_get_state_with_dead_zone`",
       "tests": "four players, three modes, invalid identity and wrong-thread cases",
       "status": "implemented",
@@ -569,7 +831,9 @@
     {
       "id": "gamepad-state-button-queries",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadState::IsButton(?:Down|Up)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_gamepad_state_is_button_down/up`",
       "tests": "single/combined/empty/invalid bit-mask cases",
       "status": "implemented",
@@ -578,7 +842,10 @@
     {
       "id": "touch-capability-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "copied `CNA_TouchCapabilities` POD",
       "tests": "ABI layout and platform-absence snapshots",
       "status": "implemented",
@@ -587,7 +854,9 @@
     {
       "id": "touch-capability-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities::get(?:IsConnected|MaximumTouchCount)Property$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "corresponding `CNA_TouchCapabilities` field",
       "tests": "`InputSnapshotsSmoke.c` capability and wrong-thread cases",
       "status": "implemented",
@@ -596,7 +865,9 @@
     {
       "id": "touch-panel-snapshot-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(?:GetCapabilities|GetState)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_touch_get_capabilities/state`",
       "tests": "HEADLESS/SDL_RENDERER empty-device and thread cases",
       "status": "implemented",
@@ -605,7 +876,10 @@
     {
       "id": "touch-value-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::(?:TouchCollection|TouchLocation)$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "fixed-capacity `CNA_TouchState` and `CNA_TouchLocation` POD",
       "tests": "ABI layout plus synthetic find/previous-location tests",
       "status": "implemented",
@@ -614,7 +888,10 @@
     {
       "id": "touch-read-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::(?:TouchCollection::(?:FindById|getCountProperty|getIsConnectedProperty|operator\\[\\])|TouchLocation::(?:TryGetPreviousLocation|getIdProperty|getPositionProperty|getPressureEXT|getStateProperty))$",
-      "kinds": ["method", "operator"],
+      "kinds": [
+        "method",
+        "operator"
+      ],
       "mapping": "snapshot field or local `cna_touch_*` query",
       "tests": "`InputSnapshotsSmoke.c` found/absent/previous/range cases",
       "status": "implemented",
@@ -623,7 +900,9 @@
     {
       "id": "content-manager-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "owned game-child ContentManager `CNA_Handle`",
       "tests": "`ContentSmoke.c` root/cache/load/lifetime under two renderers",
       "status": "partial",
@@ -632,7 +911,9 @@
     {
       "id": "content-manager-core-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:getRootDirectoryProperty|setRootDirectoryProperty|Unload|Dispose)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "matching `cna_content_manager_*` root/unload/destroy operation",
       "tests": "strict-C UTF-8, cache, stale handle and parent-order tests",
       "status": "implemented",
@@ -641,7 +922,9 @@
     {
       "id": "content-manager-load-texture-partial",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::Load$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_content_manager_load_texture2d` for the Color Texture2D specialization only",
       "tests": "real UTF-8 fixture/cache/unload/pixel tests in `ContentSmoke.c`",
       "status": "partial",
@@ -650,7 +933,9 @@
     {
       "id": "sound-effect-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "owned game-child SoundEffect `CNA_Handle` for PCM16LE data",
       "tests": "dummy/unavailable audio strict-C regression programs",
       "status": "partial",
@@ -660,7 +945,9 @@
       "id": "sound-effect-pcm-constructor",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::SoundEffect$",
       "signature_regex": "^\\(const std::vector< SharpRuntime::bytecs > &buffer, SharpRuntime::intcs sampleRate, AudioChannels channels\\)$",
-      "kinds": ["constructor"],
+      "kinds": [
+        "constructor"
+      ],
       "mapping": "`cna_sound_effect_create_pcm16` with copied bytes",
       "tests": "`AudioSmoke.c` PCM validation/duration/ownership and unavailable driver",
       "status": "implemented",
@@ -669,7 +956,9 @@
     {
       "id": "sound-effect-resource-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::(?:getDurationProperty|CreateInstance|Dispose)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "matching sound-effect duration/create-instance/destroy C operation",
       "tests": "`AudioSmoke.c` duration, hierarchy, stale handles and wrong thread",
       "status": "implemented",
@@ -678,7 +967,9 @@
     {
       "id": "sound-instance-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance$",
-      "kinds": ["class"],
+      "kinds": [
+        "class"
+      ],
       "mapping": "owned SoundEffect child `CNA_Handle`",
       "tests": "`AudioSmoke.c` state/control/lifetime and mixer-thread boundary",
       "status": "partial",
@@ -687,7 +978,9 @@
     {
       "id": "sound-instance-control-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::(?:Play|Pause|Resume|Stop|Dispose|getStateProperty|getVolumeProperty|getPitchProperty|getPanProperty|getIsLoopedProperty|setVolumeProperty|setPitchProperty|setPanProperty|setIsLoopedProperty)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "matching `cna_sound_effect_instance_*` control/info operation",
       "tests": "`AudioSmoke.c` transitions, clamping, validation, lifetime and threading",
       "status": "implemented",
@@ -732,7 +1025,10 @@
     {
       "id": "vector3-spritefont-value",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "fixed-layout `CNA_Vector3` POD used by `CNA_SpriteFontGlyph.kerning`",
       "tests": "C/C++ ABI layout assertions and glyph construction in `GraphicsSurfaceSmoke.c`",
       "status": "implemented",
@@ -741,7 +1037,9 @@
     {
       "id": "vector3-spritefont-fields",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Vector3::[XYZ]$",
-      "kinds": ["field"],
+      "kinds": [
+        "field"
+      ],
       "mapping": "same-named field in fixed-layout `CNA_Vector3`",
       "tests": "C/C++ ABI layout assertions and glyph construction in `GraphicsSurfaceSmoke.c`",
       "status": "implemented",
@@ -795,7 +1093,9 @@
     {
       "id": "graphics-device-state-target-display-members",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getPresentationParametersProperty|getDisplayModeProperty|getSamplerStatesProperty|getVertexSamplerStatesProperty|getBlendStateProperty|setBlendStateProperty|getDepthStencilStateProperty|setDepthStencilStateProperty|getRasterizerStateProperty|setRasterizerStateProperty|SetRenderTarget|SetRenderTargets|GetRenderTargets|SetPresentationParameters)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "matching presentation/display, state/sampler or render-target C API operation with callback-scoped device validation",
       "tests": "HEADLESS/SDL device round-trip, binding, backend-refusal, invalid input, threading and ABI cases in `GraphicsSurfaceSmoke.c`",
       "status": "implemented",
@@ -822,7 +1122,10 @@
     {
       "id": "math3d-pod-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Point|Vector4|Quaternion|Matrix|Plane|Ray|BoundingBox|BoundingSphere|BoundingFrustum)$",
-      "kinds": ["class", "struct"],
+      "kinds": [
+        "class",
+        "struct"
+      ],
       "mapping": "corresponding fixed-layout `CNA_*` POD in `math_values.h`",
       "tests": "C/C++ ABI size, alignment and field-offset assertions",
       "status": "implemented",
@@ -831,7 +1134,9 @@
     {
       "id": "math3d-pod-fields",
       "qualified_name_regex": "^Microsoft::Xna::Framework::(?:Point::[XY]|Vector4::[XYZW]|Quaternion::[XYZW]|Matrix::M[1-4][1-4]|Plane::(?:Normal|D)|Ray::(?:Position|Direction)|BoundingBox::(?:Min|Max)|BoundingSphere::(?:Center|Radius))$",
-      "kinds": ["field"],
+      "kinds": [
+        "field"
+      ],
       "mapping": "corresponding lower-case field in the fixed-layout `CNA_*` POD",
       "tests": "C/C++ ABI size, alignment and field-offset assertions",
       "status": "implemented",
@@ -840,7 +1145,9 @@
     {
       "id": "bounding-frustum-matrix-property",
       "qualified_name_regex": "^Microsoft::Xna::Framework::BoundingFrustum::(?:get|set)MatrixProperty$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "direct `matrix` field in `CNA_BoundingFrustum`",
       "tests": "C/C++ ABI size, alignment and field-offset assertions",
       "status": "implemented",
@@ -849,7 +1156,9 @@
     {
       "id": "vertex-element-pod-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexElement$",
-      "kinds": ["struct"],
+      "kinds": [
+        "struct"
+      ],
       "mapping": "fixed-layout `CNA_VertexElement` POD in `graphics3d.h`",
       "tests": "C/C++ ABI size, alignment and field-offset assertions",
       "status": "implemented",
@@ -858,7 +1167,9 @@
     {
       "id": "vertex-element-pod-properties",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::VertexElement::(?:get|set)(?:Offset|VertexElementFormat|VertexElementUsage|UsageIndex)Property$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "corresponding field in fixed-layout `CNA_VertexElement`",
       "tests": "C/C++ ABI size, alignment and field-offset assertions",
       "status": "implemented",
@@ -867,7 +1178,9 @@
     {
       "id": "packed-vector-raw-types",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)$",
-      "kinds": ["struct"],
+      "kinds": [
+        "struct"
+      ],
       "mapping": "matching fixed-width `CNA_Packed*` raw-storage alias",
       "tests": "C/C++ ABI size assertions",
       "status": "implemented",
@@ -876,7 +1189,9 @@
     {
       "id": "packed-vector-raw-properties",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)::(?:get|set)PackedValueProperty$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "the value of the matching fixed-width `CNA_Packed*` raw-storage alias",
       "tests": "C/C++ ABI size assertions",
       "status": "implemented",
@@ -886,7 +1201,11 @@
       "id": "packed-vector-operations",
       "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::PackedVector::(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)::(?:get|set)PackedValueProperty$).*$",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/(?:Alpha8|Bgr565|Bgra4444|Bgra5551|Byte4|HalfSingle|HalfVector2|HalfVector4|NormalizedByte2|NormalizedByte4|NormalizedShort2|NormalizedShort4|Rg32|Rgba1010102|Rgba64|Short2|Short4)\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "fixed-width raw storage selected by `CNA_PackedVectorFormat` plus `cna_packed_vector_pack`, `cna_packed_vector_unpack`, `cna_packed_vector_equals` and `cna_packed_vector_not_equals`; component/default/raw constructors and specialized scalar/Vector2 conversions collapse to the corresponding format route or direct raw value",
       "tests": "all 17 formats, exact packed bits, native unpack semantics, equality/inequality, storage-width validation, finite/infinite boundaries, null and failure atomicity in strict-C `PackedVectorSmoke.c`, plus C/C++ identity assertions",
       "status": "implemented",
@@ -896,7 +1215,10 @@
       "id": "half-type-helper-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/PackedVector/HalfTypeHelper\\.hpp$",
-      "kinds": ["struct", "method"],
+      "kinds": [
+        "struct",
+        "method"
+      ],
       "mapping": "stateless `cna_half_from_single`, `cna_half_from_single_bits` and `cna_half_to_single` IEEE 754 conversion operations",
       "tests": "exact binary16/binary32 conversion, NaN, infinity and null-output cases in strict-C `PackedVectorSmoke.c`",
       "status": "implemented",
@@ -906,7 +1228,11 @@
       "id": "packed-vector-interface-routes",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Graphics/PackedVector/IPackedVector\\.hpp$",
-      "kinds": ["struct", "method", "destructor"],
+      "kinds": [
+        "struct",
+        "method",
+        "destructor"
+      ],
       "mapping": "format-tagged fixed-width raw values plus generic pack/unpack operations provide the non-generic and typed storage routes without a C-owned polymorphic object or destructor",
       "tests": "every format through generic pack/unpack and direct raw storage, storage-width validation and C/C++ format identity assertions",
       "status": "implemented",
@@ -916,7 +1242,12 @@
       "id": "point-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Point\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_point_*` initialization, zero, arithmetic, equality, hash and UTF-8 count/copy operations",
       "tests": "strict-C normal, wraparound, divide-failure, equality, hash, exact-string, capacity and null cases in `MathValuesSmoke.c`",
       "status": "implemented",
@@ -926,7 +1257,12 @@
       "id": "rectangle-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Rectangle\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_rectangle_*` initialization, property, containment, mutation, equality, hash, UTF-8 count/copy, intersection and union operations",
       "tests": "strict-C property, half-open bounds, mutation, wraparound, overload-equivalent, exact-string, capacity and null cases in `MathValuesSmoke.c`",
       "status": "implemented",
@@ -936,7 +1272,11 @@
       "id": "math-helper-surface",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/MathHelper\\.hpp$",
-      "kinds": ["class", "constant", "method"],
+      "kinds": [
+        "class",
+        "constant",
+        "method"
+      ],
       "mapping": "stateless `cna_math_*` prefix, exact `CNA_MATH_*` constants and fallible scalar output operations",
       "tests": "C/C++ constant checks plus every interpolation, clamp, distance, angle, epsilon and full-range MSAA operation in strict-C `MathValuesSmoke.c`",
       "status": "implemented",
@@ -946,7 +1286,12 @@
       "id": "vector2-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Vector2\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_vector2_*` initialization, constants, scalar/value operations, named operators, exact UTF-8 count/copy and validated raw-array matrix/quaternion transform ranges",
       "tests": "every entry point, overload-equivalent math, IEEE division, strings, null/range atomicity and single/bulk transforms in strict-C `VectorSmoke.c`",
       "status": "implemented",
@@ -956,7 +1301,12 @@
       "id": "vector3-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Vector3\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_vector3_*` initialization, direction constants, scalar/value/cross operations, named operators, exact UTF-8 count/copy and validated raw-array matrix/quaternion transform ranges",
       "tests": "every entry point, overload-equivalent math, IEEE division, strings, null/range atomicity and single/bulk transforms in strict-C `VectorSmoke.c`",
       "status": "implemented",
@@ -966,7 +1316,12 @@
       "id": "vector4-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Vector4\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_vector4_*` initialization, constants, scalar/value operations, named operators, exact UTF-8 count/copy and typed Vector2/3/4 plus validated raw-array matrix/quaternion transforms",
       "tests": "every entry point, overload-equivalent math, IEEE division/normalization, strings, null/range atomicity, aliasing and single/bulk transforms in strict-C `VectorSmoke.c`",
       "status": "implemented",
@@ -976,7 +1331,12 @@
       "id": "quaternion-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Quaternion\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_quaternion_*` construction, identity, member/static/operator math, rotation factories, interpolation and exact UTF-8 count/copy operations",
       "tests": "every entry point, overload-equivalent operations, rotation factories, interpolation, IEEE normalization, exact strings, aliasing and null failures in strict-C `QuaternionSmoke.c`",
       "status": "implemented",
@@ -986,7 +1346,12 @@
       "id": "matrix-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Matrix\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_matrix_*` construction, direction/translation properties, decomposition, determinant, member/static/operator math, all factories and exact UTF-8 count/copy operations",
       "tests": "every entry point, overload-equivalent operations, row-major fields, properties, decomposition/singularity, projection failures, IEEE inversion and exact strings in strict-C `MatrixSmoke.c`",
       "status": "implemented",
@@ -996,7 +1361,11 @@
       "id": "plane-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Plane\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_plane_*` construction, dot, normalization, volume classification, equality/hash/string and matrix/quaternion transform operations",
       "tests": "every entry point, overload-equivalent operations, classifications, transforms, IEEE normalization, exact strings and null/capacity failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
@@ -1006,7 +1375,11 @@
       "id": "ray-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Ray\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_ray_*` construction, equality/hash/string and explicit hit-plus-distance box/sphere/plane/frustum intersection operations",
       "tests": "every entry point, hit/miss distances, frustum containment, exact strings and null/capacity failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
@@ -1016,7 +1389,12 @@
       "id": "bounding-box-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingBox\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`CNA_BOUNDING_BOX_CORNER_COUNT` and `cna_bounding_box_*` construction, corner copy, containment, intersection, factory, merge, equality/hash/string and explicit hit-plus-distance ray operations",
       "tests": "every entry point, corner order and capacity atomicity, containment/classification, hit/miss, factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
@@ -1026,7 +1404,11 @@
       "id": "bounding-sphere-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingSphere\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`cna_bounding_sphere_*` construction, transformation, containment, intersection, factory, merge, equality/hash/string and explicit hit-plus-distance ray operations",
       "tests": "every entry point, nonuniform transformation, containment/classification, hit/miss, point/frustum/box factories, merge, exact strings and null/empty failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
@@ -1036,7 +1418,12 @@
       "id": "bounding-frustum-operations",
       "qualified_name_regex": "^(?!Microsoft::Xna::Framework::BoundingFrustum::(?:getMatrixProperty|setMatrixProperty)).*$",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/BoundingFrustum\\.hpp$",
-      "kinds": ["constant", "constructor", "method", "operator"],
+      "kinds": [
+        "constant",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "`CNA_BOUNDING_FRUSTUM_CORNER_COUNT` and `cna_bounding_frustum_*` construction, derived-plane queries, corner copy, containment, intersection, equality/hash/string and explicit hit-plus-distance ray operations; the matrix property remains the direct POD field",
       "tests": "every entry point, matrix value semantics, all planes/corners, capacity atomicity, containment/classification, hit/miss/not-supported boundary rays, exact strings and null failures in strict-C `GeometrySmoke.c`",
       "status": "implemented",
@@ -1046,7 +1433,12 @@
       "id": "curve-key-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/CurveKey\\.hpp$",
-      "kinds": ["class", "constructor", "method", "operator"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "fixed-layout `CNA_CurveKey` plus `cna_curve_key_*` property, construction, clone, comparison, equality and hash operations",
       "tests": "C/C++ ABI size/alignment/offset assertions plus every entry point, constructors, mutation, NaN comparison, equality/hash and invalid-continuity/null atomicity in strict-C `CurveSmoke.c`",
       "status": "implemented",
@@ -1056,7 +1448,13 @@
       "id": "curve-key-collection-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/CurveKeyCollection\\.hpp$",
-      "kinds": ["alias", "class", "constructor", "method", "operator"],
+      "kinds": [
+        "alias",
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "owned validated `CNA_CurveKeyCollectionHandle` plus `cna_curve_key_collection_*` count/read-only, indexed mutation, ordered add, clear/clone, contains/index/remove and atomic destination-index copy operations; native aliases/iterators collapse to count/copy",
       "tests": "every entry point, handle ABI, ordering/repositioning, clone independence, count/index/copy, capacity atomicity, invalid keys/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
       "status": "implemented",
@@ -1066,7 +1464,11 @@
       "id": "curve-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Curve\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "owned validated `CNA_CurveHandle` plus `cna_curve_*` loop, clone, evaluation and tangent operations; both native key-reference properties collapse to an owned mutable collection-view handle that retains the curve",
       "tests": "every entry point, handle ABI, empty/single-state identity, mutable retained key views, all loop modes and tangent overloads, evaluation, clone independence, invalid enums/indices and invalid/stale/wrong-thread handles in strict-C `CurveSmoke.c`",
       "status": "implemented",
@@ -1076,7 +1478,11 @@
       "id": "color-value-operations",
       "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Color::(?:get|set)(?:R|G|B|A)Property$).*$",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Color\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "fixed-layout `CNA_Color`; direct channel fields; `cna_color_*` construction, packed-value, conversion, exact-string, equality/hash, interpolation, premultiplication, multiplication and packed-vector operations",
       "tests": "every entry point, ABI layout, direct channels, all constructors, packed order, exact strings, conversions, equality/hash, clamp/truncation/wrap behavior, null and capacity atomicity in strict-C `ColorSmoke.c`",
       "status": "implemented",
@@ -1086,7 +1492,9 @@
       "id": "color-named-values",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Color::[A-Za-z0-9_]+$",
       "header_regex": "^modules/math/include/Microsoft/Xna/Framework/Color\\.hpp$",
-      "kinds": ["constant"],
+      "kinds": [
+        "constant"
+      ],
       "mapping": "directly usable C/C++ `CNA_COLOR_*` value expression with exact RGBA channels and canonical AABBGGRR packed value in `named_colors.h`",
       "tests": "all 141 named expressions packed independently against their canonical AABBGGRR literals in strict-C `ColorSmoke.c`, plus strict C17/C++23 public-header compilation",
       "status": "implemented",
@@ -1096,7 +1504,11 @@
       "id": "vertex-element-operations",
       "qualified_name_regex": "^(?!Microsoft::Xna::Framework::Graphics::VertexElement::(?:get|set)(?:Offset|VertexElementFormat|VertexElementUsage|UsageIndex)Property$).*$",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexElement\\.hpp$",
-      "kinds": ["constructor", "method", "operator"],
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "fixed-layout `CNA_VertexElement`; direct fields plus `cna_vertex_element_equals`, `cna_vertex_element_not_equals`, `cna_vertex_element_get_hash_code` and exact UTF-8 count/copy operations; constructors collapse to aggregate initialization",
       "tests": "all operations, exact formatting, invalid format/usage identities, null outputs and capacity atomicity in strict-C `VertexValueSmoke.c`, plus C/C++ ABI assertions",
       "status": "implemented",
@@ -1106,7 +1518,13 @@
       "id": "built-in-vertex-values",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexPosition(?:Color|ColorTexture|NormalTangentTexture|NormalTangentTextureSkinned|NormalTexture|NormalTextureSkinned|Texture)\\.hpp$",
-      "kinds": ["struct", "field", "constructor", "method", "operator"],
+      "kinds": [
+        "struct",
+        "field",
+        "constructor",
+        "method",
+        "operator"
+      ],
       "mapping": "seven fixed-layout `CNA_VertexPosition*` POD values selected by `CNA_VertexType`; direct fields plus generic default, equality, hash, exact UTF-8 count/copy, GPU stride and canonical element-copy operations; parameterized constructors collapse to aggregate initialization",
       "tests": "all seven types, defaults, fields, equality/inequality, hashes, exact strings, stable POD layouts and complete GPU declarations under strict C in `VertexValueSmoke.c`, plus C/C++ ABI assertions",
       "status": "implemented",
@@ -1116,7 +1534,11 @@
       "id": "vertex-type-interface-routes",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/IVertexType\\.hpp$",
-      "kinds": ["class", "destructor", "method"],
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
       "mapping": "`CNA_VertexType` identity plus stateless stride and canonical element-copy operations provide the declaration route without a C-owned polymorphic object or destructor",
       "tests": "all built-in vertex identities and their exact declarations in strict-C `VertexValueSmoke.c`, plus C/C++ identity assertions",
       "status": "implemented",
@@ -1126,7 +1548,11 @@
       "id": "vertex-declaration-ownership",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexDeclaration\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "owned generation/type/thread-validated `CNA_VertexDeclarationHandle` plus empty, computed-stride and explicit-stride creation, exact type-name count/copy, stride query, atomic element copy and destruction; initializer-list and vector explicit-stride constructors share one copied-array route",
       "tests": "all constructors and queries, computed/explicit/empty declarations, exact type name, copy capacity, invalid elements/ranges, wrong-kind/stale/wrong-thread handles and destruction in strict-C `VertexResourceSmoke.c`, plus C/C++ handle assertions",
       "status": "implemented",
@@ -1136,7 +1562,11 @@
       "id": "vertex-buffer-binding-value",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/VertexBufferBinding\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "fixed-layout `CNA_VertexBufferBinding` with direct handle/offset/frequency fields; zero aggregate is the default constructor and `cna_vertex_buffer_binding_init` provides structurally validated parameterized construction",
       "tests": "default and parameterized construction, direct getters/fields, negative/null validation and C/C++ ABI size/alignment/offset assertions in strict-C `VertexResourceSmoke.c`",
       "status": "implemented",
@@ -1146,7 +1576,15 @@
       "id": "graphics-resource-common-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsResource\\.hpp$",
-      "kinds": ["class", "event", "destructor", "method", "constructor", "operator", "field"],
+      "kinds": [
+        "class",
+        "event",
+        "destructor",
+        "method",
+        "constructor",
+        "operator",
+        "field"
+      ],
       "mapping": "generic validated graphics-resource handle operations for callback-scoped device identity, disposal state/event/lifetime, exact UTF-8 Name/ToString count-copy and a fixed 64-bit C-owned opaque tag; protected construction/copy/move and storage remain encapsulated by concrete owned resource handles",
       "tests": "every generic entry point, standalone and device-owned resources, disposal callbacks, repeated/typed destruction, UTF-8/capacity atomicity, C tag reset, wrong-kind/stale/wrong-thread handles and callback-scoped device expiry in strict-C `GraphicsResourceSmoke.c`, registry unit tests and C/C++ ABI assertions",
       "status": "implemented",
@@ -1156,7 +1594,11 @@
       "id": "viewport-complete-contract",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Viewport\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "fixed-layout `CNA_Viewport` POD whose six public fields are the complete property set, plus `cna_viewport_init`/`cna_viewport_init_bounds`/`cna_viewport_init_from_rectangle` construction, aspect-ratio, bounds get/set, title-safe-area, `cna_viewport_project`/`cna_viewport_unproject` and exact UTF-8 string count/copy operations",
       "tests": "all three constructors including the canonical zero-size unit-depth default, both zero-dimension aspect cases, bounds/title-safe-area round-trips, depth-range scaling, clip-space corners, an identity and a perspective project/unproject round trip, exact string bytes, capacity atomicity and null-argument failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1166,7 +1608,11 @@
       "id": "clear-options-identities-and-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ClearOptions\\.hpp$",
-      "kinds": ["enum", "enum-value", "operator"],
+      "kinds": [
+        "enum",
+        "enum-value",
+        "operator"
+      ],
       "mapping": "`CNA_ClearOptions` and `CNA_CLEAR_OPTION_*` at their native bit values; the native `|`, `&`, `~`, `|=` and `&=` overloads need no adapter because C's own bitwise operators apply directly to the fixed-width alias",
       "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and every bitwise combination in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1176,7 +1622,9 @@
       "id": "sprite-effects-bitwise-operations",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteEffects\\.hpp$",
-      "kinds": ["operator"],
+      "kinds": [
+        "operator"
+      ],
       "mapping": "native C `|`, `&`, `|=` and `&=` on the existing fixed-width `CNA_SpriteEffects` alias, whose bits equal the native mirroring bits",
       "tests": "native-ordinal static assertions in `CnaCApiGraphics.cpp`, C/C++ ABI bit assertions and combine/mask sequences in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1186,7 +1634,10 @@
       "id": "graphics-device-status-identities",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus\\.hpp$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_GraphicsDeviceStatus` and `CNA_GRAPHICS_DEVICE_STATUS_*` at their native ordinals",
       "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1196,7 +1647,10 @@
       "id": "unsupported-3d-call-behavior-identities",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/CNA/Unsupported3DGraphicsCallBehavior\\.hpp$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_Unsupported3DGraphicsCallBehavior` and `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` at their native ordinals",
       "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1205,7 +1659,9 @@
     {
       "id": "graphics-device-events",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Disposing|DeviceLost|DeviceReset|DeviceResetting|ResourceCreated|ResourceDestroyed)$",
-      "kinds": ["event"],
+      "kinds": [
+        "event"
+      ],
       "mapping": "`cna_graphics_device_subscribe_event` with the four `CNA_GRAPHICS_DEVICE_EVENT_*` identities plus `cna_graphics_device_subscribe_resource_created`/`_destroyed` and `cna_graphics_device_unsubscribe`; owned registration handles replace native handler objects and copied `CNA_ResourceCreatedEventInfo`/`CNA_ResourceDestroyedEventInfo` values replace the native EventArgs. Game destruction invalidates live subscriptions after the canonical device has raised Disposing, so the handle stays releasable and never touches a destroyed handler",
       "tests": "all six subscriptions, real resource-created/destroyed delivery through Texture2D creation and destruction, observed Disposing during game destruction, post-destruction release, unsubscription stopping delivery and null/unknown-identity/wrong-kind failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1214,7 +1670,10 @@
     {
       "id": "graphics-device-lifetime",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::~?GraphicsDevice$",
-      "kinds": ["constructor", "destructor"],
+      "kinds": [
+        "constructor",
+        "destructor"
+      ],
       "mapping": "no C constructor or destructor: the canonical device belongs to the running `Game`, which creates it from its adapter/profile/presentation state and destroys it during `cna_game_destroy`. `cna_game_get_graphics_device` borrows it for the active callback and `cna_graphics_device_dispose` reports the same ownership rule as an explicit callable `NOT_SUPPORTED` result",
       "tests": "borrowed-device acquisition, callback-scoped expiry, explicit dispose refusal and device destruction through `cna_game_destroy` in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1223,7 +1682,9 @@
     {
       "id": "graphics-device-friend-declarations",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Game|GameWindow|GraphicsDeviceManager)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "No C mapping: these are friendship declarations that grant canonical CNA types access to private device state, not callable public members",
       "tests": "Doxygen declaration inventory; no callable native operation exists",
       "status": "not-applicable",
@@ -1232,7 +1693,9 @@
     {
       "id": "graphics-device-state-and-disposal",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getIsDisposedProperty|getGraphicsDeviceStatusProperty|getAdapterProperty|getGraphicsProfileProperty|getScissorRectangleProperty|setScissorRectangleProperty|getViewportProperty|setViewportProperty|getBlendFactorProperty|setBlendFactorProperty|getMultiSampleMaskProperty|setMultiSampleMaskProperty|getReferenceStencilProperty|setReferenceStencilProperty|GetTypeName|Dispose)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_get_is_disposed`, `_get_status`, `_get_adapter_index`, `_get_graphics_profile`, `_get`/`_set_scissor_rectangle`, `_get`/`_set_viewport`, `_get`/`_set_blend_factor`, `_get`/`_set_multi_sample_mask`, `_get`/`_set_reference_stencil`, `_get_type_name_size`/`_copy_type_name` and the explicit `_dispose` ownership result. The native `GraphicsAdapter&` becomes an index into the existing `cna_graphics_adapter_*` queries and no native reference crosses the ABI",
       "tests": "every getter/setter round trip, canonical multisample-mask and reference-stencil defaults, non-finite viewport-depth rejection without mutation, exact type-name bytes with capacity atomicity, dispose refusal and null-output/stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1242,7 +1705,11 @@
       "id": "graphics-device-resource-event-args",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Resource(?:Created|Destroyed)EventArgs\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "fixed-layout `CNA_ResourceCreatedEventInfo` and `CNA_ResourceDestroyedEventInfo` values delivered by the device subscription callbacks; a C consumer never constructs the native args object. `getResourceProperty()` is reported as presence only because the canonical event is raised from the graphics-resource base constructor, where the object has no concrete type yet; `getNameProperty()` becomes a callback-scoped UTF-8 view and the caller-owned `System::Object*` tag is likewise reported as presence only",
       "tests": "real created/destroyed delivery with exact structure size/version, empty-name and no-tag values and payload validation in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1251,7 +1718,11 @@
     {
       "id": "graphics-device-service-access",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService(?:::~?IGraphicsDeviceService|::getGraphicsDeviceProperty)?$",
-      "kinds": ["class", "destructor", "method"],
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
       "mapping": "`cna_game_get_graphics_device` is the C route to the service's device. The interface itself is deliberately not instantiable or implementable from C: a C++ abstract base class cannot cross the ABI, and its only canonical implementation is the game-owned `GraphicsDeviceManager`",
       "tests": "borrowed-device acquisition and callback-scoped expiry in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1260,7 +1731,9 @@
     {
       "id": "graphics-device-service-events",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService::getDevice(?:Created|Disposing|Reset|Resetting)Event$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "the device's own lifecycle events are subscribable through `cna_graphics_device_subscribe_event`; these service-level events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module, whose C mapping is owned by CBIND-037",
       "tests": "device-level Disposing/lost/reset/resetting subscriptions in strict-C `GraphicsDeviceSmoke.c`; service-level delivery evidence is pending CBIND-037",
       "status": "partial",
@@ -1270,7 +1743,10 @@
       "id": "graphics-device-exceptions",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:DeviceLostException|DeviceNotResetException|NoSuitableGraphicsDeviceException)\\.hpp$",
-      "kinds": ["class", "constructor"],
+      "kinds": [
+        "class",
+        "constructor"
+      ],
       "mapping": "the C exception firewall converts these canonical failures before they can cross the ABI: a lost or not-reset device becomes `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`, an unavailable device becomes `CNA_RESULT_NOT_SUPPORTED` with `CNA_ERROR_CATEGORY_NOT_SUPPORTED`, and both default and custom messages reach the caller through the per-thread UTF-8 diagnostic. No exception object, type name or C++ throw is exposed",
       "tests": "default-message and custom-message conversion of all three types, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test",
       "status": "implemented",
@@ -1279,7 +1755,9 @@
     {
       "id": "graphics-device-texture-collections",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getTexturesProperty|getVertexTexturesProperty)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_get_texture`, `cna_graphics_device_set_texture` and `cna_graphics_device_unbind_texture`, each addressing a collection by `CNA_ShaderStage` plus slot index instead of returning a native collection reference",
       "tests": "both stages across all 16 slots, bind/read/unbind round trips, unknown-stage and out-of-range rejection and stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1289,7 +1767,13 @@
       "id": "texture-collection-slots",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/TextureCollection\\.hpp$",
-      "kinds": ["class", "constant", "constructor", "operator", "method"],
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "operator",
+        "method"
+      ],
       "mapping": "`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` freezes the native slot count and the stage-addressed device operations replace the collection object: the indexing operator becomes `cna_graphics_device_get_texture` with a versioned `CNA_TextureSlotInfo`, the call operator becomes `cna_graphics_device_set_texture`, and `RemoveDisposedTexture` becomes `cna_graphics_device_unbind_texture`. No standalone collection is constructible from C, because the canonical default constructor produces a deviceless collection that no device ever consults; a slot filled by canonical CNA code reports as bound with an invalid handle rather than exposing a native `Texture*`",
       "tests": "slot-count assertion against the native constant, initial empty slots, bind/read/unbind on both stages, self-unbinding on texture destruction, render-target rejection where the backend binds one, and invalid stage/slot/structure/handle failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1299,7 +1783,9 @@
       "id": "graphics-device-frame-control",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Clear|Present|Reset)$",
       "signature_regex": "^(?:\\(float r, float g, float b, float a\\)|\\(ClearOptions options, const Color &color, float depth, int stencil\\)|\\(const Color &color, float depth\\)|\\(\\)|\\(const PresentationParameters &presentationParameters\\)|\\(const PresentationParameters &presentationParameters, GraphicsAdapter &adapter\\)|\\(const PresentationParameters &presentationParameters, GraphicsAdapter \\*adapter\\))$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_clear_rgba`, `cna_graphics_device_clear_color_depth`, `cna_graphics_device_clear_options`, `cna_graphics_device_present`, `cna_graphics_device_reset` and `cna_graphics_device_reset_with_parameters`. The reference and pointer adapter overloads collapse into one route whose nullable `adapter_index` pointer expresses the optional adapter; the renderer-private device window handle is preserved across a reset because a C caller never supplies it",
       "tests": "every clear overload including unknown option bits and non-finite channel/depth rejection, present, both reset routes with observed resetting/reset event pairs, invalid parameters and an out-of-range adapter index in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1309,7 +1795,9 @@
       "id": "graphics-device-backbuffer-window",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
       "signature_regex": "^(?:\\(Color \\*data, int startIndex, int elementCount\\)|\\(const Rectangle \\*rect, Color \\*data, int startIndex, int elementCount\\))$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_get_backbuffer_data_window` with a versioned `CNA_BackBufferReadback` carrying the optional source rectangle, destination start index and element count. The nullable native rectangle becomes an explicit flag plus value, and an element count smaller than the selected region is decided as `CNA_RESULT_BUFFER_TOO_SMALL` before any native read instead of surfacing as a generic native failure",
       "tests": "rectangle and full-buffer windows, exact untouched destination bytes outside the window, capacity/structure rejection, undersized-region refusal and honest HEADLESS `NOT_SUPPORTED` in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1318,7 +1806,9 @@
     {
       "id": "graphics-device-buffer-binding",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getIndicesProperty|setIndicesProperty|Indices|SetVertexBuffer|SetVertexBuffers|GetVertexBuffer|GetVertexBuffers|SetIndexBuffer|GetIndexBuffer)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_set_vertex_buffer`, `_set_vertex_buffer_offset`, `_set_vertex_buffers`, `_get_vertex_buffer_count`, `_copy_vertex_buffers`, `_get_vertex_buffer`, `_set_index_buffer` and `_get_index_buffer`. The native `std::vector<VertexBufferBinding>` becomes a caller-owned `CNA_VertexBufferBinding` array with a count/copy contract, and the four equivalent index-buffer accessors collapse to one validated get/set pair. Reads report the owning C handle rather than a native pointer; a binding applied by canonical CNA code reports an invalid handle",
       "tests": "empty-state reads, single and multi-binding application, explicit offsets, unbinding, count/copy capacity atomicity, negative offset/frequency rejection before any binding is applied, wrong-kind handle refusal and honest backend creation refusal in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1327,7 +1817,9 @@
     {
       "id": "graphics-device-draw-submission",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:DrawPrimitives|DrawIndexedPrimitives|DrawInstancedPrimitives|DrawUserPrimitives|DrawUserIndexedPrimitives|PrimitiveVerts)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_draw_primitives`, `_draw_indexed_primitives`, `_draw_instanced_primitives`, `_draw_user_primitives`, `_draw_user_indexed_primitives` and `cna_primitive_type_get_vertex_count`. The twenty-nine user-primitive overloads collapse into two calls whose versioned `CNA_UserPrimitives`/`CNA_UserIndices` descriptors carry the dimensions that select the canonical overload: vertex source, optional declaration and index width. A built-in vertex source is converted into native values before submission, because those structures embed a polymorphic Color and are never layout-compatible with their C PODs; a raw stream therefore always requires an explicit declaration, since the declaration-less canonical raw overloads read native objects. A backend without 3D support refuses every draw route as `NOT_SUPPORTED` instead of surfacing its first unsupported internal call",
       "tests": "all five topologies through the vertex-count helper, unknown-topology and malformed-descriptor rejection, raw-stream-without-declaration refusal, both user routes for a converted and a raw stream with 16- and 32-bit indices under a bound BasicEffect, and capability-accurate refusal on SDL_RENDERER in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1336,7 +1828,9 @@
     {
       "id": "graphics-device-extension-operations",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:GetTrackedResourceCount|SetDepthTestEnabled|SetBlendEnabled|SetDepthWriteEnabled|SetGraphicsProfileEXT|SetContextRecoveryEnabled|SetStringMarkerEXT|SetUnsupported3DGraphicsCallBehavior|GetUnsupported3DGraphicsCallBehavior|SetCurrentEffect|RecreateRendererForMultiSampleCount)$",
-      "kinds": ["method"],
+      "kinds": [
+        "method"
+      ],
       "mapping": "`cna_graphics_device_get_tracked_resource_count`, `_set_depth_test_enabled`, `_set_blend_enabled`, `_set_depth_write_enabled`, `_set_graphics_profile_ext`, `_set_context_recovery_enabled`, `_set_string_marker_ext`, `_get`/`_set_unsupported_3d_call_behavior`, `_set_current_effect` and `_recreate_renderer_for_multi_sample_count_ext`. The three pipeline-state toggles refuse a backend without 3D support as `NOT_SUPPORTED`; the marker takes a validated UTF-8 view; and because the device stores a borrowed `Effect*`, the C API keeps an assigned effect alive until it is replaced, cleared or the game is destroyed",
       "tests": "tracked-resource count, all Boolean toggles including non-Boolean rejection and capability-accurate refusal, both profile values and an unknown one, valid and malformed UTF-8 markers, the unsupported-3D policy round trip, current-effect assignment/clearing with wrong-kind refusal, and negative multisample rejection in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1345,8 +1839,10 @@
     {
       "id": "graphics-device-internal-notification-hooks",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:OnResourceCreated|OnResourceDestroyed|AddResourceReference|RemoveResourceReference|GetRenderer)$",
-      "kinds": ["method"],
-      "mapping": "no C route raises or registers these directly: every one takes or returns a native object \u2014 a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself \u2014 that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no C route raises or registers these directly: every one takes or returns a native object — a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself — that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
       "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F5"
@@ -1354,7 +1850,11 @@
     {
       "id": "spritebatch-text-and-mesh",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::(?:SpriteBatch|~SpriteBatch|GetTypeName|DrawString|DrawMeshEXT)$",
-      "kinds": ["constructor", "destructor", "method"],
+      "kinds": [
+        "constructor",
+        "destructor",
+        "method"
+      ],
       "mapping": "`cna_sprite_batch_draw_string` with a versioned `CNA_SpriteTextCommand`, `cna_sprite_batch_draw_mesh_ext` with a versioned `CNA_SpriteMeshEXT`, and `cna_sprite_batch_get_type_name_size`/`_copy_type_name`. All six `DrawString` overloads collapse into one command: both native text types are copied before layout, so a UTF-8 view expresses either, and the parameter shapes differ only in which transform fields stay at their defaults. Mesh colors and positions are converted rather than reinterpreted because the native Color carries a vtable, and a renderer without mesh submission reports `NOT_SUPPORTED`. `cna_sprite_batch_create` is the only C construction: the canonical default constructor produces a deviceless batch and the other takes a renderer-private object, so neither has a C form; `cna_sprite_batch_destroy` is the destructor route",
       "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal, mesh submission with and without optional colors/texture coordinates, malformed mesh rejection and honest backend refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1365,7 +1865,12 @@
       "id": "occlusion-query-surface",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/OcclusionQuery\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
       "mapping": "owned game-child `CNA_OcclusionQueryHandle` values through `cna_occlusion_query_create`, `_begin`, `_end`, `_get_is_complete`, `_get_pixel_count`, `_has_renderer` and `_destroy`. Creation refuses a backend without the occlusion-query capability, and the handle is a full graphics resource: the generic `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes accept it, which is where the protected `Dispose(bool)` and `GetTypeName` behavior is observed",
       "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and SDL_RENDERER",
       "status": "implemented",
@@ -1375,7 +1880,10 @@
       "id": "graphics-ext-identities",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:AsciiQuantizeMode|CRTMaskType|DitherMode|RenderQuality|ShadowQuality|TonemappingMode|DepthEffectMode)\\.hpp$",
-      "kinds": ["enum", "enum-value"],
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
       "mapping": "`CNA_AsciiQuantizeMode`, `CNA_CRTMaskType`, `CNA_DitherMode`, `CNA_RenderQuality`, `CNA_ShadowQuality`, `CNA_TonemappingMode` and `CNA_DepthEffectMode` with their `CNA_*` constants at the native ordinals. The identities are declared in every build so the exported ABI never changes shape with the extension build option",
       "tests": "native-ordinal static assertions in `CnaCApiGraphicsExt.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsExtSmoke.c` under HEADLESS without the extension layer and SDL_RENDERER with it",
       "status": "implemented",
@@ -1385,7 +1893,11 @@
       "id": "graphics-ext-settings-values",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:PbrMaterial|RenderPipelineSettings)\\.hpp$",
-      "kinds": ["class", "constructor", "method"],
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
       "mapping": "fixed-layout `CNA_PbrMaterial` and `CNA_RenderPipelineSettings` PODs plus `cna_pbr_material_init`/`cna_render_pipeline_settings_init`. Both canonical types are settings bags whose accessors assign without clamping, so direct field access is the exact mapping of every getter and setter and the initializers reproduce the constructors' defaults. Texture slots become handles and stay non-owning, matching the canonical non-owning `Texture2D*` slots; the value routes work in every build because they need no native extension object",
       "tests": "every default field value, direct unclamped field mutation and null-output rejection in strict-C `GraphicsExtSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS without the extension layer and SDL_RENDERER with it",
       "status": "implemented",
@@ -1395,11 +1907,64 @@
       "id": "graphics-ext-post-process-effects",
       "qualified_name_regex": ".*",
       "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:CRTEffect|DepthEffect|AsciiPostProcessEffect)\\.hpp$",
-      "kinds": ["class", "constructor", "destructor", "method"],
-      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract \u2014 clone, dispose, apply, type name, parameters \u2014 covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract — clone, dispose, apply, type name, parameters — covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
       "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_RENDERER with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
       "status": "implemented",
       "task": "CBIND-035F7"
+    },
+    {
+      "id": "storage-container-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/storage/include/Microsoft/Xna/Framework/Storage/StorageContainer\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "event"
+      ],
+      "mapping": "owned `CNA_StorageContainerHandle` resources opened from a storage device: display-name and fully-qualified type-name count/copy, disposal state, the owning device's handle, explicit `cna_storage_container_dispose` and owned `Disposing` callback registration; directory create/exists/delete and file create/exists/delete; both `GetDirectoryNames` and both `GetFileNames` overloads expressed as a count plus an indexed copy, where an empty search pattern selects the no-argument overload; `CreateFile` and all three `OpenFile` overloads returning an owned `CNA_StorageStreamHandle` (`cna_storage_container_open_file`, `_open_file_access`, `_open_file_share`). `System::IO::Stream` never becomes a C type: the stream handle exposes read/write/seek/position/length/set-length/flush/capability/close only, and a stream is a child of its container just as a container is a child of its device",
+      "tests": "`StorageSmoke.c` display/type-name count-copy round trips and buffer-too-small refusal, disposal state, owning-device identity, one-shot `Disposing` delivery across repeated disposal, directory create/exists/list/delete including glob and empty-pattern listings and out-of-range name indexes, file create/exists/list/delete, byte-exact write/read round trip, seek from begin and end plus the negative-position I/O refusal, read-only write refusal, `SetLength` truncation, rejected file mode/access/share identities, the append-with-read refusal, the missing-file I/O result, and stream-before-container destruction ordering, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036A"
+    },
+    {
+      "id": "storage-device-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/storage/include/Microsoft/Xna/Framework/Storage/StorageDevice\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator",
+        "event"
+      ],
+      "mapping": "owned `CNA_StorageDeviceHandle` resources: free space, total space and connection state; process-wide `DeviceChanged` callback registration, matching the canonical event's static storage; `DeleteContainer`; the four `BeginShowSelector`/`EndShowSelector` fake-async pairs collapsed into `cna_storage_device_show_selector`, `_for_player`, `_with_space` and `_for_player_with_space`, and the `BeginOpenContainer`/`EndOpenContainer` pair into `cna_storage_container_open`. CNA completes all of them before `Begin` returns, so each C route stays one synchronous call that still invokes the canonical completion callback and no `System::IAsyncResult` or operation handle is invented for work that never pends. `SetAppNameEXT` and `GetStorageRootEXT` become `cna_storage_set_app_name_ext` and root size/copy",
+      "tests": "`StorageSmoke.c` all four selector overloads with and without a completion callback, negative space and unknown player refusals, free/total/connection queries, `DeviceChanged` subscribe/unsubscribe and stale-registration refusal, container open with completion callback, container deletion including the escaping and empty title-name refusals, and container-before-device destruction ordering, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036A"
+    },
+    {
+      "id": "storage-device-not-connected-exception",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/storage/include/Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor"
+      ],
+      "mapping": "the C exception firewall converts this canonical failure before it can cross the ABI: a disconnected storage device becomes `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`, and both the default and a custom message reach the caller through the per-thread UTF-8 diagnostic. No exception object, type name or C++ throw is exposed",
+      "tests": "default-message and custom-message conversion, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test",
+      "status": "implemented",
+      "task": "CBIND-036A"
     }
   ]
 }

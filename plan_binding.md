@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -95,6 +95,7 @@ modules/c-api/
 │   ├── graphics.h            # graphics/device/2D resources and batches
 │   ├── input.h               # snapshot input APIs
 │   ├── content.h             # content/root-directory APIs
+│   ├── storage.h             # storage devices, containers and file streams
 │   └── audio.h               # only after its explicit phase is approved
 ├── src/
 ├── tests/
@@ -234,7 +235,7 @@ mechanical wrapper.
 | CBIND-033 | Inventory the complete public CNA surface | ✅ | Doxygen-backed `tools/c-api/generate_coverage_inventory.py` deterministically tracks all 414 public headers and 6,415 public/protected declarations while explicitly excluding 95 `Internal`/`Detail` headers and the C API itself. `coverage_mappings.json` assigns reviewed current mappings; every remaining symbol has a C-native mapping proposal, test obligation, status and owner task. The snapshot records 443 implemented, 21 partial, 5,881 planned and 70 explicitly deleted/not-applicable declarations; `--check` proves drift without prematurely wiring the CBIND-043 CI gate. |
 | CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ✅ | `graphics_state.h`, `display.h`, `render_target.h` and `sprite_font.h` map every inventory row in this family: fixed identities and complete state PODs/presets/device round-trips, sampler slots and explicit-state SpriteBatch Begin; display/adapter/presentation values and safe native-handle/refresh limitations; owned 2D/cube targets with applied-property snapshots and atomic singular/MRT binding; copied glyph SpriteFonts retaining their source Texture2D. Strict-C HEADLESS and SDL_RENDERER tests cover ABI layouts, properties, UTF-8, ownership, stale/wrong-thread handles, real 2D binding and honest unavailable-backend paths. The inventory now records 814 implemented, 21 partial, 5,510 planned and 70 not applicable rows, with no planned CBIND-034 row. |
 | CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ✅ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. Work is decomposed into CBIND-035A–G below; the parent becomes complete only when all seven rows and every CBIND-035 inventory row are closed. |
-| CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
+| CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | 🟨 | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. Work is decomposed into CBIND-036A–E below; the parent becomes complete only when all five rows and every CBIND-036 inventory row are closed. |
 | CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
 | CBIND-043 | Maintain a machine-checked coverage gate | ⬜ | A CI checker compares the public-header inventory to `COVERAGE.md` and fails if a public type/member/constant/event has no mapping/status. New C++ public API cannot land without its C API row and tests in the same change. |
 | CBIND-044 | Close the public API coverage matrix | ⬜ | Every row is implemented and tested, or carries an owner-approved native limitation with a callable C API that reports it. No unspecified omission remains. |
@@ -313,6 +314,21 @@ copied bulk transfers.
 | CBIND-035E5 | 20 | Complete morph-target extension values and operations | ✅ | `models.h` maps keyframes, tracks and target deltas through fixed deep-copied descriptors and owns validated MorphTargetDataEXT handles. Atomic count/copy routes expose every nested field without C++ vectors; mutable weights/tracks, LINEAR/STEP/Hermite evaluation, base-byte blending, retained ModelMeshPart attachment and supported VertexBuffer upload map all native operations. Strict-C tests cover ABI, exact blend/evaluation math, malformed shapes/flags/times/counts, capacity atomicity, lifetime and handle/thread errors under HEADLESS and SDL_RENDERER plus ASan+UBSan. |
 | CBIND-035E6 | 36 | Complete SkinnedModelEXT | ✅ | `CNA_SkinnedModelEXTHandle` deeply copies fixed skeleton/keyframe/track/clip descriptors, exposes deterministic count/copy and native transform-sampling routes, and supports normalized native move semantics. A stable lifetime sidecar retains same-device VertexBuffer/IndexBuffer/ModelMeshPart/optional Texture2D resources, blocks premature disposal and maps ordered part access, replace-by-name attach/remove and owned counts. Strict-C tests cover all layouts and operations, exact interpolation/clamp/loop math, validation/capacity atomicity, moves, lifetime and handle/thread failures under HEADLESS and SDL_RENDERER on dummy virtual video plus ASan+UBSan. |
 | CBIND-035E7 | 19 | Complete SkinningData and AnimationPlayer | ✅ | `CNA_SkinningDataHandle` deeply copies validated hierarchy/bind/inverse-bind/root-prefix/named-clip state and exposes type, deterministic clip and atomic field copies. `CNA_AnimationPlayerHandle` retains data, starts exact named clips, maps relative/absolute loop/clamp Update and exposes position/current clip plus atomic local/world/skin matrices. Strict-C tests cover every route, deep-copy/lifetime, exact prefix/interpolation composition, capacity and input/handle/thread failures under HEADLESS and SDL_RENDERER plus ASan+UBSan; this closes parent CBIND-035E. |
+
+#### CBIND-036 stream, storage and networking implementation slices
+
+The 406 rows owned by CBIND-036 are partitioned once by dependency boundary. Storage lands first
+because it is self-contained and introduces the C stream contract every later file-facing row
+reuses; content follows; the networking families are ordered so identities, values and packet
+buffers exist before the session and gamer objects that consume them.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-036A | 42 | Complete storage devices, containers and file streams | ✅ | `storage.h` and `CnaCApiStorage.cpp` map every `storage` row: owned `CNA_StorageDeviceHandle`, `CNA_StorageContainerHandle` and `CNA_StorageStreamHandle` families that nest strictly and refuse destruction while a child is live; free/total space, connection state, both events (the static `DeviceChanged` without a device handle, per-instance `Disposing` through one), container display/type-name count-copy, directory and file create/exists/delete, both listing overloads as count plus indexed copy with an empty pattern selecting the no-argument overload, `CreateFile` and all three `OpenFile` overloads, and container deletion keeping the canonical containment guard. All four `BeginShowSelector`/`EndShowSelector` pairs and `BeginOpenContainer`/`EndOpenContainer` collapse into single synchronous calls that still invoke the canonical completion callback, so no `System::IAsyncResult` or invented operation handle exists in C. `System::IO::Stream` stays behind the adapter; wider-than-`Int32` counts are refused rather than truncated and stream capabilities are queried, not inferred. `filesystem_error`, `System::IO::IOException` and `StorageDeviceNotConnectedException` gained boundary conversions to `CNA_RESULT_IO`, `CNA_RESULT_IO` and `CNA_RESULT_INVALID_STATE`, each proven in `cna_c_api_boundary_detail_test`. Strict-C `StorageSmoke.c` plus C/C++ ABI assertions run green in all three trees (48/48). The snapshot is now 3,518 implemented, 23 partial, 2,801 planned and 73 not applicable, with no planned `storage` row left. |
+| CBIND-036B | 97 | Complete content readers, managers and manifests | ⬜ | Map `ContentReader`, the remaining `ContentManager` rows, `ContentTypeReader`/`ContentTypeReaderManager`, `ContentManifestEntry`, `ResourceContentManager`, `LooseFileContentTypeReader`, `KnownUnsupportedContentTypeReader` and `ContentLoadException` without exposing C++ type-reader templates, streams or containers. |
+| CBIND-036C | 98 | Complete network identities, values and packet transfer | ⬜ | Map all five network identity enumerations, `NetworkSessionProperties`, `QualityOfService`, `NetworkSessionJoinException`, and both `PacketReader`/`PacketWriter` through fixed values, validated handles and bulk byte transfers. |
+| CBIND-036D | 65 | Complete network gamers, machines and events | ⬜ | Map `NetworkGamer`, `LocalNetworkGamer`, `NetworkMachine` and all seven network event-argument types through stable handles, copied payloads and owned callback registrations. |
+| CBIND-036E | 104 | Complete network sessions and discovery | ⬜ | Map `NetworkSession`, `AvailableNetworkSession` and `AvailableNetworkSessionCollection`, including creation/find/join, session state and every session event, through owned handles, count/copy collections and documented asynchronous-operation conversion. |
 
 #### CBIND-035F device and draw-submission implementation slices
 
@@ -576,16 +592,22 @@ remains**; parent CBIND-035F is complete. CBIND-035G then adds the missing real-
 through `Draw3DSmoke.c`: honest refusal on a backend without the 3D capability, and observable
 pixel change through user, indexed, buffered and Model draw routes on the CPU-raster SOFTWARE
 backend, with pixel readback treated as a capability separate from 3D. Parent CBIND-035 is
-complete; CBIND-036 stream/storage/network coverage is next.
+complete. CBIND-036A then closes the first CBIND-036 slice by mapping the whole 42-row `storage`
+module: three strictly nested owned handle families, both canonical events, count/copy listings, a
+C-native stream handle that never exposes `System::IO::Stream`, and the five fake-async Begin/End
+pairs collapsed into single synchronous calls that still invoke the completion callback. Three
+canonical failures gained boundary conversions -- `std::filesystem::filesystem_error` and
+`System::IO::IOException` to `CNA_RESULT_IO`, `StorageDeviceNotConnectedException` to
+`CNA_RESULT_INVALID_STATE` -- each proven in the adapter test. The snapshot is now 3,518
+implemented, 23 partial, 2,801 planned and 73 not applicable; CBIND-036B content coverage is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-035G is the final task completed in this handoff and closes
-  parent CBIND-035.
-- Next task: `CBIND-036` stream, storage, networking and asynchronous-operation coverage (406
-  planned rows). Do not reopen closed CBIND-035 slices without a concrete demonstrated defect. Do not
-  reopen completed CBIND-035E slices unless a regression demonstrates a concrete defect.
-- Verification baseline: three trees each run the same 47 C API tests green — HEADLESS,
+- Branch: `feature/binding`; CBIND-036A is the final task completed in this handoff and closes the
+  first CBIND-036 slice (parent CBIND-035 was closed by CBIND-035G).
+- Next task: `CBIND-036B` complete content readers, managers and manifests (97 planned rows). Do not
+  reopen closed CBIND-035 or CBIND-036A slices without a concrete demonstrated defect.
+- Verification baseline: three trees each run the same 48 C API tests green — HEADLESS,
   SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
   the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
   probe the capability or the actual result, so a new backend needs no test edits. The
@@ -593,8 +615,8 @@ complete; CBIND-036 stream/storage/network coverage is next.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after F7: 414 headers / 6,415 symbols; 3,476 implemented, 23 partial, 2,843
-  planned and 73 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-036A: 414 headers / 6,415 symbols; 3,518 implemented, 23 partial,
+  2,801 planned and 73 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

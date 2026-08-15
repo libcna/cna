@@ -33,7 +33,9 @@ morph-target descriptors/data, blending, track evaluation and retained mesh-part
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
-probe. Exact support and omissions are recorded in
+probe. The complete storage module adds owned storage devices, containers and file streams with
+count/copy directory and file listings and synchronous equivalents of the canonical fake-async
+selector and container pairs. Exact support and omissions are recorded in
 [`FEATURE_MATRIX.md`](FEATURE_MATRIX.md). It is not complete public CNA coverage. The contract in
 this directory is binding on implementation until the release gate in
 [`../../plan_binding.md`](../../plan_binding.md) is complete.
@@ -97,8 +99,8 @@ The exact modules and headers are defined in the implementation plan. The curren
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
-`vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`
-and `audio.h`;
+`vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
+`storage.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations
@@ -133,7 +135,8 @@ callbacks/threading, renderer capability reporting, [graphics resources](GRAPHIC
 [index buffers](INDEX_BUFFERS.md),
 [math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
 Runtime boundary. The owned content/cache
-contract is in [`CONTENT.md`](CONTENT.md). The
+contract is in [`CONTENT.md`](CONTENT.md); the device/container/stream ownership and fake-async
+contract is in [`STORAGE.md`](STORAGE.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

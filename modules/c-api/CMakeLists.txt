@@ -27,6 +27,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
     src/CnaCApiSpriteFont.cpp
+    src/CnaCApiStorage.cpp
     src/CnaCApiInput.cpp
     src/CnaCApiMath.cpp
     src/CnaCApiMatrix.cpp
@@ -67,7 +68,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext)
+target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -215,6 +216,23 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
+
+    add_executable(cna_c_api_storage_smoke
+        tests/pure_c/StorageSmoke.c
+    )
+    set_target_properties(cna_c_api_storage_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_storage_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_storage_smoke)
+    add_test(NAME CApi_StorageSmoke COMMAND cna_c_api_storage_smoke)
+    # The storage root is derived from the platform preference path, so the suite is pinned to a
+    # build-tree location instead of writing into the developer's real user data directory.
+    set_tests_properties(CApi_StorageSmoke PROPERTIES
+        ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/storage-smoke-home"
+    )
 
     add_executable(cna_c_api_vector_smoke
         tests/pure_c/VectorSmoke.c
@@ -798,11 +816,13 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
+        ${PROJECT_SOURCE_DIR}/modules/storage/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         Threads::Threads
         sharp_runtime_core_base
     )
+    cna_link_sharp_runtime(cna_c_api_handle_registry_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_handle_registry_test)
     add_test(NAME CApi_HandleRegistry COMMAND cna_c_api_handle_registry_test)
 
@@ -815,8 +835,15 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
+        ${PROJECT_SOURCE_DIR}/modules/storage/include
     )
-    target_link_libraries(cna_c_api_boundary_detail_test PRIVATE sharp_runtime_core_base)
+    # The storage exception is the one canonical type this test throws whose constructors are not
+    # header-only, so proving its conversion needs the storage module on the link line.
+    target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
+        sharp_runtime_core_base
+        cna_storage
+    )
+    cna_link_sharp_runtime(cna_c_api_boundary_detail_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)
     add_test(NAME CApi_BoundaryDetail COMMAND cna_c_api_boundary_detail_test)
 endif()
