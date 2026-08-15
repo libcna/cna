@@ -35,7 +35,8 @@ owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in load
 with an owned compiled-asset reader over a storage stream and the process-wide type-reader
 registry alongside it. Networking contributes the session identity enumerations, the
 quality-of-service value, owned session-property lists with enumerators, owned packet read and
-write buffers, owned network gamers and machines and the seven event descriptions; owned
+write buffers, owned network gamers and machines, the seven event descriptions and owned discovered
+sessions with their read-only collection; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async
@@ -104,7 +105,7 @@ The exact modules and headers are defined in the implementation plan. The curren
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
-`content_readers.h`, `storage.h`, `net.h`, `net_gamers.h` and `audio.h`;
+`content_readers.h`, `storage.h`, `net.h`, `net_gamers.h`, `net_sessions.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations

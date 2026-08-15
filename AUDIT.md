@@ -24,8 +24,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > process-wide registry. `CBIND-036C` adds the network identity enumerations, the
 > quality-of-service value, owned session-property lists with enumerators, owned packet read and
 > write buffers, and the join-failure conversion with its per-thread join-error record.
-> `CBIND-036D` adds owned network gamers and machines and the seven event descriptions. The generated
-> inventory currently records 3,711 implemented, 29 partial, 2,559 planned and 116
+> `CBIND-036D` adds owned network gamers and machines and the seven event descriptions, and
+> `CBIND-036E1` adds discovered sessions and their collection. The generated
+> inventory currently records 3,728 implemented, 29 partial, 2,542 planned and 116
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

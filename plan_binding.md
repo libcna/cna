@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A–D under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A–D and CBIND-036E1 under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -98,6 +98,7 @@ modules/c-api/
 │   ├── content_readers.h     # compiled-asset readers and the type-reader registry
 │   ├── net.h                 # network identities, values and packet buffers
 │   ├── net_gamers.h          # network gamers, machines and event descriptions
+│   ├── net_sessions.h        # discovered sessions, collections and network sessions
 │   ├── storage.h             # storage devices, containers and file streams
 │   └── audio.h               # only after its explicit phase is approved
 ├── src/
@@ -334,6 +335,22 @@ buffers exist before the session and gamer objects that consume them.
 | CBIND-036C | 98 | Complete network identities, values and packet transfer | ✅ | `net.h` and `CnaCApiNet.cpp` map all five identity enumerations at their canonical ordinals, the `CNA_QualityOfService` value with both canonical factories, an owned `CNA_NetworkSessionPropertiesHandle` over the optional-integer list with an owned enumerator handle, and owned packet read/write buffers with one route per canonical read and write. Two canonical behaviors are preserved rather than tidied up -- the list reports itself read-only while still mutating, and an out-of-range write appends -- and two are decided in C because the canonical implementation does not decide them at all: `Insert`/`RemoveAt` are range-checked before the unchecked native call, and the enumerator's before-first read becomes `CNA_RESULT_INVALID_STATE` instead of an out-of-bounds dereference. The canonical color write/read asymmetry is preserved and proved in both directions. `NetworkSessionJoinException` converts to `CNA_RESULT_INVALID_STATE` and its join error is recorded per thread for `cna_net_get_last_join_error`, cleared by any later failure; the conversion is proved in `cna_c_api_boundary_detail_test`. Two `_ext` routes move packet bytes because the canonical API never exposes them. Strict-C `NetSmoke.c` plus C/C++ ABI assertions run green in all three trees (50/50). |
 | CBIND-036D | 47 | Complete network gamers, machines and events | ✅ | `net_gamers.h` and `CnaCApiNetGamers.cpp` map `NetworkGamer`, `NetworkMachine` and all seven event-argument types: an owned gamer handle carrying every canonical flag, the session-local identifier, the round-trip time as ticks and the owning session handle, with the CNA extension setters kept under an `_ext` suffix so a consumer can see which state the canonical API otherwise leaves fixed; an owned machine handle with a counted roster whose borrowed gamer views block the machine's release, and a removal route that reports the canonical always-throwing placeholder as `NOT_SUPPORTED`; and seven fixed `CNA_*EventInfo` descriptions with `_init` routines that validate their payload gamer handle. `getMachineProperty` hands back an independent copy because the canonical setter already takes its machine by value and the canonical machine exposes no mutator. **Re-partitioned:** `LocalNetworkGamer` moved to CBIND-036E — its receive and send paths dereference the owning session, so it cannot exist before sessions do. `NetSmoke.c` grew the gamer, machine and event coverage and runs green in all three trees (50/50). |
 | CBIND-036E | 122 | Complete network sessions, local gamers and discovery | ⬜ | Map `NetworkSession`, `LocalNetworkGamer`, `AvailableNetworkSession` and `AvailableNetworkSessionCollection`, including creation/find/join, session state, packet send and receive and every session event, through owned handles, count/copy collections and documented asynchronous-operation conversion. `LocalNetworkGamer` moved here from CBIND-036D because its receive and send paths dereference the owning session. |
+
+#### CBIND-036E session implementation slices
+
+The 122 rows CBIND-036E owns are partitioned by what each part needs to exist. Available sessions
+are a self-contained discovery value and land first; the session object then arrives in three
+passes — its own state and identity, its ten events, and the creation/discovery/join surfaces whose
+fake-async pairs need the session object to already exist — and the local gamer lands last, because
+its receive and send paths dereference the session it belongs to.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-036E1 | 17 | Complete available sessions and their collection | ✅ | `net_sessions.h` and `CnaCApiNetSessions.cpp` map both types: an owned discovered-session handle built from a versioned creation structure, every scalar property, count/copy host gamertag and connect address, connect port and session type, a copied `CNA_QualityOfService` and an independently copied property list, and both equality operators as explicit routes. Only the round-trip sample can be carried into a quality of service, because that is the only measurement the canonical type accepts. The collection is an owned handle with disposal state, explicit dispose and release, a count and an indexed copy-out whose element survives the collection it came from. `NetSmoke.c` grew the discovered-session coverage and runs green in all three trees (50/50). |
+| CBIND-036E2 | 57 | Complete session identity, state and gamer management | ⬜ | Map the `NetworkSession` handle, both constants, the `NetworkEventType`/`NetworkEvent` identities and payload, every state property and gamer collection, disposal, `Update`, `AddLocalGamer`, `FindGamerById`, `ResetReady`, `StartGame`, `EndGame`, `SendNetworkEvent`, `AddRemoteGamer`, `RemoveGamer` and the testing counters. |
+| CBIND-036E3 | 10 | Complete session event registrations | ⬜ | Map all nine instance events and the static `InviteAccepted` event through owned registration handles that deliver the CBIND-036D event descriptions, with the same subscribe/unsubscribe contract every other C API event family uses. |
+| CBIND-036E4 | 20 | Complete session creation, discovery and join | ⬜ | Map all four `Create`, both `Find`, `Join` and both `JoinInvited` overloads together with their `Begin`/`End` pairs, documenting how each fake-async pair becomes a C route and never exposing `System::IAsyncResult` or `std::any`. |
+| CBIND-036E5 | 18 | Complete local network gamers | ⬜ | Map `LocalNetworkGamer`: the data-available and signed-in-gamer queries, every `ReceiveData` and `SendData` overload including the `PacketReader`/`PacketWriter` forms, and the CNAEXT queue operations. |
 
 #### CBIND-036B content implementation slices
 
@@ -639,16 +656,20 @@ implemented, 29 partial, 2,606 planned and 115 not applicable. CBIND-036D then m
 machine and event-argument rows. Its boundary needed one correction: `LocalNetworkGamer` moved to
 CBIND-036E because its receive and send paths dereference the owning session, so the slice is 47
 rows rather than 65. The snapshot is now 3,711 implemented, 29 partial, 2,559 planned and 116 not
-applicable; CBIND-036E network sessions, local gamers and discovery is next.
+applicable. CBIND-036E is partitioned into five slices by what each part needs to exist, and
+CBIND-036E1 closes the first: discovered sessions and their collection. The snapshot is now 3,728
+implemented, 29 partial, 2,542 planned and 116 not applicable; CBIND-036E2, the session object's own
+identity, state and gamer management, is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-036D is the final task completed in this handoff (parent
-  CBIND-035 was closed by CBIND-035G; CBIND-036A closed storage, CBIND-036B closed content and
-  CBIND-036C closed the network values and packets).
-- Next task: `CBIND-036E` complete network sessions, local gamers and discovery (122 planned rows,
-  the last CBIND-036 slice). Do not reopen closed CBIND-035 or CBIND-036A–D slices without a
-  concrete demonstrated defect.
+- Branch: `feature/binding`; CBIND-036E1 is the final task completed in this handoff (parent
+  CBIND-035 was closed by CBIND-035G; CBIND-036A closed storage, CBIND-036B closed content,
+  CBIND-036C closed the network values and packets and CBIND-036D closed gamers, machines and
+  event descriptions).
+- Next task: `CBIND-036E2` complete session identity, state and gamer management (57 planned rows),
+  then E3 events, E4 creation/discovery/join and E5 local gamers. Do not reopen closed CBIND-035,
+  CBIND-036A–D or CBIND-036E1 slices without a concrete demonstrated defect.
 - Verification baseline: three trees each run the same 50 C API tests green — HEADLESS,
   SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
   the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
@@ -657,8 +678,8 @@ applicable; CBIND-036E network sessions, local gamers and discovery is next.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-036D: 414 headers / 6,415 symbols; 3,711 implemented, 29 partial,
-  2,559 planned and 116 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-036E1: 414 headers / 6,415 symbols; 3,728 implemented, 29 partial,
+  2,542 planned and 116 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

@@ -644,6 +644,217 @@ static int validate_gamers(void)
         cna_network_gamer_destroy(gamer) == CNA_RESULT_INVALID_HANDLE;
 }
 
+static CNA_AvailableNetworkSessionCreateInfo make_session_info(
+    const char* const host,
+    const int32_t gamers,
+    const CNA_NetworkSessionPropertiesHandle properties)
+{
+    CNA_AvailableNetworkSessionCreateInfo info = {
+        sizeof(CNA_AvailableNetworkSessionCreateInfo), UINT32_C(1), gamers, INT32_C(2),
+        INT32_C(6), CNA_NETWORK_SESSION_TYPE_SYSTEM_LINK, UINT16_C(27015), {0U, 0U, 0U, 0U, 0U, 0U},
+        {0, UINT64_C(0)}, {0, UINT64_C(0)}, properties
+    };
+    info.host_gamertag = view(host);
+    info.host_address = view("127.0.0.1");
+    return info;
+}
+
+static int validate_available_session_values(const CNA_AvailableNetworkSessionHandle session)
+{
+    CNA_QualityOfService quality = {
+        sizeof(CNA_QualityOfService), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U},
+        INT64_C(0), INT64_C(0), INT32_C(0), INT32_C(0)
+    };
+    CNA_NetworkSessionPropertiesHandle properties = CNA_INVALID_HANDLE;
+    CNA_OptionalInt32 value = absent();
+    CNA_NetworkSessionType type = CNA_NETWORK_SESSION_TYPE_LOCAL;
+    char buffer[64];
+    uint64_t bytes = UINT64_C(0);
+    int32_t number = -1;
+    uint16_t port = UINT16_C(0);
+
+    if (cna_available_network_session_get_current_gamer_count(session, &number) !=
+            CNA_RESULT_SUCCESS ||
+        number != 3 ||
+        cna_available_network_session_get_open_private_gamer_slots(session, &number) !=
+            CNA_RESULT_SUCCESS ||
+        number != 2 ||
+        cna_available_network_session_get_open_public_gamer_slots(session, &number) !=
+            CNA_RESULT_SUCCESS ||
+        number != 6) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_available_network_session_get_host_gamertag_size(session, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(4) ||
+        cna_available_network_session_copy_host_gamertag(
+            session, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, "Host") != 0 ||
+        cna_available_network_session_copy_host_gamertag(session, buffer, UINT64_C(1), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_available_network_session_get_connect_address_size_ext(session, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(9) ||
+        cna_available_network_session_copy_connect_address_ext(
+            session, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, "127.0.0.1") != 0 ||
+        cna_available_network_session_get_connect_port_ext(session, &port) !=
+            CNA_RESULT_SUCCESS ||
+        port != UINT16_C(27015) ||
+        cna_available_network_session_get_session_type_ext(session, &type) !=
+            CNA_RESULT_SUCCESS ||
+        type != CNA_NETWORK_SESSION_TYPE_SYSTEM_LINK) {
+        return 0;
+    }
+    /* Only the round-trip sample can be carried in, because that is all the canonical type
+       accepts; availability is still reported true, as its unmeasured factory does. */
+    if (cna_available_network_session_get_quality_of_service(session, &quality) !=
+            CNA_RESULT_SUCCESS ||
+        quality.is_available != CNA_TRUE ||
+        quality.average_roundtrip_ticks != INT64_C(4242) ||
+        quality.minimum_roundtrip_ticks != INT64_C(4242) ||
+        quality.bytes_per_second_downstream != INT32_C(0)) {
+        return 0;
+    }
+    /* The properties come back as an independent copy, not an alias into the description. */
+    if (cna_available_network_session_copy_session_properties(session, &properties) !=
+            CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_get_count(properties, &number) != CNA_RESULT_SUCCESS ||
+        number != 1 ||
+        cna_network_session_properties_get_item(properties, 0, &value) != CNA_RESULT_SUCCESS ||
+        !same_optional(value, present(77))) {
+        return 0;
+    }
+    return cna_network_session_properties_add(properties, present(1)) == CNA_RESULT_SUCCESS &&
+        cna_network_session_properties_destroy(properties) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_available_session_collection(
+    const CNA_AvailableNetworkSessionHandle first,
+    const CNA_AvailableNetworkSessionHandle second)
+{
+    CNA_AvailableNetworkSessionHandle sessions[2];
+    CNA_AvailableNetworkSessionCollectionHandle collection = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle copied = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle rejected = UINT64_C(9);
+    CNA_Bool flag = CNA_TRUE;
+    int32_t count = -1;
+    char buffer[64];
+    uint64_t bytes = UINT64_C(0);
+
+    sessions[0] = first;
+    sessions[1] = second;
+    if (cna_available_network_session_collection_create_ext(sessions, UINT64_C(2), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_available_network_session_collection_create_ext(0, UINT64_C(2), &collection) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_available_network_session_collection_create_ext(
+            sessions, UINT64_C(2), &collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_available_network_session_collection_get_count(collection, &count) !=
+            CNA_RESULT_SUCCESS ||
+        count != 2 ||
+        cna_available_network_session_collection_get_is_disposed(collection, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    /* An element is copied out, so it survives the collection it came from. */
+    if (cna_available_network_session_collection_copy_session(collection, 1, &copied) !=
+            CNA_RESULT_SUCCESS ||
+        copied == CNA_INVALID_HANDLE || copied == second ||
+        cna_available_network_session_collection_copy_session(collection, 2, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_available_network_session_collection_copy_session(collection, -1, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_available_network_session_collection_dispose(collection) != CNA_RESULT_SUCCESS ||
+        cna_available_network_session_collection_get_is_disposed(collection, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_available_network_session_collection_dispose(collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    memset(buffer, 0, sizeof(buffer));
+    if (cna_available_network_session_copy_host_gamertag(
+            copied, buffer, (uint64_t)sizeof(buffer), &bytes) != CNA_RESULT_SUCCESS ||
+        strcmp(buffer, "Other") != 0) {
+        return 0;
+    }
+    return cna_available_network_session_destroy(copied) == CNA_RESULT_SUCCESS &&
+        cna_available_network_session_collection_destroy(collection) == CNA_RESULT_SUCCESS &&
+        cna_available_network_session_collection_destroy(collection) ==
+            CNA_RESULT_INVALID_HANDLE;
+}
+
+static int validate_available_sessions(void)
+{
+    CNA_NetworkSessionPropertiesHandle properties = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle first = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle second = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle rejected = UINT64_C(9);
+    const CNA_QualityOfService quality = {
+        sizeof(CNA_QualityOfService), UINT32_C(1), CNA_TRUE, {0U, 0U, 0U, 0U, 0U, 0U, 0U},
+        INT64_C(4242), INT64_C(4242), INT32_C(0), INT32_C(0)
+    };
+    CNA_Bool flag = CNA_TRUE;
+    int ok = 0;
+
+    if (cna_network_session_properties_create(&properties) != CNA_RESULT_SUCCESS ||
+        cna_network_session_properties_add(properties, present(77)) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    CNA_AvailableNetworkSessionCreateInfo info = make_session_info("Host", 3, properties);
+    info.reserved[0] = 1U;
+    if (cna_available_network_session_create_ext(&info, &quality, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
+        (void)cna_network_session_properties_destroy(properties);
+        return 0;
+    }
+    info.reserved[0] = 0U;
+    info.session_type = UINT32_C(9);
+    if (cna_available_network_session_create_ext(&info, &quality, &rejected) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        (void)cna_network_session_properties_destroy(properties);
+        return 0;
+    }
+    info.session_type = CNA_NETWORK_SESSION_TYPE_SYSTEM_LINK;
+    if (cna_available_network_session_create_ext(&info, &quality, &first) != CNA_RESULT_SUCCESS) {
+        (void)cna_network_session_properties_destroy(properties);
+        return 0;
+    }
+
+    CNA_AvailableNetworkSessionCreateInfo other = make_session_info("Other", 5, properties);
+    if (cna_available_network_session_create_ext(&other, 0, &second) != CNA_RESULT_SUCCESS) {
+        (void)cna_available_network_session_destroy(first);
+        (void)cna_network_session_properties_destroy(properties);
+        return 0;
+    }
+
+    ok = validate_available_session_values(first) &&
+        cna_available_network_session_equals(first, first, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE &&
+        cna_available_network_session_equals(first, second, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_FALSE &&
+        cna_available_network_session_not_equals(first, second, &flag) == CNA_RESULT_SUCCESS &&
+        flag == CNA_TRUE &&
+        validate_available_session_collection(first, second);
+
+    return cna_available_network_session_destroy(second) == CNA_RESULT_SUCCESS &&
+        cna_available_network_session_destroy(first) == CNA_RESULT_SUCCESS &&
+        cna_available_network_session_destroy(first) == CNA_RESULT_INVALID_HANDLE &&
+        cna_network_session_properties_destroy(properties) == CNA_RESULT_SUCCESS && ok;
+}
+
 static int validate_join_error(void)
 {
     CNA_NetworkSessionJoinError join_error = CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_FULL;
@@ -684,6 +895,9 @@ int main(void)
     }
     if (!validate_gamers()) {
         return 7;
+    }
+    if (!validate_available_sessions()) {
+        return 8;
     }
     return 0;
 }

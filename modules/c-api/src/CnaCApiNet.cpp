@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/net.h"
+#include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -339,6 +340,50 @@ void StoreMatrix(const Matrix& value, CNA_Matrix* const outValue)
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result BorrowNetworkSessionProperties(
+    const CNA_Handle handle,
+    NetworkSessionProperties** const outProperties)
+{
+    if (outProperties == nullptr) {
+        return InvalidArgument("The borrowed session-property output is null.");
+    }
+    *outProperties = nullptr;
+    std::shared_ptr<NetworkSessionPropertiesResource> properties;
+    if (const CNA_Result result = GetProperties(handle, &properties);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outProperties = properties->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CreateOwnedNetworkSessionProperties(
+    const NetworkSessionProperties& value,
+    CNA_Handle* const outProperties)
+{
+    if (outProperties == nullptr) {
+        return InvalidArgument("The NetworkSessionProperties output handle is null.");
+    }
+    *outProperties = CNA_INVALID_HANDLE;
+    const auto resource = std::make_shared<NetworkSessionPropertiesResource>();
+    resource->value = std::make_unique<NetworkSessionProperties>(value);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::NetworkSessionProperties,
+        resource,
+        outProperties);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned NetworkSessionProperties handle could not be created.");
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_quality_of_service_init(CNA_QualityOfService* const outValue)
 {

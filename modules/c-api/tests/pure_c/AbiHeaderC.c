@@ -820,3 +820,19 @@ _Static_assert(sizeof(CNA_NetworkSessionEndedEventInfo) == 16U &&
                    offsetof(CNA_WriteLeaderboardsEventInfo, is_leaving) == 16U &&
                    offsetof(CNA_WriteLeaderboardsEventInfo, reserved) == 17U,
                "CNA network session event layouts must remain stable");
+_Static_assert(sizeof(CNA_AvailableNetworkSessionHandle) == 8U &&
+                   sizeof(CNA_AvailableNetworkSessionCollectionHandle) == 8U &&
+                   sizeof(CNA_AvailableNetworkSessionCreateInfo) == 72U &&
+                   _Alignof(CNA_AvailableNetworkSessionCreateInfo) == 8U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, current_gamer_count) == 8U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, open_private_gamer_slots) ==
+                       12U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, open_public_gamer_slots) ==
+                       16U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, session_type) == 20U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, host_port) == 24U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, reserved) == 26U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, host_gamertag) == 32U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, host_address) == 48U &&
+                   offsetof(CNA_AvailableNetworkSessionCreateInfo, session_properties) == 64U,
+               "CNA_AvailableNetworkSessionCreateInfo layout must remain stable");

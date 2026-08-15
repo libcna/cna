@@ -2492,6 +2492,32 @@
       "tests": "`NetSmoke.c` initialization of all seven descriptions, payload handle validation including the refusal of a handle that was never a gamer, the rejected end-reason identity, invalid structure prefixes, plus C and C++ ABI layout assertions",
       "status": "implemented",
       "task": "CBIND-036D"
+    },
+    {
+      "id": "available-network-session",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::AvailableNetworkSession(?:::.*)?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned `CNA_AvailableNetworkSessionHandle` built from a versioned creation structure, with every scalar property, count/copy host gamertag and connect address, the connect port and session type, a copied `CNA_QualityOfService` and an independently copied property-list handle, plus both equality operators as explicit routes because C has no operator overloading. Only the round-trip sample can be carried into a quality of service, because that is the only measurement the canonical type accepts",
+      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E1"
+    },
+    {
+      "id": "available-network-session-collection",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::AvailableNetworkSessionCollection(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_AvailableNetworkSessionCollectionHandle` with disposal state, explicit dispose and release, a count and an indexed copy-out. An element is copied rather than aliased, so it survives the collection it came from; the canonical factory copies its input the same way, so the source handles stay independently owned",
+      "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E1"
     }
   ]
 }

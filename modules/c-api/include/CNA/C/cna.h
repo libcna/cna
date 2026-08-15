@@ -39,6 +39,7 @@
 #include "CNA/C/content_readers.h"
 #include "CNA/C/net.h"
 #include "CNA/C/net_gamers.h"
+#include "CNA/C/net_sessions.h"
 #include "CNA/C/storage.h"
 #include "CNA/C/audio.h"
 

@@ -265,8 +265,17 @@
 > roster-removal placeholder is reported as `NOT_SUPPORTED` rather than faked. The seven
 > event-argument types become fixed descriptions with validating initializers, delivered by value
 > like every other C API event payload. The inventory is now 3,711 implemented, 29 partial, 2,559
-> planned and 116 N/A; all three trees stay green at 50/50. CBIND-036E (sessions, local gamers and
-> discovery, 122 rows) is the last CBIND-036 slice.
+> planned and 116 N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E is partitioned into five slices by what each part needs to exist: discovered sessions
+> first, then the session object's own state, its ten events, the creation/discovery/join surfaces
+> whose fake-async pairs need the session object to exist, and the local gamer last. CBIND-036E1
+> closes the first 17 rows. Two canonical limits shape it: the quality-of-service type accepts only
+> a round-trip sample, so that is all a C caller can supply; and a collection element is copied out
+> rather than aliased, so it survives the collection it came from — which is also how the canonical
+> factory treats its own input. The inventory is now 3,728 implemented, 29 partial, 2,542 planned
+> and 116 N/A; all three trees stay green at 50/50. CBIND-036E2 (session identity, state and gamer
+> management, 57 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

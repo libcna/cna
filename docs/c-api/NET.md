@@ -4,8 +4,9 @@
 
 `CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
-event descriptions. Sessions, local gamers and discovery are a later coverage task and have no C
-route yet; nothing in either header opens a socket or joins a session.
+event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions and their collection. The
+session object itself, local gamers and live discovery are a later coverage task; nothing in these
+headers opens a socket or joins a session.
 
 ## Identities
 
@@ -121,3 +122,22 @@ Only a session populates a roster, so a machine created from C reports none.
 The seven canonical event-argument types become fixed `CNA_*EventInfo` descriptions with `_init`
 routines, delivered by value exactly as every other C API event payload is. A payload gamer is a
 validated handle, so a description can never name a handle that was never a gamer.
+
+## Discovered sessions
+
+`CNA_AvailableNetworkSessionHandle` owns one description a discovery backend published. Every
+scalar is exposed directly; the host gamertag and connect address use the count/copy protocol; the
+quality of service comes back as a copied `CNA_QualityOfService`; and the session properties come
+back as an **independent owned list**, so a caller's list cannot alias or outlive the description.
+
+Both equality operators become explicit routes, because C has no operator overloading.
+
+One canonical limit shapes creation: the quality-of-service type offers exactly two constructions —
+unmeasured, and one built from a single round-trip sample. Only that sample can be carried in, so
+`cna_available_network_session_create_ext` reads `average_roundtrip_ticks` and ignores the
+throughput fields, which the canonical type leaves at zero anyway.
+
+`CNA_AvailableNetworkSessionCollectionHandle` owns the read-only collection. An element is **copied
+out** rather than aliased, so it survives the collection it came from; the canonical factory copies
+its own input the same way, so the handles a caller passes in stay independently owned and may be
+released immediately.

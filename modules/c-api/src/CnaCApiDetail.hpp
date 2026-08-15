@@ -103,6 +103,8 @@ enum class ObjectKind : uint32_t {
     PacketReader = 57,
     NetworkGamer = 58,
     NetworkMachine = 59,
+    AvailableNetworkSession = 60,
+    AvailableNetworkSessionCollection = 61,
     Test = UINT32_MAX
 };
 
