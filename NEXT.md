@@ -316,8 +316,15 @@
 > **before** rejecting an out-of-range offset, the packet-reader receive always reports zero bytes
 > even when it consumed a packet, and `EnableSendVoice`/`SendPartyInvites` are declared no-ops. The
 > inventory is now 3,841 implemented, 30 partial, 2,428 planned and 116 N/A, and the `net` module
-> has no planned row left; all three trees stay green at 50/50. CBIND-037 (collections, events,
-> services, media and devices) owns everything that remains.
+> has no planned row left; all three trees stay green at 50/50.
+>
+> A fourth, verification-only tree then closes the one evidence gap CBIND-035F and CBIND-036 had
+> relative to the earlier slices: a combined ASan+UBSan SOFTWARE/CNAEXT build runs all 50 C API
+> tests green **with leak detection enabled** — stricter than the `detect_leaks=0` the CBIND-035B–E
+> runs used. Nothing in the storage streams, the content readers or the network sessions leaks,
+> reads out of bounds or executes undefined behavior, including the borrowed-view counters and the
+> raw session pointer the C layer owns. CBIND-037 (collections, events, services, media and
+> devices) owns everything that remains.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
