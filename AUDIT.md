@@ -45,8 +45,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-037B4c` adds the mouse cursor with its stock singletons as borrowed views, and
 > `CBIND-037B4d` closes the input module's text surface: all three `TextInputEXT` events as owned
 > registrations, the activation and screen-keyboard queries, the typed start and the input
-> rectangle. The
-> generated inventory currently records 4,209 implemented, 30 partial, 2,055 planned and 121
+> rectangle. `CBIND-037B5` then adds touch and gestures: the gesture type and sample, the touch
+> location and collection value surfaces over the existing fixed snapshot, and every `TouchPanel`
+> static. The
+> generated inventory currently records 4,284 implemented, 30 partial, 1,975 planned and 126
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

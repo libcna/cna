@@ -108,9 +108,50 @@ window handle and drops every subscription to all three events, including regist
 handed out, so releasing one afterwards is a no-op rather than a failure. It changes process-wide
 state a caller may not own; restore the window handle afterwards.
 
+## Touch and gestures
+
+`input_touch.h` completes the touch family. It **extends** the fixed eight-slot `CNA_TouchState`
+snapshot the C API already had rather than introducing a second representation: the canonical
+`TouchCollection` mutation surface — add, insert, remove, remove-at, clear, contains, index-of and
+the copy — operates on that snapshot in place. Its capacity is exactly the canonical touch-panel
+maximum, and an append or insert past it is refused rather than silently dropping a touch.
+
+Three canonical value behaviors are reproduced rather than tidied up. Equality and the hash ignore
+the pressure extension, so two locations differing only in pressure are the same location and the
+collection's search and removal treat them as such. The text carries **only the position**, as
+`{Position:{X:… Y:…}}`. And the copy **inserts** at its index and shifts what is already there,
+because the canonical destination is a growable vector — which is why the destination's current
+element count is an argument in C rather than being inferred.
+
+`CNA_GestureType` is a real bit set, so the canonical flag operators need no route: C composes and
+masks it with its own operators, and every route validates against `CNA_GESTURE_TYPE_ALL`.
+`CNA_GestureSample` is a fixed 64-byte value whose eight canonical getters are plain fields;
+`System::TimeSpan` crosses as `int64_t` 100-nanosecond ticks, the same spelling `runtime.h` and
+`audio.h` already use.
+
+Every `TouchPanel` static takes an active game handle, for the same reason the gamepad and mouse
+queries do. Four of them behave in ways worth stating plainly:
+
+- **Reading an empty gesture queue is a refusal**, `CNA_RESULT_INVALID_STATE`, because the canonical
+  read throws. Check `cna_touch_panel_get_is_gesture_available` first. `..._enqueue_gesture_ext` is
+  what makes the queue observable with no touch device at all.
+- **A raised touch event feeds gesture detection, not the snapshot.** The slot array
+  `cna_touch_get_state` reports is populated by `cna_touch_panel_set_finger_ext`; the two are
+  separate sources. A raised event is also **dropped entirely** while no display size is published,
+  because the canonical dispatch scales normalized coordinates by that size.
+- **Clearing a slot does not make a touch vanish.** The next frame reports it once more as released
+  with its previous state carried over, which is the XNA contract for a lifted finger.
+- **The reset clears the display metrics and the window handle too.** The canonical class comment
+  says they survive; the implementation clears them deliberately, so a leaked display size cannot
+  corrupt another test's scaled coordinates. This contract follows the behavior.
+
+The display size, orientation, enabled gestures, window handle and device-exists flag are all
+process-wide state. Restore what you change. As with text input, do not assume the window handle
+starts at zero — a windowed backend publishes a real one.
+
 ## Current scope boundary
 
 Apart from the text-input events above, the input families deliberately expose no live native state
-pointer, per-key platform call or device event subscription. Touch gestures, the haptics family and
-the remaining `CNA::Input` joystick, sensor, clipboard, power and device-enumeration extensions
-remain planned for complete-public-API coverage.
+pointer, per-key platform call or device event subscription. The haptics family and the remaining
+`CNA::Input` joystick, sensor, clipboard, power and device-enumeration extensions remain planned
+for complete-public-API coverage.

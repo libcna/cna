@@ -777,3 +777,14 @@ static_assert(offsetof(CNA_TextEditingEventInfo, length) == 28U);
 static_assert(sizeof(CNA_TextEditingCandidatesEventInfo) == 32U);
 static_assert(offsetof(CNA_TextEditingCandidatesEventInfo, candidates) == 8U);
 static_assert(offsetof(CNA_TextEditingCandidatesEventInfo, horizontal) == 24U);
+
+static_assert(sizeof(CNA_GestureType) == sizeof(uint32_t));
+static_assert(CNA_GESTURE_TYPE_NONE == UINT32_C(0));
+static_assert(CNA_GESTURE_TYPE_PINCH_COMPLETE == UINT32_C(512));
+static_assert(CNA_GESTURE_TYPE_ALL == UINT32_C(0x000003FF));
+static_assert(CNA_TOUCH_NO_FINGER == INT32_C(-1));
+static_assert(sizeof(CNA_GestureSample) == 64U);
+static_assert(alignof(CNA_GestureSample) == 8U);
+static_assert(offsetof(CNA_GestureSample, timestamp_ticks) == 24U);
+static_assert(offsetof(CNA_GestureSample, delta2) == 56U);
+static_assert(sizeof(CNA_TouchState) == 16U + (sizeof(CNA_TouchLocation) * CNA_TOUCH_MAX_TOUCHES));

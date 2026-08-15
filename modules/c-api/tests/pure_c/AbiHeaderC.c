@@ -991,3 +991,40 @@ _Static_assert(sizeof(CNA_TextEditingCandidatesEventInfo) == 32U &&
                    offsetof(CNA_TextEditingCandidatesEventInfo, horizontal) == 24U &&
                    offsetof(CNA_TextEditingCandidatesEventInfo, reserved) == 25U,
                "CNA_TextEditingCandidatesEventInfo layout must remain stable");
+
+_Static_assert(sizeof(CNA_GestureType) == sizeof(uint32_t) &&
+                   CNA_GESTURE_TYPE_NONE == UINT32_C(0) &&
+                   CNA_GESTURE_TYPE_TAP == UINT32_C(1) &&
+                   CNA_GESTURE_TYPE_DOUBLE_TAP == UINT32_C(2) &&
+                   CNA_GESTURE_TYPE_HOLD == UINT32_C(4) &&
+                   CNA_GESTURE_TYPE_HORIZONTAL_DRAG == UINT32_C(8) &&
+                   CNA_GESTURE_TYPE_VERTICAL_DRAG == UINT32_C(16) &&
+                   CNA_GESTURE_TYPE_FREE_DRAG == UINT32_C(32) &&
+                   CNA_GESTURE_TYPE_PINCH == UINT32_C(64) &&
+                   CNA_GESTURE_TYPE_FLICK == UINT32_C(128) &&
+                   CNA_GESTURE_TYPE_DRAG_COMPLETE == UINT32_C(256) &&
+                   CNA_GESTURE_TYPE_PINCH_COMPLETE == UINT32_C(512) &&
+                   CNA_GESTURE_TYPE_ALL == UINT32_C(0x000003FF) &&
+                   CNA_TOUCH_NO_FINGER == INT32_C(-1),
+               "CNA gesture identities must remain stable");
+
+_Static_assert(sizeof(CNA_GestureSample) == 64U &&
+                   _Alignof(CNA_GestureSample) == 8U &&
+                   offsetof(CNA_GestureSample, gesture_type) == 8U &&
+                   offsetof(CNA_GestureSample, finger_id_ext) == 12U &&
+                   offsetof(CNA_GestureSample, finger_id2_ext) == 16U &&
+                   offsetof(CNA_GestureSample, reserved) == 20U &&
+                   offsetof(CNA_GestureSample, timestamp_ticks) == 24U &&
+                   offsetof(CNA_GestureSample, position) == 32U &&
+                   offsetof(CNA_GestureSample, position2) == 40U &&
+                   offsetof(CNA_GestureSample, delta) == 48U &&
+                   offsetof(CNA_GestureSample, delta2) == 56U,
+               "CNA_GestureSample layout must remain stable");
+
+/* The touch collection surface reuses the existing fixed snapshot rather than adding a second
+   spelling of the same numbers, so its capacity is exactly the canonical touch-panel maximum. */
+_Static_assert(sizeof(CNA_TouchState) ==
+                       16U + (sizeof(CNA_TouchLocation) * CNA_TOUCH_MAX_TOUCHES) &&
+                   CNA_TOUCH_MAX_TOUCHES == UINT32_C(8) &&
+                   sizeof(CNA_TouchLocation) == 32U,
+               "CNA touch collection storage must remain stable");

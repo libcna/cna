@@ -18,6 +18,7 @@ typedef struct WrongThreadState {
     CNA_Result vibration_result;
     CNA_Result touch_result;
     CNA_Result text_input_result;
+    CNA_Result touch_panel_result;
 } WrongThreadState;
 
 /* The next representable float above a positive finite value, without pulling in libm: the C API's
@@ -898,6 +899,385 @@ static int validate_pure_touch_helpers(void)
     return 1;
 }
 
+static int gesture_is_empty(const CNA_GestureSample* const sample)
+{
+    return sample->struct_size == sizeof(CNA_GestureSample) &&
+        sample->struct_version == UINT32_C(1) &&
+        sample->gesture_type == CNA_GESTURE_TYPE_NONE &&
+        sample->finger_id_ext == CNA_TOUCH_NO_FINGER &&
+        sample->finger_id2_ext == CNA_TOUCH_NO_FINGER &&
+        sample->reserved == UINT32_C(0) &&
+        sample->timestamp_ticks == INT64_C(0) &&
+        sample->position.x == 0.0F && sample->position.y == 0.0F &&
+        sample->position2.x == 0.0F && sample->position2.y == 0.0F &&
+        sample->delta.x == 0.0F && sample->delta.y == 0.0F &&
+        sample->delta2.x == 0.0F && sample->delta2.y == 0.0F;
+}
+
+static int validate_pure_gesture_value_helpers(void)
+{
+    const CNA_Vector2 position = {1.0F, 2.0F};
+    const CNA_Vector2 position2 = {3.0F, 4.0F};
+    const CNA_Vector2 delta = {5.0F, 6.0F};
+    const CNA_Vector2 delta2 = {7.0F, 8.0F};
+    CNA_GestureSample sample;
+    CNA_GestureSample fingered;
+    CNA_GestureType type = CNA_GESTURE_TYPE_NONE;
+
+    memset(&sample, 9, sizeof(sample));
+    if (cna_gesture_sample_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_gesture_sample_init(&sample) != CNA_RESULT_SUCCESS ||
+        !gesture_is_empty(&sample)) {
+        return 0;
+    }
+
+    /* The value-taking construction leaves both finger identifiers unset, exactly as the canonical
+       constructor does -- that is the only difference between the two public constructions. */
+    if (cna_gesture_sample_init_from_values(
+            CNA_GESTURE_TYPE_PINCH,
+            INT64_C(1234567),
+            position, position2, delta, delta2,
+            &sample) != CNA_RESULT_SUCCESS ||
+        sample.gesture_type != CNA_GESTURE_TYPE_PINCH ||
+        sample.timestamp_ticks != INT64_C(1234567) ||
+        sample.finger_id_ext != CNA_TOUCH_NO_FINGER ||
+        sample.finger_id2_ext != CNA_TOUCH_NO_FINGER ||
+        sample.reserved != UINT32_C(0) ||
+        sample.position.x != 1.0F || sample.position.y != 2.0F ||
+        sample.position2.x != 3.0F || sample.position2.y != 4.0F ||
+        sample.delta.x != 5.0F || sample.delta.y != 6.0F ||
+        sample.delta2.x != 7.0F || sample.delta2.y != 8.0F) {
+        return 0;
+    }
+    if (cna_gesture_sample_init_from_values_ext(
+            CNA_GESTURE_TYPE_FLICK | CNA_GESTURE_TYPE_TAP,
+            INT64_C(-5),
+            position, position2, delta, delta2,
+            11, 12,
+            &fingered) != CNA_RESULT_SUCCESS ||
+        fingered.gesture_type != (CNA_GESTURE_TYPE_FLICK | CNA_GESTURE_TYPE_TAP) ||
+        fingered.timestamp_ticks != INT64_C(-5) ||
+        fingered.finger_id_ext != 11 || fingered.finger_id2_ext != 12) {
+        return 0;
+    }
+
+    /* Every defined bit is accepted on its own and every combination of them together; the first
+       undefined bit is refused. C composes the identity with its own bitwise operators, which is
+       why the canonical flag operators need no route of their own. */
+    for (type = CNA_GESTURE_TYPE_TAP;
+         type <= CNA_GESTURE_TYPE_PINCH_COMPLETE;
+         type = (CNA_GestureType)(type << 1)) {
+        if (cna_gesture_sample_init_from_values(
+                type, INT64_C(0), position, position2, delta, delta2, &sample) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    if (cna_gesture_sample_init_from_values(
+            CNA_GESTURE_TYPE_ALL, INT64_C(0), position, position2, delta, delta2, &sample) !=
+            CNA_RESULT_SUCCESS ||
+        sample.gesture_type != CNA_GESTURE_TYPE_ALL) {
+        return 0;
+    }
+    return cna_gesture_sample_init_from_values(
+            CNA_GESTURE_TYPE_PINCH_COMPLETE << 1, INT64_C(0),
+            position, position2, delta, delta2, &sample) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gesture_sample_init_from_values_ext(
+            CNA_GESTURE_TYPE_PINCH_COMPLETE << 1, INT64_C(0),
+            position, position2, delta, delta2, 0, 0, &sample) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gesture_sample_init_from_values(
+            CNA_GESTURE_TYPE_TAP, INT64_C(0), position, position2, delta, delta2, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gesture_sample_init_from_values_ext(
+            CNA_GESTURE_TYPE_TAP, INT64_C(0), position, position2, delta, delta2, 0, 0, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+}
+
+static int validate_pure_touch_value_helpers(void)
+{
+    const CNA_Vector2 position = {3.0F, 4.0F};
+    const CNA_Vector2 previous_position = {1.0F, 2.0F};
+    CNA_TouchCapabilities capabilities;
+    CNA_TouchLocation plain;
+    CNA_TouchLocation with_previous;
+    CNA_TouchLocation pressed;
+    CNA_TouchLocation other;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t hash = 0;
+    int32_t other_hash = 0;
+    uint64_t bytes = UINT64_C(0);
+    char text[64];
+
+    /* Both canonical capability constructions, including the refusal C adds. */
+    memset(&capabilities, 9, sizeof(capabilities));
+    if (cna_touch_capabilities_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_capabilities_init(&capabilities) != CNA_RESULT_SUCCESS ||
+        capabilities.struct_size != sizeof(CNA_TouchCapabilities) ||
+        capabilities.struct_version != UINT32_C(1) ||
+        capabilities.is_connected != CNA_FALSE ||
+        capabilities.maximum_touch_count != UINT32_C(0) ||
+        capabilities.reserved[0] != UINT8_C(0) || capabilities.reserved[1] != UINT8_C(0) ||
+        capabilities.reserved[2] != UINT8_C(0)) {
+        return 0;
+    }
+    if (cna_touch_capabilities_init_from_values_ext(CNA_TRUE, 4, &capabilities) !=
+            CNA_RESULT_SUCCESS ||
+        capabilities.is_connected != CNA_TRUE || capabilities.maximum_touch_count != UINT32_C(4) ||
+        cna_touch_capabilities_init_from_values_ext(CNA_TRUE, -1, &capabilities) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_capabilities_init_from_values_ext(CNA_TRUE, 4, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The canonical default location carries identifier zero, not the -1 the find-by-id miss
+       sentinel uses -- the two are deliberately different values and C reproduces both. */
+    if (cna_touch_location_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_init(&plain) != CNA_RESULT_SUCCESS ||
+        plain.id != 0 || plain.state != CNA_TOUCH_LOCATION_INVALID ||
+        plain.position.x != 0.0F || plain.position.y != 0.0F ||
+        plain.previous_state != CNA_TOUCH_LOCATION_INVALID || plain.pressure != 0.0F) {
+        return 0;
+    }
+    if (cna_touch_location_init_from_values(7, CNA_TOUCH_LOCATION_MOVED, position, &plain) !=
+            CNA_RESULT_SUCCESS ||
+        plain.id != 7 || plain.state != CNA_TOUCH_LOCATION_MOVED ||
+        plain.position.x != 3.0F || plain.position.y != 4.0F ||
+        plain.previous_state != CNA_TOUCH_LOCATION_INVALID ||
+        plain.previous_position.x != 0.0F || plain.pressure != 0.0F) {
+        return 0;
+    }
+    if (cna_touch_location_init_with_previous(
+            7, CNA_TOUCH_LOCATION_MOVED, position,
+            CNA_TOUCH_LOCATION_PRESSED, previous_position, &with_previous) !=
+            CNA_RESULT_SUCCESS ||
+        with_previous.previous_state != CNA_TOUCH_LOCATION_PRESSED ||
+        with_previous.previous_position.x != 1.0F || with_previous.pressure != 0.0F) {
+        return 0;
+    }
+    if (cna_touch_location_init_from_values_ext(
+            7, CNA_TOUCH_LOCATION_MOVED, position, 0.5F, &pressed) != CNA_RESULT_SUCCESS ||
+        pressed.pressure != 0.5F ||
+        cna_touch_location_init_with_previous_ext(
+            7, CNA_TOUCH_LOCATION_MOVED, position,
+            CNA_TOUCH_LOCATION_PRESSED, previous_position, 1.0F, &other) != CNA_RESULT_SUCCESS ||
+        other.pressure != 1.0F) {
+        return 0;
+    }
+    if (cna_touch_location_init_from_values(7, UINT32_C(4), position, &plain) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_init_with_previous(
+            7, CNA_TOUCH_LOCATION_MOVED, position, UINT32_C(4), previous_position, &plain) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_init_from_values_ext(
+            7, CNA_TOUCH_LOCATION_MOVED, position, 1.5F, &plain) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_init_from_values_ext(
+            7, CNA_TOUCH_LOCATION_MOVED, position, -0.5F, &plain) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_init_from_values(7, CNA_TOUCH_LOCATION_MOVED, position, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Equality and the hash deliberately ignore the pressure extension, exactly as the canonical
+       ones do -- two locations differing only in pressure are the same location. */
+    if (cna_touch_location_init_from_values(7, CNA_TOUCH_LOCATION_MOVED, position, &plain) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_location_init_from_values_ext(
+            7, CNA_TOUCH_LOCATION_MOVED, position, 0.75F, &pressed) != CNA_RESULT_SUCCESS ||
+        cna_touch_location_equals(&plain, &pressed, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_location_get_hash_code(&plain, &hash) != CNA_RESULT_SUCCESS ||
+        cna_touch_location_get_hash_code(&pressed, &other_hash) != CNA_RESULT_SUCCESS ||
+        hash != other_hash) {
+        return 0;
+    }
+    /* A different identifier, state or previous location does separate them. */
+    if (cna_touch_location_init_from_values(8, CNA_TOUCH_LOCATION_MOVED, position, &other) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_location_equals(&plain, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_location_equals(&plain, &with_previous, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_touch_location_equals(0, &plain, &flag) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_equals(&plain, 0, &flag) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_equals(&plain, &other, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_get_hash_code(&plain, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The canonical text carries only the position -- not the identifier, state or pressure. */
+    memset(text, 0, sizeof(text));
+    if (cna_touch_location_get_string_size(&plain, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes == UINT64_C(0) || bytes >= (uint64_t)sizeof(text) ||
+        cna_touch_location_copy_string(&plain, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        (uint64_t)strlen(text) != bytes ||
+        strcmp(text, "{Position:{X:3 Y:4}}") != 0) {
+        return 0;
+    }
+    if (cna_touch_location_copy_string(&plain, text, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        bytes != (uint64_t)strlen("{Position:{X:3 Y:4}}") ||
+        cna_touch_location_get_string_size(&plain, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_location_get_string_size(0, &bytes) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_pure_touch_collection_helpers(void)
+{
+    const CNA_Vector2 origin = {0.0F, 0.0F};
+    CNA_TouchState state;
+    CNA_TouchState built;
+    CNA_TouchLocation locations[3];
+    CNA_TouchLocation destination[8];
+    CNA_TouchLocation probe;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t index = 99;
+    uint64_t count = UINT64_C(0);
+    uint32_t slot = 0U;
+
+    for (slot = 0U; slot < 3U; ++slot) {
+        const CNA_Vector2 position = {(float)slot, (float)slot};
+        if (cna_touch_location_init_from_values(
+                (int32_t)slot, CNA_TOUCH_LOCATION_PRESSED, position, &locations[slot]) !=
+            CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    if (cna_touch_state_init(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_init(&state) != CNA_RESULT_SUCCESS ||
+        state.struct_size != sizeof(CNA_TouchState) || state.struct_version != UINT32_C(1) ||
+        state.touch_count != 0U || state.is_connected != CNA_FALSE) {
+        return 0;
+    }
+    /* An empty collection reports itself read-only anyway: the canonical flag is hard-coded true
+       while the mutation routes below still succeed, and C is faithful to that rather than making
+       the flag mean something it does not mean. */
+    if (cna_touch_state_get_is_read_only(&state, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_state_get_is_empty_ext(&state, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_state_get_is_read_only(&state, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_get_is_empty_ext(0, &flag) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Both vector-taking constructions are one array in C. */
+    if (cna_touch_state_init_from_locations(locations, 3U, &built) != CNA_RESULT_SUCCESS ||
+        built.touch_count != 3U ||
+        memcmp(&built.touches[0], &locations[0], sizeof(locations[0])) != 0 ||
+        memcmp(&built.touches[2], &locations[2], sizeof(locations[2])) != 0 ||
+        cna_touch_state_init_from_locations(0, 0U, &built) != CNA_RESULT_SUCCESS ||
+        built.touch_count != 0U ||
+        cna_touch_state_init_from_locations(0, 1U, &built) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_init_from_locations(
+            locations, CNA_TOUCH_MAX_TOUCHES + 1U, &built) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_init_from_locations(locations, 3U, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Mutation still succeeds on the read-only-reporting collection. */
+    if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_SUCCESS ||
+        cna_touch_state_add(&state, &locations[1]) != CNA_RESULT_SUCCESS ||
+        state.touch_count != 2U ||
+        cna_touch_state_get_is_empty_ext(&state, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_state_contains(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_state_contains(&state, &locations[2], &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_state_index_of(&state, &locations[1], &index) != CNA_RESULT_SUCCESS ||
+        index != 1 ||
+        cna_touch_state_index_of(&state, &locations[2], &index) != CNA_RESULT_SUCCESS ||
+        index != -1) {
+        return 0;
+    }
+    /* The search uses the canonical comparison, so pressure does not separate two locations. */
+    if (cna_touch_location_init_from_values_ext(
+            0, CNA_TOUCH_LOCATION_PRESSED, origin, 0.9F, &probe) != CNA_RESULT_SUCCESS ||
+        cna_touch_state_contains(&state, &probe, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+
+    /* An index equal to the count appends, exactly as the canonical insertion does. */
+    if (cna_touch_state_insert(&state, 0, &locations[2]) != CNA_RESULT_SUCCESS ||
+        state.touch_count != 3U || state.touches[0].id != 2 || state.touches[1].id != 0 ||
+        cna_touch_state_insert(&state, (int32_t)state.touch_count, &locations[2]) !=
+            CNA_RESULT_SUCCESS ||
+        state.touch_count != 4U || state.touches[3].id != 2 ||
+        cna_touch_state_insert(&state, -1, &locations[0]) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_insert(&state, 5, &locations[0]) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_touch_state_remove(&state, &locations[2], &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE || state.touch_count != 3U || state.touches[0].id != 0 ||
+        cna_touch_state_remove(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE || state.touch_count != 2U ||
+        cna_touch_state_remove(&state, &locations[1], &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE || state.touch_count != 2U) {
+        return 0;
+    }
+    if (cna_touch_state_remove_at(&state, 1) != CNA_RESULT_SUCCESS ||
+        state.touch_count != 1U || state.touches[0].id != 0 ||
+        cna_touch_state_remove_at(&state, 1) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_remove_at(&state, -1) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_clear(&state) != CNA_RESULT_SUCCESS || state.touch_count != 0U) {
+        return 0;
+    }
+
+    /* The fixed capacity is exactly the canonical touch-panel maximum, and an append beyond it is
+       refused rather than silently dropping a touch. */
+    for (slot = 0U; slot < CNA_TOUCH_MAX_TOUCHES; ++slot) {
+        if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    if (cna_touch_state_add(&state, &locations[0]) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        state.touch_count != CNA_TOUCH_MAX_TOUCHES ||
+        cna_touch_state_insert(&state, 0, &locations[0]) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        cna_touch_state_clear(&state) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The copy INSERTS at its index and shifts what is already there, because the canonical
+       destination is a growable vector whose copy operation does exactly that. */
+    if (cna_touch_state_init_from_locations(locations, 2U, &state) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    destination[0] = locations[2];
+    destination[1] = locations[2];
+    if (cna_touch_state_copy_to(&state, destination, UINT64_C(2), UINT64_C(8), 1, &count) !=
+            CNA_RESULT_SUCCESS ||
+        count != UINT64_C(4) ||
+        destination[0].id != 2 || destination[1].id != 0 || destination[2].id != 1 ||
+        destination[3].id != 2) {
+        return 0;
+    }
+    if (cna_touch_state_copy_to(&state, destination, UINT64_C(2), UINT64_C(3), 0, &count) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        count != UINT64_C(4) ||
+        cna_touch_state_copy_to(&state, destination, UINT64_C(2), UINT64_C(8), 3, &count) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_copy_to(&state, destination, UINT64_C(2), UINT64_C(8), -1, &count) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_copy_to(&state, destination, UINT64_C(9), UINT64_C(8), 0, &count) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_state_copy_to(&state, destination, UINT64_C(2), UINT64_C(8), 0, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return 1;
+}
+
 /* Every device query below is answered for an empty slot too: an absent controller is an ordinary
    answer -- false, zero, empty or Unknown -- never a failure. No verification tree has a real
    controller, so these assert the shape of the answer and the refusals, not a specific device. */
@@ -1653,6 +2033,283 @@ static int validate_text_input_family(const CNA_Handle game)
     return cna_text_input_set_window_handle_ext(game, bound) == CNA_RESULT_SUCCESS;
 }
 
+/* The touch panel is process-wide state this suite does not own, so everything it changes is put
+   back. The window handle gets the same treatment the text-input family taught: a windowed backend
+   publishes a real window into the canonical static, so the unbound case is forced to pin the
+   contract and whatever was bound is restored afterwards. */
+static int validate_touch_panel_family(const CNA_Handle game)
+{
+    const CNA_Vector2 finger_position = {12.0F, 34.0F};
+    const CNA_Vector2 zero = {0.0F, 0.0F};
+    CNA_GestureSample sample;
+    CNA_GestureSample read_back;
+    CNA_TouchState touches;
+    CNA_DisplayOrientation orientation = CNA_DISPLAY_ORIENTATION_DEFAULT;
+    uint64_t restored_window = UINT64_C(0);
+    CNA_DisplayOrientation restored_orientation = CNA_DISPLAY_ORIENTATION_DEFAULT;
+    CNA_GestureType gestures = CNA_GESTURE_TYPE_NONE;
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t window = UINT64_C(9);
+    uint64_t bound = UINT64_C(0);
+    int32_t restored_width = 0;
+    int32_t restored_height = 0;
+    int32_t value = 0;
+
+    if (cna_touch_state_init(&touches) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_touch_panel_get_display_width(game, &restored_width) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_height(game, &restored_height) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_orientation(game, &restored_orientation) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_window_handle(game, &bound) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_touch_panel_get_display_width(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_display_height(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_display_orientation(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_window_handle(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_enabled_gestures(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_is_gesture_available(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_get_touch_device_exists_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The display size is stored verbatim, including a nonpositive value, exactly as the canonical
+       property stores it. */
+    if (cna_touch_panel_set_display_width(game, 640) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_width(game, &value) != CNA_RESULT_SUCCESS || value != 640 ||
+        cna_touch_panel_set_display_height(game, 480) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_height(game, &value) != CNA_RESULT_SUCCESS || value != 480 ||
+        cna_touch_panel_set_display_width(game, 0) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_width(game, &value) != CNA_RESULT_SUCCESS || value != 0) {
+        return 0;
+    }
+
+    if (cna_touch_panel_set_display_orientation(game, CNA_DISPLAY_ORIENTATION_PORTRAIT) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
+        orientation != CNA_DISPLAY_ORIENTATION_PORTRAIT ||
+        cna_touch_panel_set_display_orientation(
+            game,
+            CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT | CNA_DISPLAY_ORIENTATION_PORTRAIT) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_display_orientation(game, UINT32_C(8)) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Enabled gestures are a real bit set, so C combines them with its own operators; only the
+       undefined bit is refused. */
+    if (cna_touch_panel_set_enabled_gestures(
+            game, CNA_GESTURE_TYPE_TAP | CNA_GESTURE_TYPE_FLICK) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_enabled_gestures(game, &gestures) != CNA_RESULT_SUCCESS ||
+        gestures != (CNA_GESTURE_TYPE_TAP | CNA_GESTURE_TYPE_FLICK) ||
+        cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_ALL) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_enabled_gestures(game, &gestures) != CNA_RESULT_SUCCESS ||
+        gestures != CNA_GESTURE_TYPE_ALL ||
+        cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_PINCH_COMPLETE << 1) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Forcing the unbound case pins the contract on every backend; whatever a windowed backend
+       really published is restored at the end. */
+    if (cna_touch_panel_set_window_handle(game, UINT64_C(0)) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_window_handle(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0) ||
+        cna_touch_panel_set_window_handle(game, UINT64_C(0xFEEDFACE)) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_window_handle(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0xFEEDFACE)) {
+        return 0;
+    }
+
+    /* The device-exists flag is what the collection's connection getter reads live. */
+    if (cna_touch_panel_get_touch_device_exists_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE) ||
+        cna_touch_panel_set_touch_device_exists_ext(game, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_touch_device_exists_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
+        touches.is_connected != CNA_TRUE ||
+        cna_touch_panel_set_touch_device_exists_ext(game, CNA_FALSE) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* An empty queue is a refusal, not an empty sample: the canonical read throws. */
+    memset(&sample, 0, sizeof(sample));
+    sample.struct_size = sizeof(CNA_GestureSample);
+    sample.struct_version = UINT32_C(1);
+    read_back = sample;
+    if (cna_touch_panel_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+
+    /* Enqueueing is what makes the queue observable with no touch device at all. */
+    if (cna_gesture_sample_init_from_values_ext(
+            CNA_GESTURE_TYPE_FLICK,
+            INT64_C(4242),
+            finger_position, zero, finger_position, zero,
+            3, CNA_TOUCH_NO_FINGER,
+            &sample) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_enqueue_gesture_ext(game, &sample) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_SUCCESS ||
+        read_back.gesture_type != CNA_GESTURE_TYPE_FLICK ||
+        read_back.timestamp_ticks != INT64_C(4242) ||
+        read_back.finger_id_ext != 3 || read_back.finger_id2_ext != CNA_TOUCH_NO_FINGER ||
+        read_back.position.x != 12.0F || read_back.position.y != 34.0F ||
+        read_back.delta.x != 12.0F || read_back.delta.y != 34.0F) {
+        return 0;
+    }
+    /* Reading consumed it, so the queue is empty again and refuses again. */
+    if (cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_INVALID_STATE) {
+        return 0;
+    }
+    {
+        CNA_GestureSample bad = sample;
+        bad.struct_version = UINT32_C(2);
+        if (cna_touch_panel_enqueue_gesture_ext(game, &bad) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_touch_panel_enqueue_gesture_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        bad = sample;
+        bad.gesture_type = CNA_GESTURE_TYPE_PINCH_COMPLETE << 1;
+        if (cna_touch_panel_enqueue_gesture_ext(game, &bad) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        /* A separate scratch value for the expected-failure call: reusing read_back here would
+           leave a bad version behind and make every later read refuse. */
+        CNA_GestureSample scratch = read_back;
+        scratch.struct_version = UINT32_C(2);
+        if (cna_touch_panel_read_gesture(game, &scratch) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_touch_panel_read_gesture(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+
+    /* A slot written by hand becomes visible only after the frame is advanced. */
+    if (cna_touch_panel_set_finger_ext(game, 0, 5, finger_position) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_finger_ext(game, -1, 5, finger_position) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_set_finger_ext(
+            game, (int32_t)CNA_TOUCH_MAX_TOUCHES, 5, finger_position) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
+        touches.touch_count != 1U || touches.touches[0].id != 5 ||
+        touches.touches[0].position.x != 12.0F || touches.touches[0].position.y != 34.0F) {
+        return 0;
+    }
+    /* Clearing a slot does not make the touch vanish: it is reported once more as released, with
+       its previous state carried over, which is the XNA contract for a lifted finger. */
+    if (cna_touch_panel_set_finger_ext(game, 0, CNA_TOUCH_NO_FINGER, finger_position) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
+        touches.touch_count != 1U ||
+        touches.touches[0].state != CNA_TOUCH_LOCATION_RELEASED ||
+        touches.touches[0].previous_state != CNA_TOUCH_LOCATION_PRESSED) {
+        return 0;
+    }
+
+    /* The raised event feeds gesture detection, NOT the slot array the snapshot reports -- the two
+       are separate sources and the snapshot stays empty either way, which is asserted rather than
+       assumed. While no display size is published the event is dropped outright, because the
+       canonical dispatch scales by that size and refuses to collapse every touch onto the origin;
+       that drop is a successful no-op, not a failure. */
+    if (cna_touch_panel_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_TAP) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, CNA_TOUCH_LOCATION_PRESSED, 0.5F, 0.5F, 0.0F, 0.0F) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, CNA_TOUCH_LOCATION_RELEASED, 0.5F, 0.5F, 0.0F, 0.0F) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
+        touches.touch_count != 0U ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+
+    /* With a real display size the same press/release round trip reaches the detector. Whether it
+       decides a gesture happened is the detector's business, so both documented answers are
+       accepted -- but if one IS queued, reading it must succeed and must consume it. */
+    if (cna_touch_panel_set_display_width(game, 640) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_display_height(game, 480) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, CNA_TOUCH_LOCATION_PRESSED, 0.5F, 0.5F, 0.0F, 0.0F) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, CNA_TOUCH_LOCATION_MOVED, 0.5F, 0.5F, 0.0F, 0.0F) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, CNA_TOUCH_LOCATION_RELEASED, 0.5F, 0.5F, 0.0F, 0.0F) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_raise_touch_event_ext(
+            game, 6, UINT32_C(4), 0.5F, 0.5F, 0.0F, 0.0F) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_touch_panel_update_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_get_state(game, &touches) != CNA_RESULT_SUCCESS ||
+        touches.touch_count != 0U ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (flag == CNA_TRUE) {
+        if (cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_SUCCESS ||
+            (read_back.gesture_type & ~CNA_GESTURE_TYPE_ALL) != 0U ||
+            cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    /* Whatever the detector left behind is drained, so nothing leaks into a later validator. */
+    while (flag == CNA_TRUE) {
+        if (cna_touch_panel_read_gesture(game, &read_back) != CNA_RESULT_SUCCESS ||
+            cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+
+    /* The reset clears everything the panel owns -- queue, device flag, enabled gestures AND the
+       display metrics and window handle. The canonical class comment claims the display size and
+       orientation survive; the implementation clears them on purpose, so a leaked display size
+       cannot corrupt another test's scaled coordinates. This asserts the behavior, not the
+       comment. */
+    if (cna_touch_panel_set_display_width(game, 321) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_display_height(game, 123) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_display_orientation(game, CNA_DISPLAY_ORIENTATION_PORTRAIT) !=
+            CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_window_handle(game, UINT64_C(0xFEEDFACE)) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_set_enabled_gestures(game, CNA_GESTURE_TYPE_TAP) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_enqueue_gesture_ext(game, &sample) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_touch_panel_get_enabled_gestures(game, &gestures) != CNA_RESULT_SUCCESS ||
+        gestures != CNA_GESTURE_TYPE_NONE ||
+        cna_touch_panel_get_is_gesture_available(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_panel_get_touch_device_exists_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_touch_panel_get_display_width(game, &value) != CNA_RESULT_SUCCESS || value != 0 ||
+        cna_touch_panel_get_display_height(game, &value) != CNA_RESULT_SUCCESS || value != 0 ||
+        cna_touch_panel_get_display_orientation(game, &orientation) != CNA_RESULT_SUCCESS ||
+        orientation != CNA_DISPLAY_ORIENTATION_DEFAULT ||
+        cna_touch_panel_get_window_handle(game, &restored_window) != CNA_RESULT_SUCCESS ||
+        restored_window != UINT64_C(0)) {
+        return 0;
+    }
+
+    /* Everything this suite changed goes back, including whatever window the backend had bound. */
+    return cna_touch_panel_set_display_width(game, restored_width) == CNA_RESULT_SUCCESS &&
+        cna_touch_panel_set_display_height(game, restored_height) == CNA_RESULT_SUCCESS &&
+        cna_touch_panel_set_display_orientation(game, restored_orientation) ==
+            CNA_RESULT_SUCCESS &&
+        cna_touch_panel_set_window_handle(game, bound) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1740,7 +2397,7 @@ static CNA_Result on_update(
 
     if (!validate_device_queries(game) || !validate_keyboard_queries(game) ||
         !validate_mouse_queries(game) || !validate_cursor_family(game) ||
-        !validate_text_input_family(game)) {
+        !validate_text_input_family(game) || !validate_touch_panel_family(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -1837,6 +2494,8 @@ static int capture_on_wrong_thread(void* const context)
     {
         CNA_Bool active = CNA_FALSE;
         state->text_input_result = cna_text_input_is_active_ext(state->game, &active);
+        state->touch_panel_result =
+            cna_touch_panel_get_is_gesture_available(state->game, &active);
     }
     return 0;
 }
@@ -1874,6 +2533,15 @@ int main(void)
     if (!validate_pure_touch_helpers()) {
         return 16;
     }
+    if (!validate_pure_gesture_value_helpers()) {
+        return 19;
+    }
+    if (!validate_pure_touch_value_helpers()) {
+        return 20;
+    }
+    if (!validate_pure_touch_collection_helpers()) {
+        return 21;
+    }
 
     InputState input_state = {0};
     CNA_GameCallbacks callbacks = {
@@ -1897,7 +2565,7 @@ int main(void)
 
     WrongThreadState wrong_thread = {
         game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS,
-        CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
+        CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
     };
     thrd_t thread;
     if (thrd_create(&thread, capture_on_wrong_thread, &wrong_thread) != thrd_success ||
@@ -1907,7 +2575,8 @@ int main(void)
         wrong_thread.capabilities_result != CNA_RESULT_THREAD ||
         wrong_thread.vibration_result != CNA_RESULT_THREAD ||
         wrong_thread.touch_result != CNA_RESULT_THREAD ||
-        wrong_thread.text_input_result != CNA_RESULT_THREAD) {
+        wrong_thread.text_input_result != CNA_RESULT_THREAD ||
+        wrong_thread.touch_panel_result != CNA_RESULT_THREAD) {
         return 3;
     }
 

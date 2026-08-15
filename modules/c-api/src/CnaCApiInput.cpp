@@ -6,6 +6,7 @@
 #include "CNA/C/input_mouse.h"
 #include "CNA/C/input_cursor.h"
 #include "CNA/C/input_text.h"
+#include "CNA/C/input_touch.h"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -36,12 +37,16 @@
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "CNA/Input/TextInputType.hpp"
 #include "System/MulticastAction.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureSample.hpp"
+#include "Microsoft/Xna/Framework/Input/Touch/GestureType.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.hpp"
+#include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
+#include "System/TimeSpan.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -3854,6 +3859,1089 @@ CNA_Result cna_text_input_reset_for_tests_ext(const CNA_Handle gameHandle)
             return result;
         }
         TextInputEXT::ResetForTests();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::DisplayOrientation;
+using Microsoft::Xna::Framework::Input::Touch::GestureSample;
+using Microsoft::Xna::Framework::Input::Touch::GestureType;
+
+constexpr CNA_DisplayOrientation DisplayOrientationAll =
+    CNA_DISPLAY_ORIENTATION_LANDSCAPE_LEFT | CNA_DISPLAY_ORIENTATION_LANDSCAPE_RIGHT |
+    CNA_DISPLAY_ORIENTATION_PORTRAIT;
+
+[[nodiscard]] CNA_Result ValidateGestureType(const CNA_GestureType gestures) noexcept
+{
+    if ((gestures & ~CNA_GESTURE_TYPE_ALL) != 0U) {
+        return InvalidInput("The gesture type contains an undefined bit.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidateTouchLocationValue(
+    const CNA_TouchLocation* const location,
+    const char* const message) noexcept
+{
+    if (location == nullptr) {
+        return InvalidInput(message);
+    }
+    if (!IsValidTouchLocationState(location->state) ||
+        !IsValidTouchLocationState(location->previous_state)) {
+        return InvalidInput("The touch location carries an undefined state.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidatePressure(const float pressure) noexcept
+{
+    // The canonical constructors store any value; C refuses one outside the documented range so a
+    // snapshot can never claim a pressure its own contract excludes. NaN fails both comparisons.
+    if (!(pressure >= 0.0F && pressure <= 1.0F)) {
+        return InvalidInput("The touch pressure is outside the range zero through one.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] TouchLocation ToNativeTouchLocation(const CNA_TouchLocation& location)
+{
+    return TouchLocation(
+        location.id,
+        static_cast<TouchLocationState>(location.state),
+        Vector2(location.position.x, location.position.y),
+        static_cast<TouchLocationState>(location.previous_state),
+        Vector2(location.previous_position.x, location.previous_position.y),
+        location.pressure);
+}
+
+// The canonical comparison covers id, state, position, previous state and previous position and
+// deliberately excludes the pressure extension, so C compares through the canonical type rather
+// than memcmp-ing the POD, which would wrongly separate two locations differing only in pressure.
+[[nodiscard]] bool TouchLocationsEqual(
+    const CNA_TouchLocation& left,
+    const CNA_TouchLocation& right)
+{
+    return ToNativeTouchLocation(left).Equals(ToNativeTouchLocation(right));
+}
+
+[[nodiscard]] CNA_GestureSample MapGestureSample(const GestureSample& sample)
+{
+    const Vector2& position = sample.getPositionProperty();
+    const Vector2& position2 = sample.getPosition2Property();
+    const Vector2& delta = sample.getDeltaProperty();
+    const Vector2& delta2 = sample.getDelta2Property();
+    CNA_GestureSample mapped = {};
+    mapped.struct_size = sizeof(CNA_GestureSample);
+    mapped.struct_version = StructureVersion;
+    mapped.gesture_type = static_cast<CNA_GestureType>(sample.getGestureTypeProperty());
+    mapped.finger_id_ext = sample.getFingerIdEXTProperty();
+    mapped.finger_id2_ext = sample.getFingerId2EXTProperty();
+    mapped.timestamp_ticks = static_cast<int64_t>(sample.getTimestampProperty().getTicksProperty());
+    mapped.position = CNA_Vector2{position.X, position.Y};
+    mapped.position2 = CNA_Vector2{position2.X, position2.Y};
+    mapped.delta = CNA_Vector2{delta.X, delta.Y};
+    mapped.delta2 = CNA_Vector2{delta2.X, delta2.Y};
+    return mapped;
+}
+
+[[nodiscard]] GestureSample ToNativeGestureSample(const CNA_GestureSample& sample)
+{
+    return GestureSample(
+        static_cast<GestureType>(sample.gesture_type),
+        System::TimeSpan(static_cast<SharpRuntime::longcs>(sample.timestamp_ticks)),
+        Vector2(sample.position.x, sample.position.y),
+        Vector2(sample.position2.x, sample.position2.y),
+        Vector2(sample.delta.x, sample.delta.y),
+        Vector2(sample.delta2.x, sample.delta2.y),
+        sample.finger_id_ext,
+        sample.finger_id2_ext);
+}
+
+[[nodiscard]] CNA_Result BuildGestureSample(
+    const CNA_GestureType gestureType,
+    const int64_t timestampTicks,
+    const CNA_Vector2 position,
+    const CNA_Vector2 position2,
+    const CNA_Vector2 delta,
+    const CNA_Vector2 delta2,
+    const int32_t fingerId,
+    const int32_t fingerId2,
+    CNA_GestureSample* const outSample)
+{
+    if (outSample == nullptr) {
+        return InvalidInput("The gesture-sample output is null.");
+    }
+    if (const CNA_Result result = ValidateGestureType(gestureType);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    CNA_GestureSample sample = {};
+    sample.struct_size = sizeof(CNA_GestureSample);
+    sample.struct_version = StructureVersion;
+    sample.gesture_type = gestureType;
+    sample.finger_id_ext = fingerId;
+    sample.finger_id2_ext = fingerId2;
+    sample.timestamp_ticks = timestampTicks;
+    sample.position = position;
+    sample.position2 = position2;
+    sample.delta = delta;
+    sample.delta2 = delta2;
+    *outSample = sample;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BuildTouchLocation(
+    const int32_t id,
+    const CNA_TouchLocationState state,
+    const CNA_Vector2 position,
+    const CNA_TouchLocationState previousState,
+    const CNA_Vector2 previousPosition,
+    const float pressure,
+    CNA_TouchLocation* const outLocation)
+{
+    if (outLocation == nullptr) {
+        return InvalidInput("The touch-location output is null.");
+    }
+    if (!IsValidTouchLocationState(state) || !IsValidTouchLocationState(previousState)) {
+        return InvalidInput("The touch location state is undefined.");
+    }
+    if (const CNA_Result result = ValidatePressure(pressure);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outLocation = CNA_TouchLocation{
+        id, state, position, previousState, previousPosition, pressure
+    };
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ReportTouchLocationString(
+    const CNA_TouchLocation* const location,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes,
+    const bool copy)
+{
+    if (outBytes == nullptr) {
+        return InvalidInput("The touch-location text byte-count output is null.");
+    }
+    if (const CNA_Result result =
+            ValidateTouchLocationValue(location, "The touch location is null.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::string text = ToNativeTouchLocation(*location).ToString();
+    if (!copy) {
+        *outBytes = text.size();
+        return CNA_RESULT_SUCCESS;
+    }
+    return CopyDeviceText(text, destination, capacity, outBytes);
+}
+
+} // namespace
+
+CNA_Result cna_gesture_sample_init(CNA_GestureSample* const outSample)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSample == nullptr) {
+            return InvalidInput("The gesture-sample output is null.");
+        }
+        *outSample = MapGestureSample(GestureSample());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gesture_sample_init_from_values(
+    const CNA_GestureType gestureType,
+    const int64_t timestampTicks,
+    const CNA_Vector2 position,
+    const CNA_Vector2 position2,
+    const CNA_Vector2 delta,
+    const CNA_Vector2 delta2,
+    CNA_GestureSample* const outSample)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildGestureSample(
+            gestureType,
+            timestampTicks,
+            position,
+            position2,
+            delta,
+            delta2,
+            CNA_TOUCH_NO_FINGER,
+            CNA_TOUCH_NO_FINGER,
+            outSample);
+    });
+}
+
+CNA_Result cna_gesture_sample_init_from_values_ext(
+    const CNA_GestureType gestureType,
+    const int64_t timestampTicks,
+    const CNA_Vector2 position,
+    const CNA_Vector2 position2,
+    const CNA_Vector2 delta,
+    const CNA_Vector2 delta2,
+    const int32_t fingerId,
+    const int32_t fingerId2,
+    CNA_GestureSample* const outSample)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildGestureSample(
+            gestureType,
+            timestampTicks,
+            position,
+            position2,
+            delta,
+            delta2,
+            fingerId,
+            fingerId2,
+            outSample);
+    });
+}
+
+CNA_Result cna_touch_capabilities_init(CNA_TouchCapabilities* const outCapabilities)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCapabilities == nullptr) {
+            return InvalidInput("The touch-capabilities output is null.");
+        }
+        const TouchPanelCapabilities nativeCapabilities;
+        *outCapabilities = CNA_TouchCapabilities{
+            sizeof(CNA_TouchCapabilities),
+            StructureVersion,
+            nativeCapabilities.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+            {0U, 0U, 0U},
+            static_cast<uint32_t>(nativeCapabilities.getMaximumTouchCountProperty())
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_capabilities_init_from_values_ext(
+    const CNA_Bool isConnected,
+    const int32_t maximumTouchCount,
+    CNA_TouchCapabilities* const outCapabilities)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCapabilities == nullptr) {
+            return InvalidInput("The touch-capabilities output is null.");
+        }
+        if (maximumTouchCount < 0) {
+            return InvalidInput("The maximum touch count is negative.");
+        }
+        *outCapabilities = CNA_TouchCapabilities{
+            sizeof(CNA_TouchCapabilities),
+            StructureVersion,
+            isConnected != CNA_FALSE ? CNA_TRUE : CNA_FALSE,
+            {0U, 0U, 0U},
+            static_cast<uint32_t>(maximumTouchCount)
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_location_init(CNA_TouchLocation* const outLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLocation == nullptr) {
+            return InvalidInput("The touch-location output is null.");
+        }
+        *outLocation = MapTouchLocation(TouchLocation());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_location_init_from_values(
+    const int32_t id,
+    const CNA_TouchLocationState state,
+    const CNA_Vector2 position,
+    CNA_TouchLocation* const outLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildTouchLocation(
+            id,
+            state,
+            position,
+            CNA_TOUCH_LOCATION_INVALID,
+            CNA_Vector2{0.0F, 0.0F},
+            0.0F,
+            outLocation);
+    });
+}
+
+CNA_Result cna_touch_location_init_with_previous(
+    const int32_t id,
+    const CNA_TouchLocationState state,
+    const CNA_Vector2 position,
+    const CNA_TouchLocationState previousState,
+    const CNA_Vector2 previousPosition,
+    CNA_TouchLocation* const outLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildTouchLocation(
+            id,
+            state,
+            position,
+            previousState,
+            previousPosition,
+            0.0F,
+            outLocation);
+    });
+}
+
+CNA_Result cna_touch_location_init_from_values_ext(
+    const int32_t id,
+    const CNA_TouchLocationState state,
+    const CNA_Vector2 position,
+    const float pressure,
+    CNA_TouchLocation* const outLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildTouchLocation(
+            id,
+            state,
+            position,
+            CNA_TOUCH_LOCATION_INVALID,
+            CNA_Vector2{0.0F, 0.0F},
+            pressure,
+            outLocation);
+    });
+}
+
+CNA_Result cna_touch_location_init_with_previous_ext(
+    const int32_t id,
+    const CNA_TouchLocationState state,
+    const CNA_Vector2 position,
+    const CNA_TouchLocationState previousState,
+    const CNA_Vector2 previousPosition,
+    const float pressure,
+    CNA_TouchLocation* const outLocation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return BuildTouchLocation(
+            id,
+            state,
+            position,
+            previousState,
+            previousPosition,
+            pressure,
+            outLocation);
+    });
+}
+
+CNA_Result cna_touch_location_equals(
+    const CNA_TouchLocation* const left,
+    const CNA_TouchLocation* const right,
+    CNA_Bool* const outEqual)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEqual == nullptr) {
+            return InvalidInput("The touch-location equality output is null.");
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(left, "The first touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(right, "The second touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEqual = TouchLocationsEqual(*left, *right) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_location_get_hash_code(
+    const CNA_TouchLocation* const location,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The touch-location hash output is null.");
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(location, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHash = static_cast<int32_t>(ToNativeTouchLocation(*location).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_location_get_string_size(
+    const CNA_TouchLocation* const location,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportTouchLocationString(location, nullptr, UINT64_C(0), outBytes, false);
+    });
+}
+
+CNA_Result cna_touch_location_copy_string(
+    const CNA_TouchLocation* const location,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportTouchLocationString(location, destination, capacity, outBytes, true);
+    });
+}
+
+CNA_Result cna_touch_state_init(CNA_TouchState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The touch-state output is null.");
+        }
+        CNA_TouchState state = {};
+        state.struct_size = sizeof(CNA_TouchState);
+        state.struct_version = StructureVersion;
+        state.is_connected = CNA_FALSE;
+        state.touch_count = 0U;
+        *outState = state;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_init_from_locations(
+    const CNA_TouchLocation* const locations,
+    const uint32_t count,
+    CNA_TouchState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The touch-state output is null.");
+        }
+        if (count > CNA_TOUCH_MAX_TOUCHES) {
+            return InvalidInput("The touch count exceeds the fixed snapshot capacity.");
+        }
+        if (locations == nullptr && count != 0U) {
+            return InvalidInput("The touch-location array is null.");
+        }
+        for (uint32_t index = 0U; index < count; ++index) {
+            if (const CNA_Result result = ValidateTouchLocationValue(
+                    &locations[index],
+                    "The touch-location array is null.");
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        CNA_TouchState state = {};
+        state.struct_size = sizeof(CNA_TouchState);
+        state.struct_version = StructureVersion;
+        state.is_connected = CNA_FALSE;
+        state.touch_count = count;
+        for (uint32_t index = 0U; index < count; ++index) {
+            state.touches[index] = locations[index];
+        }
+        *outState = state;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_get_is_read_only(
+    const CNA_TouchState* const state,
+    CNA_Bool* const outReadOnly)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outReadOnly == nullptr) {
+            return InvalidInput("The touch-state read-only output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outReadOnly = TouchCollection().getIsReadOnlyProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_get_is_empty_ext(
+    const CNA_TouchState* const state,
+    CNA_Bool* const outEmpty)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEmpty == nullptr) {
+            return InvalidInput("The touch-state empty output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEmpty = state->touch_count == 0U ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_contains(
+    const CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return InvalidInput("The touch-state contains output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(item, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA_Bool contains = CNA_FALSE;
+        for (uint32_t index = 0U; index < state->touch_count; ++index) {
+            if (TouchLocationsEqual(state->touches[index], *item)) {
+                contains = CNA_TRUE;
+                break;
+            }
+        }
+        *outContains = contains;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_index_of(
+    const CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    int32_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr) {
+            return InvalidInput("The touch-state index output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(item, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        int32_t found = -1;
+        for (uint32_t index = 0U; index < state->touch_count; ++index) {
+            if (TouchLocationsEqual(state->touches[index], *item)) {
+                found = static_cast<int32_t>(index);
+                break;
+            }
+        }
+        *outIndex = found;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_copy_to(
+    const CNA_TouchState* const state,
+    CNA_TouchLocation* const destination,
+    const uint64_t count,
+    const uint64_t capacity,
+    const int32_t destinationIndex,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The touch-state copy count output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (count > capacity) {
+            return InvalidInput("The destination element count exceeds its capacity.");
+        }
+        if (destination == nullptr && capacity != UINT64_C(0)) {
+            return InvalidInput("The destination array is null.");
+        }
+        // The canonical operation guards the index the same way and throws for a bad one.
+        if (destinationIndex < 0 || static_cast<uint64_t>(destinationIndex) > count) {
+            return InvalidInput("The destination index is out of range.");
+        }
+        const uint64_t added = state->touch_count;
+        const uint64_t required = count + added;
+        *outCount = required;
+        if (required > capacity) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination array cannot hold the inserted touch locations.");
+        }
+        if (added == UINT64_C(0)) {
+            return CNA_RESULT_SUCCESS;
+        }
+        // Insert rather than overwrite: the canonical destination is a growable vector whose copy
+        // shifts existing elements up. Move the tail back first so the copy is not self-clobbering.
+        const uint64_t start = static_cast<uint64_t>(destinationIndex);
+        for (uint64_t offset = count; offset > start; --offset) {
+            destination[offset - 1U + added] = destination[offset - 1U];
+        }
+        for (uint64_t index = 0U; index < added; ++index) {
+            destination[start + index] = state->touches[index];
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_add(
+    CNA_TouchState* const state,
+    const CNA_TouchLocation* const item)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(item, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The touch snapshot is already at its fixed capacity.");
+        }
+        state->touches[state->touch_count] = *item;
+        state->touch_count += 1U;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_clear(CNA_TouchState* const state)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        state->touch_count = 0U;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_remove(
+    CNA_TouchState* const state,
+    const CNA_TouchLocation* const item,
+    CNA_Bool* const outRemoved)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRemoved == nullptr) {
+            return InvalidInput("The touch-state removal output is null.");
+        }
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(item, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outRemoved = CNA_FALSE;
+        for (uint32_t index = 0U; index < state->touch_count; ++index) {
+            if (!TouchLocationsEqual(state->touches[index], *item)) {
+                continue;
+            }
+            for (uint32_t shift = index + 1U; shift < state->touch_count; ++shift) {
+                state->touches[shift - 1U] = state->touches[shift];
+            }
+            state->touch_count -= 1U;
+            state->touches[state->touch_count] = CNA_TouchLocation{};
+            *outRemoved = CNA_TRUE;
+            break;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_remove_at(CNA_TouchState* const state, const int32_t index)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index < 0 || static_cast<uint32_t>(index) >= state->touch_count) {
+            return InvalidInput("The touch-location index is out of range.");
+        }
+        for (uint32_t shift = static_cast<uint32_t>(index) + 1U;
+             shift < state->touch_count;
+             ++shift) {
+            state->touches[shift - 1U] = state->touches[shift];
+        }
+        state->touch_count -= 1U;
+        state->touches[state->touch_count] = CNA_TouchLocation{};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_state_insert(
+    CNA_TouchState* const state,
+    const int32_t index,
+    const CNA_TouchLocation* const item)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTouchState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result =
+                ValidateTouchLocationValue(item, "The touch location is null.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical insertion accepts an index equal to the count, which appends.
+        if (index < 0 || static_cast<uint32_t>(index) > state->touch_count) {
+            return InvalidInput("The touch-location index is out of range.");
+        }
+        if (state->touch_count >= CNA_TOUCH_MAX_TOUCHES) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The touch snapshot is already at its fixed capacity.");
+        }
+        for (uint32_t shift = state->touch_count; shift > static_cast<uint32_t>(index); --shift) {
+            state->touches[shift] = state->touches[shift - 1U];
+        }
+        state->touches[static_cast<uint32_t>(index)] = *item;
+        state->touch_count += 1U;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_display_width(
+    const CNA_Handle gameHandle,
+    int32_t* const outWidth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWidth == nullptr) {
+            return InvalidInput("The touch-panel display-width output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWidth = static_cast<int32_t>(TouchPanel::getDisplayWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_display_width(
+    const CNA_Handle gameHandle,
+    const int32_t width)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setDisplayWidthProperty(width);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_display_height(
+    const CNA_Handle gameHandle,
+    int32_t* const outHeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeight == nullptr) {
+            return InvalidInput("The touch-panel display-height output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeight = static_cast<int32_t>(TouchPanel::getDisplayHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_display_height(
+    const CNA_Handle gameHandle,
+    const int32_t height)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setDisplayHeightProperty(height);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_display_orientation(
+    const CNA_Handle gameHandle,
+    CNA_DisplayOrientation* const outOrientation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outOrientation == nullptr) {
+            return InvalidInput("The touch-panel orientation output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outOrientation =
+            static_cast<CNA_DisplayOrientation>(TouchPanel::getDisplayOrientationProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_display_orientation(
+    const CNA_Handle gameHandle,
+    const CNA_DisplayOrientation orientation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if ((orientation & ~DisplayOrientationAll) != 0U) {
+            return InvalidInput("The display orientation contains an undefined bit.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setDisplayOrientationProperty(static_cast<DisplayOrientation>(orientation));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_enabled_gestures(
+    const CNA_Handle gameHandle,
+    CNA_GestureType* const outGestures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGestures == nullptr) {
+            return InvalidInput("The enabled-gestures output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outGestures = static_cast<CNA_GestureType>(TouchPanel::getEnabledGesturesProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_enabled_gestures(
+    const CNA_Handle gameHandle,
+    const CNA_GestureType gestures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateGestureType(gestures);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setEnabledGesturesProperty(static_cast<GestureType>(gestures));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_is_gesture_available(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAvailable == nullptr) {
+            return InvalidInput("The gesture-available output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAvailable = TouchPanel::getIsGestureAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_window_handle(
+    const CNA_Handle gameHandle,
+    uint64_t* const outWindow)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWindow == nullptr) {
+            return InvalidInput("The touch-panel window-handle output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWindow = static_cast<uint64_t>(TouchPanel::getWindowHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_window_handle(
+    const CNA_Handle gameHandle,
+    const uint64_t window)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_get_touch_device_exists_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outExists)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outExists == nullptr) {
+            return InvalidInput("The touch-device-exists output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outExists = TouchPanel::getTouchDeviceExistsProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_touch_device_exists_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool exists)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::setTouchDeviceExistsProperty(exists != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_read_gesture(
+    const CNA_Handle gameHandle,
+    CNA_GestureSample* const outSample)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outSample,
+                "The gesture-sample output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // An empty queue throws canonically; the firewall reports that as an invalid state rather
+        // than inventing a default sample, so "no gesture" stays distinguishable from a real one.
+        *outSample = MapGestureSample(TouchPanel::ReadGesture());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_enqueue_gesture_ext(
+    const CNA_Handle gameHandle,
+    const CNA_GestureSample* const sample)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateVersionedStructure(
+                sample,
+                "The gesture-sample structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateGestureType(sample->gesture_type);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::EnqueueGesture(ToNativeGestureSample(*sample));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_raise_touch_event_ext(
+    const CNA_Handle gameHandle,
+    const int32_t fingerId,
+    const CNA_TouchLocationState state,
+    const float x,
+    const float y,
+    const float dx,
+    const float dy)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsValidTouchLocationState(state)) {
+            return InvalidInput("The touch location state is undefined.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::INTERNAL_onTouchEvent(
+            fingerId,
+            static_cast<TouchLocationState>(state),
+            x,
+            y,
+            dx,
+            dy);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_set_finger_ext(
+    const CNA_Handle gameHandle,
+    const int32_t index,
+    const int32_t fingerId,
+    const CNA_Vector2 position)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (index < 0 || static_cast<uint32_t>(index) >= CNA_TOUCH_MAX_TOUCHES) {
+            return InvalidInput("The touch slot index is out of range.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::SetFinger(index, fingerId, Vector2(position.x, position.y));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_update_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_touch_panel_reset_for_tests_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TouchPanel::ResetForTests();
         return CNA_RESULT_SUCCESS;
     });
 }

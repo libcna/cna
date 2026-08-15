@@ -392,7 +392,7 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B4b | 21 | Complete the mouse | ✅ | `input_mouse.h` maps the whole `MouseState` value surface and every remaining `Mouse` static. Each construction takes the same `CNA_MouseButtonFlags` bit set the snapshot already carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them; the eight-argument form leaves the horizontal wheel at zero exactly as the canonical one does. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and C reproduces the canonical format exactly, `None` included. The window handle crosses as an opaque `uint64_t` the C API never dereferences. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and the global-position query — canonically `void` with two output references — cannot fail at all. The static `ClickedEXT` event becomes an owned `CNA_MouseEventRegistrationHandle` that takes no game handle, because the canonical event belongs to the process; `INTERNAL_onClicked` becomes the raise route that makes it observable without a device, and `ResetForTests` is documented as dropping every subscription, including ones this API handed out, so a release afterwards is a no-op. **Re-partitioned:** `Mouse::SetCursor` moved to CBIND-037B4c (21 rows here, 22 there), because it cannot be mapped before a cursor handle exists. `InputSnapshotsSmoke.c` proves the click round trip and the reset-drops-subscriptions behavior; green in all three trees (51/51) and under ASan+UBSan with leak detection on. |
 | CBIND-037B4c | 22 | Complete the mouse cursor | ✅ | `input_cursor.h` maps `MouseCursor` as an owned `CNA_MouseCursorHandle` plus `Mouse::SetCursor`, moved here from CBIND-037B4b because it cannot be mapped before a cursor handle exists. All twelve stock accessors collapse into one route taking a `CNA_MOUSE_CURSOR_STOCK_*` identity, and the handle they return is a **borrowed view**: the canonical stock cursors are process-lifetime singletons whose disposal is a deliberate no-op, so destroying the handle never frees the shared native cursor and disposing it succeeds without doing anything. The default constructor, the texture factory and both lifetime operations are mapped; the texture factory does not keep its texture alive, because the canonical one copies the pixels. Four rows are `not-applicable` and each says why: the `SDL_Cursor*` constructor and `GetSDLCursor` would put a native backend pointer in the ABI, and the move constructor and move assignment have no counterpart because a handle is the only name C has for a cursor. `InputSnapshotsSmoke.c` probes the texture-derived cursor **by behavior** — whichever documented answer the backend gives, the success path is exercised fully and the refusal path must leave the output handle invalid — and proves the stock no-op disposal by reusing an identity after disposing and releasing it. Green in all three trees (51/51) and under ASan+UBSan with leak detection on. |
 | CBIND-037B4d | 27 | Complete text input | ✅ | `input_text.h` maps every `TextInputEXT` row through `cna_text_input_*` free functions, because C has no static class. All three events become owned `CNA_TextInputRegistrationHandle` values with **one** shared release route, since a registration already knows which event it came from; the subscriptions take no game handle, as the canonical events are process-wide statics. A committed code unit crosses as a `uint16_t` and an above-BMP code point arrives as two surrogate calls; the two multi-field events hand over fixed versioned infos whose UTF-8 text and candidate strings are `CNA_StringView`s borrowed only for the callback, so neither `std::string` nor `std::vector` crosses the ABI. The three `INTERNAL_On*` dispatchers become the raise routes that make the events observable without a keyboard. Two canonical quirks are preserved and asserted: composition `start`/`length` are byte offsets forwarded verbatim and `selected` is not range-checked, because the canonical dispatch checks neither. One **deliberate deviation**: an undefined type hint is refused, where the canonical conversion silently falls back to plain text. **Borrowed from CBIND-037B7:** `TextInputTypeEXT` and its nine values (10 rows) — 27 rows here, 92 left there. This closes parent `CBIND-037B4`. The suite never branches on renderer identity: it forces the unbound case to prove the null-guarded contract on every backend, then restores whatever the backend really bound — which on SDL_RENDERER is a live window where start genuinely activates text input and stop genuinely deactivates it, asserted as a relationship rather than a fixed answer. Green in all four trees (51/51) and under ASan+UBSan with leak detection on. |
-| CBIND-037B5 | 80 | Complete touch and gestures | ⬜ | Map the remaining `TouchPanel`, `TouchCollection`, `TouchLocation`, `TouchPanelCapabilities`, `GestureType` and `GestureSample` rows. |
+| CBIND-037B5 | 80 | Complete touch and gestures | ✅ | `input_touch.h` maps the whole touch family onto the representations the C API already had. `GestureType` is a `uint32_t` bit set whose four canonical operators need **no** route — unlike the gamepad button identities these really are flags, so C composes and masks them with its own operators and every route validates against `CNA_GESTURE_TYPE_ALL`. `GestureSample` is a fixed 64-byte value rather than a handle, since it is a copyable snapshot with no identity; its eight canonical getters are plain fields and `System::TimeSpan` crosses as `int64_t` 100-nanosecond ticks, the spelling `runtime.h` and `audio.h` already use. `TouchLocation`, `TouchPanelCapabilities` and the entire `TouchCollection` mutation surface extend the **existing** fixed eight-slot `CNA_TouchState`/`CNA_TouchLocation`/`CNA_TouchCapabilities` values, so the ABI never grows a second spelling of a touch snapshot. Four canonical behaviors are preserved and asserted rather than smoothed over: equality, the hash and the text all ignore the pressure extension and the text carries **only** the position; reading an empty gesture queue throws canonically and so is refused in C rather than answered with a default sample; a raised touch event feeds gesture detection and **not** the snapshot, and is dropped outright until a display size is published, because the dispatch scales by it; and `ResetForTests` clears the display metrics and window handle even though the canonical class comment claims they survive — **the C contract follows the implementation and says so**. `CopyTo` inserts and shifts rather than overwriting, which is why the destination's element count is an argument. Three deliberate C deviations are documented: a negative maximum touch count, a pressure outside zero through one, and an append past the fixed capacity are refused rather than stored or silently dropped. Five rows are `not-applicable` with reasons: the four iterator overloads, because an iterator has no C counterpart and C indexes the fixed array directly, and the class-local `intcs` alias, which declares no operation. `InputSnapshotsSmoke.c` grew three pure validators and one in-game validator with their own return codes, proving the pressure-blind match, the insert-semantics copy, the exact text, the enqueue/read round trip, the empty-queue refusal, the released frame after a slot is cleared, and the reset really clearing the display metrics. Green in all four trees (51/51) and under ASan+UBSan with leak detection on. |
 | CBIND-037B6 | 126 | Complete the haptics extension family | ⬜ | Map `CNA::Input` haptics: devices, features, effects, effect types, capabilities, directions and the haptics facade. |
 | CBIND-037B7 | 102 | Complete the remaining input extensions | ⬜ | Map the `CNA::Input` joystick, sensor, key-modifier, button-label, text-input-type, device-enumeration, clipboard, power and connection-state surfaces. |
 
@@ -529,8 +529,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037B4d`):** 414 headers / 6,415 symbols —
-**4,209 implemented, 30 partial, 2,055 planned, 121 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037B5`):** 414 headers / 6,415 symbols —
+**4,284 implemented, 30 partial, 1,975 planned, 126 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -540,27 +540,26 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 | `CBIND-000`–`CBIND-034` | ✅ all |
 | `CBIND-035` (math, geometry, textures, effects, models, device and draw submission) | ✅ closed by `CBIND-035G` |
 | `CBIND-036` (storage, content, networking, fake-async) | ✅ closed by `CBIND-036E5` |
-| `CBIND-037A` core, `CBIND-037B1`–`B3` gamepad, `CBIND-037B4` keyboard/mouse/cursor/text input | ✅ |
+| `CBIND-037A` core, `CBIND-037B1`–`B3` gamepad, `CBIND-037B4` keyboard/mouse/cursor/text input, `CBIND-037B5` touch and gestures | ✅ |
 
 **Four modules now have no planned row left: `storage`, `content`, `net`, `core`.**
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (2,055 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,975 rows), the B7 hardening phase
 (`CBIND-038`–`042`), the CI coverage gate (`CBIND-043`) and the final close (`CBIND-044`).
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
 later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037B5` touch and gestures | 80 | |
-| 2 | `CBIND-037B6` haptics | 126 | |
-| 3 | `CBIND-037B7` remaining input extensions | 92 (after the B4a/B4d borrows) | closes parent `CBIND-037B`; joysticks, sensors, clipboard, power, device enumeration |
-| 4 | `CBIND-037C` media | 325 | sub-partition on arrival |
-| 5 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info |
-| 6 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
-| 7 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
-| 8 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
+| 1 | `CBIND-037B6` haptics | 126 | |
+| 2 | `CBIND-037B7` remaining input extensions | 92 (after the B4a/B4d borrows) | closes parent `CBIND-037B`; joysticks, sensors, clipboard, power, device enumeration |
+| 3 | `CBIND-037C` media | 325 | sub-partition on arrival |
+| 4 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info |
+| 5 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
+| 6 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
+| 7 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
 
 After `CBIND-037` closes: `CBIND-043` (make the coverage matrix a configured/CI gate — it already
 passes `--check` deterministically, so this is small and high-leverage), then `CBIND-038`–`042`,
@@ -590,9 +589,11 @@ below. These are the decisions that mechanics cannot make for you:
 Both kinds are recorded rather than smoothed over; a new context should not "fix" them:
 
 - **Deliberate C-layer deviations:** out-of-range keyboard keys, unchecked
-  `NetworkSessionProperties` indices and undefined text-input type hints are refused instead of
-  silently dropped, left undefined or quietly falling back to a different value; a gamepad snapshot
-  carries one button mask, so a supplied directional pad is merged into it.
+  `NetworkSessionProperties` indices, undefined text-input type hints, negative maximum touch
+  counts, touch pressures outside zero through one, and touch appends past the fixed snapshot
+  capacity are all refused instead of silently dropped, left undefined or quietly falling back to a
+  different value; a gamepad snapshot carries one button mask, so a supplied directional pad is
+  merged into it.
 - **Re-partitions:** `LocalNetworkGamer` D→E; three `Create` overloads E4→E2; a minimum
   gamer-services surface borrowed into E2/E3; `GamePad::GetCapabilities` B3→B1;
   `Mouse::SetCursor` B4b→B4c; the CNA::Input identity enumerations borrowed from B7 into B3, B4a
@@ -839,7 +840,19 @@ static, so the family's behavior legitimately differs between trees. Rather than
 renderer, the suite forces the unbound case to prove the null-guarded contract everywhere and then
 restores what the backend really bound — which turned SDL_RENDERER into a genuine activate/
 deactivate round trip instead of one more no-op assertion. The snapshot is now 4,209 implemented,
-30 partial, 2,055 planned and 121 not applicable.
+30 partial, 2,055 planned and 121 not applicable. CBIND-037B5 then closes touch and gestures by
+extending what already existed rather than adding to the ABI: the whole `TouchCollection` mutation
+surface operates in place on the fixed eight-slot snapshot the C API has carried since CBIND-025,
+and only the gesture type and sample are genuinely new values. Its real work was archaeological.
+Four canonical behaviors that a careless mapping would have quietly changed are now pinned by
+tests: equality, the hash and the text are all blind to the pressure extension and the text carries
+only the position; an empty gesture queue throws and so must refuse in C rather than hand back a
+default sample; a raised touch event feeds gesture detection and never the snapshot, and is dropped
+entirely until a display size is published; and `ResetForTests` clears the display metrics and the
+window handle even though the canonical class comment says it leaves them alone. That last one is a
+documentation-versus-implementation contradiction in the canonical header; the C contract follows
+the implementation and states the discrepancy rather than repeating the comment. The snapshot is now
+4,284 implemented, 30 partial, 1,975 planned and 126 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -848,15 +861,14 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037B4d` is the last task completed; the working tree is clean
-  and every slice below is committed one-task-one-commit. Parent `CBIND-037B4` is closed.
-- **Next task:** `CBIND-037B5`, touch and gestures — 80 rows across `TouchPanel`,
-  `TouchCollection`, `TouchLocation`, `TouchPanelCapabilities`, `GestureType` and `GestureSample`.
-  This one *extends* an existing surface rather than starting one: `cna_touch_get_capabilities`
-  and `cna_touch_get_state` already exist in `input.h` from `CBIND-025`/`CBIND-029`, so reuse the
-  fixed `CNA_TouchState`/`CNA_TouchLocation` PODs instead of adding a second spelling.
-  `TouchPanel::setWindowHandleProperty` takes the same opaque `uint64_t` the mouse and text-input
-  families already use — reuse their documented sentence rather than inventing one.
+- Branch: `feature/binding`. `CBIND-037B5` is the last task completed; the working tree is clean
+  and every slice below is committed one-task-one-commit. Parent `CBIND-037B4` is closed and the
+  whole `Microsoft::Xna::Framework::Input::Touch` namespace has no planned row left.
+- **Next task:** `CBIND-037B6`, the haptics extension family — 126 rows across the `CNA::Input`
+  haptic devices, features, effects, effect types, capabilities, directions and the facade. This is
+  the first input slice with no XNA counterpart at all, so every route is a `CNA::Input` mapping;
+  check whether a haptic device is an owned handle (it almost certainly is, unlike every value type
+  B1–B5 produced) and take `ObjectKind` 68 for it.
 - Do not reopen a closed slice without a concrete demonstrated defect.
 - **Two Claude sessions have run against this one working tree at once.** If another session is
   active, agree on who owns the slice *before* writing: a read-modify-write from the other session
@@ -870,7 +882,7 @@ order:
 
 | File | Role |
 |---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 45 today (`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 46 today (`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
 | `src/CnaCApi<Family>.cpp` | the adapter — 37 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
 | `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 68**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
@@ -1002,7 +1014,20 @@ were rewritten once for exactly this reason.
   process-wide state the suite does not own.
 - **Out-parameter clobbering.** Routes set `*out = CNA_INVALID_HANDLE` before validating, so
   reusing one variable for an expected-failure call destroys a live handle. Hit three times; use a
-  separate scratch variable for the failure case.
+  separate scratch variable for the failure case. **Versioned output structures have the same
+  problem in a nastier form:** `CBIND-037B5` set `struct_version = 2` on a live `CNA_GestureSample`
+  to test the invalid-structure refusal and every *later* read of that variable then refused, which
+  looks like a broken route rather than a broken test. Copy to a scratch value.
+- **A canonical Doxygen comment can contradict its own implementation.** `TouchPanel::ResetForTests`
+  documents that the display size and orientation are left untouched; it clears them, plus the
+  window handle, deliberately — a leaked display size silently corrupts another test's scaled touch
+  coordinates. Read the `.cpp`, not just the header, before writing a C contract sentence, and when
+  they disagree follow the behavior and say so in the C header. Assume other stale comments exist.
+- **Two sources feed one snapshot.** `TouchPanel::INTERNAL_onTouchEvent` feeds gesture detection and
+  the event-driven touch map; `TouchPanel::SetFinger` feeds the slot array that `GetState` actually
+  reports. A test that raises an event and then asserts the snapshot changed will fail while looking
+  like a mapping bug. The raise path is also a **silent no-op** until a display size is published.
+  Expect more of these splits in the remaining `CNA::Input` families.
 - **Do not pipe a build into `grep … | head`.** SIGPIPE kills the build and leaves a target
   unlinked, which then shows up as a mysterious "Not Run" in ctest. Redirect to a log and grep the
   log.

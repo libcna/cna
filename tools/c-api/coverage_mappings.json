@@ -1842,7 +1842,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "no C route raises or registers these directly: every one takes or returns a native object \u2014 a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself \u2014 that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
+      "mapping": "no C route raises or registers these directly: every one takes or returns a native object — a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself — that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
       "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F5"
@@ -1913,7 +1913,7 @@
         "destructor",
         "method"
       ],
-      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract \u2014 clone, dispose, apply, type name, parameters \u2014 covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
+      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract — clone, dispose, apply, type name, parameters — covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
       "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_RENDERER with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
       "status": "implemented",
       "task": "CBIND-035F7"
@@ -2679,7 +2679,7 @@
         "enum",
         "enum-value"
       ],
-      "mapping": "`CNA_LogLevel` and the `CNA_LOG_LEVEL_*` identities at the canonical ordinals. The canonical values are explicit and deliberately not contiguous \u2014 `EXPERIMENT` is 100, not 6 \u2014 and the C identities preserve that exactly rather than renumbering into a dense range",
+      "mapping": "`CNA_LogLevel` and the `CNA_LOG_LEVEL_*` identities at the canonical ordinals. The canonical values are explicit and deliberately not contiguous — `EXPERIMENT` is 100, not 6 — and the C identities preserve that exactly rather than renumbering into a dense range",
       "tests": "C and C++ ABI assertions freeze every ordinal including the 100 gap; `CoreExtSmoke.c` logs at all seven levels and asserts that 6 is refused as `CNA_RESULT_INVALID_ARGUMENT`, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
@@ -2703,7 +2703,7 @@
         "class",
         "method"
       ],
-      "mapping": "one `cna_logger_*` route per canonical static, so C never depends on a defaulted argument: the general `cna_logger_log` takes level, message, category and condition explicitly, each severity route takes message and category, and each conditional route takes message and condition because the canonical `*If` overloads accept no category and always log under `APPLICATION`. A message crosses as a borrowed `CNA_StringView` and is copied into an owned string before the canonical `std::string_view` is formed, so no view outlives its call. `cna_logger_set_minimum_level` and `_get_minimum_level` map the threshold, which is process-wide static state in the canonical logger and is documented as such. The class itself is never instantiated \u2014 it is a static-only utility \u2014 so no handle exists",
+      "mapping": "one `cna_logger_*` route per canonical static, so C never depends on a defaulted argument: the general `cna_logger_log` takes level, message, category and condition explicitly, each severity route takes message and category, and each conditional route takes message and condition because the canonical `*If` overloads accept no category and always log under `APPLICATION`. A message crosses as a borrowed `CNA_StringView` and is copied into an owned string before the canonical `std::string_view` is formed, so no view outlives its call. `cna_logger_set_minimum_level` and `_get_minimum_level` map the threshold, which is process-wide static state in the canonical logger and is documented as such. The class itself is never instantiated — it is a static-only utility — so no handle exists",
       "tests": "`CoreExtSmoke.c` calls every route, drives the threshold to `FATAL` and back, asserts the getter observes each set value, and covers a null message view, a null output and an unknown level or category as `CNA_RESULT_INVALID_ARGUMENT`; the threshold is restored because it is process-wide. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
@@ -2750,7 +2750,7 @@
         "function"
       ],
       "mapping": "`cna_desktop_os_get_current`. The canonical function throws on a non-desktop platform rather than returning a fallback, and the firewall converts that `CNA::CNAException` to `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`; the refusal is preserved rather than replaced by an invented default",
-      "tests": "`CoreExtSmoke.c` branches on the platform the build actually targets \u2014 a desktop build asserts a valid identity, any other asserts the `CNA_RESULT_INVALID_STATE` refusal \u2014 plus a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "tests": "`CoreExtSmoke.c` branches on the platform the build actually targets — a desktop build asserts a valid identity, any other asserts the `CNA_RESULT_INVALID_STATE` refusal — plus a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
     },
@@ -2773,7 +2773,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_category_get_name_size` and `cna_graphics_backend_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project\u2019s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
+      "mapping": "`cna_graphics_backend_category_get_name_size` and `cna_graphics_backend_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project’s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
       "tests": "`CoreExtSmoke.c` round-trips all five names exactly, asserts the requirement is reported and nothing is written when the capacity is too small, and refuses an unknown category and a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
@@ -2784,7 +2784,7 @@
       "kinds": [
         "function"
       ],
-      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 46 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set \u2014 including `CNA_GRAPHICS_RENDERER_UNKNOWN` \u2014 is refused rather than silently classified",
+      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 46 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set — including `CNA_GRAPHICS_RENDERER_UNKNOWN` — is refused rather than silently classified",
       "tests": "`CoreExtSmoke.c` classifies all 46 identities, pins three fixed answers a consumer can rely on, and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
@@ -2959,7 +2959,7 @@
         "method",
         "operator"
       ],
-      "mapping": "the same `CNA_GamePadButtonFlags` mask restricted to the four `CNA_GAMEPAD_BUTTON_DPAD_*` bits, because the canonical type holds four button states and CNA itself derives them from a button mask. `cna_gamepad_dpad_init` reproduces the default constructor, `_init_from_states` the four-state constructor and `_init_from_button_array` the canonical factory, which ignores non-directional identities. The four named getters collapse into `cna_gamepad_dpad_is_pressed`, which routes through the canonical getters and refuses a non-directional button. Equality compares only the four directional bits, and the hash reproduces the canonical weighting \u2014 Down 1, Left 2, Right 4, Up 8 \u2014 which is its own numbering rather than the button bits",
+      "mapping": "the same `CNA_GamePadButtonFlags` mask restricted to the four `CNA_GAMEPAD_BUTTON_DPAD_*` bits, because the canonical type holds four button states and CNA itself derives them from a button mask. `cna_gamepad_dpad_init` reproduces the default constructor, `_init_from_states` the four-state constructor and `_init_from_button_array` the canonical factory, which ignores non-directional identities. The four named getters collapse into `cna_gamepad_dpad_is_pressed`, which routes through the canonical getters and refuses a non-directional button. Equality compares only the four directional bits, and the hash reproduces the canonical weighting — Down 1, Left 2, Right 4, Up 8 — which is its own numbering rather than the button bits",
       "tests": "`InputSnapshotsSmoke.c` covers all three constructions including a mixed array whose non-directional entries are dropped, each direction pressed and released, equality ignoring a non-directional bit, both comparisons, all four hash weights individually, and every null-output, non-directional-button and invalid-array refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2"
@@ -2972,7 +2972,7 @@
         "method",
         "operator"
       ],
-      "mapping": "the fixed 16-byte `CNA_GamePadThumbSticks` value \u2014 two `CNA_Vector2` positions, directly readable, with no version prefix because the canonical type is an immutable pair. It is byte-identical to the first half of the `CNA_GamePadAnalogState` a snapshot already carried, which is asserted rather than assumed, so the ABI never grows two representations of the same four numbers. `cna_gamepad_thumb_sticks_init` reproduces the default constructor and `_init_from_positions` the public one, including its **square clamp** to the inclusive range minus one through one; the dead-zone constructor is private and stays behind `cna_gamepad_apply_dead_zone`",
+      "mapping": "the fixed 16-byte `CNA_GamePadThumbSticks` value — two `CNA_Vector2` positions, directly readable, with no version prefix because the canonical type is an immutable pair. It is byte-identical to the first half of the `CNA_GamePadAnalogState` a snapshot already carried, which is asserted rather than assumed, so the ABI never grows two representations of the same four numbers. `cna_gamepad_thumb_sticks_init` reproduces the default constructor and `_init_from_positions` the public one, including its **square clamp** to the inclusive range minus one through one; the dead-zone constructor is private and stays behind `cna_gamepad_apply_dead_zone`",
       "tests": "`InputSnapshotsSmoke.c` covers the zero default, an in-range construction kept verbatim, an out-of-range construction square-clamped on all four components, equal and unequal comparisons in both directions, hash agreement for equal values, and every null-input and null-output refusal; ABI assertions freeze the layout and its identity with the analog block. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2"
@@ -2985,8 +2985,8 @@
         "method",
         "operator"
       ],
-      "mapping": "the fixed 8-byte `CNA_GamePadTriggers` value \u2014 two directly readable floats, byte-identical to the second half of `CNA_GamePadAnalogState`, for the same reason as the thumbstick pair. `cna_gamepad_triggers_init` reproduces the default constructor and `_init_from_positions` the public one, including its **clamp** to the inclusive range zero through one. Equality preserves the canonical epsilon comparison rather than becoming an exact one",
-      "tests": "`InputSnapshotsSmoke.c` covers the zero default, a construction kept verbatim, a construction clamped from below and above, the epsilon comparison proved with the next representable float above a value \u2014 a genuinely different float that still compares equal \u2014 an unequal comparison, hash agreement, and every null-input and null-output refusal; ABI assertions freeze the layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "mapping": "the fixed 8-byte `CNA_GamePadTriggers` value — two directly readable floats, byte-identical to the second half of `CNA_GamePadAnalogState`, for the same reason as the thumbstick pair. `cna_gamepad_triggers_init` reproduces the default constructor and `_init_from_positions` the public one, including its **clamp** to the inclusive range zero through one. Equality preserves the canonical epsilon comparison rather than becoming an exact one",
+      "tests": "`InputSnapshotsSmoke.c` covers the zero default, a construction kept verbatim, a construction clamped from below and above, the epsilon comparison proved with the next representable float above a value — a genuinely different float that still compares equal — an unequal comparison, hash agreement, and every null-input and null-output refusal; ABI assertions freeze the layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2"
     },
@@ -2998,7 +2998,7 @@
         "method",
         "operator"
       ],
-      "mapping": "the versioned `CNA_GamePadState` snapshot the C API already had, plus routes for everything the canonical type computes. `cna_gamepad_state_init` reproduces the default constructor; `_init_from_components` and `_init_from_values` reproduce the two public ones, including the canonical derivation of extra button bits \u2014 a trigger past `CNA_GAMEPAD_TRIGGER_THRESHOLD` adds its trigger bit and a stick past its dead zone adds the matching virtual direction bits. The four component getters become projections out of the snapshot, and the CNA extension packet-number setter keeps an `_ext` suffix. The snapshot carries one button mask, exactly as every state CNA itself builds does \u2014 the capture path derives both the button set and the pad from one raw mask \u2014 so a supplied directional pad is merged into the button set rather than kept beside it. The hash mixes only the button set and the packet number, matching the canonical implementation, and the string is the fixed fully-qualified type name because the canonical type does not override its conversion",
+      "mapping": "the versioned `CNA_GamePadState` snapshot the C API already had, plus routes for everything the canonical type computes. `cna_gamepad_state_init` reproduces the default constructor; `_init_from_components` and `_init_from_values` reproduce the two public ones, including the canonical derivation of extra button bits — a trigger past `CNA_GAMEPAD_TRIGGER_THRESHOLD` adds its trigger bit and a stick past its dead zone adds the matching virtual direction bits. The four component getters become projections out of the snapshot, and the CNA extension packet-number setter keeps an `_ext` suffix. The snapshot carries one button mask, exactly as every state CNA itself builds does — the capture path derives both the button set and the pad from one raw mask — so a supplied directional pad is merged into the button set rather than kept beside it. The hash mixes only the button set and the packet number, matching the canonical implementation, and the string is the fixed fully-qualified type name because the canonical type does not override its conversion",
       "tests": "`InputSnapshotsSmoke.c` covers the default snapshot, both constructions with their derived trigger and virtual stick bits asserted individually, the merged directional pad read back, all four component projections, the extension packet-number setter observed through equality, equal and unequal comparisons, the hash ignoring a changed analog value, the exact fixed string with its count/copy round trip and a too-small capacity writing nothing, and every null, invalid-snapshot and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2"
@@ -3010,8 +3010,8 @@
         "class",
         "method"
       ],
-      "mapping": "one `cna_gamepad_*` route per canonical static, each taking an active game handle for the same reason the state and capability captures do \u2014 CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception: it is a pure value operation and takes no handle. The class itself has no handle, because its canonical constructor is deleted and every member is static. Two canonical shapes are preserved rather than collapsed: a query that reports availability through its return value and its answer through an output reference keeps both answers separate in C \u2014 `_get_gyro_ext`, `_get_accelerometer_ext` and `_get_touchpad_finger_ext` each take an availability output, so \"no sensor\" is an ordinary answer, not a failure \u2014 and the four identity strings use the project count/copy protocol. The touchpad finger query returns its four output references as one fixed `CNA_GamePadTouchpadFinger` value. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary",
-      "tests": "`InputSnapshotsSmoke.c` calls every route inside the update callback and asserts the shape of an empty slot answer for each \u2014 false, zero, empty or an `Unknown` identity \u2014 plus the count/copy round trip for all four identity strings, an out-of-range player slot and a null output refused per route, an undefined button bit refused by the label query, and the wrong-thread refusal; the pure dead-zone exclusion is covered outside the callback including its non-finite refusal leaving the output untouched. C and C++ ABI assertions freeze the three identity enumerations and the touchpad-finger layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "mapping": "one `cna_gamepad_*` route per canonical static, each taking an active game handle for the same reason the state and capability captures do — CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception: it is a pure value operation and takes no handle. The class itself has no handle, because its canonical constructor is deleted and every member is static. Two canonical shapes are preserved rather than collapsed: a query that reports availability through its return value and its answer through an output reference keeps both answers separate in C — `_get_gyro_ext`, `_get_accelerometer_ext` and `_get_touchpad_finger_ext` each take an availability output, so \"no sensor\" is an ordinary answer, not a failure — and the four identity strings use the project count/copy protocol. The touchpad finger query returns its four output references as one fixed `CNA_GamePadTouchpadFinger` value. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary",
+      "tests": "`InputSnapshotsSmoke.c` calls every route inside the update callback and asserts the shape of an empty slot answer for each — false, zero, empty or an `Unknown` identity — plus the count/copy round trip for all four identity strings, an out-of-range player slot and a null output refused per route, an undefined button bit refused by the label query, and the wrong-thread refusal; the pure dead-zone exclusion is covered outside the callback including its non-finite refusal leaving the output untouched. C and C++ ABI assertions freeze the three identity enumerations and the touchpad-finger layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3"
     },
@@ -3143,7 +3143,7 @@
         "method",
         "operator"
       ],
-      "mapping": "routes over the versioned `CNA_MouseState` snapshot the C API already had, whose horizontal-wheel field is the CNA extension property. `cna_mouse_state_init` reproduces the default constructor, `_init_from_values` the eight-argument one \u2014 leaving the horizontal wheel at zero exactly as it does \u2014 and `_init_from_values_ext` the nine-argument CNA extension. Each takes the same `CNA_MouseButtonFlags` bit set the snapshot carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them. Equality, inequality, the hash and the string each get their own route. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and the C text reproduces the canonical format exactly, including `None` for no button and the omission of the horizontal wheel",
+      "mapping": "routes over the versioned `CNA_MouseState` snapshot the C API already had, whose horizontal-wheel field is the CNA extension property. `cna_mouse_state_init` reproduces the default constructor, `_init_from_values` the eight-argument one — leaving the horizontal wheel at zero exactly as it does — and `_init_from_values_ext` the nine-argument CNA extension. Each takes the same `CNA_MouseButtonFlags` bit set the snapshot carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them. Equality, inequality, the hash and the string each get their own route. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and the C text reproduces the canonical format exactly, including `None` for no button and the omission of the horizontal wheel",
       "tests": "`InputSnapshotsSmoke.c` covers the default value, both explicit constructions with the horizontal wheel checked in each, an undefined button bit refused, equal and unequal comparisons in both directions, the hash proved to ignore the buttons and the horizontal wheel, the exact text for a pressed and an empty snapshot, a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b"
@@ -3155,7 +3155,7 @@
         "class",
         "method"
       ],
-      "mapping": "one `cna_mouse_*` route per canonical static, each taking an active game handle. The class itself has no handle: its canonical constructor is deleted and every member is static. The window handle crosses as an opaque `uint64_t` the C API never dereferences, not as a `CNA_Handle`. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and `GetGlobalPositionEXT` \u2014 which the canonical API declares `void` with two output references \u2014 reports both coordinates and cannot fail. `INTERNAL_onClicked` becomes `cna_mouse_raise_clicked_ext`, which is what makes the clicked event observable without a real device, and `ResetForTests` becomes `_reset_for_tests_ext`, documented as clearing the bound window and dropping every subscription including ones this API handed out",
+      "mapping": "one `cna_mouse_*` route per canonical static, each taking an active game handle. The class itself has no handle: its canonical constructor is deleted and every member is static. The window handle crosses as an opaque `uint64_t` the C API never dereferences, not as a `CNA_Handle`. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and `GetGlobalPositionEXT` — which the canonical API declares `void` with two output references — reports both coordinates and cannot fail. `INTERNAL_onClicked` becomes `cna_mouse_raise_clicked_ext`, which is what makes the clicked event observable without a real device, and `ResetForTests` becomes `_reset_for_tests_ext`, documented as clearing the bound window and dropping every subscription including ones this API handed out",
       "tests": "`InputSnapshotsSmoke.c` round-trips the window handle and restores it, exercises position, capture, global position, warp and relative mode with their null-output refusals, raises a click and observes it, and proves the reset drops a live subscription so the handler stops running and the registration release afterwards is still a success, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4b"
@@ -3180,7 +3180,7 @@
         "destructor",
         "method"
       ],
-      "mapping": "an owned `CNA_MouseCursorHandle`. `cna_mouse_cursor_create_ext` reproduces the default constructor \u2014 a cursor with nothing behind it, which is a real handle that can be set and released \u2014 and `cna_mouse_cursor_create_from_texture2d` maps the canonical factory, refusing a non-color texture format exactly as it does. The canonical destructor becomes `cna_mouse_cursor_destroy` and `Dispose` its own idempotent route, so a caller can release the native resource without giving up the handle",
+      "mapping": "an owned `CNA_MouseCursorHandle`. `cna_mouse_cursor_create_ext` reproduces the default constructor — a cursor with nothing behind it, which is a real handle that can be set and released — and `cna_mouse_cursor_create_from_texture2d` maps the canonical factory, refusing a non-color texture format exactly as it does. The canonical destructor becomes `cna_mouse_cursor_destroy` and `Dispose` its own idempotent route, so a caller can release the native resource without giving up the handle",
       "tests": "`InputSnapshotsSmoke.c` covers the empty cursor end to end, double disposal, double release refused as `CNA_RESULT_INVALID_HANDLE`, and a texture-derived cursor probed by **behavior**: whichever documented answer the backend gives, the success path is exercised fully and the refusal path is required to leave the output handle invalid. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c"
@@ -3238,7 +3238,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_mouse_set_cursor_ext`, taking an owned or stock cursor handle. **Re-partitioned into CBIND-037B4c** from the mouse slice, because it cannot be mapped before a cursor handle exists. The canonical operation returns nothing, so a backend that cannot change the cursor \u2014 and a cursor with nothing behind it \u2014 succeed and change nothing",
+      "mapping": "`cna_mouse_set_cursor_ext`, taking an owned or stock cursor handle. **Re-partitioned into CBIND-037B4c** from the mouse slice, because it cannot be mapped before a cursor handle exists. The canonical operation returns nothing, so a backend that cannot change the cursor — and a cursor with nothing behind it — succeed and change nothing",
       "tests": "`InputSnapshotsSmoke.c` sets the empty cursor, every stock cursor and a texture-derived cursor when the backend produces one, and refuses a never-created handle, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c"
@@ -3250,7 +3250,7 @@
       "kinds": [
         "constructor"
       ],
-      "mapping": "`cna_mouse_cursor_create_ext`, which produces a cursor with nothing behind it \u2014 a real handle that can be set and released, exactly as the canonical default-constructed value can",
+      "mapping": "`cna_mouse_cursor_create_ext`, which produces a cursor with nothing behind it — a real handle that can be set and released, exactly as the canonical default-constructed value can",
       "tests": "`InputSnapshotsSmoke.c` creates one, sets it, disposes it twice and releases it, then refuses a second release, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c"
@@ -3285,7 +3285,7 @@
         "field",
         "constant"
       ],
-      "mapping": "one `cna_text_input_subscribe_*_ext` route per event, each returning an owned `CNA_TextInputRegistrationHandle`, plus one shared `cna_text_input_unsubscribe_ext` \u2014 one release route, because a registration already knows which of the three events it came from. The subscriptions take no game handle, since the canonical events are process-wide statics. `TextInput` hands over a single `uint16_t` UTF-16 code unit; the two multi-field events hand over a fixed versioned `CNA_TextEditingEventInfo` / `CNA_TextEditingCandidatesEventInfo` whose UTF-8 `CNA_StringView`s are borrowed for the duration of the callback, so neither `std::string` nor `std::vector` crosses the ABI",
+      "mapping": "one `cna_text_input_subscribe_*_ext` route per event, each returning an owned `CNA_TextInputRegistrationHandle`, plus one shared `cna_text_input_unsubscribe_ext` — one release route, because a registration already knows which of the three events it came from. The subscriptions take no game handle, since the canonical events are process-wide statics. `TextInput` hands over a single `uint16_t` UTF-16 code unit; the two multi-field events hand over a fixed versioned `CNA_TextEditingEventInfo` / `CNA_TextEditingCandidatesEventInfo` whose UTF-8 `CNA_StringView`s are borrowed for the duration of the callback, so neither `std::string` nor `std::vector` crosses the ABI",
       "tests": "`InputSnapshotsSmoke.c` subscribes to all three, proves an above-BMP code point arrives as two surrogate calls, reads a real multi-byte composition and candidate list back out of the borrowed views, refuses a null callback or output, and proves a released handler stops running; ASan+UBSan with leak detection covers the borrowed-view lifetime",
       "status": "implemented",
       "task": "CBIND-037B4d"
@@ -3296,7 +3296,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_text_input_get_window_handle_ext` and `cna_text_input_set_window_handle_ext`, carrying the native window as an opaque `uint64_t` the C API never dereferences \u2014 not a `CNA_Handle`, and not the graphics device's native handle, which the C API deliberately does not hand out. Only zero is guarded, exactly as the canonical property is: a nonzero value must be a live native window supplied by the platform layer",
+      "mapping": "`cna_text_input_get_window_handle_ext` and `cna_text_input_set_window_handle_ext`, carrying the native window as an opaque `uint64_t` the C API never dereferences — not a `CNA_Handle`, and not the graphics device's native handle, which the C API deliberately does not hand out. Only zero is guarded, exactly as the canonical property is: a nonzero value must be a live native window supplied by the platform layer",
       "tests": "`InputSnapshotsSmoke.c` round trips a bogus nonzero value without ever handing it to the backend, then proves the canonical reset clears it, so every later activation route takes the documented null-guarded path, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d"
@@ -3364,7 +3364,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_text_input_set_input_rectangle_ext`, taking the existing fixed `CNA_Rectangle` by value. The canonical operation reports nothing back and passes a zero text-cursor offset to the backend, so a backend that ignores the hint \u2014 and an unbound window \u2014 succeed and change nothing",
+      "mapping": "`cna_text_input_set_input_rectangle_ext`, taking the existing fixed `CNA_Rectangle` by value. The canonical operation reports nothing back and passes a zero text-cursor offset to the backend, so a backend that ignores the hint — and an unbound window — succeed and change nothing",
       "tests": "`InputSnapshotsSmoke.c` sets a rectangle with no window bound and asserts success, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d"
@@ -3376,7 +3376,7 @@
         "method"
       ],
       "mapping": "`cna_text_input_raise_text_input_ext`, `cna_text_input_raise_text_editing_ext` and `cna_text_input_raise_text_editing_candidates_ext`. These are what make the three events observable without a real keyboard, which is the only reason the canonical dispatchers are public. Input text is a borrowed `CNA_StringView` copied and UTF-8 validated before dispatch; a candidate list is a pointer plus a count. Two canonical behaviors are preserved rather than tidied up: the composition `start`/`length` are byte offsets forwarded verbatim and are deliberately not range-checked against the text, and `selected` is not range-checked against the candidate count, because the canonical dispatch checks neither",
-      "tests": "`InputSnapshotsSmoke.c` delivers an ASCII unit and a surrogate pair, a real multi-byte composition with a deliberately out-of-range start and a negative length, an empty composition, a two-entry candidate list, an empty list, and refuses invalid UTF-8, a negative count and a null array with a nonzero count \u2014 each refusal proved to have dispatched nothing. Runs under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
+      "tests": "`InputSnapshotsSmoke.c` delivers an ASCII unit and a surrogate pair, a real multi-byte composition with a deliberately out-of-range start and a negative length, an empty composition, a two-entry candidate list, an empty list, and refuses invalid UTF-8, a negative count and a null array with a nonzero count — each refusal proved to have dispatched nothing. Runs under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
       "status": "implemented",
       "task": "CBIND-037B4d"
     },
@@ -3386,10 +3386,189 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_text_input_reset_for_tests_ext`, documented as clearing the bound window handle and dropping every subscription to all three events \u2014 including registrations this API handed out, so releasing one afterwards is a no-op rather than a failure",
+      "mapping": "`cna_text_input_reset_for_tests_ext`, documented as clearing the bound window handle and dropping every subscription to all three events — including registrations this API handed out, so releasing one afterwards is a no-op rather than a failure",
       "tests": "`InputSnapshotsSmoke.c` subscribes to all three events, resets, proves no handler runs for any of them and that the window handle is back to zero, then releases all three registrations successfully, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4d"
+    },
+    {
+      "id": "gesture-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::GestureType(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_GestureType` bit set with one `CNA_GESTURE_TYPE_*` macro per canonical value at its canonical bit, plus `CNA_GESTURE_TYPE_ALL` for validation. The identities are pinned by C and C++ ABI assertions",
+      "tests": "`InputSnapshotsSmoke.c` constructs a sample with every single bit, with all of them combined, and refuses the first undefined bit, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "gesture-type-operators",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::operator(\\||&|\\|=|&=)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "No separate route: unlike the gamepad button identities these really are flags, so C composes and masks the `uint32_t` identity with its own bitwise operators. Every route that accepts a gesture type validates against `CNA_GESTURE_TYPE_ALL`, which is what makes composing them in C safe",
+      "tests": "`InputSnapshotsSmoke.c` passes composed values through the sample constructors and `cna_touch_panel_set_enabled_gestures` and reads the same combination back, and refuses an undefined bit",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "gesture-sample",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::GestureSample(::(getGestureTypeProperty|getTimestampProperty|getPositionProperty|getPosition2Property|getDeltaProperty|getDelta2Property|getFingerIdEXTProperty|getFingerId2EXTProperty))?$",
+      "kinds": [
+        "struct",
+        "method"
+      ],
+      "mapping": "one fixed 64-byte `CNA_GestureSample` value rather than a handle, because the canonical type is a copyable snapshot with no identity. Every canonical property is a plain getter, so each becomes a directly readable field rather than its own route; `System::TimeSpan` crosses as `int64_t` 100-nanosecond ticks, the established spelling in `runtime.h` and `audio.h`, and the two CNA finger identifiers keep an `_ext` suffix on their fields",
+      "tests": "`InputSnapshotsSmoke.c` asserts every field of a default, a value-constructed and a finger-constructed sample, and the layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "gesture-sample-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::GestureSample::GestureSample$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_gesture_sample_init` for the default, `cna_gesture_sample_init_from_values` for the six-argument form and `cna_gesture_sample_init_from_values_ext` for the eight-argument one. The six-argument form leaves both finger identifiers at `CNA_TOUCH_NO_FINGER`, exactly as the canonical constructor does, which is the only difference between the two public constructions",
+      "tests": "`InputSnapshotsSmoke.c` covers all three, the unset-finger default, an undefined gesture bit and the null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-capabilities-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanelCapabilities::TouchPanelCapabilities$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_touch_capabilities_init` and `cna_touch_capabilities_init_from_values_ext` over the existing `CNA_TouchCapabilities` value, so the ABI does not grow a second spelling of a capability set it already carries. **Documented deviation:** the canonical constructor accepts a negative maximum touch count; C refuses one, because the C field is unsigned and the value could not be represented without silently changing it",
+      "tests": "`InputSnapshotsSmoke.c` asserts the canonical disconnected default, an explicit construction and the negative-count and null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-location-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchLocation::TouchLocation$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "five `cna_touch_location_init*` routes over the existing `CNA_TouchLocation` value: the default, both XNA forms and both CNA pressure forms, which keep an `_ext` suffix. The default carries identifier zero and the invalid state, which is deliberately not the -1 sentinel the find-by-id miss uses. **Documented deviation:** a pressure outside zero through one is refused rather than stored verbatim, so a snapshot can never claim a pressure its own contract excludes",
+      "tests": "`InputSnapshotsSmoke.c` asserts every field of all five constructions plus the undefined-state, out-of-range-pressure and null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-location-value-operations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchLocation::(Equals|GetHashCode|ToString|operator==|operator!=)$",
+      "kinds": [
+        "method",
+        "operator"
+      ],
+      "mapping": "`cna_touch_location_equals`, `cna_touch_location_get_hash_code` and the count/copy pair `cna_touch_location_get_string_size`/`_copy_string`. The canonical `==` and `!=` are `Equals` and its negation, so they need no route of their own. Two canonical behaviors are preserved rather than tidied up: equality and the hash **ignore the pressure extension**, so two locations differing only in pressure are equal and hash the same; and the text carries **only the position**, mentioning neither the identifier, the state nor the pressure",
+      "tests": "`InputSnapshotsSmoke.c` proves the pressure blindness for both equality and the hash, separates locations differing in identifier and in previous location, asserts the exact `{Position:{X:3 Y:4}}` text, and covers the buffer-too-small and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-collection-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::TouchCollection$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_touch_state_init` and `cna_touch_state_init_from_locations` over the existing fixed-capacity `CNA_TouchState`, so the ABI keeps one spelling of a touch snapshot. The copy- and move-taking constructors are the same array in C and share the one route. **Documented deviation:** the canonical connection getter is a live read of the touch-device flag rather than stored state, so a locally constructed snapshot reports false and a consumer wanting the live answer calls `cna_touch_panel_get_touch_device_exists_ext`",
+      "tests": "`InputSnapshotsSmoke.c` builds an empty and a three-element snapshot, and covers the over-capacity, null-array-with-count and null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-collection-operations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::(getIsReadOnlyProperty|empty|Contains|IndexOf|CopyTo|Add|Clear|Remove|RemoveAt|Insert)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "one `cna_touch_state_*` route each, mutating the existing fixed snapshot in place. `getIsReadOnlyProperty` answers `CNA_TRUE` always and is documented as **advisory**, because the canonical property is hard-coded true while the mutators still succeed. Searching and removal use the canonical comparison, so they are pressure-blind. `CopyTo` **inserts** at its index and shifts what is already there, which is what the canonical operation does to its growable destination; C reproduces it on a caller-owned array, which is why the destination's current element count is an argument. **Documented deviation:** the canonical collection grows without bound, while the C snapshot has the fixed capacity `CNA_TOUCH_MAX_TOUCHES` — exactly the canonical touch-panel maximum — and an append or insert beyond it is refused rather than silently dropping a touch",
+      "tests": "`InputSnapshotsSmoke.c` exercises add, insert at zero and at the count, remove, remove-at, clear, contains, index-of and the insert-semantics copy with its shifted result, proves the pressure-blind match, and covers the capacity, out-of-range-index and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-collection-iterators",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchCollection::(begin|end)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: an iterator has no C counterpart, and the four overloads exist only so the canonical collection can be used in a range-for. C indexes the fixed `touches` array directly using `touch_count`, which is the same traversal without a type the ABI cannot express",
+      "tests": "Doxygen declaration inventory; traversal is covered by the count-and-index loops in `InputSnapshotsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-class",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "free `cna_touch_panel_*` routes rather than a handle: the canonical constructor is deleted and every member is static, exactly as for `Mouse`, `Keyboard` and `TextInputEXT`. Each route takes an active game handle, because CNA is event-driven and a device query is only meaningful on the game thread of a running game",
+      "tests": "`InputSnapshotsSmoke.c` drives every route from inside a running game's update callback and asserts the wrong-thread refusal from a second thread",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-constants",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(MAX_TOUCHES|NO_FINGER)$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "the existing `CNA_TOUCH_MAX_TOUCHES` macro, which the fixed snapshot capacity is already built on, and the new `CNA_TOUCH_NO_FINGER` macro. Both are pinned by C and C++ ABI assertions",
+      "tests": "`InputSnapshotsSmoke.c` fills a snapshot to `CNA_TOUCH_MAX_TOUCHES` and refuses the next append, and clears a slot with `CNA_TOUCH_NO_FINGER`",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-alias",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::intcs$",
+      "kinds": [
+        "alias"
+      ],
+      "mapping": "No C mapping: this is a class-local spelling of the `SharpRuntime` 32-bit integer alias and declares no operation of its own. C uses `int32_t` directly wherever the canonical signatures use it",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(get|set)(DisplayWidth|DisplayHeight|DisplayOrientation|EnabledGestures|IsGestureAvailable|WindowHandle|TouchDeviceExists)Property$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "one `cna_touch_panel_*` getter or setter per canonical accessor. The orientation reuses the existing `CNA_DisplayOrientation` identity and the enabled gestures the new `CNA_GestureType` bit set, both validated against their defined bits. The window handle crosses as an opaque `uint64_t` the C API never dereferences, exactly as the mouse and text-input families spell it. The device-exists pair keeps an `_ext` suffix and is the live answer the canonical touch-collection connection getter reads. All of it is process-wide state a caller is expected to restore",
+      "tests": "`InputSnapshotsSmoke.c` round-trips every property and restores it, proves the device-exists flag reaches a captured snapshot's connection field, and covers the undefined-orientation, undefined-gesture and null-output refusals under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-gesture-queue",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(ReadGesture|EnqueueGesture)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_touch_panel_read_gesture` and `cna_touch_panel_enqueue_gesture_ext`. The canonical read **throws** on an empty queue, and C preserves that as `CNA_RESULT_INVALID_STATE` rather than inventing a default sample, so \"no gesture\" stays distinguishable from a real one; a caller checks availability first. Enqueueing is what makes the queue observable on a backend with no touch device, in the same way the mouse and text-input raise routes make their events observable",
+      "tests": "`InputSnapshotsSmoke.c` proves the enqueue/read round trip preserves type, ticks, finger identifiers, position and delta, that reading consumes the entry, and that an empty queue refuses both before and after — plus the invalid-structure, undefined-bit and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B5"
+    },
+    {
+      "id": "touch-panel-frame-operations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Touch::TouchPanel::(INTERNAL_onTouchEvent|SetFinger|Update|ResetForTests)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_touch_panel_raise_touch_event_ext`, `_set_finger_ext`, `_update_ext` and `_reset_for_tests_ext`. Two canonical facts are documented rather than smoothed over: the raised event feeds gesture detection and the event-driven touch map, **not** the slot array `cna_touch_get_state` reports, and it is **dropped entirely** while no display size is published, because the canonical dispatch scales normalized coordinates by that size. Clearing a slot reports the touch once more as released with its previous state carried over, which is the XNA contract for a lifted finger. The reset clears everything the panel owns — including the display metrics and window handle, which the canonical class comment claims survive but its implementation deliberately clears",
+      "tests": "`InputSnapshotsSmoke.c` writes a slot and observes the exact scaled touch after the frame advances, observes the released frame after clearing it, asserts the raised event is dropped with no display size and never reaches the snapshot with one, drains whatever gesture the detector produced, and asserts the reset really does clear the display metrics and window handle; the out-of-range slot, undefined state and wrong-thread refusals are covered too",
+      "status": "implemented",
+      "task": "CBIND-037B5"
     }
   ]
 }

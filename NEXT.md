@@ -437,6 +437,25 @@
 > unbound case to pin the null-guarded contract, then restores whatever was bound and asserts only
 > the relationship between the answers. The inventory is now 4,209 implemented, 30 partial, 2,055
 > planned and 121 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B5 then adds touch and gestures, 80 rows. `GestureType` becomes a `uint32_t` bit set
+> whose four canonical operators need no route, because C composes real flags with its own
+> operators; `GestureSample` becomes a fixed 64-byte value whose eight getters are plain fields, with
+> `System::TimeSpan` crossing as 100-nanosecond ticks. The touch location and collection surfaces
+> reuse the **existing** fixed eight-slot snapshot rather than adding a second spelling, so the whole
+> mutation surface — add, insert, remove, remove-at, clear, contains, index-of and the
+> insert-semantics copy — operates on it in place. Writing the tests surfaced four canonical
+> behaviors worth keeping rather than smoothing: equality, the hash and the text all ignore the
+> pressure extension and the text carries only the position; reading an empty gesture queue throws
+> canonically and is therefore refused in C rather than answered with a default sample; a raised
+> touch event feeds gesture detection and **not** the snapshot, and is dropped outright until a
+> display size is published; and the canonical reset clears the display metrics and window handle
+> even though the canonical class comment says it leaves them alone — the C contract follows the
+> behavior and says so. Three deliberate C deviations are documented: a negative maximum touch count,
+> a pressure outside zero through one, and an append past the fixed capacity are all refused rather
+> than stored or dropped silently. Five rows are `not-applicable` with reasons: the four iterator
+> overloads and the class-local `intcs` alias. The inventory is now 4,284 implemented, 30 partial,
+> 1,975 planned and 126 N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
