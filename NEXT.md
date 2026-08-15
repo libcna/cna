@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS-DEVICE STATE COMPLETE THROUGH CBIND-035F4 (2026-08-15)
+## C BINDING / C ABI — GRAPHICS DEVICE COMPLETE THROUGH CBIND-035F5 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
-> `CBIND-035F1`–`035F4` are complete:
+> `CBIND-035F1`–`035F5` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -172,8 +172,13 @@
 > 73 N/A. CBIND-035F4 then maps all 21 clear, present, reset, back-buffer-window and
 > buffer-binding rows through versioned descriptors, a nullable adapter index and caller-owned
 > binding arrays, deciding readback capacity in C instead of surfacing a generic native failure.
-> The inventory is now 3,288 implemented, 23 partial, 3,031 planned and 73 N/A. CBIND-035F5 draw
-> submission and device extensions is next.
+> The inventory is now 3,288 implemented, 23 partial, 3,031 planned and 73 N/A. CBIND-035F5 then
+> maps all 49 draw-submission and device-extension rows: two descriptor-driven calls replace the
+> twenty-nine canonical user-primitive overloads, built-in vertex sources are converted because the
+> native structures embed a polymorphic Color, and every draw route refuses a backend without 3D
+> support as `NOT_SUPPORTED`. No planned GraphicsDevice.hpp row remains. The inventory is now
+> 3,337 implemented, 23 partial, 2,982 planned and 73 N/A. CBIND-035F6 SpriteBatch text routes and
+> occlusion queries is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

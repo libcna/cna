@@ -4,6 +4,7 @@
 #define CNA_C_GRAPHICS_DEVICE_H
 
 #include "CNA/C/display.h"
+#include "CNA/C/effects.h"
 #include "CNA/C/graphics_state.h"
 #include "CNA/C/index_resources.h"
 #include "CNA/C/vertex_resources.h"
@@ -891,6 +892,332 @@ CNA_C_API CNA_Result cna_graphics_device_set_index_buffer(
 CNA_C_API CNA_Result cna_graphics_device_get_index_buffer(
     CNA_Handle graphics_device,
     CNA_IndexBufferHandle* out_index_buffer);
+
+/** @brief Identifies how a caller-supplied user-primitive vertex array is represented. */
+typedef uint32_t CNA_UserVertexSource;
+
+/** @brief Bytes that are already a GPU vertex stream at the declared stride. */
+#define CNA_USER_VERTEX_SOURCE_RAW_STREAM UINT32_C(0)
+/** @brief An array of `CNA_VertexPositionColor` values. */
+#define CNA_USER_VERTEX_SOURCE_POSITION_COLOR UINT32_C(1)
+/** @brief An array of `CNA_VertexPositionColorTexture` values. */
+#define CNA_USER_VERTEX_SOURCE_POSITION_COLOR_TEXTURE UINT32_C(2)
+/** @brief An array of `CNA_VertexPositionTexture` values. */
+#define CNA_USER_VERTEX_SOURCE_POSITION_TEXTURE UINT32_C(3)
+/** @brief An array of `CNA_VertexPositionNormalTexture` values. */
+#define CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE UINT32_C(4)
+
+/**
+ * @brief Describes one caller-supplied vertex array for a user-primitive draw.
+ */
+typedef struct CNA_UserPrimitives {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Primitive topology to draw. */
+    CNA_PrimitiveType primitive_type;
+
+    /** @brief One of the `CNA_USER_VERTEX_SOURCE_*` identities. */
+    CNA_UserVertexSource vertex_source;
+
+    /** @brief Caller-owned vertex array read during this call. */
+    const void* vertex_data;
+
+    /**
+     * @brief Vertex declaration describing the stream, or `CNA_INVALID_HANDLE`.
+     *
+     * A raw stream without a declaration uses the canonical implicit
+     * `VertexPositionColor` layout; a typed source without a declaration uses that type's own
+     * declaration.
+     */
+    CNA_VertexDeclarationHandle vertex_declaration;
+
+    /** @brief Offset into @ref vertex_data in vertices; must not be negative. */
+    int32_t vertex_offset;
+
+    /** @brief Number of vertices; used only by the indexed route. */
+    int32_t num_vertices;
+
+    /** @brief Number of primitives to draw; must be positive. */
+    int32_t primitive_count;
+
+    /** @brief Reserved for future use; callers must initialize this to zero. */
+    uint32_t reserved;
+} CNA_UserPrimitives;
+
+/**
+ * @brief Describes one caller-supplied index array for a user-primitive draw.
+ */
+typedef struct CNA_UserIndices {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Stored index width. */
+    CNA_IndexElementSize index_element_size;
+
+    /** @brief Offset into @ref index_data in indices; must not be negative. */
+    int32_t index_offset;
+
+    /** @brief Caller-owned index array read during this call. */
+    const void* index_data;
+} CNA_UserIndices;
+
+/**
+ * @brief Gets the vertex count required to draw a primitive count of one topology.
+ *
+ * @param primitive_type Primitive topology.
+ * @param primitive_count Number of primitives.
+ * @param out_vertex_count Receives the total vertex count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown topology or a null
+ * output, or `CNA_RESULT_INVALID_STATE` when the canonical helper rejects the topology.
+ */
+CNA_C_API CNA_Result cna_primitive_type_get_vertex_count(
+    CNA_PrimitiveType primitive_type,
+    int32_t primitive_count,
+    int32_t* out_vertex_count);
+
+/**
+ * @brief Draws non-indexed primitives from the bound vertex buffer.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param primitive_type Primitive topology.
+ * @param vertex_start Index of the first vertex.
+ * @param primitive_count Number of primitives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` on a backend without the required
+ * capability, or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_primitives(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    int32_t vertex_start,
+    int32_t primitive_count);
+
+/**
+ * @brief Draws indexed primitives from the bound vertex and index buffers.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param primitive_type Primitive topology.
+ * @param base_vertex Offset added to each decoded index.
+ * @param min_vertex_index Minimum referenced vertex index.
+ * @param num_vertices Number of referenced vertices.
+ * @param start_index First index element consumed.
+ * @param primitive_count Number of primitives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` on a backend without the required
+ * capability, or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_indexed_primitives(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    int32_t base_vertex,
+    int32_t min_vertex_index,
+    int32_t num_vertices,
+    int32_t start_index,
+    int32_t primitive_count);
+
+/**
+ * @brief Draws several instances of one indexed geometry range.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param primitive_type Primitive topology.
+ * @param base_vertex Offset added to each decoded index.
+ * @param min_vertex_index Minimum referenced vertex index.
+ * @param num_vertices Number of referenced vertices.
+ * @param start_index First index element consumed.
+ * @param primitive_count Number of primitives per instance.
+ * @param instance_count Number of instances.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` on a backend without instancing, or a
+ * documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_instanced_primitives(
+    CNA_Handle graphics_device,
+    CNA_PrimitiveType primitive_type,
+    int32_t base_vertex,
+    int32_t min_vertex_index,
+    int32_t num_vertices,
+    int32_t start_index,
+    int32_t primitive_count,
+    int32_t instance_count);
+
+/**
+ * @brief Draws non-indexed primitives from a caller-supplied vertex array.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param primitives Versioned vertex-array description.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` on a backend without the required
+ * capability, or a documented argument/handle/thread/native failure.
+ *
+ * The vertex source and the optional declaration together select the canonical overload; no vertex
+ * array is retained after the call returns.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_user_primitives(
+    CNA_Handle graphics_device,
+    const CNA_UserPrimitives* primitives);
+
+/**
+ * @brief Draws indexed primitives from caller-supplied vertex and index arrays.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param primitives Versioned vertex-array description.
+ * @param indices Versioned index-array description.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` on a backend without the required
+ * capability, or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_draw_user_indexed_primitives(
+    CNA_Handle graphics_device,
+    const CNA_UserPrimitives* primitives,
+    const CNA_UserIndices* indices);
+
+/**
+ * @brief Gets the number of live graphics resources the device currently tracks.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_count Receives the tracked resource count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_tracked_resource_count(
+    CNA_Handle graphics_device,
+    uint64_t* out_count);
+
+/**
+ * @brief Enables or disables depth testing.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param enabled `CNA_TRUE` to enable depth testing.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-Boolean value, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_depth_test_enabled(
+    CNA_Handle graphics_device,
+    CNA_Bool enabled);
+
+/**
+ * @brief Enables or disables blending.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param enabled `CNA_TRUE` to enable blending.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-Boolean value, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_blend_enabled(
+    CNA_Handle graphics_device,
+    CNA_Bool enabled);
+
+/**
+ * @brief Enables or disables depth writes.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param enabled `CNA_TRUE` to enable depth writes.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-Boolean value, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_depth_write_enabled(
+    CNA_Handle graphics_device,
+    CNA_Bool enabled);
+
+/**
+ * @brief Sets the graphics profile of an already constructed device.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param profile `CNA_GRAPHICS_PROFILE_REACH` or `CNA_GRAPHICS_PROFILE_HI_DEF`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown profile, or a
+ * documented handle/thread/native failure.
+ *
+ * XNA fixes the profile at device construction; this CNA extension exists because the canonical
+ * device is created before a game can request a profile. It does not re-validate existing
+ * resources against the new profile.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_graphics_profile_ext(
+    CNA_Handle graphics_device,
+    CNA_GraphicsProfile profile);
+
+/**
+ * @brief Enables or disables graphics-context-loss recovery.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param enabled `CNA_FALSE` to drop the CPU shadow copies that survive a context loss.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-Boolean value, or a
+ * documented handle/thread/native failure.
+ *
+ * The canonical contract requires this before the device is initialized; a later call has no
+ * effect on resources that already exist.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_context_recovery_enabled(
+    CNA_Handle graphics_device,
+    CNA_Bool enabled);
+
+/**
+ * @brief Inserts a named debug marker into the GPU command stream.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param marker UTF-8 marker text without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for invalid UTF-8, or a documented
+ * argument/handle/thread/native failure. Backends without debug markers ignore it.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_string_marker_ext(
+    CNA_Handle graphics_device,
+    CNA_StringView marker);
+
+/**
+ * @brief Gets the active policy for unsupported 3D calls on a 2D-only renderer.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_behavior Receives one of the `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_unsupported_3d_call_behavior(
+    CNA_Handle graphics_device,
+    CNA_Unsupported3DGraphicsCallBehavior* out_behavior);
+
+/**
+ * @brief Sets the policy for unsupported 3D calls on a 2D-only renderer.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param behavior One of the `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown identity, or a
+ * documented handle/thread/native failure.
+ *
+ * This does not change capability query results and does not suppress argument, lifetime or
+ * driver errors.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_unsupported_3d_call_behavior(
+    CNA_Handle graphics_device,
+    CNA_Unsupported3DGraphicsCallBehavior behavior);
+
+/**
+ * @brief Sets the effect used by subsequent draw calls.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param effect Owned effect handle, or `CNA_INVALID_HANDLE` to clear the current effect.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical device stores a borrowed pointer, so the C API keeps the assigned effect alive
+ * until it is replaced, cleared, or the game is destroyed. Applying an effect natively also sets
+ * this state without going through the C route.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_current_effect(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle effect);
+
+/**
+ * @brief Rebuilds the active renderer with a new preferred multisample count.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param multi_sample_count Requested sample count; must not be negative.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative count, or a
+ * documented handle/thread/native failure.
+ *
+ * This canonical extension destroys and replaces the renderer outright, so it is only safe before
+ * any GPU resource exists on the current renderer. It is not a resource-preserving device reset.
+ */
+CNA_C_API CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
+    CNA_Handle graphics_device,
+    int32_t multi_sample_count);
 
 #ifdef __cplusplus
 }

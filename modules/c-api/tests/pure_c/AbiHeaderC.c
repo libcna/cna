@@ -672,3 +672,18 @@ _Static_assert(sizeof(CNA_BackBufferReadback) == 48U &&
                    offsetof(CNA_BackBufferReadback, start_index) == 32U &&
                    offsetof(CNA_BackBufferReadback, element_count) == 40U,
                "CNA_BackBufferReadback layout must remain stable");
+_Static_assert(sizeof(CNA_UserVertexSource) == sizeof(uint32_t) &&
+                   CNA_USER_VERTEX_SOURCE_RAW_STREAM == UINT32_C(0) &&
+                   CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE == UINT32_C(4),
+               "CNA user-vertex-source identities must remain stable");
+_Static_assert(sizeof(CNA_UserPrimitives) == 48U &&
+                   _Alignof(CNA_UserPrimitives) == 8U &&
+                   offsetof(CNA_UserPrimitives, vertex_data) == 16U &&
+                   offsetof(CNA_UserPrimitives, vertex_declaration) == 24U &&
+                   offsetof(CNA_UserPrimitives, vertex_offset) == 32U,
+               "CNA_UserPrimitives layout must remain stable");
+_Static_assert(sizeof(CNA_UserIndices) == 24U &&
+                   _Alignof(CNA_UserIndices) == 8U &&
+                   offsetof(CNA_UserIndices, index_element_size) == 8U &&
+                   offsetof(CNA_UserIndices, index_data) == 16U,
+               "CNA_UserIndices layout must remain stable");

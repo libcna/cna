@@ -1323,6 +1323,33 @@
       "tests": "empty-state reads, single and multi-binding application, explicit offsets, unbinding, count/copy capacity atomicity, negative offset/frequency rejection before any binding is applied, wrong-kind handle refusal and honest backend creation refusal in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F4"
+    },
+    {
+      "id": "graphics-device-draw-submission",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:DrawPrimitives|DrawIndexedPrimitives|DrawInstancedPrimitives|DrawUserPrimitives|DrawUserIndexedPrimitives|PrimitiveVerts)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_draw_primitives`, `_draw_indexed_primitives`, `_draw_instanced_primitives`, `_draw_user_primitives`, `_draw_user_indexed_primitives` and `cna_primitive_type_get_vertex_count`. The twenty-nine user-primitive overloads collapse into two calls whose versioned `CNA_UserPrimitives`/`CNA_UserIndices` descriptors carry the dimensions that select the canonical overload: vertex source, optional declaration and index width. A built-in vertex source is converted into native values before submission, because those structures embed a polymorphic Color and are never layout-compatible with their C PODs; a raw stream therefore always requires an explicit declaration, since the declaration-less canonical raw overloads read native objects. A backend without 3D support refuses every draw route as `NOT_SUPPORTED` instead of surfacing its first unsupported internal call",
+      "tests": "all five topologies through the vertex-count helper, unknown-topology and malformed-descriptor rejection, raw-stream-without-declaration refusal, both user routes for a converted and a raw stream with 16- and 32-bit indices under a bound BasicEffect, and capability-accurate refusal on SDL_RENDERER in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F5"
+    },
+    {
+      "id": "graphics-device-extension-operations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:GetTrackedResourceCount|SetDepthTestEnabled|SetBlendEnabled|SetDepthWriteEnabled|SetGraphicsProfileEXT|SetContextRecoveryEnabled|SetStringMarkerEXT|SetUnsupported3DGraphicsCallBehavior|GetUnsupported3DGraphicsCallBehavior|SetCurrentEffect|RecreateRendererForMultiSampleCount)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_get_tracked_resource_count`, `_set_depth_test_enabled`, `_set_blend_enabled`, `_set_depth_write_enabled`, `_set_graphics_profile_ext`, `_set_context_recovery_enabled`, `_set_string_marker_ext`, `_get`/`_set_unsupported_3d_call_behavior`, `_set_current_effect` and `_recreate_renderer_for_multi_sample_count_ext`. The three pipeline-state toggles refuse a backend without 3D support as `NOT_SUPPORTED`; the marker takes a validated UTF-8 view; and because the device stores a borrowed `Effect*`, the C API keeps an assigned effect alive until it is replaced, cleared or the game is destroyed",
+      "tests": "tracked-resource count, all Boolean toggles including non-Boolean rejection and capability-accurate refusal, both profile values and an unknown one, valid and malformed UTF-8 markers, the unsupported-3D policy round trip, current-effect assignment/clearing with wrong-kind refusal, and negative multisample rejection in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F5"
+    },
+    {
+      "id": "graphics-device-internal-notification-hooks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:OnResourceCreated|OnResourceDestroyed|AddResourceReference|RemoveResourceReference|GetRenderer)$",
+      "kinds": ["method"],
+      "mapping": "no C route raises or registers these directly: every one takes or returns a native object \u2014 a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself \u2014 that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
+      "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F5"
     }
   ]
 }

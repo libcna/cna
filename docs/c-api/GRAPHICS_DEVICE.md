@@ -285,10 +285,58 @@ so a rejected call leaves the previous binding set intact. Reads report the owni
 sampler slots, a binding applied by canonical CNA code reports `CNA_INVALID_HANDLE` rather than
 inventing one.
 
+## Draw submission
+
+Three routes draw from the currently bound buffers — `cna_graphics_device_draw_primitives`,
+`_draw_indexed_primitives` and `_draw_instanced_primitives` — and
+`cna_primitive_type_get_vertex_count` exposes the canonical topology-to-vertex-count helper so a
+caller can size an array without attempting a draw.
+
+The canonical surface has **twenty-nine** user-primitive overloads. They vary along three
+dimensions — vertex representation, whether a `VertexDeclaration` is supplied, and index width —
+so the C surface has two functions and puts those dimensions in a versioned descriptor:
+
+```c
+CNA_UserPrimitives primitives = {
+    sizeof(CNA_UserPrimitives), 1u, CNA_PRIMITIVE_TRIANGLE_LIST,
+    CNA_USER_VERTEX_SOURCE_POSITION_COLOR, vertices, CNA_INVALID_HANDLE, 0, 3, 1, 0u};
+cna_graphics_device_draw_user_primitives(device, &primitives);
+```
+
+A built-in vertex source is **converted** into native values before submission. That is not an
+optimization choice: `VertexPositionColor` and its siblings embed a polymorphic `Color`, so a C
+array of the matching POD is never layout-compatible with the native structure. For the same
+reason `CNA_USER_VERTEX_SOURCE_RAW_STREAM` always requires an explicit declaration — the canonical
+declaration-less raw overloads read their bytes as an array of native objects, which C cannot
+produce. The C-safe equivalent of those overloads is `CNA_USER_VERTEX_SOURCE_POSITION_COLOR`
+without a declaration, which produces the same result through the conversion.
+
+Every draw route first checks the device's 3D capability, so a 2D-only backend answers
+`CNA_RESULT_NOT_SUPPORTED` rather than surfacing whatever generic failure its first unsupported
+internal call happens to raise.
+
+## Device extensions
+
+`cna_graphics_device_get_tracked_resource_count`, the depth-test/blend/depth-write toggles, the
+graphics-profile and context-recovery setters, the debug-marker route, the unsupported-3D policy
+pair, current-effect assignment and the multisample renderer rebuild map CNA's own device
+extensions. The three pipeline-state toggles are capability-gated like the draw routes.
+
+`cna_graphics_device_set_current_effect` needs one extra guarantee the canonical API does not give:
+the device stores a borrowed `Effect*`, so the C API keeps the assigned effect alive until it is
+replaced, cleared, or the game is destroyed. Destroying the effect's own handle while it is current
+therefore cannot leave the device pointing at freed memory.
+
+`OnResourceCreated`, `OnResourceDestroyed`, `AddResourceReference`, `RemoveResourceReference` and
+`GetRenderer` have **no** C route, because each takes or returns a native object: a partially
+constructed `System::Object*`, a `GraphicsResource*`, or the renderer itself. Their observable
+effects are already reachable — resource events through the subscriptions above, tracking
+automatically for every owned C resource and readable through the tracked-count query, and renderer
+identity and capabilities through `graphics.h`.
+
 ## Not yet in this header
 
 Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. Draw submission and the CNAEXT device helpers, SpriteBatch text routes, occlusion queries and the
-`graphics-ext` post-process family are owned by CBIND-035F5 through CBIND-035F7 and are not
-callable yet.
+`graphics_state.h`. SpriteBatch text routes, occlusion queries and the `graphics-ext` post-process family are owned by
+CBIND-035F6 and CBIND-035F7 and are not callable yet.

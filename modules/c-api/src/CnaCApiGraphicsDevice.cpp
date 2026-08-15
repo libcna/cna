@@ -5,17 +5,26 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTexture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -25,6 +34,7 @@
 #include "System/Object.hpp"
 
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -64,11 +74,13 @@ static_assert(
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::VertexBufferResource;
 using CNA::C::Detail::ObjectKind;
@@ -76,11 +88,19 @@ using CNA::C::Detail::TextureResourceView;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::PrimitiveType;
+using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
+using Microsoft::Xna::Framework::Graphics::VertexPositionColorTexture;
+using Microsoft::Xna::Framework::Graphics::VertexPositionNormalTexture;
+using Microsoft::Xna::Framework::Graphics::VertexPositionTexture;
 using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
@@ -231,6 +251,40 @@ template<typename TCallable>
     });
 }
 
+[[nodiscard]] CNA_Result EnsureThreeDSupported(GraphicsDevice& device) noexcept
+{
+    if (!device.SupportsCapability(CNA::GraphicsCapability::ThreeD)) {
+        return Fail(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "The selected graphics backend does not support 3D draw submission.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// A draw route that a 2D-only backend cannot serve is reported as an explicit capability refusal
+// rather than as whatever generic failure that backend's first unsupported call happens to raise.
+template<typename TCallable>
+[[nodiscard]] CNA_Result DeviceGuardedCommand(
+    const CNA_Handle graphicsDeviceHandle,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = EnsureThreeDSupported(*graphicsDevice->value);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::forward<TCallable>(callable)(*graphicsDevice->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 // Callback-scoped view over native text. The event payload never owns bytes: the canonical string
 // outlives the synchronous callback, and the C consumer copies whatever it needs before returning.
 [[nodiscard]] CNA_StringView ToStringView(const std::string* const value) noexcept
@@ -362,6 +416,9 @@ struct DeviceBindingState final {
     std::vector<BoundBufferSlot> vertexBindings;
     CNA_Handle indexBuffer = CNA_INVALID_HANDLE;
     const void* indexNativePointer = nullptr;
+    // The device keeps a borrowed Effect pointer, so the C API keeps the assigned effect alive for
+    // as long as it can still be dereferenced by a draw call.
+    std::shared_ptr<void> currentEffect;
 };
 
 [[nodiscard]] DeviceBindingState& GetDeviceBindingState()
@@ -475,6 +532,332 @@ struct DeviceBindingState final {
     return static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
 }
 
+[[nodiscard]] CNA_Result ValidatePrimitiveType(const CNA_PrimitiveType primitiveType) noexcept
+{
+    if (primitiveType > CNA_PRIMITIVE_POINT_LIST_EXT) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The primitive topology is not recognized.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result DeviceBooleanCommand(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Bool value,
+    const bool requiresThreeD,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value != CNA_TRUE && value != CNA_FALSE) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Boolean argument must be CNA_TRUE or CNA_FALSE.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (requiresThreeD) {
+            if (const CNA_Result result = EnsureThreeDSupported(*graphicsDevice->value);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        std::forward<TCallable>(callable)(*graphicsDevice->value, value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+// One resolved user-primitive draw. The vertex source and the optional declaration together select
+// which canonical overload runs, so the C surface needs two functions instead of twenty-nine.
+struct UserPrimitiveRequest final {
+    GraphicsDevice* device = nullptr;
+    PrimitiveType primitiveType = PrimitiveType::TriangleList;
+    CNA_UserVertexSource vertexSource = CNA_USER_VERTEX_SOURCE_RAW_STREAM;
+    const void* vertexData = nullptr;
+    const VertexDeclaration* declaration = nullptr;
+    int32_t vertexOffset = 0;
+    int32_t numVertices = 0;
+    int32_t primitiveCount = 0;
+    std::shared_ptr<VertexDeclaration> declarationOwner;
+};
+
+[[nodiscard]] CNA_Result ResolveUserPrimitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_UserPrimitives* const primitives,
+    const bool indexed,
+    UserPrimitiveRequest* const outRequest)
+{
+    if (primitives == nullptr || primitives->struct_size < sizeof(CNA_UserPrimitives) ||
+        primitives->struct_version != StructureVersion || primitives->reserved != 0U ||
+        primitives->vertex_data == nullptr || primitives->vertex_offset < 0 ||
+        primitives->primitive_count <= 0 ||
+        primitives->vertex_source > CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE ||
+        (indexed && primitives->num_vertices <= 0)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The user vertex description is invalid.");
+    }
+    // The canonical declaration-less raw overloads read their bytes as an array of the native
+    // VertexPositionColor object, which carries a vtable and can never be produced from C. A raw
+    // stream therefore always needs its declaration; the equivalent C-safe route for that overload
+    // is the POSITION_COLOR source, which converts before it reaches CNA.
+    if (primitives->vertex_source == CNA_USER_VERTEX_SOURCE_RAW_STREAM &&
+        primitives->vertex_declaration == CNA_INVALID_HANDLE) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "A raw vertex stream requires an explicit vertex declaration.");
+    }
+    if (const CNA_Result result = ValidatePrimitiveType(primitives->primitive_type);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+    if (const CNA_Result result =
+            GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    std::shared_ptr<VertexDeclaration> declaration;
+    if (primitives->vertex_declaration != CNA_INVALID_HANDLE) {
+        const CNA_Result result = GetRuntimeHandles().Get(
+            primitives->vertex_declaration, ObjectKind::VertexDeclaration, &declaration);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The VertexDeclaration handle is invalid for this call.");
+        }
+    }
+
+    if (const CNA_Result result = EnsureThreeDSupported(*graphicsDevice->value);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    outRequest->device = graphicsDevice->value;
+    outRequest->primitiveType = static_cast<PrimitiveType>(primitives->primitive_type);
+    outRequest->vertexSource = primitives->vertex_source;
+    outRequest->vertexData = primitives->vertex_data;
+    outRequest->declaration = declaration.get();
+    outRequest->vertexOffset = primitives->vertex_offset;
+    outRequest->numVertices = primitives->num_vertices;
+    outRequest->primitiveCount = primitives->primitive_count;
+    outRequest->declarationOwner = std::move(declaration);
+    return CNA_RESULT_SUCCESS;
+}
+
+// The built-in vertex structures embed a polymorphic Color, so a C array of the matching POD is
+// never layout-compatible with them: every typed route converts before it reaches CNA.
+[[nodiscard]] VertexPositionColor ToNativeVertex(const CNA_VertexPositionColor& value)
+{
+    return VertexPositionColor(
+        Vector3(value.position.x, value.position.y, value.position.z),
+        Color(value.color.r, value.color.g, value.color.b, value.color.a));
+}
+
+[[nodiscard]] VertexPositionColorTexture ToNativeVertex(
+    const CNA_VertexPositionColorTexture& value)
+{
+    return VertexPositionColorTexture(
+        Vector3(value.position.x, value.position.y, value.position.z),
+        Color(value.color.r, value.color.g, value.color.b, value.color.a),
+        Vector2(value.texture_coordinate.x, value.texture_coordinate.y));
+}
+
+[[nodiscard]] VertexPositionTexture ToNativeVertex(const CNA_VertexPositionTexture& value)
+{
+    return VertexPositionTexture(
+        Vector3(value.position.x, value.position.y, value.position.z),
+        Vector2(value.texture_coordinate.x, value.texture_coordinate.y));
+}
+
+[[nodiscard]] VertexPositionNormalTexture ToNativeVertex(
+    const CNA_VertexPositionNormalTexture& value)
+{
+    return VertexPositionNormalTexture(
+        Vector3(value.position.x, value.position.y, value.position.z),
+        Vector3(value.normal.x, value.normal.y, value.normal.z),
+        Vector2(value.texture_coordinate.x, value.texture_coordinate.y));
+}
+
+template<typename TNative, typename TValue>
+[[nodiscard]] std::vector<TNative> ToNativeVertices(
+    const void* const data,
+    const int32_t offset,
+    const int32_t count)
+{
+    const TValue* const source = static_cast<const TValue*>(data);
+    std::vector<TNative> native;
+    native.reserve(static_cast<std::size_t>(count));
+    for (int32_t index = 0; index < count; ++index) {
+        native.push_back(ToNativeVertex(source[offset + index]));
+    }
+    return native;
+}
+
+void DrawUserPrimitivesNative(const UserPrimitiveRequest& request)
+{
+    GraphicsDevice& device = *request.device;
+    const int32_t vertexCount =
+        GraphicsDevice::PrimitiveVerts(request.primitiveType, request.primitiveCount);
+    switch (request.vertexSource) {
+        case CNA_USER_VERTEX_SOURCE_POSITION_COLOR: {
+            const auto native = ToNativeVertices<VertexPositionColor, CNA_VertexPositionColor>(
+                request.vertexData, request.vertexOffset, vertexCount);
+            if (request.declaration != nullptr) {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount,
+                    *request.declaration);
+            } else {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount);
+            }
+            return;
+        }
+        case CNA_USER_VERTEX_SOURCE_POSITION_COLOR_TEXTURE: {
+            const auto native =
+                ToNativeVertices<VertexPositionColorTexture, CNA_VertexPositionColorTexture>(
+                    request.vertexData, request.vertexOffset, vertexCount);
+            if (request.declaration != nullptr) {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount,
+                    *request.declaration);
+            } else {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount);
+            }
+            return;
+        }
+        case CNA_USER_VERTEX_SOURCE_POSITION_TEXTURE: {
+            const auto native = ToNativeVertices<VertexPositionTexture, CNA_VertexPositionTexture>(
+                request.vertexData, request.vertexOffset, vertexCount);
+            if (request.declaration != nullptr) {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount,
+                    *request.declaration);
+            } else {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount);
+            }
+            return;
+        }
+        case CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE: {
+            const auto native =
+                ToNativeVertices<VertexPositionNormalTexture, CNA_VertexPositionNormalTexture>(
+                    request.vertexData, request.vertexOffset, vertexCount);
+            if (request.declaration != nullptr) {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount,
+                    *request.declaration);
+            } else {
+                device.DrawUserPrimitives(
+                    request.primitiveType, native.data(), 0, request.primitiveCount);
+            }
+            return;
+        }
+        default:
+            break;
+    }
+
+    if (request.declaration != nullptr) {
+        device.DrawUserPrimitives(
+            request.primitiveType, request.vertexData, request.vertexOffset,
+            request.primitiveCount, *request.declaration);
+    } else {
+        device.DrawUserPrimitives(
+            request.primitiveType, request.vertexData, request.vertexOffset,
+            request.primitiveCount);
+    }
+}
+
+template<typename TNative, typename TValue, typename TIndex>
+void DrawTypedIndexedPrimitives(
+    const UserPrimitiveRequest& request,
+    const TIndex* const indexData,
+    const int32_t indexOffset)
+{
+    const auto native = ToNativeVertices<TNative, TValue>(
+        request.vertexData, request.vertexOffset, request.numVertices);
+    if (request.declaration != nullptr) {
+        request.device->DrawUserIndexedPrimitives(
+            request.primitiveType, native.data(), 0, request.numVertices, indexData, indexOffset,
+            request.primitiveCount, *request.declaration);
+    } else {
+        request.device->DrawUserIndexedPrimitives(
+            request.primitiveType, native.data(), 0, request.numVertices, indexData, indexOffset,
+            request.primitiveCount);
+    }
+}
+
+template<typename TIndex>
+void DrawUserIndexedPrimitivesTyped(
+    const UserPrimitiveRequest& request,
+    const TIndex* const indexData,
+    const int32_t indexOffset)
+{
+    switch (request.vertexSource) {
+        case CNA_USER_VERTEX_SOURCE_POSITION_COLOR:
+            DrawTypedIndexedPrimitives<VertexPositionColor, CNA_VertexPositionColor>(
+                request, indexData, indexOffset);
+            return;
+        case CNA_USER_VERTEX_SOURCE_POSITION_COLOR_TEXTURE:
+            DrawTypedIndexedPrimitives<VertexPositionColorTexture, CNA_VertexPositionColorTexture>(
+                request, indexData, indexOffset);
+            return;
+        case CNA_USER_VERTEX_SOURCE_POSITION_TEXTURE:
+            DrawTypedIndexedPrimitives<VertexPositionTexture, CNA_VertexPositionTexture>(
+                request, indexData, indexOffset);
+            return;
+        case CNA_USER_VERTEX_SOURCE_POSITION_NORMAL_TEXTURE:
+            DrawTypedIndexedPrimitives<
+                VertexPositionNormalTexture, CNA_VertexPositionNormalTexture>(
+                request, indexData, indexOffset);
+            return;
+        default:
+            break;
+    }
+
+    if (request.declaration != nullptr) {
+        request.device->DrawUserIndexedPrimitives(
+            request.primitiveType, request.vertexData, request.vertexOffset, request.numVertices,
+            indexData, indexOffset, request.primitiveCount, *request.declaration);
+    } else {
+        request.device->DrawUserIndexedPrimitives(
+            request.primitiveType, request.vertexData, request.vertexOffset, request.numVertices,
+            indexData, indexOffset, request.primitiveCount);
+    }
+}
+
+void DrawUserIndexedPrimitivesNative(
+    const UserPrimitiveRequest& request,
+    const CNA_UserIndices& indices)
+{
+    // The raw void*/void* overload is the only one without an index width, so a 16-bit request on
+    // a raw stream without a declaration takes it; everything else is width-typed.
+    if (indices.index_element_size == CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS) {
+        DrawUserIndexedPrimitivesTyped<std::uint16_t>(
+            request,
+            static_cast<const std::uint16_t*>(indices.index_data),
+            indices.index_offset);
+        return;
+    }
+    DrawUserIndexedPrimitivesTyped<std::uint32_t>(
+        request,
+        static_cast<const std::uint32_t*>(indices.index_data),
+        indices.index_offset);
+}
+
 struct LiveRegistrations final {
     std::mutex mutex;
     std::vector<std::weak_ptr<DeviceRegistration>> entries;
@@ -571,6 +954,7 @@ void ResetGraphicsDeviceAdapterState() noexcept
     bindings.vertexBindings.clear();
     bindings.indexBuffer = CNA_INVALID_HANDLE;
     bindings.indexNativePointer = nullptr;
+    bindings.currentEffect.reset();
 }
 
 } // namespace CNA::C::Detail
@@ -1540,5 +1924,284 @@ CNA_Result cna_graphics_device_get_index_buffer(
 {
     return DeviceQuery(graphicsDeviceHandle, outIndexBuffer, [](GraphicsDevice& device) {
         return RecordedIndexBufferHandle(device.GetIndexBuffer());
+    });
+}
+
+CNA_Result cna_primitive_type_get_vertex_count(
+    const CNA_PrimitiveType primitiveType,
+    const int32_t primitiveCount,
+    int32_t* const outVertexCount)
+{
+    return StoreOutput(outVertexCount, "The vertex-count output is null.", [=] {
+        return static_cast<int32_t>(GraphicsDevice::PrimitiveVerts(
+            static_cast<PrimitiveType>(primitiveType), primitiveCount));
+    });
+}
+
+CNA_Result cna_graphics_device_draw_primitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const int32_t vertexStart,
+    const int32_t primitiveCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.DrawPrimitives(
+                static_cast<PrimitiveType>(primitiveType), vertexStart, primitiveCount);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_draw_indexed_primitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const int32_t baseVertex,
+    const int32_t minVertexIndex,
+    const int32_t numVertices,
+    const int32_t startIndex,
+    const int32_t primitiveCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.DrawIndexedPrimitives(
+                static_cast<PrimitiveType>(primitiveType),
+                baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_draw_instanced_primitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PrimitiveType primitiveType,
+    const int32_t baseVertex,
+    const int32_t minVertexIndex,
+    const int32_t numVertices,
+    const int32_t startIndex,
+    const int32_t primitiveCount,
+    const int32_t instanceCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidatePrimitiveType(primitiveType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return DeviceGuardedCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.DrawInstancedPrimitives(
+                static_cast<PrimitiveType>(primitiveType),
+                baseVertex, minVertexIndex, numVertices, startIndex, primitiveCount,
+                instanceCount);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_draw_user_primitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_UserPrimitives* const primitives)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        UserPrimitiveRequest request;
+        if (const CNA_Result result = ResolveUserPrimitives(
+                graphicsDeviceHandle, primitives, false, &request);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        DrawUserPrimitivesNative(request);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_draw_user_indexed_primitives(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_UserPrimitives* const primitives,
+    const CNA_UserIndices* const indices)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (indices == nullptr || indices->struct_size < sizeof(CNA_UserIndices) ||
+            indices->struct_version != StructureVersion || indices->index_data == nullptr ||
+            indices->index_offset < 0 ||
+            (indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS &&
+             indices->index_element_size != CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The user index description is invalid.");
+        }
+        UserPrimitiveRequest request;
+        if (const CNA_Result result = ResolveUserPrimitives(
+                graphicsDeviceHandle, primitives, true, &request);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        DrawUserIndexedPrimitivesNative(request, *indices);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_tracked_resource_count(
+    const CNA_Handle graphicsDeviceHandle,
+    uint64_t* const outCount)
+{
+    return DeviceQuery(graphicsDeviceHandle, outCount, [](GraphicsDevice& device) {
+        return static_cast<uint64_t>(device.GetTrackedResourceCount());
+    });
+}
+
+CNA_Result cna_graphics_device_set_depth_test_enabled(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Bool enabled)
+{
+    return DeviceBooleanCommand(
+        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
+            device.SetDepthTestEnabled(value);
+        });
+}
+
+CNA_Result cna_graphics_device_set_blend_enabled(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Bool enabled)
+{
+    return DeviceBooleanCommand(
+        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
+            device.SetBlendEnabled(value);
+        });
+}
+
+CNA_Result cna_graphics_device_set_depth_write_enabled(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Bool enabled)
+{
+    return DeviceBooleanCommand(
+        graphicsDeviceHandle, enabled, true, [](GraphicsDevice& device, const bool value) {
+            device.SetDepthWriteEnabled(value);
+        });
+}
+
+CNA_Result cna_graphics_device_set_graphics_profile_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_GraphicsProfile profile)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (profile != NativeOrdinal(GraphicsProfile::Reach) &&
+            profile != NativeOrdinal(GraphicsProfile::HiDef)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The graphics profile is not recognized.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.SetGraphicsProfileEXT(static_cast<GraphicsProfile>(profile));
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_set_context_recovery_enabled(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Bool enabled)
+{
+    return DeviceBooleanCommand(
+        graphicsDeviceHandle, enabled, false, [](GraphicsDevice& device, const bool value) {
+            device.SetContextRecoveryEnabled(value);
+        });
+}
+
+CNA_Result cna_graphics_device_set_string_marker_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_StringView marker)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string text;
+        if (const CNA_Result result = CopyStringView(marker, true, &text);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return DeviceCommand(graphicsDeviceHandle, [&](GraphicsDevice& device) {
+            device.SetStringMarkerEXT(text);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_get_unsupported_3d_call_behavior(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Unsupported3DGraphicsCallBehavior* const outBehavior)
+{
+    return DeviceQuery(graphicsDeviceHandle, outBehavior, [](GraphicsDevice& device) {
+        return NativeOrdinal(device.GetUnsupported3DGraphicsCallBehavior());
+    });
+}
+
+CNA_Result cna_graphics_device_set_unsupported_3d_call_behavior(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Unsupported3DGraphicsCallBehavior behavior)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW &&
+            behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The unsupported-3D-call policy is not recognized.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.SetUnsupported3DGraphicsCallBehavior(
+                static_cast<CNA::Unsupported3DGraphicsCallBehavior>(behavior));
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_set_current_effect(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (effectHandle != CNA_INVALID_HANDLE) {
+            const CNA_Result result =
+                GetRuntimeHandles().Get(effectHandle, ObjectKind::Effect, &effect);
+            if (result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    ErrorCategoryForResult(result),
+                    "The Effect handle is invalid for this call.");
+            }
+        }
+
+        Effect* const native = effect == nullptr ? nullptr : effect->value.get();
+        graphicsDevice->value->SetCurrentEffect(native);
+
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        state.currentEffect = effect == nullptr ? nullptr : effect->value;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t multiSampleCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (multiSampleCount < 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The multisample count must not be negative.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.RecreateRendererForMultiSampleCount(multiSampleCount);
+        });
     });
 }

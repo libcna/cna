@@ -987,6 +987,267 @@ static int validate_buffer_binding(CNA_Handle graphics_device)
     return ok;
 }
 
+static int make_position_color_declaration(CNA_VertexDeclarationHandle* out_declaration)
+{
+    CNA_VertexElement elements[8];
+    uint64_t element_count = 0U;
+    uint32_t stride = 0U;
+    return cna_vertex_type_get_stride(CNA_VERTEX_TYPE_POSITION_COLOR, &stride) ==
+            CNA_RESULT_SUCCESS &&
+        cna_vertex_type_copy_elements(
+            CNA_VERTEX_TYPE_POSITION_COLOR, elements, 8U, &element_count) ==
+            CNA_RESULT_SUCCESS &&
+        cna_vertex_declaration_create_with_stride(
+            (int32_t)stride, elements, element_count, out_declaration) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_device_extensions(CNA_Handle graphics_device);
+
+static int validate_draw_and_extensions(CNA_Handle graphics_device)
+{
+    int32_t vertex_count = 0;
+    if (cna_primitive_type_get_vertex_count(
+            CNA_PRIMITIVE_TRIANGLE_LIST, 2, &vertex_count) != CNA_RESULT_SUCCESS ||
+        vertex_count != 6 ||
+        cna_primitive_type_get_vertex_count(
+            CNA_PRIMITIVE_TRIANGLE_STRIP, 2, &vertex_count) != CNA_RESULT_SUCCESS ||
+        vertex_count != 4 ||
+        cna_primitive_type_get_vertex_count(
+            CNA_PRIMITIVE_LINE_LIST, 3, &vertex_count) != CNA_RESULT_SUCCESS ||
+        vertex_count != 6 ||
+        cna_primitive_type_get_vertex_count(
+            CNA_PRIMITIVE_LINE_STRIP, 3, &vertex_count) != CNA_RESULT_SUCCESS ||
+        vertex_count != 4 ||
+        cna_primitive_type_get_vertex_count(
+            CNA_PRIMITIVE_POINT_LIST_EXT, 5, &vertex_count) != CNA_RESULT_SUCCESS ||
+        vertex_count != 5 ||
+        cna_primitive_type_get_vertex_count(CNA_PRIMITIVE_TRIANGLE_LIST, 1, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Unknown topologies are rejected before any native draw. */
+    if (cna_graphics_device_draw_primitives(
+            graphics_device, UINT32_C(9), 0, 1) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_indexed_primitives(
+            graphics_device, UINT32_C(9), 0, 0, 3, 0, 1) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_instanced_primitives(
+            graphics_device, UINT32_C(9), 0, 0, 3, 0, 1, 1) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Without bindings, every buffered draw route fails; a 2D-only backend refuses it outright. */
+    CNA_Bool supports_3d = CNA_FALSE;
+    if (cna_graphics_device_supports_capability(
+            graphics_device, CNA_GRAPHICS_CAPABILITY_THREE_D, &supports_3d) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    const CNA_Result expected_without_bindings =
+        supports_3d == CNA_TRUE ? CNA_RESULT_INTERNAL : CNA_RESULT_NOT_SUPPORTED;
+    if (cna_graphics_device_draw_primitives(
+            graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 1) !=
+            expected_without_bindings ||
+        cna_graphics_device_draw_indexed_primitives(
+            graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1) !=
+            expected_without_bindings ||
+        cna_graphics_device_draw_instanced_primitives(
+            graphics_device, CNA_PRIMITIVE_TRIANGLE_LIST, 0, 0, 3, 0, 1, 2) !=
+            expected_without_bindings) {
+        return 0;
+    }
+
+    const CNA_VertexPositionColor vertices[3] = {
+        {{0.0F, 0.0F, 0.0F}, {255U, 0U, 0U, 255U}},
+        {{1.0F, 0.0F, 0.0F}, {0U, 255U, 0U, 255U}},
+        {{0.0F, 1.0F, 0.0F}, {0U, 0U, 255U, 255U}}};
+    const uint16_t indices16[3] = {0U, 1U, 2U};
+    const uint32_t indices32[3] = {0U, 1U, 2U};
+
+    CNA_UserPrimitives primitives = {
+        sizeof(CNA_UserPrimitives), UINT32_C(1), CNA_PRIMITIVE_TRIANGLE_LIST,
+        CNA_USER_VERTEX_SOURCE_POSITION_COLOR, vertices, CNA_INVALID_HANDLE, 0, 3, 1, 0U};
+    CNA_UserIndices user_indices = {
+        sizeof(CNA_UserIndices), UINT32_C(1), CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, 0, indices16};
+
+    /* Structural validation happens before the device is reached. */
+    CNA_UserPrimitives malformed = primitives;
+    malformed.vertex_data = 0;
+    CNA_UserPrimitives bad_count = primitives;
+    bad_count.primitive_count = 0;
+    CNA_UserPrimitives bad_source = primitives;
+    bad_source.vertex_source = UINT32_C(9);
+    CNA_UserIndices bad_indices = user_indices;
+    bad_indices.index_element_size = UINT32_C(4);
+    if (cna_graphics_device_draw_user_primitives(graphics_device, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_primitives(graphics_device, &malformed) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_primitives(graphics_device, &bad_count) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_primitives(graphics_device, &bad_source) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_indexed_primitives(
+            graphics_device, &primitives, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_indexed_primitives(
+            graphics_device, &primitives, &bad_indices) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_primitives(0, &primitives) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    if (supports_3d != CNA_TRUE) {
+        /* A 2D-only backend refuses every draw route; nothing further is observable here. */
+        return cna_graphics_device_draw_user_primitives(graphics_device, &primitives) ==
+            CNA_RESULT_NOT_SUPPORTED &&
+            cna_graphics_device_draw_user_indexed_primitives(
+                graphics_device, &primitives, &user_indices) == CNA_RESULT_NOT_SUPPORTED &&
+            validate_device_extensions(graphics_device);
+    }
+
+    /* A raw stream without a declaration would read native objects, so it is refused. */
+    CNA_UserPrimitives raw = primitives;
+    raw.vertex_source = CNA_USER_VERTEX_SOURCE_RAW_STREAM;
+    if (cna_graphics_device_draw_user_primitives(graphics_device, &raw) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_draw_user_indexed_primitives(
+            graphics_device, &raw, &user_indices) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Every user-primitive route needs a current effect and reaches the backend with one. */
+    CNA_EffectHandle basic_effect = CNA_INVALID_HANDLE;
+    if (cna_basic_effect_create(graphics_device, &basic_effect) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_graphics_device_set_current_effect(graphics_device, basic_effect) !=
+        CNA_RESULT_SUCCESS) {
+        (void)cna_effect_destroy(basic_effect);
+        return 0;
+    }
+
+    CNA_VertexDeclarationHandle declaration = CNA_INVALID_HANDLE;
+    int drew = make_position_color_declaration(&declaration);
+    float stream[3 * 4];
+    for (size_t index = 0U; drew && index < 2U; ++index) {
+        /* Slot 0 uses the converting typed route; slot 1 uses a raw GPU stream. */
+        CNA_UserPrimitives request = primitives;
+        if (index == 1U) {
+            for (size_t vertex = 0U; vertex < 3U; ++vertex) {
+                stream[vertex * 4U + 0U] = vertices[vertex].position.x;
+                stream[vertex * 4U + 1U] = vertices[vertex].position.y;
+                stream[vertex * 4U + 2U] = vertices[vertex].position.z;
+                stream[vertex * 4U + 3U] = 0.0F;
+            }
+            request.vertex_source = CNA_USER_VERTEX_SOURCE_RAW_STREAM;
+            request.vertex_data = stream;
+            request.vertex_declaration = declaration;
+        }
+        user_indices.index_element_size = CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS;
+        user_indices.index_data = indices16;
+        drew = is_supported(
+                   cna_graphics_device_draw_user_primitives(graphics_device, &request)) &&
+            is_supported(cna_graphics_device_draw_user_indexed_primitives(
+                graphics_device, &request, &user_indices));
+        if (drew) {
+            user_indices.index_element_size = CNA_INDEX_ELEMENT_SIZE_THIRTY_TWO_BITS;
+            user_indices.index_data = indices32;
+            drew = is_supported(cna_graphics_device_draw_user_indexed_primitives(
+                graphics_device, &request, &user_indices));
+        }
+    }
+
+    if (declaration != CNA_INVALID_HANDLE) {
+        (void)cna_vertex_declaration_destroy(declaration);
+    }
+    if (cna_graphics_device_set_current_effect(graphics_device, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_effect_destroy(basic_effect) != CNA_RESULT_SUCCESS || !drew) {
+        return 0;
+    }
+
+    return validate_device_extensions(graphics_device);
+}
+
+static int validate_device_extensions(CNA_Handle graphics_device)
+{
+    /* CNA extension state. */
+    uint64_t tracked = UINT64_MAX;
+    CNA_Unsupported3DGraphicsCallBehavior behavior = UINT32_MAX;
+    CNA_Bool supports_3d = CNA_FALSE;
+    if (cna_graphics_device_supports_capability(
+            graphics_device, CNA_GRAPHICS_CAPABILITY_THREE_D, &supports_3d) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The pipeline-state extensions need a 3D backend and refuse one that has none. */
+    const CNA_Result expected_pipeline_state =
+        supports_3d == CNA_TRUE ? CNA_RESULT_SUCCESS : CNA_RESULT_NOT_SUPPORTED;
+    if (cna_graphics_device_get_tracked_resource_count(graphics_device, &tracked) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_tracked_resource_count(graphics_device, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_depth_test_enabled(graphics_device, CNA_TRUE) !=
+            expected_pipeline_state ||
+        cna_graphics_device_set_depth_test_enabled(graphics_device, (CNA_Bool)2) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_blend_enabled(graphics_device, CNA_FALSE) !=
+            expected_pipeline_state ||
+        cna_graphics_device_set_depth_write_enabled(graphics_device, CNA_TRUE) !=
+            expected_pipeline_state ||
+        cna_graphics_device_set_context_recovery_enabled(graphics_device, CNA_TRUE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_graphics_profile_ext(
+            graphics_device, CNA_GRAPHICS_PROFILE_REACH) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_graphics_profile_ext(graphics_device, UINT32_C(5)) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    static const char marker[] = "cna-c-api";
+    const CNA_StringView marker_view = {marker, sizeof(marker) - 1U};
+    const CNA_StringView invalid_marker = {"\xC0\x80", 2U};
+    if (cna_graphics_device_set_string_marker_ext(graphics_device, marker_view) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_string_marker_ext(graphics_device, invalid_marker) !=
+            CNA_RESULT_ENCODING) {
+        return 0;
+    }
+
+    if (cna_graphics_device_get_unsupported_3d_call_behavior(graphics_device, &behavior) !=
+            CNA_RESULT_SUCCESS ||
+        behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW ||
+        cna_graphics_device_set_unsupported_3d_call_behavior(
+            graphics_device, CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_unsupported_3d_call_behavior(graphics_device, &behavior) !=
+            CNA_RESULT_SUCCESS ||
+        behavior != CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB ||
+        cna_graphics_device_set_unsupported_3d_call_behavior(graphics_device, UINT32_C(7)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_unsupported_3d_call_behavior(
+            graphics_device, CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A retained current effect stays valid after its own handle is destroyed. */
+    CNA_EffectHandle effect = CNA_INVALID_HANDLE;
+    if (cna_effect_create_empty(graphics_device, &effect) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_graphics_device_set_current_effect(graphics_device, effect) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_current_effect(graphics_device, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_current_effect(graphics_device, graphics_device) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_effect_destroy(effect) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    return cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
+               graphics_device, -1) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1003,7 +1264,8 @@ static CNA_Result on_load(
         !validate_device_events(graphics_device, state) ||
         !validate_frame_control(graphics_device, state) ||
         !validate_backbuffer_window(graphics_device) ||
-        !validate_buffer_binding(graphics_device)) {
+        !validate_buffer_binding(graphics_device) ||
+        !validate_draw_and_extensions(graphics_device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stale_device = graphics_device;
