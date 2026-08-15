@@ -1745,10 +1745,83 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, SpecularTextureInventoryClassifiesEveryPbrRenderer)
+{
+    // GLTF-344 is `KHR_materials_specular`'s partial boundary, and prose is the wrong place to
+    // keep it: "the other renderers remain" was written when four remained and was still being
+    // read after eleven were done. The boundary is a partition instead, and it is the *unfinished*
+    // half that carries the value -- naming the three renderers that sample neither map is what
+    // makes finishing one of them a deliberate edit here rather than a silent drift.
+    //
+    // Both directions are asserted. A renderer moved into `sampling` without the bindings fails,
+    // and so does one that grows them while still listed as factor-only, which is the direction a
+    // half-finished backend would otherwise take unnoticed.
+    constexpr std::array<const char*, 12> sampling{{
+        "bgfx", "diligent", "directx9", "directx11", "directx12", "easygl",
+        "llgl", "magnum", "opengl2", "opengl4", "sdl-gpu", "vulkan",
+    }};
+    // Factor-only is not a capability decision -- it is unfinished work, and the reason is the
+    // same for all three: the binding contract is defined per map with its own UV selector, and
+    // none of these three carries a second UV stream at all. The dual-UV foundation comes first.
+    constexpr std::array<const char*, 3> factorOnly{{"metal", "webgpu", "wicked"}};
+
+    std::set<std::string> expected;
+    for (const char* name : sampling) { expected.insert(name); }
+    for (const char* name : factorOnly) { expected.insert(name); }
+    ASSERT_EQ(15u, expected.size()) << "the two sets must be disjoint";
+
+    const std::filesystem::path renderers = RepositoryRoot() / "modules" / "renderers";
+    ASSERT_TRUE(std::filesystem::is_directory(renderers));
+
+    // Same discriminator as InventoryCoversEveryRendererThatConsumesPbrMaps, so a new PBR renderer
+    // cannot appear to one audit and not the other.
+    std::set<std::string> observed;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(renderers))
+    {
+        if (!entry.is_directory()) { continue; }
+        const std::filesystem::path src = entry.path() / "src";
+        if (!std::filesystem::is_directory(src)) { continue; }
+        for (const std::filesystem::directory_entry& source :
+             std::filesystem::recursive_directory_iterator(src))
+        {
+            if (!source.is_regular_file() || !IsPolicySource(source.path())) { continue; }
+            if (ReadFile(source.path()).find("pbrNormalMap") != std::string::npos)
+            {
+                observed.insert(entry.path().filename().string());
+                break;
+            }
+        }
+    }
+    EXPECT_EQ(expected, observed)
+        << "a PBR renderer was added or removed without a GLTF-344 specular-texture disposition";
+
+    for (const char* name : sampling)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        EXPECT_NE(std::string::npos, source.find("pbrSpecularMap"))
+            << "listed as sampling, but the scalar specular map is never bound";
+        EXPECT_NE(std::string::npos, source.find("pbrSpecularColorMap"))
+            << "listed as sampling, but the specular colour map is never bound";
+    }
+    for (const char* name : factorOnly)
+    {
+        SCOPED_TRACE(name);
+        const std::string source = RendererSlotText(renderers, name);
+        EXPECT_EQ(std::string::npos, source.find("pbrSpecularMap"))
+            << "this renderer now binds a specular map -- move it to `sampling` and give it the "
+               "per-map UV selector, rather than leaving the boundary saying it has neither";
+        EXPECT_EQ(std::string::npos, source.find("pbrSpecularColorMap"))
+            << "this renderer now binds a specular colour map -- move it to `sampling`";
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, EasyGLSamplesBothKhrMaterialsSpecularTextures)
 {
     // GLTF-344 lands backend-by-backend. This focused contract prevents the first completed
-    // renderer from regressing while the repository-wide 15-renderer audit is still being filled.
+    // renderer from regressing; the repository-wide partition is
+    // SpecularTextureInventoryClassifiesEveryPbrRenderer above.
     const std::string source = RendererSlotText(
         RepositoryRoot() / "modules" / "renderers", "easygl");
     ASSERT_FALSE(source.empty());
