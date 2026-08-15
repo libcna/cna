@@ -69,6 +69,13 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11" OR CNA_GRAPHICS_RENDERER STREQUAL 
     add_subdirectory(common/d3d)
 endif()
 
+# plan_fx.md FX-061: the MojoShader-to-CNA translation shared by every backend that executes
+# compiled XNA effects. Entered only where cna_mojoshader was configured, which today means the
+# FNA3D renderer or an SDL_GPU build with -DCNA_SDL_GPU_COMPILED_EFFECTS=ON.
+if(TARGET cna_mojoshader)
+    add_subdirectory(common/mojoshader)
+endif()
+
 # GDI presents the Software renderer's CPU framebuffer through classic Win32 GDI: the
 # software module publishes its shared 2D translation-unit list (and its header interface)
 # for the GDI configuration. Ordering matters: software must be entered before gdi so the

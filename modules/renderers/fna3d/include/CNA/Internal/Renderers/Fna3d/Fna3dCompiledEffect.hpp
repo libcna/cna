@@ -44,15 +44,10 @@ namespace CNA::Internal::Renderers::Fna3d
         explicit Fna3dCompiledEffect(Fna3dRenderer& renderer,
                                      const Fna3dCompiledEffect& cloneSource);
 
-        void ValidateNativeEffect(const char* operation);
-        void BuildDescription();
-        void BuildSamplerMap();
-        void ApplyRenderStates(const CompiledEffectDeviceState& deviceState,
-                               CompiledEffectPassStateChanges& changes);
-        void ApplySamplers(const MOJOSHADER_samplerStateRegister* changeList,
-                           std::uint32_t count, bool vertexStage,
-                           const CompiledEffectDeviceState& deviceState,
-                           CompiledEffectPassStateChanges& changes);
+        // Validation, reflection and state/sampler translation are renderer-neutral and live in
+        // CNA::Internal::Renderers::MojoShaderEffect, shared with every other backend that
+        // executes compiled effects. What stays here is the part that is genuinely FNA3D's: the
+        // native calls, and binding a translated sampler and texture to a slot.
         void ApplyNativeSampler(std::size_t slot, bool vertexStage,
                                 const SamplerState& sampler, Texture* texture);
 

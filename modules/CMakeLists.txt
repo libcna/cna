@@ -159,7 +159,7 @@ set(_cna_renderer_modules
     easygl fna3d freedirect gdi glide headless html-dom llgl magnum metal opengl1
     opengl2 opengl4 opengles1 openvg portablegl sdl-gpu sdl-renderer skia software sokol
     stub svg-dom vulkan
-    webgpu wicked common/d3d)
+    webgpu wicked common/d3d common/mojoshader)
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")
 foreach(_cna_tu IN LISTS _cna_all_module_tus)
