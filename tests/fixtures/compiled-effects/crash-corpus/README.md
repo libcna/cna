@@ -12,6 +12,7 @@ carries, and every one is now rejected as ordinary malformed input.
 | `clone-effect-null-parse-data.fxb` | `MOJOSHADER_cloneEffect` dereferenced a shader's parse data without checking the shader had compiled, and indexed its symbol and parameter tables unbounded |
 | `print-float-stack-overflow.fxb` | `MOJOSHADER_printFloat` advances its cursor past the caller's buffer on purpose, to keep its return value meaningful, but then kept formatting through it -- a stack-buffer-overflow |
 | `ctab-typeinfo-member-offset.fxb` | `parse_ctab_typeinfo` read a struct's member-table offset from the constant table without bounding it, so a structure could point its member list anywhere |
+| `empty-shader-object-unbounded-scan.fxb` | A shader object with a zero-length program. `MOJOSHADER_parse` reads a zero buffer size as "size unknown", sets its token count to 4 billion and scans for an end token that is not there -- straight off the payload |
 
 `Fna3dCompiledEffectTest.CrashCorpusIsRejectedWithoutCrashing` replays all of them on every build.
 They matter most when the FNA3D or MojoShader pin moves: the fixes live in a patch CNA applies to a
