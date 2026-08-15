@@ -716,6 +716,463 @@ CNA_C_API CNA_Result cna_gamepad_state_copy_string(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/** @brief Fixed-width identity of the glyph a controller prints on a face button. */
+typedef uint32_t CNA_GamePadButtonLabel;
+
+/** @brief The label is unknown. */
+#define CNA_GAMEPAD_BUTTON_LABEL_UNKNOWN UINT32_C(0)
+/** @brief Labelled `A`. */
+#define CNA_GAMEPAD_BUTTON_LABEL_A UINT32_C(1)
+/** @brief Labelled `B`. */
+#define CNA_GAMEPAD_BUTTON_LABEL_B UINT32_C(2)
+/** @brief Labelled `X`. */
+#define CNA_GAMEPAD_BUTTON_LABEL_X UINT32_C(3)
+/** @brief Labelled `Y`. */
+#define CNA_GAMEPAD_BUTTON_LABEL_Y UINT32_C(4)
+/** @brief Labelled with a cross. */
+#define CNA_GAMEPAD_BUTTON_LABEL_CROSS UINT32_C(5)
+/** @brief Labelled with a circle. */
+#define CNA_GAMEPAD_BUTTON_LABEL_CIRCLE UINT32_C(6)
+/** @brief Labelled with a square. */
+#define CNA_GAMEPAD_BUTTON_LABEL_SQUARE UINT32_C(7)
+/** @brief Labelled with a triangle. */
+#define CNA_GAMEPAD_BUTTON_LABEL_TRIANGLE UINT32_C(8)
+
+/** @brief Fixed-width identity of how a controller is attached. */
+typedef uint32_t CNA_GamePadConnectionState;
+
+/** @brief The attachment is unknown. */
+#define CNA_GAMEPAD_CONNECTION_STATE_UNKNOWN UINT32_C(0)
+/** @brief Attached by cable. */
+#define CNA_GAMEPAD_CONNECTION_STATE_WIRED UINT32_C(1)
+/** @brief Attached wirelessly. */
+#define CNA_GAMEPAD_CONNECTION_STATE_WIRELESS UINT32_C(2)
+
+/** @brief Fixed-width identity of a device's power situation. */
+typedef uint32_t CNA_PowerState;
+
+/** @brief The power state could not be determined because the query failed. */
+#define CNA_POWER_STATE_ERROR UINT32_C(0)
+/** @brief The power state is unknown. */
+#define CNA_POWER_STATE_UNKNOWN UINT32_C(1)
+/** @brief Running on battery. */
+#define CNA_POWER_STATE_ON_BATTERY UINT32_C(2)
+/** @brief No battery is present. */
+#define CNA_POWER_STATE_NO_BATTERY UINT32_C(3)
+/** @brief Charging. */
+#define CNA_POWER_STATE_CHARGING UINT32_C(4)
+/** @brief Fully charged. */
+#define CNA_POWER_STATE_CHARGED UINT32_C(5)
+
+/**
+ * @brief Describes one finger on a controller touchpad.
+ *
+ * A plain fixed value, because the canonical query reports the same four numbers through separate
+ * output references rather than through an object.
+ */
+typedef struct CNA_GamePadTouchpadFinger {
+    /** @brief Nonzero while the finger is touching the pad. */
+    CNA_Bool is_down;
+
+    /** @brief Reserved; set to zero. */
+    uint8_t reserved[3];
+
+    /** @brief Normalized X position on the pad. */
+    float x;
+
+    /** @brief Normalized Y position on the pad. */
+    float y;
+
+    /** @brief Normalized pressure. */
+    float pressure;
+} CNA_GamePadTouchpadFinger;
+
+/**
+ * @brief Applies CNA's canonical axis dead-zone exclusion to a single value.
+ *
+ * @param value Raw axis value.
+ * @param dead_zone Dead-zone threshold, such as `CNA_GAMEPAD_LEFT_DEAD_ZONE`.
+ * @param out_value Receives the processed value.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output or a
+ *         non-finite input. The output is unchanged on failure.
+ *
+ * This pure value operation touches no runtime state and may run on any thread. The three
+ * canonical thresholds are already exposed as `CNA_GAMEPAD_LEFT_DEAD_ZONE`,
+ * `CNA_GAMEPAD_RIGHT_DEAD_ZONE` and `CNA_GAMEPAD_TRIGGER_THRESHOLD`.
+ */
+CNA_C_API CNA_Result cna_gamepad_exclude_axis_dead_zone(
+    float value,
+    float dead_zone,
+    float* out_value);
+
+/**
+ * @brief Sets the two rumble motors of a controller.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param left_motor Left motor strength.
+ * @param right_motor Right motor strength.
+ * @param out_applied Receives `CNA_TRUE` when the device accepted the request.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * A slot with nothing connected, or a controller without rumble, reports `CNA_FALSE` rather than
+ * failing — refusal is the canonical answer, not an error.
+ */
+CNA_C_API CNA_Result cna_gamepad_set_vibration(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    float left_motor,
+    float right_motor,
+    CNA_Bool* out_applied);
+
+/**
+ * @brief Sets the light bar color of a controller.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param color Requested color.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical operation returns nothing, so a controller without a light bar is silently
+ * unaffected and this route still succeeds.
+ */
+CNA_C_API CNA_Result cna_gamepad_set_light_bar_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_Color color);
+
+/**
+ * @brief Sets the two trigger rumble motors of a controller.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param left_trigger Left trigger motor strength.
+ * @param right_trigger Right trigger motor strength.
+ * @param out_applied Receives `CNA_TRUE` when the device accepted the request.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_set_trigger_vibration_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    float left_trigger,
+    float right_trigger,
+    CNA_Bool* out_applied);
+
+/**
+ * @brief Reads a controller's gyroscope.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_gyro Receives the reading; left unchanged when none is available.
+ * @param out_available Receives `CNA_TRUE` when a reading was produced.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical query reports availability through its return value and the reading through an
+ * output reference, so the C route keeps both answers separate rather than folding "no sensor"
+ * into a failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_gyro_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_Vector3* out_gyro,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Reads a controller's accelerometer.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_acceleration Receives the reading; left unchanged when none is available.
+ * @param out_available Receives `CNA_TRUE` when a reading was produced.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_accelerometer_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_Vector3* out_acceleration,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Reads the player index a controller reports for itself.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_index Receives the device's own index, which is negative when it has none.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_player_index_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    int32_t* out_index);
+
+/**
+ * @brief Sets the player index a controller reports for itself.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param index New device index.
+ * @param out_applied Receives `CNA_TRUE` when the device accepted the request.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_set_player_index_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    int32_t index,
+    CNA_Bool* out_applied);
+
+/**
+ * @brief Reads a controller's power situation and remaining charge.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_state Receives one `CNA_POWER_STATE_*` identity.
+ * @param out_percent Receives the remaining charge percentage, which is negative when unknown.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * `CNA_POWER_STATE_ERROR` is a canonical answer the query itself produces, not a C failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_power_info_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_PowerState* out_state,
+    int32_t* out_percent);
+
+/**
+ * @brief Reads the glyph a controller prints on a face button.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param button One `CNA_GAMEPAD_BUTTON_*` identity.
+ * @param out_label Receives one `CNA_GAMEPAD_BUTTON_LABEL_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * A button the controller does not label reports `CNA_GAMEPAD_BUTTON_LABEL_UNKNOWN`.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_button_label_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_GamePadButtonFlags button,
+    CNA_GamePadButtonLabel* out_label);
+
+/**
+ * @brief Reports the length of a controller's stable device identifier, without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_guid_size_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a controller's stable device identifier without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented failure. No
+ *         partial value is written.
+ *
+ * An empty slot reports zero bytes, which is an ordinary answer rather than a failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_copy_guid_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the length of a controller's display name, without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_name_size_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a controller's display name without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented failure. No
+ *         partial value is written.
+ */
+CNA_C_API CNA_Result cna_gamepad_copy_name_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the length of a controller's device path, without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_path_size_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a controller's device path without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented failure. No
+ *         partial value is written.
+ */
+CNA_C_API CNA_Result cna_gamepad_copy_path_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the length of a controller's serial number, without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_serial_size_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a controller's serial number without a terminator.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented failure. No
+ *         partial value is written.
+ */
+CNA_C_API CNA_Result cna_gamepad_copy_serial_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reads a controller's firmware version.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_version Receives the version, which is zero when the device reports none.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_firmware_version_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint16_t* out_version);
+
+/**
+ * @brief Reads a controller's Steam input handle.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_handle Receives the handle, which is zero when the device has none.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The value is an opaque native identifier, not a `CNA_Handle`, and the C API never dereferences
+ * it.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_steam_handle_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    uint64_t* out_handle);
+
+/**
+ * @brief Reads how a controller is attached.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_state Receives one `CNA_GAMEPAD_CONNECTION_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_connection_state_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    CNA_GamePadConnectionState* out_state);
+
+/**
+ * @brief Reads how many touchpads a controller has.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param out_count Receives the touchpad count, which is zero when there are none.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_touchpad_count_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    int32_t* out_count);
+
+/**
+ * @brief Reads how many fingers one touchpad can track.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param touchpad Zero-based touchpad index.
+ * @param out_count Receives the finger count, which is zero when the touchpad does not exist.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_touchpad_finger_count_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    int32_t touchpad,
+    int32_t* out_count);
+
+/**
+ * @brief Reads one finger on one touchpad.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param player_index Player slot in the inclusive range one through four.
+ * @param touchpad Zero-based touchpad index.
+ * @param finger Zero-based finger index.
+ * @param out_finger Receives the reading; left unchanged when none is available.
+ * @param out_available Receives `CNA_TRUE` when a reading was produced.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical query reports four separate values through output references; C collects them into
+ * one fixed value and keeps the availability answer separate, so an absent touchpad or finger is
+ * an ordinary answer rather than a failure.
+ */
+CNA_C_API CNA_Result cna_gamepad_get_touchpad_finger_ext(
+    CNA_Handle game,
+    CNA_PlayerIndex player_index,
+    int32_t touchpad,
+    int32_t finger,
+    CNA_GamePadTouchpadFinger* out_finger,
+    CNA_Bool* out_available);
+
 #ifdef __cplusplus
 }
 #endif

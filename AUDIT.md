@@ -36,8 +36,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
 > adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
 > adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
-> snapshot itself — with every constructor, comparison, hash and string operation. The generated
-> inventory currently records 4,063 implemented, 30 partial, 2,205 planned and 117
+> snapshot itself — with every constructor, comparison, hash and string operation, and
+> `CBIND-037B3` adds the `GamePad` statics: vibration, light bar, sensors, player index, power
+> info, button labels, the four identity strings, connection state and the touchpad queries. The
+> generated inventory currently records 4,108 implemented, 30 partial, 2,160 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

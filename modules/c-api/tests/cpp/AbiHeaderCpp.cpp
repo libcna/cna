@@ -745,3 +745,12 @@ static_assert(offsetof(CNA_GamePadThumbSticks, right) == 8U);
 static_assert(offsetof(CNA_GamePadTriggers, right) == 4U);
 static_assert(sizeof(CNA_GamePadAnalogState) ==
               sizeof(CNA_GamePadThumbSticks) + sizeof(CNA_GamePadTriggers));
+
+static_assert(sizeof(CNA_GamePadButtonLabel) == sizeof(uint32_t));
+static_assert(sizeof(CNA_GamePadConnectionState) == sizeof(uint32_t));
+static_assert(sizeof(CNA_PowerState) == sizeof(uint32_t));
+static_assert(CNA_GAMEPAD_BUTTON_LABEL_TRIANGLE == UINT32_C(8));
+static_assert(CNA_GAMEPAD_CONNECTION_STATE_WIRELESS == UINT32_C(2));
+static_assert(CNA_POWER_STATE_CHARGED == UINT32_C(5));
+static_assert(sizeof(CNA_GamePadTouchpadFinger) == 16U);
+static_assert(offsetof(CNA_GamePadTouchpadFinger, pressure) == 12U);

@@ -372,6 +372,18 @@
 > directional pad is merged into it — which is the relationship every state CNA itself builds
 > already has, since the capture path derives both from one raw mask. The inventory is now 4,063
 > implemented, 30 partial, 2,205 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B3 then maps the `GamePad` statics. Each takes an active game handle for the same reason
+> the state and capability captures do — CNA is event-driven, so a device query is only meaningful
+> on the game thread of a running game — except the pure dead-zone exclusion, which takes none. Two
+> canonical shapes are preserved rather than collapsed: a query that reports availability through
+> its return value and its answer through an output reference keeps **both** answers separate in C,
+> so "no sensor" is an ordinary answer rather than a failure; and the four identity strings use the
+> project count/copy protocol. The touchpad finger query's four output references become one fixed
+> 16-byte value. Three CNA::Input identity enumerations are borrowed from the later input-extension
+> slice, because three of these statics return them and cannot be mapped without them. The
+> inventory is now 4,108 implemented, 30 partial, 2,160 planned and 117 N/A; all four trees stay
+> green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

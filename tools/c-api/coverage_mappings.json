@@ -3002,6 +3002,65 @@
       "tests": "`InputSnapshotsSmoke.c` covers the default snapshot, both constructions with their derived trigger and virtual stick bits asserted individually, the merged directional pad read back, all four component projections, the extension packet-number setter observed through equality, equal and unequal comparisons, the hash ignoring a changed analog value, the exact fixed string with its count/copy round trip and a too-small capacity writing nothing, and every null, invalid-snapshot and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-statics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad(?:::(?:SetVibration|SetLightBarEXT|SetTriggerVibrationEXT|GetGyroEXT|GetAccelerometerEXT|GetPlayerIndexEXT|SetPlayerIndexEXT|GetPowerInfoEXT|GetButtonLabelEXT|GetNameEXT|GetPathEXT|GetSerialEXT|GetGUIDEXT|GetFirmwareVersionEXT|GetSteamHandleEXT|GetConnectionStateEXT|GetTouchpadCountEXT|GetTouchpadFingerCountEXT|GetTouchpadFingerEXT|ExcludeAxisDeadZone))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "one `cna_gamepad_*` route per canonical static, each taking an active game handle for the same reason the state and capability captures do \u2014 CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception: it is a pure value operation and takes no handle. The class itself has no handle, because its canonical constructor is deleted and every member is static. Two canonical shapes are preserved rather than collapsed: a query that reports availability through its return value and its answer through an output reference keeps both answers separate in C \u2014 `_get_gyro_ext`, `_get_accelerometer_ext` and `_get_touchpad_finger_ext` each take an availability output, so \"no sensor\" is an ordinary answer, not a failure \u2014 and the four identity strings use the project count/copy protocol. The touchpad finger query returns its four output references as one fixed `CNA_GamePadTouchpadFinger` value. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary",
+      "tests": "`InputSnapshotsSmoke.c` calls every route inside the update callback and asserts the shape of an empty slot answer for each \u2014 false, zero, empty or an `Unknown` identity \u2014 plus the count/copy round trip for all four identity strings, an out-of-range player slot and a null output refused per route, an undefined button bit refused by the label query, and the wrong-thread refusal; the pure dead-zone exclusion is covered outside the callback including its non-finite refusal leaving the output untouched. C and C++ ABI assertions freeze the three identity enumerations and the touchpad-finger layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B3"
+    },
+    {
+      "id": "gamepad-dead-zone-constants",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::(?:LeftDeadZone|RightDeadZone|TriggerThreshold)$",
+      "kinds": [
+        "constant"
+      ],
+      "mapping": "the `CNA_GAMEPAD_LEFT_DEAD_ZONE`, `CNA_GAMEPAD_RIGHT_DEAD_ZONE` and `CNA_GAMEPAD_TRIGGER_THRESHOLD` macros, which carry the canonical expressions verbatim so a C consumer computes the identical float rather than a rounded decimal copy",
+      "tests": "`InputSnapshotsSmoke.c` feeds each constant to `cna_gamepad_apply_dead_zone` and `cna_gamepad_exclude_axis_dead_zone` and asserts the boundary and midpoint results, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B3"
+    },
+    {
+      "id": "input-gamepad-button-label",
+      "qualified_name_regex": "^CNA::Input::GamePadButtonLabelEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GamePadButtonLabel` and the `CNA_GAMEPAD_BUTTON_LABEL_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** from the input-extension slice, because `GamePad::GetButtonLabelEXT` returns it and cannot be mapped without it",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported label is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B3"
+    },
+    {
+      "id": "input-gamepad-connection-state",
+      "qualified_name_regex": "^CNA::Input::GamePadConnectionStateEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GamePadConnectionState` and the `CNA_GAMEPAD_CONNECTION_STATE_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** because `GamePad::GetConnectionStateEXT` returns it",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B3"
+    },
+    {
+      "id": "input-power-state",
+      "qualified_name_regex": "^CNA::Input::PowerStateEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_PowerState` and the `CNA_POWER_STATE_*` identities at the canonical ordinals. **Borrowed into CBIND-037B3** because `GamePad::GetPowerInfoEXT` returns it. `CNA_POWER_STATE_ERROR` is a canonical answer the query itself produces, not a C failure, and is documented as such",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B3"
     }
   ]
 }

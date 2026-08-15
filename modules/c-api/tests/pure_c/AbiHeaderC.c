@@ -925,3 +925,22 @@ _Static_assert(offsetof(CNA_GamePadAnalogState, left_thumb_stick) ==
                    sizeof(CNA_GamePadAnalogState) ==
                        sizeof(CNA_GamePadThumbSticks) + sizeof(CNA_GamePadTriggers),
                "CNA_GamePadAnalogState must stay the thumbstick and trigger values back to back");
+
+_Static_assert(sizeof(CNA_GamePadButtonLabel) == sizeof(uint32_t) &&
+                   sizeof(CNA_GamePadConnectionState) == sizeof(uint32_t) &&
+                   sizeof(CNA_PowerState) == sizeof(uint32_t) &&
+                   CNA_GAMEPAD_BUTTON_LABEL_UNKNOWN == UINT32_C(0) &&
+                   CNA_GAMEPAD_BUTTON_LABEL_TRIANGLE == UINT32_C(8) &&
+                   CNA_GAMEPAD_CONNECTION_STATE_UNKNOWN == UINT32_C(0) &&
+                   CNA_GAMEPAD_CONNECTION_STATE_WIRELESS == UINT32_C(2) &&
+                   CNA_POWER_STATE_ERROR == UINT32_C(0) &&
+                   CNA_POWER_STATE_CHARGED == UINT32_C(5),
+               "CNA gamepad device identities must remain stable");
+_Static_assert(sizeof(CNA_GamePadTouchpadFinger) == 16U &&
+                   _Alignof(CNA_GamePadTouchpadFinger) == 4U &&
+                   offsetof(CNA_GamePadTouchpadFinger, is_down) == 0U &&
+                   offsetof(CNA_GamePadTouchpadFinger, reserved) == 1U &&
+                   offsetof(CNA_GamePadTouchpadFinger, x) == 4U &&
+                   offsetof(CNA_GamePadTouchpadFinger, y) == 8U &&
+                   offsetof(CNA_GamePadTouchpadFinger, pressure) == 12U,
+               "CNA_GamePadTouchpadFinger layout must remain stable");

@@ -15,6 +15,7 @@ typedef struct WrongThreadState {
     CNA_Result mouse_result;
     CNA_Result gamepad_result;
     CNA_Result capabilities_result;
+    CNA_Result vibration_result;
     CNA_Result touch_result;
 } WrongThreadState;
 
@@ -627,6 +628,28 @@ static int validate_pure_state_value_helpers(void)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static int validate_pure_dead_zone_exclusion(void)
+{
+    float value = 9.0F;
+
+    /* Inside the dead zone the axis reads zero; outside it, the remainder is rescaled so the
+       range stays continuous up to one. */
+    if (cna_gamepad_exclude_axis_dead_zone(
+            CNA_GAMEPAD_LEFT_DEAD_ZONE, CNA_GAMEPAD_LEFT_DEAD_ZONE, &value) !=
+            CNA_RESULT_SUCCESS || value != 0.0F ||
+        cna_gamepad_exclude_axis_dead_zone(1.0F, CNA_GAMEPAD_LEFT_DEAD_ZONE, &value) !=
+            CNA_RESULT_SUCCESS || !nearly_equal(value, 1.0F) ||
+        cna_gamepad_exclude_axis_dead_zone(-1.0F, CNA_GAMEPAD_LEFT_DEAD_ZONE, &value) !=
+            CNA_RESULT_SUCCESS || !nearly_equal(value, -1.0F)) {
+        return 0;
+    }
+    value = 9.0F;
+    return cna_gamepad_exclude_axis_dead_zone(1.0F, 0.0F, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_exclude_axis_dead_zone(1.0F / 0.0F - 1.0F / 0.0F, 0.0F, &value) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        value == 9.0F;
+}
+
 static int validate_pure_touch_helpers(void)
 {
     CNA_TouchState state = {0};
@@ -681,6 +704,126 @@ static int validate_pure_touch_helpers(void)
         return 0;
     }
     return 1;
+}
+
+/* Every device query below is answered for an empty slot too: an absent controller is an ordinary
+   answer -- false, zero, empty or Unknown -- never a failure. No verification tree has a real
+   controller, so these assert the shape of the answer and the refusals, not a specific device. */
+static int validate_device_queries(const CNA_Handle game)
+{
+    CNA_Vector3 reading = {9.0F, 9.0F, 9.0F};
+    CNA_GamePadTouchpadFinger finger = {UINT8_C(9), {9U, 9U, 9U}, 9.0F, 9.0F, 9.0F};
+    CNA_GamePadButtonLabel label = UINT32_C(999);
+    CNA_GamePadConnectionState connection = UINT32_C(999);
+    CNA_PowerState power = UINT32_C(999);
+    CNA_Bool flag = UINT8_C(9);
+    int32_t number = 9;
+    int32_t percent = 9;
+    uint16_t firmware = UINT16_C(9);
+    uint64_t handle = UINT64_C(9);
+    uint64_t bytes = UINT64_C(9);
+    char text[64];
+
+    if (cna_gamepad_set_vibration(game, CNA_PLAYER_INDEX_ONE, 0.5F, 0.5F, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_set_trigger_vibration_ext(game, CNA_PLAYER_INDEX_ONE, 0.5F, 0.5F, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_set_light_bar_ext(
+            game, CNA_PLAYER_INDEX_ONE, (CNA_Color){255U, 0U, 0U, 255U}) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_gamepad_get_gyro_ext(game, CNA_PLAYER_INDEX_ONE, &reading, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        (flag == CNA_FALSE && reading.x != 9.0F) ||
+        cna_gamepad_get_accelerometer_ext(game, CNA_PLAYER_INDEX_ONE, &reading, &flag) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_gamepad_get_player_index_ext(game, CNA_PLAYER_INDEX_ONE, &number) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_set_player_index_ext(game, CNA_PLAYER_INDEX_ONE, 0, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_get_power_info_ext(game, CNA_PLAYER_INDEX_ONE, &power, &percent) !=
+            CNA_RESULT_SUCCESS ||
+        power > CNA_POWER_STATE_CHARGED ||
+        cna_gamepad_get_button_label_ext(
+            game, CNA_PLAYER_INDEX_ONE, CNA_GAMEPAD_BUTTON_A, &label) != CNA_RESULT_SUCCESS ||
+        label > CNA_GAMEPAD_BUTTON_LABEL_TRIANGLE ||
+        cna_gamepad_get_connection_state_ext(game, CNA_PLAYER_INDEX_ONE, &connection) !=
+            CNA_RESULT_SUCCESS ||
+        connection > CNA_GAMEPAD_CONNECTION_STATE_WIRELESS) {
+        return 0;
+    }
+    if (cna_gamepad_get_firmware_version_ext(game, CNA_PLAYER_INDEX_ONE, &firmware) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_get_steam_handle_ext(game, CNA_PLAYER_INDEX_ONE, &handle) !=
+            CNA_RESULT_SUCCESS ||
+        cna_gamepad_get_touchpad_count_ext(game, CNA_PLAYER_INDEX_ONE, &number) !=
+            CNA_RESULT_SUCCESS || number < 0 ||
+        cna_gamepad_get_touchpad_finger_count_ext(game, CNA_PLAYER_INDEX_ONE, 0, &number) !=
+            CNA_RESULT_SUCCESS || number < 0 ||
+        cna_gamepad_get_touchpad_finger_ext(
+            game, CNA_PLAYER_INDEX_ONE, 0, 0, &finger, &flag) != CNA_RESULT_SUCCESS ||
+        (flag == CNA_FALSE && finger.is_down != UINT8_C(9))) {
+        return 0;
+    }
+
+    /* All four identity strings use the same count/copy protocol. */
+    {
+        typedef CNA_Result (*size_route)(CNA_Handle, CNA_PlayerIndex, uint64_t*);
+        typedef CNA_Result (*copy_route)(CNA_Handle, CNA_PlayerIndex, char*, uint64_t, uint64_t*);
+        static const size_route sizes[4] = {
+            cna_gamepad_get_guid_size_ext, cna_gamepad_get_name_size_ext,
+            cna_gamepad_get_path_size_ext, cna_gamepad_get_serial_size_ext
+        };
+        static const copy_route copies[4] = {
+            cna_gamepad_copy_guid_ext, cna_gamepad_copy_name_ext,
+            cna_gamepad_copy_path_ext, cna_gamepad_copy_serial_ext
+        };
+        size_t index = 0U;
+        for (index = 0U; index < 4U; ++index) {
+            uint64_t copied = UINT64_C(9);
+            memset(text, 0, sizeof(text));
+            if (sizes[index](game, CNA_PLAYER_INDEX_ONE, &bytes) != CNA_RESULT_SUCCESS ||
+                bytes >= (uint64_t)sizeof(text) ||
+                copies[index](game, CNA_PLAYER_INDEX_ONE, text, (uint64_t)sizeof(text), &copied) !=
+                    CNA_RESULT_SUCCESS ||
+                copied != bytes || (uint64_t)strlen(text) != bytes) {
+                return 0;
+            }
+            if (sizes[index](game, UINT32_C(4), &bytes) != CNA_RESULT_INVALID_ARGUMENT ||
+                sizes[index](game, CNA_PLAYER_INDEX_ONE, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+                copies[index](game, CNA_PLAYER_INDEX_ONE, text, (uint64_t)sizeof(text), 0) !=
+                    CNA_RESULT_INVALID_ARGUMENT) {
+                return 0;
+            }
+        }
+    }
+
+    /* An out-of-range player slot is refused by every route, and so is a null output. */
+    return cna_gamepad_set_vibration(game, UINT32_C(4), 0.0F, 0.0F, &flag) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_set_vibration(game, CNA_PLAYER_INDEX_ONE, 0.0F, 0.0F, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_set_light_bar_ext(
+            game, UINT32_C(4), (CNA_Color){0U, 0U, 0U, 0U}) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_gyro_ext(game, CNA_PLAYER_INDEX_ONE, 0, &flag) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_accelerometer_ext(game, UINT32_C(9), &reading, &flag) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_power_info_ext(game, CNA_PLAYER_INDEX_ONE, &power, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_button_label_ext(
+            game, CNA_PLAYER_INDEX_ONE, UINT32_C(0x80000000), &label) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_connection_state_ext(game, CNA_PLAYER_INDEX_ONE, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_touchpad_finger_ext(
+            game, CNA_PLAYER_INDEX_ONE, 0, 0, &finger, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_firmware_version_ext(game, UINT32_C(4), &firmware) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_gamepad_get_steam_handle_ext(game, CNA_PLAYER_INDEX_ONE, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
 }
 
 static CNA_Result on_update(
@@ -768,6 +911,10 @@ static CNA_Result on_update(
         }
     }
 
+    if (!validate_device_queries(game)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+
     CNA_TouchCapabilities capabilities = {
         sizeof(CNA_TouchCapabilities), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U}, 0U
     };
@@ -848,6 +995,15 @@ static int capture_on_wrong_thread(void* const context)
         state->game,
         CNA_PLAYER_INDEX_ONE,
         &capabilities);
+    {
+        CNA_Bool applied = CNA_FALSE;
+        state->vibration_result = cna_gamepad_set_vibration(
+            state->game,
+            CNA_PLAYER_INDEX_ONE,
+            0.0F,
+            0.0F,
+            &applied);
+    }
     state->touch_result = cna_touch_get_state(state->game, &touch);
     return 0;
 }
@@ -873,8 +1029,11 @@ int main(void)
     if (!validate_pure_state_value_helpers()) {
         return 14;
     }
-    if (!validate_pure_touch_helpers()) {
+    if (!validate_pure_dead_zone_exclusion()) {
         return 15;
+    }
+    if (!validate_pure_touch_helpers()) {
+        return 16;
     }
 
     InputState input_state = {0};
@@ -898,7 +1057,8 @@ int main(void)
     }
 
     WrongThreadState wrong_thread = {
-        game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
+        game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS,
+        CNA_RESULT_SUCCESS
     };
     thrd_t thread;
     if (thrd_create(&thread, capture_on_wrong_thread, &wrong_thread) != thrd_success ||
@@ -906,6 +1066,7 @@ int main(void)
         wrong_thread.mouse_result != CNA_RESULT_THREAD ||
         wrong_thread.gamepad_result != CNA_RESULT_THREAD ||
         wrong_thread.capabilities_result != CNA_RESULT_THREAD ||
+        wrong_thread.vibration_result != CNA_RESULT_THREAD ||
         wrong_thread.touch_result != CNA_RESULT_THREAD) {
         return 3;
     }
