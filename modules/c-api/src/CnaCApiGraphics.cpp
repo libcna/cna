@@ -300,7 +300,7 @@ CNA_Result CreateOwnedTexture2DWithKind(
     const ObjectKind kind,
     CNA_Handle* const outTexture)
 {
-    if (texture == nullptr || parentGame == CNA_INVALID_HANDLE || outTexture == nullptr ||
+    if (texture == nullptr || outTexture == nullptr ||
         (kind != ObjectKind::Texture2D && kind != ObjectKind::RenderTarget2D)) {
         return Fail(
             CNA_RESULT_INVALID_ARGUMENT,
@@ -317,7 +317,9 @@ CNA_Result CreateOwnedTexture2DWithKind(
             ErrorCategoryForResult(result),
             "The owned Texture2D handle could not be created.");
     }
-    AddOwnedGraphicsResource();
+    if (parentGame != CNA_INVALID_HANDLE) {
+        AddOwnedGraphicsResource();
+    }
     return CNA_RESULT_SUCCESS;
 }
 
@@ -330,6 +332,14 @@ CNA_Result CreateOwnedTexture2D(
 {
     return CreateOwnedTexture2DWithKind(
         std::move(texture), parentGame, ObjectKind::Texture2D, outTexture);
+}
+
+CNA_Result CreateStandaloneTexture2D(
+    std::shared_ptr<Texture2D> texture,
+    CNA_Handle* const outTexture)
+{
+    return CreateOwnedTexture2DWithKind(
+        std::move(texture), CNA_INVALID_HANDLE, ObjectKind::Texture2D, outTexture);
 }
 
 CNA_Result CreateOwnedRenderTarget2D(
@@ -644,11 +654,11 @@ CNA_Result cna_texture2d_create(
                 CNA_ERROR_CATEGORY_ARGUMENT,
                 "The Texture2D surface-format identity is invalid.");
         }
-        if (createInfo->format != CNA_SURFACE_FORMAT_COLOR) {
+        if (!CNA::C::Detail::IsTexture2DFormatSupportedByBuild(createInfo->format)) {
             return Fail(
                 CNA_RESULT_NOT_SUPPORTED,
                 CNA_ERROR_CATEGORY_NOT_SUPPORTED,
-                "The initial C Texture2D slice supports only CNA_SURFACE_FORMAT_COLOR.");
+                "The Texture2D surface format is unavailable on the selected renderer.");
         }
         if (createInfo->width > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
             createInfo->height > static_cast<uint32_t>(std::numeric_limits<int>::max()) ||
@@ -687,7 +697,7 @@ CNA_Result cna_texture2d_create(
             static_cast<int>(createInfo->width),
             static_cast<int>(createInfo->height),
             createInfo->mip_map == CNA_TRUE,
-            SurfaceFormat::Color);
+            static_cast<SurfaceFormat>(createInfo->format));
         return CNA::C::Detail::CreateOwnedTexture2D(
             texture,
             graphicsDevice->parentGame,
@@ -839,7 +849,9 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
                 ErrorCategoryForResult(releaseResult),
                 "The owned Texture2D handle could not be released.");
         }
-        RemoveOwnedGraphicsResource();
+        if (texture->parentGame != CNA_INVALID_HANDLE) {
+            RemoveOwnedGraphicsResource();
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

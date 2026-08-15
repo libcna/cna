@@ -247,61 +247,14 @@
       "task": "CBIND-026"
     },
     {
-      "id": "texture2d-handle-type",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D$",
-      "kinds": ["class"],
-      "mapping": "owned game-child Texture2D `CNA_Handle`",
-      "tests": "`LifecycleSmoke.c` create/info/transfer/lifetime under two renderers",
+      "id": "texture-and-texture2d-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:2D)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field"],
+      "mapping": "owned standalone or game-child `CNA_Handle` resources; versioned common/2D/storage snapshots; all constructors and factories through device, file, encoded-memory, RGBA8 and CPU-only creation; every typed full/mip/rectangle transfer through `CNA_Texture2DTransfer` plus `CNA_TextureDataType`; direct raw-RGBA8 upload through the native SetDataRGBA route; Texture format/block/alignment validation helpers; exact type-name count/copy; and PNG/JPEG memory/file encoding. Stream objects, native renderer pointers, weak pointers, protected construction and copy/move storage remain behind the adapter; their safe observable state is exposed without crossing the ABI",
+      "tests": "all 27 formats, 18 transfer representations, constructors/factories, common and 2D properties, full/rectangle/mip transfers, PNG/JPEG memory and file round-trips, both stream-decode variants, storage/type-name snapshots, lifecycle, atomic capacity failures and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
       "status": "implemented",
-      "task": "CBIND-023"
-    },
-    {
-      "id": "texture2d-supported-constructors",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::Texture2D$",
-      "signature_regex": "^\\(GraphicsDevice &graphicsDevice, int width, int height(?:, bool mipMap, SurfaceFormat format)?\\)$",
-      "kinds": ["constructor"],
-      "mapping": "`cna_texture2d_create` with `CNA_Texture2DCreateInfo`",
-      "tests": "`LifecycleSmoke.c` dimensions/format/mips/parent and failure cases",
-      "status": "implemented",
-      "task": "CBIND-023"
-    },
-    {
-      "id": "texture2d-info-properties",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::get(?:Width|Height|Bounds)Property$",
-      "kinds": ["method"],
-      "mapping": "`cna_texture2d_get_info` versioned snapshot",
-      "tests": "ABI layout and `LifecycleSmoke.c` create/info cases",
-      "status": "implemented",
-      "task": "CBIND-023"
-    },
-    {
-      "id": "texture2d-color-setdata",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::SetData$",
-      "signature_regex": "^\\(const Color \\*data, int elementCount\\)$",
-      "kinds": ["method"],
-      "mapping": "`cna_texture2d_set_data_rgba8` full level zero",
-      "tests": "HEADLESS/SDL_RENDERER upload, size and lifetime cases",
-      "status": "implemented",
-      "task": "CBIND-023"
-    },
-    {
-      "id": "texture2d-color-getdata",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture2D::GetData$",
-      "signature_regex": "^\\(Color \\*data, int elementCount\\) const$",
-      "kinds": ["method"],
-      "mapping": "`cna_texture2d_get_data_rgba8` full level zero",
-      "tests": "HEADLESS/SDL_RENDERER round-trip and capacity cases",
-      "status": "implemented",
-      "task": "CBIND-023"
-    },
-    {
-      "id": "texture-base-info-partial",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::Texture::get(?:Format|LevelCount)Property$",
-      "kinds": ["method"],
-      "mapping": "`cna_texture2d_get_info` for Texture2D handles only",
-      "tests": "Texture2D info tests; other Texture subclasses remain unmapped",
-      "status": "partial",
-      "task": "CBIND-023"
+      "task": "CBIND-035C4"
     },
     {
       "id": "spritebatch-handle-type",

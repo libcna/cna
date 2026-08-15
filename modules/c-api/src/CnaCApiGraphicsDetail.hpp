@@ -32,6 +32,10 @@ struct RenderTargetCubeResource final {
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
 
+[[nodiscard]] CNA_Result CreateStandaloneTexture2D(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
+    CNA_Handle* outTexture);
+
 [[nodiscard]] CNA_Result CreateOwnedRenderTarget2D(
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
     CNA_Handle parentGame,
@@ -40,6 +44,8 @@ struct RenderTargetCubeResource final {
 [[nodiscard]] CNA_Result GetOwnedTexture2D(
     CNA_Handle handle,
     std::shared_ptr<Texture2DResource>* outTexture);
+
+[[nodiscard]] bool IsTexture2DFormatSupportedByBuild(uint32_t format) noexcept;
 
 } // namespace CNA::C::Detail
 

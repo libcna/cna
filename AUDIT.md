@@ -9,10 +9,12 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
-> **C ABI tracking note (2026-08-14):** `modules/c-api/` now has the experimental C17 ABI
-> substrate and a HEADLESS-tested adapter slice for `Game`, `GameTime`, `GameWindow` title and
-> `GraphicsDevice::Clear` (`CBIND-007`–`020`). This does not constitute broad XNA C API coverage:
-> status and the required complete-public-surface mapping are tracked in `plan_binding.md` and
+> **C ABI tracking note (2026-08-15):** `modules/c-api/` remains an experimental C17 ABI and is
+> complete through `CBIND-035C4`, including the common graphics-resource contract and complete
+> C-native `Texture`/`Texture2D` construction, typed transfer and encoded-image routes. The
+> generated inventory currently records 2,210 implemented, 19 partial, 4,116 planned and 70
+> not-applicable public/protected declarations. This is not complete CNA C API coverage; status
+> and the required full-surface mapping remain tracked in `plan_binding.md` and
 > `docs/c-api/COVERAGE.md`.
 
 ---

@@ -24,8 +24,8 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Graphics states | Complete BlendState, DepthStencilState, RasterizerState and SamplerState POD descriptors; native presets; device get/set; 16 pixel and vertex sampler slots | Applying an otherwise valid state may fail when the compiled backend cannot represent it; Effect and transform-matrix SpriteBatch variants remain planned |
 | Display and presentation | DisplayMode initialization/equality; adapter metadata, UTF-8 strings, modes, preferences, profile/format queries; PresentationParameters init/clone/bounds/device round-trip | Adapter indices are point-in-time; native monitor/window handles are deliberately not disclosed; active-device adapter refresh returns `NOT_SUPPORTED` |
 | Backbuffer | Query logical width, height and format; count/query then copy the complete RGBA8 backbuffer | Draw-time use; HEADLESS honestly returns `CNA_RESULT_NOT_SUPPORTED`; no region or non-Color readback |
-| Surface formats | Stable identities for all 27 currently canonical `SurfaceFormat` values | Initial texture transfer accepts only `CNA_SURFACE_FORMAT_COLOR` |
-| Texture2D | Create owned Color textures, query width/height/level count/format, upload and read the exact complete level-zero RGBA8 array, destroy | No subrectangle, arbitrary element type or per-mip transfer; mipmapped creation is represented but Color transfer remains level zero |
+| Surface formats | Stable identities and Texture block/byte-size/alignment helpers for all 27 currently canonical `SurfaceFormat` values | HEADLESS and SDL_RENDERER create Color Texture2D resources; the larger Skia-native promoted set is exposed but not yet C-runtime-tested |
+| Texture / Texture2D | Standalone and game-owned default/device/file/RGBA8/CPU-only/encoded-memory creation; common and 2D properties; all 18 native typed full/mip/rectangle transfer representations; exact type/storage queries; PNG/JPEG count/copy and file output; destroy | Native format/backend gates remain authoritative; SDL_RENDERER rejects compatible mip uploads above level zero as `NOT_SUPPORTED`; streams and renderer/weak pointers do not cross the ABI |
 | Render targets | Create/query/destroy owned 2D and cube targets; singular/MRT binding; active binding count/copy; RenderTarget2D accepted by Texture2D routes | Backend storage availability is explicit; HEADLESS binding returns `NOT_SUPPORTED`; bound targets cannot be destroyed; current ContentLost invariant is false |
 | SpriteBatch | Create/destroy, begin with all five sort modes or explicit blend/sampler/depth/rasterizer state, submit an array of rectangle-based textured commands, end | No transform, Effect or text-draw submission yet |
 | Sprite commands | Destination/source rectangles, RGBA tint, finite rotation/origin/depth and both flip bits | Every command is validated before native submission; every texture must belong to the same game |
@@ -66,6 +66,7 @@ time. The initial slice currently has this automated evidence:
 | Built-in vertex values, strings and packed GPU declarations | Tested | Tested | Renderer-independent copied POD and declaration operations |
 | Owned vertex declarations and binding descriptors | Tested | Tested | Renderer-independent copied arrays and standalone handle lifetime |
 | Common graphics-resource name/tag/device/disposal/event contract | Tested | Tested | Generic contract is renderer-independent; device identity is callback-scoped |
+| Complete Texture/Texture2D contract | All constructors, Color full/rectangle/mip transfer, image round-trips and error/lifetime paths tested | Same strict-C suite; level-zero transfer succeeds and native mip-upload limitation is explicit | Non-Color successful transfer needs renderer-specific C evidence; Skia has the broadest current native format gate |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
 
@@ -81,7 +82,7 @@ appropriate C evidence before this table claims support.
 | Callback game | Borrowed for the active callback; callback code must not destroy it |
 | Graphics device | Borrowed from the callback game and invalid immediately after that callback |
 | Graphics-resource event registration | Owned handle; callback/context remain caller-owned until unsubscription; may be unsubscribed after resource destruction |
-| Texture2D | Owned child that survives callbacks; destroy before its game |
+| Texture2D | Owned standalone or game child that survives callbacks; game children are destroyed before their game |
 | SpriteBatch | Owned child that survives callbacks; destroy before its game |
 | Submitted texture | Retained by an active batch until successful `End` or batch destruction; destruction while retained is refused |
 | RenderTarget2D / RenderTargetCube | Owned game child; unbind and destroy before game; RenderTarget2D also satisfies Texture2D C operations |
@@ -126,7 +127,7 @@ The following families are planned work, not implicitly supported and not perman
 - 3D resources and draws, vertex/index buffers and consumption of the completed declaration/
   binding values, models, meshes, effects and shaders;
 - occlusion queries and remaining graphics-device operations;
-- non-Color texture transfers, texture regions, mip-level transfer and additional texture types;
+- Texture3D, TextureCube and renderer-specific successful non-Color transfer evidence;
 - SpriteBatch matrices, effects and text drawing;
 - advanced and renderer-specific CNA extensions not listed in the implemented table.
 

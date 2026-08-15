@@ -9,6 +9,9 @@ render targets and SpriteFont without exposing a C++ object, collection or rende
 CBIND-035C3 adds the shared `GraphicsResource` contract in `graphics_resource.h` for every
 currently supported resource handle.
 
+The completed Texture/Texture2D construction, typed-transfer and encoded-image contract is
+documented separately in [`TEXTURES.md`](TEXTURES.md).
+
 All extensible inputs and outputs begin with `struct_size` and `struct_version`. Version one
 callers initialize both fields before a query; preset/value initializers fill the complete output.
 Fixed-width identities and layouts are frozen by both C17 and C++23 compile-time assertions.

@@ -5,7 +5,8 @@
 The native C API is experimental. Its initial `0.1.0` shared library and public C17 headers provide
 the ABI/error substrate plus a HEADLESS- and SDL_RENDERER-tested `Game` lifecycle slice
 (`CNA_GameTime`, clear, UTF-8 title and callback-scoped graphics-device capability discovery) plus
-owned Color-format `Texture2D` creation, bulk RGBA8 transfer, POD-array `SpriteBatch` submission,
+complete `Texture`/`Texture2D` construction, properties, typed mip/rectangle transfer and
+PNG/JPEG memory/file routes, POD-array `SpriteBatch` submission,
 complete graphics-state descriptors, display/adapter/presentation snapshots, owned render targets
 and caller-built SpriteFonts, fixed-layout 3D math/geometry values, complete MathHelper,
 Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray/bounding-volume
@@ -81,7 +82,7 @@ gate.
 The exact modules and headers are defined in the implementation plan. The current header split is
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
-`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `input.h`, `content.h` and `audio.h`;
+`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `texture.h`, `input.h`, `content.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations
@@ -106,6 +107,7 @@ The C API must not expose:
 
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
+[textures](TEXTURES.md),
 [math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
 Runtime boundary. The owned content/cache
 contract is in [`CONTENT.md`](CONTENT.md). The

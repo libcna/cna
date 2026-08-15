@@ -1,11 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS RESOURCE CONTRACT COMPLETE THROUGH CBIND-035C3 (2026-08-15)
+## C BINDING / C ABI — TEXTURE2D CONTRACT COMPLETE THROUGH CBIND-035C4 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`034` and slice `CBIND-035A` are complete:
+> API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035B` and
+> `CBIND-035C1`–`035C4` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -135,8 +136,13 @@
 > disposal state/events, exact UTF-8 Name/ToString and a C-owned opaque tag. Standalone and
 > device-owned resources, generic and typed destruction, event lifetime, UTF-8/capacity failures,
 > stale/wrong-kind/wrong-thread handles and registry tag reset are covered. The inventory is now
-> 2,074 implemented, 21 partial, 4,250 planned and 70 N/A. CBIND-035C4 Texture and Texture2D is
-> next.
+> 2,074 implemented, 21 partial, 4,250 planned and 70 N/A. CBIND-035C4 then completes all 134
+> unfinished Texture/Texture2D rows and upgrades the two inherited partial Texture properties.
+> Standalone and game-owned factories, all 18 typed full/mip/rectangle transfer representations,
+> common/2D/storage properties and PNG/JPEG memory/file routes are strict-C tested under HEADLESS
+> and SDL_RENDERER; SDL's native mip-upload limitation is an explicit `NOT_SUPPORTED` result and
+> the focused ASan+UBSan run is clean. The inventory is now 2,210 implemented, 19 partial, 4,116
+> planned and 70 N/A. CBIND-035C5 Texture3D and TextureCube is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

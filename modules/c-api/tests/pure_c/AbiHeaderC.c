@@ -47,6 +47,29 @@ _Static_assert(sizeof(CNA_Texture2DCreateInfo) == 24U,
                "CNA_Texture2DCreateInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Texture2DInfo) == 24U,
                "CNA_Texture2DInfo layout must remain stable");
+_Static_assert(sizeof(CNA_TextureDataType) == sizeof(uint32_t) &&
+                   CNA_TEXTURE_DATA_COLOR == UINT32_C(0) &&
+                   CNA_TEXTURE_DATA_USHORT == UINT32_C(17),
+               "CNA texture-data identities must remain stable");
+_Static_assert(sizeof(CNA_TextureImageFormat) == sizeof(uint32_t) &&
+                   CNA_TEXTURE_IMAGE_FORMAT_PNG == UINT32_C(0) &&
+                   CNA_TEXTURE_IMAGE_FORMAT_JPEG == UINT32_C(1),
+               "CNA texture-image identities must remain stable");
+_Static_assert(sizeof(CNA_TextureInfo) == 16U,
+               "CNA_TextureInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Texture2DTransfer) == 48U &&
+                   _Alignof(CNA_Texture2DTransfer) == 8U,
+               "CNA_Texture2DTransfer layout must remain stable");
+_Static_assert(offsetof(CNA_Texture2DTransfer, level) == 8U &&
+                   offsetof(CNA_Texture2DTransfer, has_rectangle) == 12U &&
+                   offsetof(CNA_Texture2DTransfer, rectangle) == 16U &&
+                   offsetof(CNA_Texture2DTransfer, start_index) == 32U &&
+                   offsetof(CNA_Texture2DTransfer, element_count) == 40U,
+               "CNA_Texture2DTransfer offsets must remain stable");
+_Static_assert(sizeof(CNA_Texture2DDecodeInfo) == 24U,
+               "CNA_Texture2DDecodeInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Texture2DStorageInfo) == 16U,
+               "CNA_Texture2DStorageInfo layout must remain stable");
 _Static_assert(sizeof(CNA_BackBufferInfo) == 24U,
                "CNA_BackBufferInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Vector2) == 8U && sizeof(CNA_Rectangle) == 16U,
