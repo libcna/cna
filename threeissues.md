@@ -118,10 +118,11 @@ and does not need the full corpus, so the reproduction is cheap.
 
 ## 3. The Emscripten build does not configure, for two reasons in `sharp-runtime`
 
-**Where:** the sibling `sharp-runtime` repository (`f827a6c5`), not this one.
+**Where:** the sibling `sharp-runtime` repository, not this one.
 
-**Status:** open upstream; **worked around here with configure flags only** — nothing outside this
-repository was modified.
+**Status: FIXED upstream on 2026-08-15** in `sharp-runtime` `bc8dbf41` (branch `develop`), both
+halves. Neither workaround below is needed any more; they are kept here because they document what
+the failure looked like and how it was diagnosed.
 
 ### 3a. `find_package(ZLIB)` finds nothing under Emscripten
 
@@ -141,8 +142,11 @@ cmake ... \
   -DZLIB_INCLUDE_DIR=$EMSDK/upstream/emscripten/cache/sysroot/include
 ```
 
-The upstream fix would be for that component to request the port itself (`-sUSE_ZLIB=1`) when
-targeting Emscripten, rather than requiring every consumer to know this.
+**Fixed:** that component now requests the port itself when targeting Emscripten and keeps
+`find_package(ZLIB)` everywhere else. The link option is `PUBLIC`, not `PRIVATE`, because
+`sharp_runtime_io_compression` is a STATIC library and `-sUSE_ZLIB=1` has to reach the final
+executable's link line as well — `PRIVATE` would configure and compile cleanly and then fail
+whoever links the result, which is the worse of the two failures.
 
 ### 3b. An unused function under `-Werror`, visible only to Clang
 
@@ -163,14 +167,29 @@ Workaround used here:
 cmake ... -DCMAKE_CXX_FLAGS="-Wno-error=unused-function"
 ```
 
-The upstream fix is to put `ThrowNative` inside the same `#if !defined(__EMSCRIPTEN__)` region as its
-callers, or mark it `[[maybe_unused]]`.
+**Fixed** by the first of those: `ThrowNative` is now compiled only where it is used. That keeps the
+dead code out of the wasm binary as well, which `[[maybe_unused]]` would not.
+
+`NativeDetail` had to move inside the same guard. Its only caller is `ThrowNative`, so excluding just
+`ThrowNative` moves the identical error one line up — a detail worth recording, because the compiler
+reports only the first of the two.
 
 ### Why this matters beyond Emscripten
 
 Both are Clang-vs-GCC and target-specific, which is exactly the class of breakage that survives
-unnoticed until someone tries the target. CNA has an Emscripten preset (`CMakePresets.json`, preset
-`web`) that does not carry either workaround, so that preset currently cannot configure.
+unnoticed until someone tries the target. CNA's Emscripten preset (`CMakePresets.json`, preset
+`web`) carries neither workaround — it could not configure before, and needs no change now.
+
+### How the fix was verified
+
+With emsdk 6.0.6, against this repository as the consumer, and with **no workaround flags of any
+kind**:
+
+* `emcmake cmake` configures — no `Could NOT find ZLIB`
+* `sharp_runtime_io` compiles — this was the `-Werror` failure
+* `sharp_runtime_io_compression` compiles and links
+* native is untouched: CNA's HEADLESS suite is identical before and after the change, 6389 tests,
+  6172 passed, 217 skipped, 0 failed
 
 ---
 
@@ -180,9 +199,11 @@ unnoticed until someone tries the target. CNA has an Emscripten preset (`CMakePr
 |---|---|---|---|---|
 | 1 | `WEBGL1` may take ES 3.0 paths | no — needs a browser | no | no, preserved verbatim and documented |
 | 2 | `OPENGL33` glTF segfault | yes, at `c5045553b` | no | no |
-| 3 | Emscripten build blocked in `sharp-runtime` | yes | no | worked around with flags only |
+| 3 | Emscripten build blocked in `sharp-runtime` | yes | no | **fixed upstream**, `sharp-runtime` `bc8dbf41` |
 | 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |
 | 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | behaviour preserved |
+| 6 | `BLEND2D`/`OPENVG` arms define no constants, so those builds cannot compile the suite | yes, by reading | no | **fixed**, RTR-P9-4 |
+| 7 | A guard with identical arms made every renderer claim SDL_GPU's boundary | yes | no | **fixed**, RTR-P9-10 |
 
 ---
 
