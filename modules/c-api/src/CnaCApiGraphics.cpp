@@ -52,6 +52,18 @@ using Microsoft::Xna::Framework::Graphics::Texture2D;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
+// The C alias carries the native mirroring bits verbatim, so a C caller's own bitwise operators
+// replace the native operator overloads without a conversion step.
+static_assert(
+    static_cast<uint32_t>(SpriteEffects::None) == CNA_SPRITE_EFFECT_NONE &&
+    static_cast<uint32_t>(SpriteEffects::FlipHorizontally) ==
+        CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY &&
+    static_cast<uint32_t>(SpriteEffects::FlipVertically) ==
+        CNA_SPRITE_EFFECT_FLIP_VERTICALLY &&
+    static_cast<uint32_t>(
+        SpriteEffects::FlipHorizontally | SpriteEffects::FlipVertically) ==
+        (CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY));
+
 struct SpriteBatchResource final {
     std::shared_ptr<SpriteBatch> value;
     CNA_Handle parentGame;

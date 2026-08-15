@@ -123,6 +123,7 @@ The C API must not expose:
 
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
+[graphics device values and identities](GRAPHICS_DEVICE.md),
 [effect metadata](EFFECTS.md),
 [models and animation](MODELS.md),
 [textures](TEXTURES.md),

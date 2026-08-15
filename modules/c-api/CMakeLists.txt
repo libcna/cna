@@ -20,6 +20,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiDisplay.cpp
     src/CnaCApiEffects.cpp
     src/CnaCApiGraphics.cpp
+    src/CnaCApiGraphicsDevice.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
     src/CnaCApiGeometry.cpp
@@ -169,6 +170,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_math_values_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_math_values_smoke)
     add_test(NAME CApi_MathValuesSmoke COMMAND cna_c_api_math_values_smoke)
+
+    add_executable(cna_c_api_graphics_device_smoke
+        tests/pure_c/GraphicsDeviceSmoke.c
+    )
+    set_target_properties(cna_c_api_graphics_device_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_graphics_device_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_device_smoke)
+    add_test(NAME CApi_GraphicsDeviceSmoke COMMAND cna_c_api_graphics_device_smoke)
 
     add_executable(cna_c_api_vector_smoke
         tests/pure_c/VectorSmoke.c

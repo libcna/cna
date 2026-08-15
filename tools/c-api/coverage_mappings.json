@@ -1151,6 +1151,56 @@
       "tests": "every generic entry point, standalone and device-owned resources, disposal callbacks, repeated/typed destruction, UTF-8/capacity atomicity, C tag reset, wrong-kind/stale/wrong-thread handles and callback-scoped device expiry in strict-C `GraphicsResourceSmoke.c`, registry unit tests and C/C++ ABI assertions",
       "status": "implemented",
       "task": "CBIND-035C3"
+    },
+    {
+      "id": "viewport-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Viewport\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "fixed-layout `CNA_Viewport` POD whose six public fields are the complete property set, plus `cna_viewport_init`/`cna_viewport_init_bounds`/`cna_viewport_init_from_rectangle` construction, aspect-ratio, bounds get/set, title-safe-area, `cna_viewport_project`/`cna_viewport_unproject` and exact UTF-8 string count/copy operations",
+      "tests": "all three constructors including the canonical zero-size unit-depth default, both zero-dimension aspect cases, bounds/title-safe-area round-trips, depth-range scaling, clip-space corners, an identity and a perspective project/unproject round trip, exact string bytes, capacity atomicity and null-argument failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F1"
+    },
+    {
+      "id": "clear-options-identities-and-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ClearOptions\\.hpp$",
+      "kinds": ["enum", "enum-value", "operator"],
+      "mapping": "`CNA_ClearOptions` and `CNA_CLEAR_OPTION_*` at their native bit values; the native `|`, `&`, `~`, `|=` and `&=` overloads need no adapter because C's own bitwise operators apply directly to the fixed-width alias",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and every bitwise combination in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F1"
+    },
+    {
+      "id": "sprite-effects-bitwise-operations",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SpriteEffects\\.hpp$",
+      "kinds": ["operator"],
+      "mapping": "native C `|`, `&`, `|=` and `&=` on the existing fixed-width `CNA_SpriteEffects` alias, whose bits equal the native mirroring bits",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphics.cpp`, C/C++ ABI bit assertions and combine/mask sequences in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F1"
+    },
+    {
+      "id": "graphics-device-status-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus\\.hpp$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_GraphicsDeviceStatus` and `CNA_GRAPHICS_DEVICE_STATUS_*` at their native ordinals",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F1"
+    },
+    {
+      "id": "unsupported-3d-call-behavior-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/CNA/Unsupported3DGraphicsCallBehavior\\.hpp$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_Unsupported3DGraphicsCallBehavior` and `CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_*` at their native ordinals",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F1"
     }
   ]
 }

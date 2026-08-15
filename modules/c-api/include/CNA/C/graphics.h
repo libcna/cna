@@ -263,7 +263,13 @@ typedef uint32_t CNA_SpriteSortMode;
 /** @brief Defers sprites and orders them from lesser to greater layer depth. */
 #define CNA_SPRITE_SORT_MODE_FRONT_TO_BACK UINT32_C(4)
 
-/** @brief Fixed-width bit set of SpriteBatch mirroring effects. */
+/**
+ * @brief Fixed-width bit set of SpriteBatch mirroring effects.
+ *
+ * The native declaration provides `|`, `&`, `|=` and `&=` operators over its scoped enumeration.
+ * This fixed-width integer alias needs no adapter for them: C's own bitwise operators apply
+ * directly to a `CNA_SpriteEffects` value and produce the identical bit pattern.
+ */
 typedef uint32_t CNA_SpriteEffects;
 
 /** @brief Applies no sprite mirroring. */

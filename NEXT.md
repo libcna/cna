@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — VOLUME/CUBE TEXTURES COMPLETE THROUGH CBIND-035C5 (2026-08-15)
+## C BINDING / C ABI — GRAPHICS-DEVICE VALUES COMPLETE THROUGH CBIND-035F1 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
-> API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035B` and
-> `CBIND-035C1`–`035C5` are complete:
+> API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
+> `CBIND-035F1` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -146,8 +146,23 @@
 > handles, versioned dimension/region descriptors, complete Color box/face/mip transfer, raw
 > Texture3D upload and copied-memory DDS decode. HEADLESS and SDL_RENDERER prove exact capability
 > refusal, six-face validation, common Texture/GraphicsResource behavior and lifecycle. The
-> inventory is now 2,250 implemented, 19 partial, 4,076 planned and 70 N/A. CBIND-035C6 vertex
-> buffers is next.
+> inventory is now 2,250 implemented, 19 partial, 4,076 planned and 70 N/A.
+>
+> CBIND-035C6 and CBIND-035C7 then close parent CBIND-035C with owned VertexBuffer and IndexBuffer
+> handles, copied declarations, both index widths, caller-window transfers and ContentLost
+> registration. CBIND-035D1–D9 close parent CBIND-035D: effect-parameter identities, annotations,
+> parameters, techniques/passes, the Effect/ShaderEffect/EffectMaterial/SpriteEffect lifecycle and
+> the BasicEffect, AlphaTest/DualTexture/EnvironmentMap, Skinned, ColorMatrix and PBR stock
+> families, all through owned game-child effect handles with retained texture slots and bounded
+> bone palettes. CBIND-035E1–E7 close parent CBIND-035E: model bones, mesh parts, meshes, Model
+> aggregates, morph-target extension data, SkinnedModelEXT and the SkinningData/AnimationPlayer
+> pair, through stable handles, deep-copied descriptors and deterministic count/copy transfers.
+> CBIND-035F is partitioned into seven slices; CBIND-035F1 maps all 49 Viewport, ClearOptions,
+> GraphicsDeviceStatus, Unsupported3DGraphicsCallBehavior and SpriteEffects-operator rows through a
+> fixed 24-byte viewport POD with complete construction/property/transform/string operations plus
+> fixed-width identities asserted against their native ordinals at the adapter boundary. The
+> inventory is now 3,215 implemented, 19 partial, 3,111 planned and 70 N/A. CBIND-035F2 device
+> lifetime, state, events and service surface is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

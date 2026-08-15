@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D9 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035F1 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -248,7 +248,7 @@ mechanical wrapper.
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ✅ | `texture.h`, `texture_volume.h`, `vertex_values.h`, `vertex_resources.h`, `index_resources.h` and the common `graphics_resource.h` map all 402 owned rows through fixed values, generation/type/thread-validated handles, caller-window transfers and explicit backend limits. Decomposed into and completed as CBIND-035C1–C7. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ✅ | All 653 Effect/technique/pass/parameter/annotation, stock/custom effect and shader/material rows are mapped without exposing bytecode objects, C++ containers or backend pointers. Completed by CBIND-035D1–D9 with strict-C HEADLESS/SDL_RENDERER and focused sanitizer evidence. |
 | CBIND-035E | Add model, mesh and animation coverage | ✅ | Model/bone/mesh/part collections, morph and both skeletal-animation paths are mapped through stable handles, deep-copied descriptors, deterministic count/copy operations and tested resource lifetimes. |
-| CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
+| CBIND-035F | Complete graphics-device and draw submission | 🟨 | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. Work is decomposed into CBIND-035F1–F7 below; the parent becomes complete only when all seven rows are closed. |
 | CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
 
 #### CBIND-035B math implementation slices
@@ -313,6 +313,23 @@ copied bulk transfers.
 | CBIND-035E5 | 20 | Complete morph-target extension values and operations | ✅ | `models.h` maps keyframes, tracks and target deltas through fixed deep-copied descriptors and owns validated MorphTargetDataEXT handles. Atomic count/copy routes expose every nested field without C++ vectors; mutable weights/tracks, LINEAR/STEP/Hermite evaluation, base-byte blending, retained ModelMeshPart attachment and supported VertexBuffer upload map all native operations. Strict-C tests cover ABI, exact blend/evaluation math, malformed shapes/flags/times/counts, capacity atomicity, lifetime and handle/thread errors under HEADLESS and SDL_RENDERER plus ASan+UBSan. |
 | CBIND-035E6 | 36 | Complete SkinnedModelEXT | ✅ | `CNA_SkinnedModelEXTHandle` deeply copies fixed skeleton/keyframe/track/clip descriptors, exposes deterministic count/copy and native transform-sampling routes, and supports normalized native move semantics. A stable lifetime sidecar retains same-device VertexBuffer/IndexBuffer/ModelMeshPart/optional Texture2D resources, blocks premature disposal and maps ordered part access, replace-by-name attach/remove and owned counts. Strict-C tests cover all layouts and operations, exact interpolation/clamp/loop math, validation/capacity atomicity, moves, lifetime and handle/thread failures under HEADLESS and SDL_RENDERER on dummy virtual video plus ASan+UBSan. |
 | CBIND-035E7 | 19 | Complete SkinningData and AnimationPlayer | ✅ | `CNA_SkinningDataHandle` deeply copies validated hierarchy/bind/inverse-bind/root-prefix/named-clip state and exposes type, deterministic clip and atomic field copies. `CNA_AnimationPlayerHandle` retains data, starts exact named clips, maps relative/absolute loop/clamp Update and exposes position/current clip plus atomic local/world/skin matrices. Strict-C tests cover every route, deep-copy/lifetime, exact prefix/interpolation composition, capacity and input/handle/thread failures under HEADLESS and SDL_RENDERER plus ASan+UBSan; this closes parent CBIND-035E. |
+
+#### CBIND-035F device and draw-submission implementation slices
+
+The 317 rows owned by CBIND-035F are partitioned by dependency boundary. Value and identity
+contracts land first, then device lifetime/state, then the collections, frame-control, binding and
+draw routes that consume them; the renderer-neutral `graphics-ext` post-process family is last
+because it builds on the completed effect and texture contracts.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-035F1 | 49 | Establish device values and identities | ✅ | `graphics_device.h` maps the complete `Viewport` header through a fixed 24-byte POD whose six public fields are its whole property set, plus construction, aspect ratio, bounds get/set, title-safe area, project/unproject and exact UTF-8 string count/copy. `CNA_ClearOptions`, `CNA_GraphicsDeviceStatus` and `CNA_Unsupported3DGraphicsCallBehavior` freeze their native ordinals, and the native ClearOptions/SpriteEffects operator overloads collapse to C's own bitwise operators on the fixed-width aliases. Source-side static assertions bind every identity to its native ordinal; strict-C `GraphicsDeviceSmoke.c` covers all three constructors, both zero-dimension aspect cases, depth-range scaling, clip-space corners, identity and perspective project/unproject round trips, exact strings, capacity atomicity and null arguments under HEADLESS and SDL_RENDERER, with C/C++ ABI layout assertions. |
+| CBIND-035F2 | 51 | Complete device lifetime, state, events and service surface | ⬜ | Map GraphicsDevice construction/disposal, all six events, status/adapter/profile/scissor/viewport/blend-factor/multisample-mask/reference-stencil state, `ResourceCreatedEventArgs`/`ResourceDestroyedEventArgs`, `IGraphicsDeviceService` and the three device exception types through the borrowed-device handle, copied event payloads and owned registrations. |
+| CBIND-035F3 | 8 | Complete texture and vertex-texture collections | ⬜ | Map `TextureCollection` and both device collection properties through validated slot indices and retained texture handles without exposing native vectors or raw `Texture*` pointers. |
+| CBIND-035F4 | 21 | Complete frame control and buffer binding | ⬜ | Map all Clear/Present/Reset overloads, both remaining `GetBackBufferData` windows and the vertex/index binding property and method set through versioned descriptors, caller-window transfers and validated buffer handles. |
+| CBIND-035F5 | 49 | Complete draw submission and device extensions | ⬜ | Map every indexed/non-indexed/instanced and user-primitive draw overload through bulk validated descriptors, plus the CNAEXT device helpers, without exposing renderer pointers or `GpuDrawParams`. |
+| CBIND-035F6 | 21 | Complete SpriteBatch text routes and occlusion queries | ⬜ | Map both remaining SpriteBatch constructors, all six `DrawString` overloads, `DrawMeshEXT` and the owned `OcclusionQuery` resource with capability-gated behavior and honest refusal on 2D-only renderers. |
+| CBIND-035F7 | 118 | Complete graphics-ext post-process and pipeline settings | ⬜ | Map the renderer-neutral ASCII/CRT/depth post-process effects, PBR material values and render-pipeline settings, including all six extension identity enumerations, through fixed values and validated handles. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -528,16 +545,22 @@ AnimationPlayer handles, deterministic clip lookup, finite-seconds update contro
 local/world/skin transform copies. The snapshot is now 3,166 implemented, 19 partial, 3,160
 planned and 70 not applicable; parent CBIND-035E is complete and CBIND-035F is next.
 
+CBIND-035F is partitioned into seven dependency-ordered slices. CBIND-035F1 maps all 49 Viewport,
+ClearOptions, GraphicsDeviceStatus, Unsupported3DGraphicsCallBehavior and SpriteEffects-operator
+rows through a fixed 24-byte viewport POD with complete construction/property/transform/string
+operations and fixed-width identities whose native ordinals are asserted at the adapter boundary.
+The snapshot is now 3,215 implemented, 19 partial, 3,111 planned and 70 not applicable, with
+CBIND-035F2 device lifetime, state, events and service surface next.
+
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-035E7 is the final task completed in this handoff and is intended
-  to be committed as `feat(CBIND-035E7): complete animation player bindings` before pushing.
-- Next task: audit and implement parent `CBIND-035F` from its public-header coverage rows. Do not
+- Branch: `feature/binding`; CBIND-035F1 is the final task completed in this handoff.
+- Next task: implement `CBIND-035F2` from its public-header coverage rows. Do not
   reopen completed CBIND-035E slices unless a regression demonstrates a concrete defect.
-- Verification baseline: both HEADLESS and SDL_RENDERER C API suites contain 44 tests; SDL tests
+- Verification baseline: both HEADLESS and SDL_RENDERER C API suites contain 45 tests; SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after E7: 414 headers / 6,415 symbols; 3,166 implemented, 19 partial, 3,160
+- Coverage baseline after F1: 414 headers / 6,415 symbols; 3,215 implemented, 19 partial, 3,111
   planned and 70 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C

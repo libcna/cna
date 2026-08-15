@@ -612,3 +612,32 @@ _Static_assert(offsetof(CNA_VertexBufferBinding, vertex_buffer) == 0U &&
                    offsetof(CNA_VertexBufferBinding, vertex_offset) == 8U &&
                    offsetof(CNA_VertexBufferBinding, instance_frequency) == 12U,
                "CNA_VertexBufferBinding fields must remain stable");
+_Static_assert(sizeof(CNA_Viewport) == 24U && _Alignof(CNA_Viewport) == 4U &&
+                   offsetof(CNA_Viewport, x) == 0U &&
+                   offsetof(CNA_Viewport, y) == 4U &&
+                   offsetof(CNA_Viewport, width) == 8U &&
+                   offsetof(CNA_Viewport, height) == 12U &&
+                   offsetof(CNA_Viewport, min_depth) == 16U &&
+                   offsetof(CNA_Viewport, max_depth) == 20U,
+               "CNA_Viewport layout must remain stable");
+_Static_assert(sizeof(CNA_ClearOptions) == sizeof(uint32_t) &&
+                   CNA_CLEAR_OPTION_TARGET == UINT32_C(1) &&
+                   CNA_CLEAR_OPTION_DEPTH_BUFFER == UINT32_C(2) &&
+                   CNA_CLEAR_OPTION_STENCIL == UINT32_C(4),
+               "CNA clear-option identities must remain stable");
+_Static_assert(sizeof(CNA_GraphicsDeviceStatus) == sizeof(uint32_t) &&
+                   CNA_GRAPHICS_DEVICE_STATUS_NORMAL == UINT32_C(0) &&
+                   CNA_GRAPHICS_DEVICE_STATUS_LOST == UINT32_C(1) &&
+                   CNA_GRAPHICS_DEVICE_STATUS_NOT_RESET == UINT32_C(2),
+               "CNA graphics-device status identities must remain stable");
+_Static_assert(sizeof(CNA_Unsupported3DGraphicsCallBehavior) == sizeof(uint32_t) &&
+                   CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW == UINT32_C(0) &&
+                   CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB == UINT32_C(1),
+               "CNA unsupported-3D-call policy identities must remain stable");
+_Static_assert(sizeof(CNA_SpriteEffects) == sizeof(uint32_t) &&
+                   (CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
+                    CNA_SPRITE_EFFECT_FLIP_VERTICALLY) == UINT32_C(3) &&
+                   ((CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
+                     CNA_SPRITE_EFFECT_FLIP_VERTICALLY) &
+                    CNA_SPRITE_EFFECT_FLIP_VERTICALLY) == CNA_SPRITE_EFFECT_FLIP_VERTICALLY,
+               "CNA sprite-effect bit operations must remain stable");
