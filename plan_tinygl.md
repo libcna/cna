@@ -183,9 +183,16 @@ portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract 
 
 - CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
   `b7a9cb532` plus the commit carrying this plan update.
-- SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`, pushed
-  head `062b9286a0ffc26a777f1a86d4dd727fde4c4abb`. The user explicitly authorized direct pushes to
-  `sharp-runtime/develop` for this work.
+- SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`. The
+  user explicitly authorized direct pushes to `sharp-runtime/develop` for this work. The last
+  commit made for TINYGL-19 is `f23ded28c7b94a745cf82f8804b5b7104ca5780e`, **and that is what the
+  workflow pins** -- deliberately, not because the pin is stale. A concurrent session has since
+  advanced `develop` to `7a46a538` with 316 files of unrelated XML/IO work (its test floor is
+  17,057 across 38 executables, not the 16,344 this task verified against). The Windows job is now
+  *past* sharp-runtime entirely, so advancing the pin would re-open ~250 build steps of brand-new,
+  MSVC-unverified code in the middle of closing this task. Do not advance it to pick up unrelated
+  work; if a further SharpRuntime fix does turn out to be needed, that new content comes along with
+  it and has to be re-verified on all three platforms.
 - `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
   SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`; do not replace either pin with a moving branch.
 - Both worktrees were clean at this handoff before this plan update.
