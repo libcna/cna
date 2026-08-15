@@ -178,6 +178,15 @@ struct CapabilityExpectation
         case GraphicsRendererType::Fna3d:
             return {true, true, false};
 
+        // Software: one active colour buffer, so no MRT -- SoftwareRenderer::SetRenderTargets()
+        // throws for count > 1 and ApplyBlendState() applies slot-0's write mask only. It used to
+        // take the default arm and claim MRT support, which
+        // TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes caught the moment that
+        // consistency check reached this renderer. Occlusion queries and custom effects are
+        // genuinely implemented, so those two keep the default's answer.
+        case GraphicsRendererType::Software:
+            return {false, true, true};
+
         default:
             return {true, true, true};
     }
