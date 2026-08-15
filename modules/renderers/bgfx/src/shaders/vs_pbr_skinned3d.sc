@@ -1,5 +1,5 @@
-$input a_position, a_normal, a_tangent, a_texcoord0, a_weight, a_indices
-$output v_texcoord0, v_normal, v_tangent, v_worldPos, v_fogFactor
+$input a_position, a_normal, a_tangent, a_texcoord0, a_texcoord1, a_weight, a_indices
+$output v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor
 
 #include <bgfx_shader.sh>
 
@@ -73,6 +73,7 @@ void main()
                          * cnaDirectionHandedness(skinDirectionMat));
 
     v_texcoord0 = a_texcoord0;
+    v_texcoord1 = a_texcoord1;
     v_worldPos = mul(u_world, skinnedPos).xyz;
     // Task 899: fog factor from raw PRE-SKIN object-space Z, unchanged from vs_skinned3d.sc.
     // REMED-GFX-005: corrected to FNA/EasyGL Task-1111 form (z+FogEnd)/(FogEnd-FogStart); the

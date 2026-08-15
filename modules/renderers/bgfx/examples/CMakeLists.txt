@@ -19,9 +19,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
                 CNA
-                SHARP_RUNTIME)
+                SHARP_RUNTIME
+                SDL3::SDL3)
         else()
-            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME)
+            target_link_libraries(${target} PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
         endif()
         if(TARGET SDL3::SDL3main)
             target_link_libraries(${target} PRIVATE SDL3::SDL3main)
@@ -1072,6 +1073,20 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
                   bgfx_pbr_fresnel_factors_test.cpp)
     target_link_libraries(cna_test_bgfx_pbr_fresnel_factors PRIVATE SDL3::SDL3)
     cna_register_renderer_test(NAME Bgfx_Pbr_FresnelFactors COMMAND cna_test_bgfx_pbr_fresnel_factors
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-182/183/224..227/344: shared material pixels include rigid/skinned UV1 selectors and
+    # both KHR_materials_specular texture transforms.
+    cna_bgfx_test(cna_test_bgfx_pbr_material_maps
+                  ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
+    cna_register_renderer_test(NAME Bgfx_Pbr_MaterialMaps COMMAND cna_test_bgfx_pbr_material_maps
+        TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
+    # GLTF-344/373: the renderer-shared seven-slot oracle proves alpha/RGB consumption from the
+    # strength and colour maps independently on both rigid and skinned programs.
+    cna_bgfx_test(cna_test_bgfx_pbr_texture_slots
+                  ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
+    cna_register_renderer_test(NAME Bgfx_Pbr_TextureSlots COMMAND cna_test_bgfx_pbr_texture_slots
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # CNB-67 (Phase 13C), Bgfx port: SkinnedEffect.VertexColorEnabled on the stride-56 skinned+

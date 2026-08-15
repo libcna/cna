@@ -14,6 +14,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
@@ -299,7 +300,13 @@ protected:
         };
         Texture2D redBlue = Texture2D::CreateFromPixels(device, 2, 1, redBluePixels);
 
+#if defined(CNA_RENDERER_BGFX)
+        DepthStencilState depthState;
+        depthState.setDepthBufferEnableProperty(false);
+        device.setDepthStencilStateProperty(depthState);
+#else
         device.SetDepthTestEnabled(false);
+#endif
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

@@ -9,9 +9,9 @@ rigid and skinned fragment variants where a renderer stores them separately.
 
 ## Texture-slot ABI (`GLTF-373`)
 
-| Renderer | Native binding of base / normal / MR / emissive / occlusion |
+| Renderer | Native binding (core five, then extension slots where implemented) |
 |---|---|
-| Bgfx | stages `0 / 1 / 2 / 3 / 4` (`s_texColor`, `s_texNormal`, `s_texMetallicRoughness`, `s_texEmissive`, `s_texOcclusion`) |
+| Bgfx | stages `0 / 1 / 2 / 3 / 4 / 5 / 6` (`s_texColor`, `s_texNormal`, `s_texMetallicRoughness`, `s_texEmissive`, `s_texOcclusion`, `s_texSpecular`, `s_texSpecularColor`) |
 | Diligent | name-bound `g_Texture / g_NormalMap / g_MetallicRoughnessMap / g_EmissiveMap / g_OcclusionMap`; sampler-state slots `0 / 1 / 2 / 3 / 4` |
 | DirectX 9 | sampler registers `s0 / s1 / s2 / s3 / s4` |
 | DirectX 11 | SRV/sampler register pairs `t0/s0` through `t4/s4` |
@@ -252,9 +252,13 @@ yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` sepa
 all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
 `specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4, DirectX9/11/12,
-Diligent, Magnum, SDL GPU and Vulkan now consume both; the other five renderer bindings remain the named `GLTF-344`
+Bgfx, Diligent, Magnum, SDL GPU and Vulkan now consume both; the other four renderer bindings remain the named `GLTF-344`
 limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
+Bgfx binds identity-white stages 5/6 and carries their independent transforms, sRGB colour decode
+and seven-bit UV selector through rigid/skinned stride-48/60/68/76 layouts. All OpenGL, ESSL,
+SPIR-V and WGSL variants compile; llvmpipe OpenGL passes 21 material-map, 22 texture-slot, 7
+analytic Fresnel and 12 sRGB rigid/skinned pixel checks under Xvfb.
 Magnum's shared rigid/skinned GLSL binds white units 5/6, and both its six-check analytic Fresnel
 witness and existing six-check metallic-roughness PBR test pass on llvmpipe under Xvfb.
 SDL GPU's shared rigid/skinned GLSL binds the two white fallbacks at bindings 5/6 with independent
@@ -436,7 +440,7 @@ White is not a tolerable normal fallback: after decode and normalize it points a
 
 `GltfRendererPbrFallbackPolicy` discovers every renderer source directory that consumes
 `GpuDrawParams::pbrNormalMap`. Its inventory must exactly equal the table below, each implementation
-must create both canonical texels, and all four optional map fields must be paired with the correct
+must create both canonical texels, and all six optional map fields must be paired with the correct
 fallback. Thus adding a PBR backend without a policy entry, or changing normal to white, fails the
 ordinary `CnaTests`/glTF conformance run even on a host that cannot build that backend.
 
@@ -444,7 +448,7 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 |---|---|---|
 | EasyGL | flat normal + white, rigid and skinned | `EasyGL_Pbr_TextureSlots`, `EasyGL_PbrEffect_Golden`, `EasyGL_SkinnedPbrEffect_Golden` |
 | Vulkan | flat normal + white, rigid and skinned | `Vulkan_Pbr_TextureSlots`, `Vulkan_PbrEffect_HandDerived` |
-| Bgfx | flat normal + white, rigid and skinned | `Bgfx_PbrEffect`, `Bgfx_SkinnedPbrEffect` |
+| Bgfx | flat normal + white, rigid and skinned | `Bgfx_PbrEffect`, `Bgfx_SkinnedPbrEffect`, `Bgfx_Pbr_MaterialMaps`, `Bgfx_Pbr_TextureSlots` |
 | Diligent | flat normal + white, rigid and skinned | `Diligent_Pbr`, `Diligent_Pbr_MaterialMaps`, `Diligent_Pbr_TextureSlots` on Vulkan and OpenGL |
 | DirectX 9 | flat normal + white, rigid and skinned | `DirectX9_Pbr` |
 | DirectX 11 | flat normal + white, rigid and skinned | `DirectX11_Pbr_VertexColor` (emissive/no-map route) |

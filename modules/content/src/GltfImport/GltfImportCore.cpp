@@ -4177,7 +4177,7 @@ namespace CNA::Internal::GltfImport
                  "PBR renderers. The optional specularTexture and specularColorTexture now survive "
                  "direct import and offline .cnj with independent UV, transform, sampler and "
                  "colour-space state. EasyGL, OpenGL2, OpenGL4, DirectX9, DirectX11, DirectX12, "
-                 "Diligent, Magnum, SDL GPU and Vulkan sample both maps; the remaining 5 PBR renderer shader bindings are pending. "
+                 "Bgfx, Diligent, Magnum, SDL GPU and Vulkan sample both maps; the remaining 4 PBR renderer shader bindings are pending. "
                  "Required use remains refused and optional use is warned by name.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,

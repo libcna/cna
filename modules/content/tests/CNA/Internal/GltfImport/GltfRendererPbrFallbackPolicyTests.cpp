@@ -179,22 +179,28 @@ namespace
     };
 
     constexpr std::array<RendererSlotAudit, 15> kSlotAudits{{
-        {"bgfx", "stages 0,1,2,3,4",
+        {"bgfx", "stages 0 through 6",
          {{R"(texColor3DSampler_ = bgfx::createUniform("s_texColor", bgfx::UniformType::Sampler))",
            R"(normalMapSampler_ = bgfx::createUniform("s_texNormal", bgfx::UniformType::Sampler))",
            R"(metallicRoughnessSampler_ = bgfx::createUniform("s_texMetallicRoughness", bgfx::UniformType::Sampler))",
            R"(emissiveMapSampler_ = bgfx::createUniform("s_texEmissive", bgfx::UniformType::Sampler))",
            R"(occlusionMapSampler_ = bgfx::createUniform("s_texOcclusion", bgfx::UniformType::Sampler))",
+           R"(specularMapSampler_ = bgfx::createUniform("s_texSpecular", bgfx::UniformType::Sampler))",
+           R"(specularColorMapSampler_ = bgfx::createUniform("s_texSpecularColor", bgfx::UniformType::Sampler))",
            R"(BindSamplerSlot(1, normalMapSampler_, params.pbrNormalMap, defaultFlatNormalTexture3D_);
               BindSamplerSlot(2, metallicRoughnessSampler_, params.pbrMetallicRoughnessMap, defaultWhiteTexture3D_);
               BindSamplerSlot(3, emissiveMapSampler_, params.pbrEmissiveMap, defaultWhiteTexture3D_);
               BindSamplerSlot(4, occlusionMapSampler_, params.pbrOcclusionMap, defaultWhiteTexture3D_);
+              BindSamplerSlot(5, specularMapSampler_, params.pbrSpecularMap, defaultWhiteTexture3D_);
+              BindSamplerSlot(6, specularColorMapSampler_, params.pbrSpecularColorMap, defaultWhiteTexture3D_);
               BindSamplerSlot(0, texColor3DSampler_, params.texture0, defaultWhiteTexture3D_);)",
            R"(SAMPLER2D(s_texColor, 0);
               SAMPLER2D(s_texNormal, 1);
               SAMPLER2D(s_texMetallicRoughness, 2);
               SAMPLER2D(s_texEmissive, 3);
-              SAMPLER2D(s_texOcclusion, 4);)"}}},
+              SAMPLER2D(s_texOcclusion, 4);
+              SAMPLER2D(s_texSpecular, 5);
+              SAMPLER2D(s_texSpecularColor, 6);)"}}},
         {"diligent", "shader-resource names; sampler-state slots 0 through 6",
          {{R"(texture = params->texture0)",
            R"(cached.textureVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture"))",
@@ -675,11 +681,11 @@ namespace
         {"bgfx",
          "bgfx::setUniform(pbrTextureTransformUnif_, params.pbrTextureTransformRows, 10)",
          "u_pbrTextureTransform[slot * 2 + 1].xyz",
-         {{"texture2D(s_texColor, rtFlipUV(pbrTransformUV(v_texcoord0, 0), u_rtFlipV.x))",
-           "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(v_texcoord0, 1), u_rtFlipV.y))",
-           "texture2D(s_texMetallicRoughness, rtFlipUV(pbrTransformUV(v_texcoord0, 2), u_rtFlipV.z))",
-           "texture2D(s_texEmissive, rtFlipUV(pbrTransformUV(v_texcoord0, 3), u_rtFlipV.w))",
-           "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4))"}}, 1},
+         {{"texture2D(s_texColor, rtFlipUV(pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 0), 0), u_rtFlipV.x))",
+           "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 1), 1), u_rtFlipV.y))",
+           "texture2D(s_texMetallicRoughness, rtFlipUV(pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 2), 2), u_rtFlipV.z))",
+           "texture2D(s_texEmissive, rtFlipUV(pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 3), 3), u_rtFlipV.w))",
+           "texture2D(s_texOcclusion, pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 4), 4))"}}, 1},
         {"diligent",
          "std::memcpy(values + 20, params.pbrTextureTransformRows",
          "g_PbrTextureTransformRows[slot * 2 + 1].xyz",
@@ -809,8 +815,8 @@ namespace
     // GL/Vulkan plus generated-GL sources from backends that share one fragment program.
     constexpr std::array<RendererPbrFresnelAudit, 15> kPbrFresnelAudits{{
         {"bgfx",
-         "vec3 F0 = mix(u_dielectricFresnel.xyz, albedo, metallic)",
-         "vec3 F90 = mix(vec3_splat(u_dielectricFresnel.w), vec3_splat(1.0), metallic)",
+         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 F90 = mix(vec3_splat(specularWeight), vec3_splat(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"diligent",
          "float3 F0 = lerp(dielectricF0, albedo, metallic)",
@@ -964,10 +970,10 @@ namespace
     // final shader still contains a hard-coded vUV expression.
     constexpr std::array<RendererPbrChannelAudit, 15> kPbrChannelAudits{{
         {"bgfx",
-         "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(v_texcoord0, 1), u_rtFlipV.y)).rgb * 2.0 - 1.0",
+         "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 1), 1), u_rtFlipV.y)).rgb * 2.0 - 1.0",
          "mr.g * u_metallicRoughnessFactor.y",
          "mr.b * u_metallicRoughnessFactor.x",
-         "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4)).r", 1},
+         "texture2D(s_texOcclusion, pbrTransformUV(pbrUV(v_texcoord0, v_texcoord1, 4), 4)).r", 1},
         {"diligent",
          "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 1), 1)).rgb * 2.0 - 1.0",
          "mr.g * g_PbrEmissiveRoughness.w",
@@ -2009,6 +2015,45 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing Vulkan specular binding evidence: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, BgfxSamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "bgfx");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.pbrDielectricF0Unclamped[0]",
+             "params.pbrSpecularFactor",
+             "params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f",
+             "params.pbrTextureCoordinateSetMask & 0x7fu",
+             "params.pbrSpecularTextureTransformRows, 4",
+             "else if (stride == 60)",
+             "else if (stride == 76)",
+             "layout.add(bgfx::Attrib::TexCoord1, 2, bgfx::AttribType::Float)",
+             "specularMapSampler_ = bgfx::createUniform(\"s_texSpecular\"",
+             "specularColorMapSampler_ = bgfx::createUniform(\"s_texSpecularColor\"",
+             "BindSamplerSlot(5, specularMapSampler_, params.pbrSpecularMap, defaultWhiteTexture3D_)",
+             "BindSamplerSlot(6, specularColorMapSampler_, params.pbrSpecularColorMap, defaultWhiteTexture3D_)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing Bgfx specular/dual-UV state: " << evidence;
+    }
+
+    EXPECT_GE(CountOccurrences(source, Normalize("v_texcoord1 = a_texcoord1")), 2u);
+    for (const char* shaderEvidence : {
+             "SAMPLER2D(s_texSpecular, 5)",
+             "SAMPLER2D(s_texSpecularColor, 6)",
+             "pbrSpecularTransformUV(pbrUV(v_texcoord0, v_texcoord1, 5), 0)).a",
+             "pbrSpecularTransformUV(pbrUV(v_texcoord0, v_texcoord1, 6), 1)).rgb",
+             "mix(specularColorTex, cnaSrgbToLinear(specularColorTex), u_srgb.w)",
+             "min(u_dielectricFresnel.xyz * specularColorTex, vec3_splat(1.0)) * specularWeight",
+             "mix(vec3_splat(specularWeight), vec3_splat(1.0), metallic)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(shaderEvidence)))
+            << "missing Bgfx specular shader evidence: " << shaderEvidence;
     }
 }
 

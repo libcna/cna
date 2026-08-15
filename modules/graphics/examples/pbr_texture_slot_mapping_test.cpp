@@ -12,6 +12,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DepthStencilState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/AlphaModeEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
@@ -310,7 +311,13 @@ protected:
         Texture2D zeroSpecularStrength = texture({255, 255, 255, 0});
         Texture2D redSpecularColor = texture({255, 0, 0, 255});
 
+#if defined(CNA_RENDERER_BGFX)
+        DepthStencilState depthState;
+        depthState.setDepthBufferEnableProperty(false);
+        device.setDepthStencilStateProperty(depthState);
+#else
         device.SetDepthTestEnabled(false);
+#endif
         device.setBlendStateProperty(BlendState::Opaque);
         device.setRasterizerStateProperty(RasterizerState::CullNone);
 

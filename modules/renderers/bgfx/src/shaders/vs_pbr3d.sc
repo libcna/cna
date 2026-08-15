@@ -1,5 +1,5 @@
-$input a_position, a_normal, a_tangent, a_texcoord0
-$output v_texcoord0, v_normal, v_tangent, v_worldPos, v_fogFactor
+$input a_position, a_normal, a_tangent, a_texcoord0, a_texcoord1
+$output v_texcoord0, v_texcoord1, v_normal, v_tangent, v_worldPos, v_fogFactor
 
 #include <bgfx_shader.sh>
 
@@ -35,6 +35,7 @@ void main()
     v_tangent = vec4(mul(u_world, vec4(a_tangent.xyz, 0.0)).xyz,
                      a_tangent.w * cnaDirectionHandedness(worldDirectionMat));
     v_texcoord0 = a_texcoord0;
+    v_texcoord1 = a_texcoord1;
     v_worldPos = mul(u_world, vec4(a_position, 1.0)).xyz;
     // Task 899/1111 fog-factor convention (see vs_skinned3d.sc's identical comment for the full
     // derivation): u_fogParams = FNA fog vector (REMED-GFX-010): dot(vec4(pos,1), u_fogParams) = fogFactor.
