@@ -18,8 +18,12 @@ namespace CNA::Internal::Graphics
     {
         /** @brief Per-channel dielectric reflectance at normal incidence. */
         std::array<float, 3> f0{0.04f, 0.04f, 0.04f};
+        /** @brief `iorF0 * specularColorFactor` before the specification's clamp and weight. */
+        std::array<float, 3> unclampedF0{0.04f, 0.04f, 0.04f};
         /** @brief Dielectric reflectance at grazing incidence. */
         float f90 = 1.0f;
+        /** @brief Scalar weight retained separately for texture-driven evaluation. */
+        float specularFactor = 1.0f;
     };
 
     /**
@@ -45,10 +49,11 @@ namespace CNA::Internal::Graphics
         PbrDielectricFresnelEXT out;
         for (std::size_t channel = 0; channel < out.f0.size(); ++channel)
         {
-            out.f0[channel] =
-                std::min(iorF0 * specularColorFactor[channel], 1.0f) * specularFactor;
+            out.unclampedF0[channel] = iorF0 * specularColorFactor[channel];
+            out.f0[channel] = std::min(out.unclampedF0[channel], 1.0f) * specularFactor;
         }
         out.f90 = specularFactor;
+        out.specularFactor = specularFactor;
         return out;
     }
 }

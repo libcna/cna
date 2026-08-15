@@ -206,6 +206,9 @@ shader-ready quantities shared by both effects: RGB `pbrDielectricF0` and scalar
 reflectance by `specularColorFactor`, clamp that product per channel to 1, then multiply by
 `specularFactor`; F90 is `specularFactor`. Keeping F90 separate is essential — a reduced specular
 factor must also reduce grazing reflectance, which cannot be reconstructed from F0 alone.
+GLTF-344 additionally retains the unclamped product and scalar factor internally: a
+`specularColorTexture` sample multiplies before the clamp, so the already-clamped factor-only F0
+cannot reproduce the specified result when an authored colour factor exceeds one.
 
 **Compatibility.** Additive. The defaults derive F0 = `(0.04,0.04,0.04)` and F90 = 1, exactly the
 constants every CNA PBR shader uses today. Existing callers and old `.cnj` files therefore keep

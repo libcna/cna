@@ -526,6 +526,10 @@ namespace Microsoft::Xna::Framework::Graphics
         p.pbrDielectricF0[1] = dielectricFresnel.f0[1];
         p.pbrDielectricF0[2] = dielectricFresnel.f0[2];
         p.pbrDielectricF90   = dielectricFresnel.f90;
+        p.pbrDielectricF0Unclamped[0] = dielectricFresnel.unclampedF0[0];
+        p.pbrDielectricF0Unclamped[1] = dielectricFresnel.unclampedF0[1];
+        p.pbrDielectricF0Unclamped[2] = dielectricFresnel.unclampedF0[2];
+        p.pbrSpecularFactor = dielectricFresnel.specularFactor;
 
         // plan_gltf.md GLTF-372: a MASK material's cutoff is the one piece of glTF alpha coverage
         // that is fragment-program work rather than device state, and every PBR shader already

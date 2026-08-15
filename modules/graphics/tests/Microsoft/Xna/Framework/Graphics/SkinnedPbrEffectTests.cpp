@@ -269,6 +269,10 @@ TEST_F(SkinnedPbrEffectDefaultsTest, IorAndSpecularFactorsRoundTripAndReachDrawP
     EXPECT_NEAR(params.pbrDielectricF0[2], 0.3f, 1e-7f)
         << "the colour product must clamp before specularFactor is applied";
     EXPECT_FLOAT_EQ(params.pbrDielectricF90, 0.3f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[0], 1.0f / 36.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[1], 1.0f / 9.0f, 1e-7f);
+    EXPECT_NEAR(params.pbrDielectricF0Unclamped[2], 4.0f / 3.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularFactor, 0.3f);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsRoundTripAndReachDrawParams)

@@ -1068,6 +1068,11 @@ namespace CNA::Internal::Renderers
         float pbrDielectricF0[3] = {0.04f, 0.04f, 0.04f};
         /// Dielectric grazing reflectance after KHR_materials_specular's scalar strength (default 1).
         float pbrDielectricF90 = 1.0f;
+        /// GLTF-344: IOR F0 times specularColorFactor before clamping/weighting. A colour-map
+        /// sample must multiply this value before the specification's per-channel clamp.
+        float pbrDielectricF0Unclamped[3] = {0.04f, 0.04f, 0.04f};
+        /// GLTF-344: authored scalar strength, retained separately for texture-driven evaluation.
+        float pbrSpecularFactor = 1.0f;
         /// plan_gltf.md GLTF-224: glTF `normalTexture.scale`. Scales the sampled tangent-space
         /// normal's x and y before the tangent basis is applied -- 0 flattens the map to the
         /// geometric normal, 1 is the map as authored, and glTF puts no upper bound on it. Only
