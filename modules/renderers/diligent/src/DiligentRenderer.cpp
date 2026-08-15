@@ -1731,7 +1731,8 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::BufferDesc pbrDesc;
         pbrDesc.Name = "CNA PBR constants";
-        pbrDesc.Size = 4 * sizeof(float) * 4; // ambient/metallic, emissive/roughness, maps, Fresnel
+        // Four material rows followed by ten per-map affine texture-transform rows.
+        pbrDesc.Size = 56 * sizeof(float);
         pbrDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
         pbrDesc.Usage = Dg::USAGE_DYNAMIC;
         pbrDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
@@ -1752,7 +1753,7 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::UploadPbrConstants(const GpuDrawParams& params)
     {
-        const float values[16] = {
+        float values[56] = {
             params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
             params.pbrMetallicFactor,
             params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
@@ -1763,6 +1764,8 @@ namespace CNA::Internal::Renderers::Diligent
             params.pbrDielectricF0[0], params.pbrDielectricF0[1],
             params.pbrDielectricF0[2], params.pbrDielectricF90,
         };
+        std::memcpy(values + 16, params.pbrTextureTransformRows,
+                    sizeof(params.pbrTextureTransformRows));
         void* mapped = nullptr;
         context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
         if (mapped == nullptr)
