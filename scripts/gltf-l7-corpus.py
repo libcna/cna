@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run the deterministic OPENGLES3 L7 oracle over every canonical glTF fixture.
+"""Run a deterministic production-viewer L7 oracle over every canonical glTF fixture.
 
 The harness launches the production cna-gltf-viewer in two independent processes per asset.  A
 renderable asset must produce byte-identical PNG files in both processes and pixels matching its
-committed EasyGL golden.  A deliberately rejected asset must fail in both processes with the
+committed same-renderer golden.  A deliberately rejected asset must fail in both processes with the
 policy's stable diagnostic fragment.  This gives all 145 corpus assets an explicit disposition;
 an exception can never appear merely because the harness skipped a file it could not draw.
 
@@ -86,16 +86,10 @@ def compare_to_golden(actual_path: Path, golden_path: Path,
     return {"maximumRgbDelta": max_rgb, "maximumAlphaDelta": max_alpha}
 
 
-def run_viewer(viewer: Path, asset: Path, png: Path,
-               extra_arguments: list[str], timeout: int) -> dict[str, Any]:
+def run_viewer(viewer: Path, asset: Path, png: Path, extra_arguments: list[str], timeout: int,
+               capture_environment: dict[str, str]) -> dict[str, Any]:
     environment = dict(os.environ)
-    environment.update({
-        "SDL_VIDEODRIVER": "x11",
-        "SDL_AUDIODRIVER": "dummy",
-        # The committed EasyGL oracle is intentionally one reproducible renderer/driver route.
-        # Hardware GPUs remain useful development comparisons, but cannot share a byte oracle.
-        "LIBGL_ALWAYS_SOFTWARE": "1",
-    })
+    environment.update(capture_environment)
     command = [
         str(viewer), str(asset), "--direct", "--capture", str(png),
         "--reference-capture", *extra_arguments,
@@ -126,7 +120,9 @@ def run_viewer(viewer: Path, asset: Path, png: Path,
 
 
 def validate_policy(policy: dict[str, Any], asset_ids: list[str]) -> None:
-    if policy.get("schemaVersion") != 1 or policy.get("renderer") != "OPENGLES3/EasyGL":
+    if policy.get("schemaVersion") != 1 or policy.get("renderer") not in (
+        "OPENGLES3/EasyGL", "VULKAN",
+    ):
         raise RuntimeError("unsupported L7 policy schema or renderer")
     overrides = policy.get("overrides", {})
     unknown = sorted(set(overrides) - set(asset_ids))
@@ -143,11 +139,11 @@ def validate_policy(policy: dict[str, Any], asset_ids: list[str]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--viewer", type=Path, required=True,
-                        help="OPENGLES3 cna_gltf_viewer executable")
+                        help="cna_gltf_viewer executable for the policy's renderer")
     parser.add_argument("--viewer-source", type=Path,
                         help="optional viewer checkout for provenance")
     parser.add_argument("--policy", type=Path,
-                        help="override the committed EasyGL L7 policy")
+                        help="override the committed EasyGL L7 policy (for example Vulkan)")
     parser.add_argument("--output", type=Path,
                         help="empty directory in which to retain the two raw runs")
     parser.add_argument("--report-out", type=Path,
@@ -162,7 +158,6 @@ def main() -> int:
     corpus = repo / "tests/assets/gltf"
     corpus_manifest_path = corpus / "manifest.json"
     policy_path = (args.policy or repo / "tests/gltf-l7/easygl-policy.json").resolve()
-    golden_root = repo / "tests/gltf-l7/easygl"
     viewer = args.viewer.resolve()
     if not viewer.is_file() or not os.access(viewer, os.X_OK):
         raise RuntimeError(f"viewer is not an executable file: {viewer}")
@@ -180,6 +175,26 @@ def main() -> int:
     if len(asset_ids) != 145 or len(asset_ids) != len(set(asset_ids)):
         raise RuntimeError("corpus manifest must contain exactly 145 unique assets")
     validate_policy(policy, asset_ids)
+
+    if policy["renderer"] == "OPENGLES3/EasyGL":
+        golden_root = repo / "tests/gltf-l7/easygl"
+        renderer_output_prefix = "EasyGLRenderer initialized with "
+        capture_environment = {
+            "SDL_VIDEODRIVER": "x11",
+            "SDL_AUDIODRIVER": "dummy",
+            # The committed EasyGL oracle is intentionally one reproducible renderer/driver route.
+            # Hardware GPUs remain useful development comparisons, but cannot share a byte oracle.
+            "LIBGL_ALWAYS_SOFTWARE": "1",
+        }
+    else:
+        golden_root = repo / "tests/gltf-l7/vulkan"
+        renderer_output_prefix = "[Vulkan] GPU: "
+        capture_environment = {
+            "SDL_VIDEODRIVER": "x11",
+            "SDL_AUDIODRIVER": "dummy",
+        }
+        if os.environ.get("VK_DRIVER_FILES"):
+            capture_environment["VK_DRIVER_FILES"] = os.environ["VK_DRIVER_FILES"]
 
     expectations = {
         asset_id: json.loads(
@@ -235,15 +250,17 @@ def main() -> int:
             disposition = override.get("disposition", "capture")
             extra_arguments = list(override.get("viewerArguments", []))
             run_1 = run_viewer(
-                viewer, source, first_root / f"{asset_id}.png", extra_arguments, args.timeout
+                viewer, source, first_root / f"{asset_id}.png", extra_arguments, args.timeout,
+                capture_environment,
             )
             run_2 = run_viewer(
-                viewer, source, second_root / f"{asset_id}.png", extra_arguments, args.timeout
+                viewer, source, second_root / f"{asset_id}.png", extra_arguments, args.timeout,
+                capture_environment,
             )
             for output_text in (run_1["output"], run_2["output"]):
                 for line in output_text.splitlines():
-                    if line.startswith("EasyGLRenderer initialized with "):
-                        renderers.add(line.removeprefix("EasyGLRenderer initialized with "))
+                    if line.startswith(renderer_output_prefix):
+                        renderers.add(line.removeprefix(renderer_output_prefix))
 
             base_result: dict[str, Any] = {
                 "id": asset_id,
@@ -333,11 +350,15 @@ def main() -> int:
                 "golden set differs from captured disposition set: "
                 f"missing={sorted(captured_ids-golden_names)}, stale={sorted(golden_names-captured_ids)}"
             )
+        if len(renderers) != 1:
+            raise RuntimeError(
+                f"expected exactly one {policy['renderer']} renderer identity, got {sorted(renderers)}"
+            )
 
         viewer_source = args.viewer_source.resolve() if args.viewer_source else None
         report = {
             "schemaVersion": 1,
-            "tasks": ["GLTF-009", "GLTF-390", "GLTF-391"],
+            "tasks": policy.get("tasks", ["GLTF-009", "GLTF-390", "GLTF-391"]),
             "capturedOn": datetime.date.today().isoformat(),
             "corpusManifest": "tests/assets/gltf/manifest.json",
             "corpusManifestSha256": sha256(corpus_manifest_path),
@@ -354,11 +375,7 @@ def main() -> int:
                 "resolution": list(RESOLUTION),
                 "clearPixel": list(CLEAR),
                 "baseViewerArguments": ["--direct", "--capture", "--reference-capture"],
-                "environment": {
-                    "SDL_VIDEODRIVER": "x11",
-                    "SDL_AUDIODRIVER": "dummy",
-                    "LIBGL_ALWAYS_SOFTWARE": "1",
-                },
+                "environment": capture_environment,
             },
             "goldenComparison": comparison,
             "classification": {
