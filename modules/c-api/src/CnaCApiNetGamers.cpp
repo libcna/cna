@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/net_gamers.h"
+#include "CnaCApiNetDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Net/GameEndedEventArgs.hpp"
@@ -63,7 +64,8 @@ struct NetworkMachineResource final {
 struct NetworkGamerResource final {
     std::shared_ptr<NetworkGamer> owned;
     NetworkGamer* value = nullptr;
-    std::shared_ptr<NetworkMachineResource> viewOwner;
+    std::shared_ptr<void> viewOwner;
+    std::size_t* viewCounter = nullptr;
     CNA_Handle session = CNA_INVALID_HANDLE;
 
     NetworkGamerResource() = default;
@@ -72,8 +74,8 @@ struct NetworkGamerResource final {
 
     ~NetworkGamerResource()
     {
-        if (viewOwner != nullptr && viewOwner->activeGamerViews != 0U) {
-            viewOwner->activeGamerViews -= 1U;
+        if (viewOwner != nullptr && viewCounter != nullptr && *viewCounter != 0U) {
+            *viewCounter -= 1U;
         }
     }
 };
@@ -162,6 +164,76 @@ template<typename TCallable>
 
 } // namespace
 
+namespace CNA::C::Detail {
+
+CNA_Result BorrowNetworkGamer(const CNA_Handle handle, NetworkGamer** const outGamer)
+{
+    if (outGamer == nullptr) {
+        return InvalidArgument("The borrowed NetworkGamer output is null.");
+    }
+    *outGamer = nullptr;
+    std::shared_ptr<NetworkGamerResource> gamer;
+    if (const CNA_Result result = GetGamer(handle, &gamer); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outGamer = gamer->value;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result RetainNetworkGamer(const CNA_Handle handle, std::shared_ptr<void>* const outOwner)
+{
+    if (outOwner == nullptr) {
+        return InvalidArgument("The retained NetworkGamer output is null.");
+    }
+    outOwner->reset();
+    std::shared_ptr<NetworkGamerResource> gamer;
+    if (const CNA_Result result = GetGamer(handle, &gamer); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outOwner = gamer;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CreateBorrowedNetworkGamer(
+    NetworkGamer* const value,
+    std::shared_ptr<void> viewOwner,
+    std::size_t* const viewCounter,
+    const CNA_Handle session,
+    CNA_Handle* const outGamer)
+{
+    if (outGamer == nullptr) {
+        return InvalidArgument("The NetworkGamer output handle is null.");
+    }
+    *outGamer = CNA_INVALID_HANDLE;
+    if (value == nullptr) {
+        return Fail(
+            CNA_RESULT_INTERNAL,
+            CNA_ERROR_CATEGORY_INTERNAL,
+            "The canonical collection reported a null gamer.");
+    }
+    const auto resource = std::make_shared<NetworkGamerResource>();
+    resource->value = value;
+    resource->session = session;
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::NetworkGamer,
+        resource,
+        outGamer);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The borrowed NetworkGamer handle could not be created.");
+    }
+    resource->viewOwner = std::move(viewOwner);
+    resource->viewCounter = viewCounter;
+    if (viewCounter != nullptr) {
+        *viewCounter += 1U;
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
+
 CNA_Result cna_network_gamer_create(
     const CNA_Handle session,
     const CNA_StringView gamertag,
@@ -172,11 +244,14 @@ CNA_Result cna_network_gamer_create(
             return InvalidArgument("The NetworkGamer output handle is null.");
         }
         *outGamer = CNA_INVALID_HANDLE;
+        Microsoft::Xna::Framework::Net::NetworkSession* nativeSession = nullptr;
         if (session != CNA_INVALID_HANDLE) {
-            return Fail(
-                CNA_RESULT_INVALID_HANDLE,
-                CNA_ERROR_CATEGORY_HANDLE,
-                "Session handles are not part of this API surface yet.");
+            if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
+                    session,
+                    &nativeSession);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
         }
 
         std::string gamertagCopy;
@@ -190,9 +265,11 @@ CNA_Result cna_network_gamer_create(
 
         const auto resource = std::make_shared<NetworkGamerResource>();
         resource->owned = gamertagCopy.empty()
-            ? std::make_shared<NetworkGamer>(NetworkGamer::CreateInternal(nullptr))
-            : std::make_shared<NetworkGamer>(NetworkGamer::CreateInternal(nullptr, gamertagCopy));
+            ? std::make_shared<NetworkGamer>(NetworkGamer::CreateInternal(nativeSession))
+            : std::make_shared<NetworkGamer>(
+                  NetworkGamer::CreateInternal(nativeSession, gamertagCopy));
         resource->value = resource->owned.get();
+        resource->session = session;
         const CNA_Result result = GetRuntimeHandles().Create(
             ObjectKind::NetworkGamer,
             resource,
@@ -608,6 +685,7 @@ CNA_Result cna_network_machine_get_gamer(
                 "The borrowed NetworkGamer handle could not be created.");
         }
         resource->viewOwner = machine;
+        resource->viewCounter = &machine->activeGamerViews;
         machine->activeGamerViews += 1U;
         return CNA_RESULT_SUCCESS;
     });

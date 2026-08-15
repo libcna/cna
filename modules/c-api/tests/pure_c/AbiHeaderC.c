@@ -836,3 +836,23 @@ _Static_assert(sizeof(CNA_AvailableNetworkSessionHandle) == 8U &&
                    offsetof(CNA_AvailableNetworkSessionCreateInfo, host_address) == 48U &&
                    offsetof(CNA_AvailableNetworkSessionCreateInfo, session_properties) == 64U,
                "CNA_AvailableNetworkSessionCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_NetworkSessionHandle) == 8U &&
+                   sizeof(CNA_SignedInGamerHandle) == 8U &&
+                   sizeof(CNA_NetworkEventType) == sizeof(uint32_t) &&
+                   CNA_NETWORK_SESSION_MAX_SUPPORTED_GAMERS == INT32_C(31) &&
+                   CNA_NETWORK_SESSION_MAX_PREVIOUS_GAMERS == INT32_C(100) &&
+                   CNA_NETWORK_EVENT_TYPE_PACKET_SEND == UINT32_C(0) &&
+                   CNA_NETWORK_EVENT_TYPE_STATE_CHANGE == UINT32_C(4) &&
+                   CNA_NETWORK_SESSION_ROSTER_ALL == UINT32_C(0) &&
+                   CNA_NETWORK_SESSION_ROSTER_PREVIOUS == UINT32_C(3),
+               "CNA network session identities must remain stable");
+_Static_assert(sizeof(CNA_NetworkEventInfo) == 56U && _Alignof(CNA_NetworkEventInfo) == 8U &&
+                   offsetof(CNA_NetworkEventInfo, type) == 8U &&
+                   offsetof(CNA_NetworkEventInfo, reliable) == 12U &&
+                   offsetof(CNA_NetworkEventInfo, state) == 16U &&
+                   offsetof(CNA_NetworkEventInfo, reason) == 20U &&
+                   offsetof(CNA_NetworkEventInfo, gamer) == 24U &&
+                   offsetof(CNA_NetworkEventInfo, sender) == 32U &&
+                   offsetof(CNA_NetworkEventInfo, packet) == 40U &&
+                   offsetof(CNA_NetworkEventInfo, packet_byte_count) == 48U,
+               "CNA_NetworkEventInfo layout must remain stable");

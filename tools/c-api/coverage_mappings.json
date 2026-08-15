@@ -2518,6 +2518,90 @@
       "tests": "`NetSmoke.c` builds two discovered sessions, one with a measured quality of service and one without, and asserts every scalar, both count/copy strings, the copied quality-of-service measurement, the independently copied property list, both equality operators in matching and differing cases, rejected reserved bytes and session-type identities, and a collection round trip covering count, an element copied out that survives its collection, out-of-range refusals, idempotent disposal and release, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E1"
+    },
+    {
+      "id": "network-session-core",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession(?:::(?:MaxSupportedGamers|MaxPreviousGamers|NetworkEventType(?:::(?:PacketSend|GamerJoin|GamerLeave|HostChange|StateChange))?|NetworkEvent(?:::(?:Type|Gamer|Sender|Packet|Reliable|State|Reason))?|~NetworkSession|getIsDisposedProperty|getAllGamersProperty|getLocalGamersProperty|getRemoteGamersProperty|getPreviousGamersProperty|getAllowHostMigrationProperty|setAllowHostMigrationProperty|getAllowJoinInProgressProperty|setAllowJoinInProgressProperty|getBytesPerSecondReceivedProperty|getBytesPerSecondSentProperty|getHostProperty|getIsEveryoneReadyProperty|getIsHostProperty|getMaxGamersProperty|setMaxGamersProperty|getPrivateGamerSlotsProperty|setPrivateGamerSlotsProperty|getSessionPropertiesProperty|getSessionStateProperty|getSessionTypeProperty|getSimulatedLatencyProperty|setSimulatedLatencyProperty|getSimulatedPacketLossProperty|setSimulatedPacketLossProperty|Dispose|GetOwnedGamerCountForTesting|GetActiveActionInstanceCountForTesting|GetInstanceCountForTesting|GetTypeName|Update|AddLocalGamer|FindGamerById|ResetReady|StartGame|EndGame|SendNetworkEvent|AddRemoteGamer|RemoveGamer))?$",
+      "kinds": [
+        "class",
+        "constant",
+        "enum",
+        "enum-value",
+        "struct",
+        "field",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_NetworkSessionHandle` that owns the caller-owned pointer the canonical creation hands back, with both limits as fixed constants, the queued-event identities and a fixed `CNA_NetworkEventInfo` payload, every state property and setter, all four rosters as a roster identity plus count and indexed borrowed views, an independently copied property list, the exact type name, disposal, the pump, local-gamer addition, identifier lookup, ready reset, start and end, and the three CNA extension routes for queued events and remote-gamer add and remove. A borrowed gamer view keeps its session alive and blocks its release; a remote gamer is retained by the C layer for the session's lifetime, because the canonical call deliberately does not take ownership",
+      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "network-session-create",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::Create$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_network_session_create`, `_with_properties` and `_with_local_gamers`, one per canonical overload. The canonical synchronous overloads already drive their own fake-async pair to completion, so each C route is a single synchronous call. The first two take their local gamers from the process-wide signed-in collection and therefore surface the canonical host-selection failure while it is empty; the third takes an explicit list",
+      "tests": "`NetSmoke.c` creates a session from a published signed-in gamer and asserts every state property and setter, both throughput readings, the exact type name, all four rosters with borrowed views, the local-gamer add and its owned-gamer count, identifier lookup in both the found and not-found cases, ready reset, the queued start/end transitions the pump applies, a queued packet event with its rejected identities, remote-gamer addition surviving release of the caller's own handle, removal, the refusal to release a session that still has a borrowed view, disposal, the post-disposal pump refusal and instance counting, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "signed-in-gamer-minimum",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::SignedInGamer::CreateInternal$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_signed_in_gamer_create_ext` produces an owned `CNA_SignedInGamerHandle`. Borrowed ahead of the gamer-services coverage task because the canonical session constructor selects its host from its local gamers and therefore cannot run without at least one signed-in gamer",
+      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
+      "status": "implemented",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "signed-in-gamer-collection-minimum",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection::CreateInternal$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_gamer_set_signed_in_gamers_ext` builds the canonical collection from owned handles. Borrowed ahead of the gamer-services coverage task for the same reason as `SignedInGamer::CreateInternal`",
+      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
+      "status": "implemented",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "gamer-signed-in-collection-setter",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::setSignedInGamersProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_gamer_set_signed_in_gamers_ext`. The canonical collection holds non-owning pointers and its setter frees only the previous wrapper, so the C layer retains each published handle and refuses to release one while it is still referenced",
+      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
+      "status": "implemented",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "gamer-signed-in-collection-getter",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::getSignedInGamersProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_gamer_get_signed_in_gamer_count` reports the count. Element access is through the handles the caller created and published; a complete collection view belongs to the gamer-services coverage task",
+      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
+      "status": "partial",
+      "task": "CBIND-036E2"
+    },
+    {
+      "id": "gamer-gamertag",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Gamer::getGamertagProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_signed_in_gamer_get_gamertag_size` and `_copy_gamertag` follow the standard UTF-8 count/copy protocol",
+      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
+      "status": "implemented",
+      "task": "CBIND-036E2"
     }
   ]
 }

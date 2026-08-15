@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A–D and CBIND-036E1 under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A–D and CBIND-036E1–E2 under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -99,6 +99,7 @@ modules/c-api/
 │   ├── net.h                 # network identities, values and packet buffers
 │   ├── net_gamers.h          # network gamers, machines and event descriptions
 │   ├── net_sessions.h        # discovered sessions, collections and network sessions
+│   ├── gamer_services.h      # signed-in gamers (minimum the session slice needs)
 │   ├── storage.h             # storage devices, containers and file streams
 │   └── audio.h               # only after its explicit phase is approved
 ├── src/
@@ -347,9 +348,9 @@ its receive and send paths dereference the session it belongs to.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-036E1 | 17 | Complete available sessions and their collection | ✅ | `net_sessions.h` and `CnaCApiNetSessions.cpp` map both types: an owned discovered-session handle built from a versioned creation structure, every scalar property, count/copy host gamertag and connect address, connect port and session type, a copied `CNA_QualityOfService` and an independently copied property list, and both equality operators as explicit routes. Only the round-trip sample can be carried into a quality of service, because that is the only measurement the canonical type accepts. The collection is an owned handle with disposal state, explicit dispose and release, a count and an indexed copy-out whose element survives the collection it came from. `NetSmoke.c` grew the discovered-session coverage and runs green in all three trees (50/50). |
-| CBIND-036E2 | 57 | Complete session identity, state and gamer management | ⬜ | Map the `NetworkSession` handle, both constants, the `NetworkEventType`/`NetworkEvent` identities and payload, every state property and gamer collection, disposal, `Update`, `AddLocalGamer`, `FindGamerById`, `ResetReady`, `StartGame`, `EndGame`, `SendNetworkEvent`, `AddRemoteGamer`, `RemoveGamer` and the testing counters. |
+| CBIND-036E2 | 60 | Complete session identity, state and gamer management | ✅ | `net_sessions.h` gains an owned `CNA_NetworkSessionHandle` that owns the caller-owned pointer canonical creation returns, both limits as constants, the queued-event identities with a fixed `CNA_NetworkEventInfo`, every state property and setter, all four rosters as a roster identity plus count and indexed borrowed views, an independently copied property list, the exact type name, disposal, the pump, local-gamer addition, identifier lookup, ready reset, start and end, and the three CNA extension routes. A borrowed gamer view blocks its session's release, and a remote gamer is retained by the C layer because the canonical add deliberately does not take ownership. **Re-partitioned:** the three `Create` overloads moved here from CBIND-036E4 (57→60 and 20→17), because none of this slice's state is reachable without a session object. **Borrowed from CBIND-037:** the canonical session constructor selects its host from its local gamers and therefore cannot run with no signed-in gamer, so `gamer_services.h` maps the minimum needed — `SignedInGamer::CreateInternal`, `SignedInGamerCollection::CreateInternal`, both `Gamer` signed-in collection accessors and the gamertag — five rows recorded against this task. `NetSmoke.c` grew the session coverage and runs green in all three trees (50/50). |
 | CBIND-036E3 | 10 | Complete session event registrations | ⬜ | Map all nine instance events and the static `InviteAccepted` event through owned registration handles that deliver the CBIND-036D event descriptions, with the same subscribe/unsubscribe contract every other C API event family uses. |
-| CBIND-036E4 | 20 | Complete session creation, discovery and join | ⬜ | Map all four `Create`, both `Find`, `Join` and both `JoinInvited` overloads together with their `Begin`/`End` pairs, documenting how each fake-async pair becomes a C route and never exposing `System::IAsyncResult` or `std::any`. |
+| CBIND-036E4 | 17 | Complete session discovery, join and the fake-async pairs | ⬜ | Map both `Find`, `Join` and both `JoinInvited` overloads together with every `Begin`/`End` pair including `BeginCreate`/`EndCreate`, documenting how each fake-async pair becomes a C route and never exposing `System::IAsyncResult` or `std::any`. The three synchronous `Create` overloads moved to CBIND-036E2. |
 | CBIND-036E5 | 18 | Complete local network gamers | ⬜ | Map `LocalNetworkGamer`: the data-available and signed-in-gamer queries, every `ReceiveData` and `SendData` overload including the `PacketReader`/`PacketWriter` forms, and the CNAEXT queue operations. |
 
 #### CBIND-036B content implementation slices
@@ -658,18 +659,23 @@ CBIND-036E because its receive and send paths dereference the owning session, so
 rows rather than 65. The snapshot is now 3,711 implemented, 29 partial, 2,559 planned and 116 not
 applicable. CBIND-036E is partitioned into five slices by what each part needs to exist, and
 CBIND-036E1 closes the first: discovered sessions and their collection. The snapshot is now 3,728
-implemented, 29 partial, 2,542 planned and 116 not applicable; CBIND-036E2, the session object's own
-identity, state and gamer management, is next.
+implemented, 29 partial, 2,542 planned and 116 not applicable. CBIND-036E2 then maps the session
+object itself. Two boundaries moved while implementing it: the three synchronous `Create` overloads
+came here from CBIND-036E4, because none of the session's state is reachable without a session
+object; and the minimum signed-in-gamer surface was borrowed from CBIND-037, because the canonical
+session constructor selects its host from its local gamers and therefore cannot run with no gamer
+signed in. The snapshot is now 3,792 implemented, 30 partial, 2,477 planned and 116 not applicable;
+CBIND-036E3, the ten session event registrations, is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-036E1 is the final task completed in this handoff (parent
+- Branch: `feature/binding`; CBIND-036E2 is the final task completed in this handoff (parent
   CBIND-035 was closed by CBIND-035G; CBIND-036A closed storage, CBIND-036B closed content,
-  CBIND-036C closed the network values and packets and CBIND-036D closed gamers, machines and
-  event descriptions).
-- Next task: `CBIND-036E2` complete session identity, state and gamer management (57 planned rows),
-  then E3 events, E4 creation/discovery/join and E5 local gamers. Do not reopen closed CBIND-035,
-  CBIND-036A–D or CBIND-036E1 slices without a concrete demonstrated defect.
+  CBIND-036C closed the network values and packets, CBIND-036D closed gamers, machines and event
+  descriptions, and CBIND-036E1 closed discovered sessions).
+- Next task: `CBIND-036E3` complete the ten session event registrations, then E4 discovery/join and
+  E5 local gamers. Do not reopen closed CBIND-035, CBIND-036A–D or CBIND-036E1–E2 slices without a
+  concrete demonstrated defect.
 - Verification baseline: three trees each run the same 50 C API tests green — HEADLESS,
   SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
   the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
@@ -678,8 +684,8 @@ identity, state and gamer management, is next.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-036E1: 414 headers / 6,415 symbols; 3,728 implemented, 29 partial,
-  2,542 planned and 116 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-036E2: 414 headers / 6,415 symbols; 3,792 implemented, 30 partial,
+  2,477 planned and 116 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

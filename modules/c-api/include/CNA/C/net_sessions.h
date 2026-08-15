@@ -318,6 +318,595 @@ CNA_C_API CNA_Result cna_available_network_session_collection_dispose(
 CNA_C_API CNA_Result cna_available_network_session_collection_destroy(
     CNA_AvailableNetworkSessionCollectionHandle collection);
 
+/** @brief Owned handle for a network session. */
+typedef CNA_Handle CNA_NetworkSessionHandle;
+
+/** @brief Largest number of gamers a session supports. */
+#define CNA_NETWORK_SESSION_MAX_SUPPORTED_GAMERS INT32_C(31)
+
+/** @brief Largest number of previous gamers a session remembers. */
+#define CNA_NETWORK_SESSION_MAX_PREVIOUS_GAMERS INT32_C(100)
+
+/** @brief Fixed-width identity naming what a queued session event describes. */
+typedef uint32_t CNA_NetworkEventType;
+
+/** @brief A packet was sent to a gamer. */
+#define CNA_NETWORK_EVENT_TYPE_PACKET_SEND UINT32_C(0)
+/** @brief A gamer joined the session. */
+#define CNA_NETWORK_EVENT_TYPE_GAMER_JOIN UINT32_C(1)
+/** @brief A gamer left the session. */
+#define CNA_NETWORK_EVENT_TYPE_GAMER_LEAVE UINT32_C(2)
+/** @brief The session host changed. */
+#define CNA_NETWORK_EVENT_TYPE_HOST_CHANGE UINT32_C(3)
+/** @brief The session state changed. */
+#define CNA_NETWORK_EVENT_TYPE_STATE_CHANGE UINT32_C(4)
+
+/**
+ * @brief Describes one event queued on a session.
+ */
+typedef struct CNA_NetworkEventInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_NETWORK_EVENT_TYPE_*` identities. */
+    CNA_NetworkEventType type;
+
+    /** @brief One of the `CNA_SEND_DATA_OPTIONS_*` identities, for a packet event. */
+    CNA_SendDataOptions reliable;
+
+    /** @brief One of the `CNA_NETWORK_SESSION_STATE_*` identities, for a state-change event. */
+    CNA_NetworkSessionState state;
+
+    /** @brief One of the `CNA_NETWORK_SESSION_END_REASON_*` identities, for a session end. */
+    CNA_NetworkSessionEndReason reason;
+
+    /** @brief The gamer the event is addressed to, or `CNA_INVALID_HANDLE`. */
+    CNA_NetworkGamerHandle gamer;
+
+    /** @brief The gamer that sent a packet event's payload, or `CNA_INVALID_HANDLE`. */
+    CNA_NetworkGamerHandle sender;
+
+    /** @brief Packet payload copied during the call, or null when @ref packet_byte_count is zero. */
+    const uint8_t* packet;
+
+    /** @brief Number of payload bytes beginning at @ref packet. */
+    uint64_t packet_byte_count;
+} CNA_NetworkEventInfo;
+
+/**
+ * @brief Creates an owned network session with a maximum local-gamer count.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param max_gamers Largest number of gamers in the session.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown identity or an
+ * out-of-range count, `CNA_RESULT_INVALID_STATE` when a session already exists, or a documented
+ * thread/native failure.
+ *
+ * The canonical creation is a fake-async pair the canonical synchronous overload already drives to
+ * completion, so this is one synchronous call. Only one session exists at a time, matching the
+ * canonical process-wide restriction. This overload takes its local gamers from the process-wide
+ * signed-in collection, so that collection must already hold at least one gamer; the canonical
+ * constructor otherwise fails while selecting its host.
+ */
+CNA_C_API CNA_Result cna_network_session_create(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    int32_t max_gamers,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Creates an owned network session with private slots and session properties.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param max_gamers Largest number of gamers in the session.
+ * @param private_gamer_slots Number of reserved private slots.
+ * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_create_with_properties(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    int32_t max_gamers,
+    int32_t private_gamer_slots,
+    CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Creates an owned network session from an explicit local-gamer list.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param max_gamers Largest number of gamers in the session.
+ * @param private_gamer_slots Number of reserved private slots.
+ * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ *
+ * This is the overload a C consumer normally uses: the canonical session constructor requires at
+ * least one signed-in gamer, and the other two overloads take theirs from the process-wide
+ * signed-in collection, which must therefore be published first.
+ */
+CNA_C_API CNA_Result cna_network_session_create_with_local_gamers(
+    CNA_NetworkSessionType session_type,
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    int32_t max_gamers,
+    int32_t private_gamer_slots,
+    CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Gets whether a session has been disposed.
+ *
+ * @param session Owned session handle.
+ * @param out_is_disposed Receives `CNA_TRUE` when the session has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_is_disposed(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool* out_is_disposed);
+
+/**
+ * @brief Gets the number of gamers in one of a session's rosters.
+ *
+ * @param session Owned session handle.
+ * @param roster One of the `CNA_NETWORK_SESSION_ROSTER_*` identities.
+ * @param out_count Receives the gamer count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown roster, or a
+ * documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_gamer_count(
+    CNA_NetworkSessionHandle session,
+    uint32_t roster,
+    int32_t* out_count);
+
+/** @brief Every gamer in the session, local and remote. */
+#define CNA_NETWORK_SESSION_ROSTER_ALL UINT32_C(0)
+/** @brief The local gamers in the session. */
+#define CNA_NETWORK_SESSION_ROSTER_LOCAL UINT32_C(1)
+/** @brief The remote gamers in the session. */
+#define CNA_NETWORK_SESSION_ROSTER_REMOTE UINT32_C(2)
+/** @brief The gamers that have left the session. */
+#define CNA_NETWORK_SESSION_ROSTER_PREVIOUS UINT32_C(3)
+
+/**
+ * @brief Gets one gamer from one of a session's rosters.
+ *
+ * @param session Owned session handle.
+ * @param roster One of the `CNA_NETWORK_SESSION_ROSTER_*` identities.
+ * @param index Zero-based index within that roster.
+ * @param out_gamer Receives a borrowed-view gamer handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown roster or an
+ * out-of-range index, or a documented handle/thread failure.
+ *
+ * The returned handle observes a gamer the session owns, so it must be released before the session.
+ */
+CNA_C_API CNA_Result cna_network_session_get_gamer(
+    CNA_NetworkSessionHandle session,
+    uint32_t roster,
+    int32_t index,
+    CNA_NetworkGamerHandle* out_gamer);
+
+/**
+ * @brief Gets whether a session allows host migration.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives `CNA_TRUE` when host migration is allowed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_allow_host_migration(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Sets whether a session allows host migration.
+ *
+ * @param session Owned session handle.
+ * @param value The new value.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_allow_host_migration(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool value);
+
+/**
+ * @brief Gets whether a session allows joining in progress.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives `CNA_TRUE` when joining in progress is allowed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_allow_join_in_progress(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Sets whether a session allows joining in progress.
+ *
+ * @param session Owned session handle.
+ * @param value The new value.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_allow_join_in_progress(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool value);
+
+/**
+ * @brief Gets the measured inbound throughput.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives the bytes received per second.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_bytes_per_second_received(
+    CNA_NetworkSessionHandle session,
+    int32_t* out_value);
+
+/**
+ * @brief Gets the measured outbound throughput.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives the bytes sent per second.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_bytes_per_second_sent(
+    CNA_NetworkSessionHandle session,
+    int32_t* out_value);
+
+/**
+ * @brief Gets the session host.
+ *
+ * @param session Owned session handle.
+ * @param out_gamer Receives a borrowed-view gamer handle, or `CNA_INVALID_HANDLE` when the session
+ * has no host.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_host(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle* out_gamer);
+
+/**
+ * @brief Gets whether every gamer in a session is ready.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives `CNA_TRUE` when everyone is ready.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_is_everyone_ready(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Gets whether the local machine hosts a session.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives `CNA_TRUE` when the local machine is the host.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_is_host(
+    CNA_NetworkSessionHandle session,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Gets the largest number of gamers a session accepts.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives the maximum.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_max_gamers(
+    CNA_NetworkSessionHandle session,
+    int32_t* out_value);
+
+/**
+ * @brief Sets the largest number of gamers a session accepts.
+ *
+ * @param session Owned session handle.
+ * @param value The new maximum.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_max_gamers(
+    CNA_NetworkSessionHandle session,
+    int32_t value);
+
+/**
+ * @brief Gets the number of reserved private slots.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives the private slot count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_private_gamer_slots(
+    CNA_NetworkSessionHandle session,
+    int32_t* out_value);
+
+/**
+ * @brief Sets the number of reserved private slots.
+ *
+ * @param session Owned session handle.
+ * @param value The new private slot count.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_private_gamer_slots(
+    CNA_NetworkSessionHandle session,
+    int32_t value);
+
+/**
+ * @brief Copies a session's properties into a new owned list.
+ *
+ * @param session Owned session handle.
+ * @param out_properties Receives an owned property-list handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical getter returns a reference into the session; the C route hands back an independent
+ * copy so a caller's list cannot alias session state.
+ */
+CNA_C_API CNA_Result cna_network_session_copy_session_properties(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionPropertiesHandle* out_properties);
+
+/**
+ * @brief Gets a session's current state.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives one of the `CNA_NETWORK_SESSION_STATE_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_session_state(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionState* out_value);
+
+/**
+ * @brief Gets a session's type.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives one of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_session_type(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionType* out_value);
+
+/**
+ * @brief Gets the simulated latency applied to a session.
+ *
+ * @param session Owned session handle.
+ * @param out_ticks Receives the latency in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_simulated_latency_ticks(
+    CNA_NetworkSessionHandle session,
+    int64_t* out_ticks);
+
+/**
+ * @brief Sets the simulated latency applied to a session.
+ *
+ * @param session Owned session handle.
+ * @param ticks The latency in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_simulated_latency_ticks(
+    CNA_NetworkSessionHandle session,
+    int64_t ticks);
+
+/**
+ * @brief Gets the simulated packet loss applied to a session.
+ *
+ * @param session Owned session handle.
+ * @param out_value Receives the loss fraction.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_simulated_packet_loss(
+    CNA_NetworkSessionHandle session,
+    float* out_value);
+
+/**
+ * @brief Sets the simulated packet loss applied to a session.
+ *
+ * @param session Owned session handle.
+ * @param value The loss fraction.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_set_simulated_packet_loss(
+    CNA_NetworkSessionHandle session,
+    float value);
+
+/**
+ * @brief Gets the UTF-8 byte count of a session's fully qualified .NET type name.
+ *
+ * @param session Owned session handle.
+ * @param out_bytes Receives the byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_get_type_name_size(
+    CNA_NetworkSessionHandle session,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a session's fully qualified .NET type name without a terminator.
+ *
+ * @param session Owned session handle.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread failure. No partial name is written.
+ */
+CNA_C_API CNA_Result cna_network_session_copy_type_name(
+    CNA_NetworkSessionHandle session,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Pumps a session's queued events and transport.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` after disposal, or a documented
+ * handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_update(CNA_NetworkSessionHandle session);
+
+/**
+ * @brief Adds a local gamer to a session.
+ *
+ * @param session Owned session handle.
+ * @param signed_in_gamer Signed-in gamer handle, or `CNA_INVALID_HANDLE` for none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the local-gamer limit is reached,
+ * or a documented handle/thread/native failure.
+ *
+ * Signed-in gamers are a gamer-services type with no C representation yet, so only
+ * `CNA_INVALID_HANDLE` is accepted today; the parameter shape is already final.
+ */
+CNA_C_API CNA_Result cna_network_session_add_local_gamer(
+    CNA_NetworkSessionHandle session,
+    CNA_Handle signed_in_gamer);
+
+/**
+ * @brief Finds a gamer in a session by its session-local identifier.
+ *
+ * @param session Owned session handle.
+ * @param gamer_id The identifier to look for.
+ * @param out_gamer Receives a borrowed-view gamer handle, or `CNA_INVALID_HANDLE` when no gamer
+ * carries that identifier.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_find_gamer_by_id(
+    CNA_NetworkSessionHandle session,
+    uint8_t gamer_id,
+    CNA_NetworkGamerHandle* out_gamer);
+
+/**
+ * @brief Clears the ready flag on every gamer in a session.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_reset_ready(CNA_NetworkSessionHandle session);
+
+/**
+ * @brief Moves a session into its playing state.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the session is not in its lobby,
+ * or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_start_game(CNA_NetworkSessionHandle session);
+
+/**
+ * @brief Moves a session back into its lobby.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the session is not playing, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_end_game(CNA_NetworkSessionHandle session);
+
+/**
+ * @brief Queues an event on a session.
+ *
+ * @param session Owned session handle.
+ * @param event_info Versioned event description; its payload is copied during this call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * This maps a CNA extension used to deliver a transport event into a session.
+ */
+CNA_C_API CNA_Result cna_network_session_send_network_event_ext(
+    CNA_NetworkSessionHandle session,
+    const CNA_NetworkEventInfo* event_info);
+
+/**
+ * @brief Adds a remote gamer to a session.
+ *
+ * @param session Owned session handle.
+ * @param gamer Owned gamer handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the session is full, or a
+ * documented handle/thread/native failure.
+ *
+ * This maps a CNA extension. The canonical call deliberately does not take ownership, so the C
+ * route retains the gamer handle's resource for the session's lifetime; the caller may release its
+ * own handle immediately without invalidating the session's roster.
+ */
+CNA_C_API CNA_Result cna_network_session_add_remote_gamer_ext(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle gamer);
+
+/**
+ * @brief Removes a gamer from a session.
+ *
+ * @param session Owned session handle.
+ * @param gamer Owned or borrowed gamer handle.
+ * @param reason One of the `CNA_NETWORK_SESSION_END_REASON_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown reason, or a
+ * documented handle/thread/native failure.
+ *
+ * This maps a CNA extension. Any retention the session took for a remote gamer is released.
+ */
+CNA_C_API CNA_Result cna_network_session_remove_gamer_ext(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle gamer,
+    CNA_NetworkSessionEndReason reason);
+
+/**
+ * @brief Gets how many gamers a session owns outright.
+ *
+ * @param session Owned session handle.
+ * @param out_count Receives the owned-gamer count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * This maps a CNA diagnostic accessor and reports the local gamers a session allocated itself,
+ * not the remote gamers it merely references.
+ */
+CNA_C_API CNA_Result cna_network_session_get_owned_gamer_count_ext(
+    CNA_NetworkSessionHandle session,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets how many session objects currently exist in the process.
+ *
+ * @param out_count Receives the instance count.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This maps a CNA diagnostic accessor.
+ */
+CNA_C_API CNA_Result cna_network_session_get_instance_count_ext(int32_t* out_count);
+
+/**
+ * @brief Gets how many pending creation actions currently exist in the process.
+ *
+ * @param out_count Receives the action count.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This maps a CNA diagnostic accessor.
+ */
+CNA_C_API CNA_Result cna_network_session_get_active_action_count_ext(int32_t* out_count);
+
+/**
+ * @brief Disposes a session without releasing its handle.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. Disposal is
+ * idempotent.
+ */
+CNA_C_API CNA_Result cna_network_session_dispose(CNA_NetworkSessionHandle session);
+
+/**
+ * @brief Disposes and releases an owned session handle.
+ *
+ * @param session Owned session handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` while a borrowed gamer view is still
+ * open, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_network_session_destroy(CNA_NetworkSessionHandle session);
+
 #ifdef __cplusplus
 }
 #endif

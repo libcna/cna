@@ -4,9 +4,10 @@
 
 `CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
-event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions and their collection. The
-session object itself, local gamers and live discovery are a later coverage task; nothing in these
-headers opens a socket or joins a session.
+event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions, their
+collection and the session object itself. Session events, live discovery, join and local gamers are
+later coverage tasks. Nothing here opens a socket unless a `SystemLink` session is created; a
+`Local` session touches no transport at all.
 
 ## Identities
 
@@ -141,3 +142,38 @@ throughput fields, which the canonical type leaves at zero anyway.
 out** rather than aliased, so it survives the collection it came from; the canonical factory copies
 its own input the same way, so the handles a caller passes in stay independently owned and may be
 released immediately.
+
+## Network sessions
+
+`CNA_NetworkSessionHandle` owns the session object. The canonical creation routes hand back a
+caller-owned raw pointer, so the handle owns the deletion, and only one session exists at a time —
+a canonical process-wide restriction, not a C one.
+
+A session cannot exist without at least one **signed-in gamer**: the canonical constructor selects
+its host from its local gamers and fails while that list is empty. `CNA/C/gamer_services.h`
+therefore carries the minimum needed — create a signed-in gamer, read its gamertag, publish or
+clear the process-wide collection, and read that collection's count. The rest of gamer services is
+a later coverage task.
+
+That shapes the three creation routes:
+
+- `cna_network_session_create` and `cna_network_session_create_with_properties` take their local
+  gamers from the published collection, so it must already hold one;
+- `cna_network_session_create_with_local_gamers` takes an explicit list and ignores the published
+  collection entirely.
+
+All four rosters — all, local, remote and previous — are a roster identity plus a count and an
+indexed **borrowed view**. A view keeps its session alive and blocks the session's release, so a
+caller releases every view first.
+
+Two lifetime rules follow from the canonical contract rather than from the binding:
+
+- `cna_network_session_add_remote_gamer_ext` retains the gamer handle's resource for the session's
+  lifetime, because the canonical add deliberately does not take ownership. A caller may release
+  its own handle immediately without invalidating the roster; `cna_network_session_remove_gamer_ext`
+  drops the retention.
+- `cna_network_session_start_game` and `_end_game` only **queue** a state change. The state moves
+  when `cna_network_session_update` pumps the queue, exactly as the canonical implementation does.
+
+A packet event queued on a non-`SystemLink` session is a deliberate no-op in the canonical pump, so
+`cna_network_session_send_network_event_ext` succeeds and delivers nothing there.

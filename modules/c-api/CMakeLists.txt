@@ -25,6 +25,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiGraphicsExt.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
+    src/CnaCApiGamerServices.cpp
     src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
     src/CnaCApiSpriteFont.cpp
@@ -72,7 +73,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content CNA_Net)
+target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content CNA_Net CNA_GamerServices)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets

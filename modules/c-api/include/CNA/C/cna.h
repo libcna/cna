@@ -37,6 +37,7 @@
 #include "CNA/C/input.h"
 #include "CNA/C/content.h"
 #include "CNA/C/content_readers.h"
+#include "CNA/C/gamer_services.h"
 #include "CNA/C/net.h"
 #include "CNA/C/net_gamers.h"
 #include "CNA/C/net_sessions.h"

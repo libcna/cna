@@ -274,8 +274,19 @@
 > a round-trip sample, so that is all a C caller can supply; and a collection element is copied out
 > rather than aliased, so it survives the collection it came from — which is also how the canonical
 > factory treats its own input. The inventory is now 3,728 implemented, 29 partial, 2,542 planned
-> and 116 N/A; all three trees stay green at 50/50. CBIND-036E2 (session identity, state and gamer
-> management, 57 rows) is next.
+> and 116 N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E2 then maps the session object, and two boundaries moved while implementing it. The
+> three synchronous `Create` overloads came here from CBIND-036E4, because none of the session's
+> state is reachable without a session object (57/20 became 60/17). And the minimum signed-in-gamer
+> surface was borrowed from CBIND-037, because the canonical session constructor selects its host
+> from its local gamers and therefore throws when none is signed in — a session simply cannot exist
+> without one. Three canonical behaviors are preserved rather than smoothed over: start and end only
+> queue a state change until the pump runs; a packet event on a non-`SystemLink` session is a
+> deliberate no-op; and a remote gamer is retained by the C layer because the canonical add
+> explicitly does not take ownership, so releasing the caller's own handle must not invalidate the
+> roster. The inventory is now 3,792 implemented, 30 partial, 2,477 planned and 116 N/A; all three
+> trees stay green at 50/50. CBIND-036E3 (the ten session event registrations, 10 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
