@@ -2313,9 +2313,11 @@ namespace Microsoft::Xna::Framework::Graphics
         // keeps the equivalent EGL selection deterministic on ES hosts.
         //
         // FNA3D primes the same attributes itself inside FNA3D_PrepareWindowAttributes(), but the
-        // platform resets GL attributes immediately before SDL_CreateWindow, so that priming does
-        // not survive. Without this the FNA3D OpenGL driver presents into a visual with no stencil
-        // bits and every stencil test silently passes.
+        // platform resets the process-global GL attribute state as the first step of creating an
+        // OpenGL-intent window, so that priming does not survive. Stating the requirement through
+        // WindowDescription instead is what makes it survive: the platform applies this request
+        // after its own reset. Without it the FNA3D OpenGL driver presents into a visual with no
+        // stencil bits and every stencil test silently passes.
         description.openGlFramebuffer.depthBits = 24;
         description.openGlFramebuffer.stencilBits = 8;
         description.openGlFramebuffer.doubleBuffered = true;
