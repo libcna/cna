@@ -25,6 +25,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <memory>
 #include <vector>
 
 using CNA::GraphicsRendererFallbackReason;
@@ -90,6 +91,27 @@ namespace
                     return &candidate;
             }
             return nullptr;
+        }
+
+        /// plan_runtimerenderer.md RTR-P6-8 follow-up: EVERY renderer whose window kind differs
+        /// from @p from, in registry order. A fallback chain is a list, and handing the test only
+        /// the first candidate made it depend on that one candidate being usable in this
+        /// environment -- which LLGL is not under Wayland, where it refuses for want of X11
+        /// handles.
+        [[nodiscard]] static std::vector<GraphicsRendererType>
+        AllDifferentWindowKinds(GraphicsRendererType from)
+        {
+            namespace Renderers = CNA::Internal::Renderers;
+            std::vector<GraphicsRendererType> out;
+            const auto* origin = Renderers::GraphicsRendererRegistry::Find(from);
+            if (origin == nullptr)
+                return out;
+            for (const auto& candidate : Renderers::GraphicsRendererRegistry::All())
+            {
+                if (candidate.type != from && candidate.windowKind != origin->windowKind)
+                    out.push_back(candidate.type);
+            }
+            return out;
         }
 
         [[nodiscard]] static std::vector<GraphicsRendererType> AllCompiledIn()
@@ -344,17 +366,43 @@ TEST_F(MultiRendererFallbackTest, FallingBackAcrossWindowKindsRecreatesTheWindow
         GTEST_SKIP() << "no two renderers with different window kinds; registry reports: " << seen;
     }
 
-    GraphicsRendererSelection::SetFallbackChain(
-        std::vector<GraphicsRendererType>{crossing->type});
+    // The chain gets every cross-kind candidate, not just the first. A renderer can be compiled in
+    // and still refuse to initialise for a reason that belongs to the machine rather than to CNA --
+    // LLGL needs X11 handles and this session runs under Wayland -- and a one-element chain turns
+    // that into a failure of a test about window recreation.
+    const std::vector<GraphicsRendererType> crossingChain = AllDifferentWindowKinds(available[0]);
+    GraphicsRendererSelection::SetFallbackChain(crossingChain);
     GraphicsRendererSelection::SetPreferred(available[0]);
     ForceInitFailure({available[0]});
 
-    Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
+    std::unique_ptr<Microsoft::Xna::Framework::Graphics::GraphicsDevice> device;
+    try
+    {
+        device = std::make_unique<Microsoft::Xna::Framework::Graphics::GraphicsDevice>();
+    }
+    catch (const std::exception& e)
+    {
+        // Every cross-kind candidate refused. That is not this test's subject -- it can only show
+        // window recreation when some renderer of the other kind actually starts here -- so it
+        // reports the attempts verbatim and skips. The attempt list is the evidence that the chain
+        // itself did its work; a silent skip would hide a registry or chain bug behind the same
+        // outcome.
+        GTEST_SKIP() << "no renderer of a different window kind could initialise in this "
+                        "environment, so window recreation cannot be observed. The chain was tried "
+                        "in full and reported:\n" << e.what();
+    }
 
-    EXPECT_EQ(device.GetGraphicsRendererType(), crossing->type);
+    EXPECT_NE(device->GetGraphicsRendererType(), available[0]);
+    const auto* chosen = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(
+        device->GetGraphicsRendererType());
+    ASSERT_NE(nullptr, chosen);
+    const auto* origin = CNA::Internal::Renderers::GraphicsRendererRegistry::Find(available[0]);
+    ASSERT_NE(nullptr, origin);
+    EXPECT_NE(chosen->windowKind, origin->windowKind)
+        << "the fallback stayed within the original window kind, so nothing was recreated";
     // The device has to be genuinely usable afterwards -- a recreated window that nothing draws
     // into would satisfy a weaker assertion.
-    EXPECT_NO_THROW(device.Clear(Microsoft::Xna::Framework::Color::CornflowerBlue));
+    EXPECT_NO_THROW(device->Clear(Microsoft::Xna::Framework::Color::CornflowerBlue));
 }
 
 #endif  // CNA_MULTI_RENDERER
