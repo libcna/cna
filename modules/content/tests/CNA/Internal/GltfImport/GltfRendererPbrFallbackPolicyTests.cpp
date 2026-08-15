@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_gltf.md GLTF-163/373/374/379/394: repository-wide renderer contracts are tested from the
+// plan_gltf.md GLTF-163/184/373/374/379/394: repository-wide renderer contracts are tested from the
 // renderer sources even when the current host cannot compile or execute a particular backend.
 // This covers 32-bit index-factory ownership as well as PBR texture bindings, packed-channel
 // semantics and neutral fallbacks.
@@ -611,6 +611,144 @@ namespace
             R"(const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);)"}}},
     }};
 
+    struct RendererPbrTextureTransformAudit
+    {
+        const char* name;
+        const char* cpuUpload;
+        const char* secondAffineRow;
+        // Base color, normal, metallic-roughness, emissive and occlusion, in public draw-field
+        // order. Each fragment names both the map and its fixed transform slot.
+        std::array<const char*, 5> samples;
+        std::size_t shaderCopies;
+    };
+
+    // GLTF-184: KHR_texture_transform is transported as two affine rows for each of the five PBR
+    // maps. A renderer passes only when it uploads the public draw field, evaluates both rows, and
+    // applies slots 0/1/2/3/4 to the corresponding samples. The minimum copy count keeps separately
+    // stored rigid/skinned shader variants in lockstep without depending on generated-header copies.
+    constexpr std::array<RendererPbrTextureTransformAudit, 15> kPbrTextureTransformAudits{{
+        {"bgfx",
+         "bgfx::setUniform(pbrTextureTransformUnif_, params.pbrTextureTransformRows, 10)",
+         "u_pbrTextureTransform[slot * 2 + 1].xyz",
+         {{"texture2D(s_texColor, rtFlipUV(pbrTransformUV(v_texcoord0, 0), u_rtFlipV.x))",
+           "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(v_texcoord0, 1), u_rtFlipV.y))",
+           "texture2D(s_texMetallicRoughness, rtFlipUV(pbrTransformUV(v_texcoord0, 2), u_rtFlipV.z))",
+           "texture2D(s_texEmissive, rtFlipUV(pbrTransformUV(v_texcoord0, 3), u_rtFlipV.w))",
+           "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4))"}}, 1},
+        {"diligent",
+         "std::memcpy(values + 16, params.pbrTextureTransformRows",
+         "g_PbrTextureTransformRows[slot * 2 + 1].xyz",
+         {{"g_Texture.Sample(g_Texture_sampler, CnaPbrTransformUv(psIn.UV, 0))",
+           "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(psIn.UV, 1))",
+           "g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(psIn.UV, 2))",
+           "g_EmissiveMap.Sample(g_EmissiveMap_sampler, CnaPbrTransformUv(psIn.UV, 3))",
+           "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(psIn.UV, 4))"}}, 1},
+        {"directx9",
+         "TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, \"TextureTransformRows\", &params.pbrTextureTransformRows[0][0])",
+         "TextureTransformRows[slot * 2 + 1].xyz",
+         {{"tex2D(Texture, CnaPbrTransformUv(pin.UV, 0))",
+           "tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1))",
+           "tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2))",
+           "tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3))",
+           "tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4))"}}, 2},
+        {"directx11",
+         "std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows",
+         "TextureTransformRows[slot * 2 + 1].xyz",
+         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(input.UV, 0))",
+           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1))",
+           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(input.UV, 2))",
+           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(input.UV, 3))",
+           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4))"}}, 2},
+        {"directx12",
+         "std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows",
+         "TextureTransformRows[slot * 2 + 1].xyz",
+         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(input.UV, 0))",
+           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1))",
+           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(input.UV, 2))",
+           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(input.UV, 3))",
+           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4))"}}, 2},
+        {"easygl",
+         "const float* values = params.pbrTextureTransformRows[row]",
+         "uTextureTransformRows[slot*2+1].xyz",
+         {{"texture(uTexture,cnaSampleUV(cnaPbrTransformUV(\" + baseUv + \",0),uRtFlipV.x))",
+           "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y))",
+           "texture(uMetallicRoughnessMap,cnaSampleUV(cnaPbrTransformUV(\" + mrUv + \",2),uRtFlipV.z))",
+           "texture(uEmissiveMap,cnaSampleUV(cnaPbrTransformUV(\" + emissiveUv + \",3),uRtFlipV.w))",
+           "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x))"}}, 2},
+        {"llgl",
+         "uniforms[92 + row * 4 + component] = params.pbrTextureTransformRows[row][component]",
+         "textureTransformRows[slot * 2 + 1].xyz",
+         {{"texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(vTexCoord, 0))",
+           "texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(vTexCoord, 1))",
+           "texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(vTexCoord, 2))",
+           "texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(vTexCoord, 3))",
+           "texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(vTexCoord, 4))"}}, 1},
+        {"magnum",
+         "const float* values = params.pbrTextureTransformRows[row]",
+         "uTextureTransformRows[slot * 2 + 1].xyz",
+         {{"texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x))",
+           "texture(uNormalMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 1), uRtFlipV.y))",
+           "texture(uMetallicRoughnessMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 2), uRtFlipV.z))",
+           "texture(uEmissiveMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 3), uRtFlipV.w))",
+           "texture(uOcclusionMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 4), uRtFlipVHi.x))"}}, 1},
+        {"metal",
+         "std::memcpy(pu.textureTransformRows, params.pbrTextureTransformRows",
+         "pu.textureTransformRows[slot * 2 + 1].xyz",
+         {{"tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu))",
+           "normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu))",
+           "mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu))",
+           "emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu))",
+           "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu))"}}, 1},
+        {"opengl2",
+         "&params->pbrTextureTransformRows[0][0]",
+         "uTextureTransformRows[slot*2+1].xyz",
+         {{"texture2D(uTex,cnaPbrTransformUV(vTex,0))",
+           "texture2D(uNormalMap,cnaPbrTransformUV(vTex,1))",
+           "texture2D(uMetallicRoughnessMap,cnaPbrTransformUV(vTex,2))",
+           "texture2D(uEmissiveMap,cnaPbrTransformUV(vTex,3))",
+           "texture2D(uOcclusionMap,cnaPbrTransformUV(vTex,4))"}}, 1},
+        {"opengl4",
+         "const float* values = params.pbrTextureTransformRows[row]",
+         "uTextureTransformRows[slot * 2 + 1].xyz",
+         {{"texture(uTexture, cnaPbrTransformUV(vUV, 0))",
+           "texture(uNormalMap, cnaPbrTransformUV(vUV, 1))",
+           "texture(uMetallicRoughnessMap, cnaPbrTransformUV(vUV, 2))",
+           "texture(uEmissiveMap, cnaPbrTransformUV(vUV, 3))",
+           "texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4))"}}, 1},
+        {"sdl-gpu",
+         "p.pbrTextureTransformRows[row][component]",
+         "pbrp.textureTransformRows[slot * 2 + 1].xyz",
+         {{"texture(uTexture, cnaPbrTransformUV(fragUV, 0))",
+           "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1))",
+           "texture(uMetallicRoughnessMap, cnaPbrTransformUV(fragUV, 2))",
+           "texture(uEmissiveMap, cnaPbrTransformUV(fragUV, 3))",
+           "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4))"}}, 1},
+        {"vulkan",
+         "out[64 + row * 4 + component] = p.pbrTextureTransformRows[row][component]",
+         "pbr.textureTransformRows[slot * 2 + 1].xyz",
+         {{"texture(uTexture, CnaPbrTransformUV(vUV, 0))",
+           "texture(uNormalMap, CnaPbrTransformUV(vUV, 1))",
+           "texture(uMetallicRoughnessMap, CnaPbrTransformUV(vUV, 2))",
+           "texture(uEmissiveMap, CnaPbrTransformUV(vUV, 3))",
+           "texture(uOcclusionMap, CnaPbrTransformUV(vUV, 4))"}}, 2},
+        {"webgpu",
+         "p.pbrTextureTransformRows[row][component]",
+         "pf.textureTransformRows[slot * 2u + 1u].xyz",
+         {{"textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u))",
+           "textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u))",
+           "textureSample(metallicRoughnessTex, texSampler, pbrTransformUv(input.uv, 2u))",
+           "textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u))",
+           "textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u))"}}, 2},
+        {"wicked",
+         "std::memcpy(constants.pbrTextureTransformRows, params->pbrTextureTransformRows",
+         "cb.pbrTextureTransformRows[slot * 2 + 1].xyz",
+         {{"texture0.Sample(sampler0, CnaPbrTransformUv(input.uv, 0))",
+           "normalMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 1))",
+           "metallicRoughnessMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 2))",
+           "emissiveMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 3))",
+           "occlusionMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 4))"}}, 1},
+    }};
+
     struct RendererPbrFresnelAudit
     {
         const char* name;
@@ -781,80 +919,80 @@ namespace
     // final shader still contains a hard-coded vUV expression.
     constexpr std::array<RendererPbrChannelAudit, 15> kPbrChannelAudits{{
         {"bgfx",
-         "texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0",
+         "texture2D(s_texNormal, rtFlipUV(pbrTransformUV(v_texcoord0, 1), u_rtFlipV.y)).rgb * 2.0 - 1.0",
          "mr.g * u_metallicRoughnessFactor.y",
          "mr.b * u_metallicRoughnessFactor.x",
-         "texture2D(s_texOcclusion, v_texcoord0).r", 1},
+         "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4)).r", 1},
         {"diligent",
-         "g_NormalMap.Sample(g_NormalMap_sampler, psIn.UV).rgb * 2.0 - 1.0",
+         "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(psIn.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * g_PbrEmissiveRoughness.w",
          "mr.b * g_PbrAmbientMetallic.w",
-         "g_OcclusionMap.Sample(g_OcclusionMap_sampler, psIn.UV).r", 1},
+         "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(psIn.UV, 4)).r", 1},
         {"directx9",
-         "tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0",
+         "tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * MetallicRoughnessFactor.y",
          "mr.b * MetallicRoughnessFactor.x",
-         "tex2D(OcclusionMap, pin.UV).r", 2},
+         "tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r", 2},
         {"directx11",
-         "uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0",
+         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * EmissiveRoughness.w",
          "mr.b * AmbientMetallic.w",
-         "uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r", 2},
+         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4)).r", 2},
         {"directx12",
-         "uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0",
+         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * EmissiveRoughness.w",
          "mr.b * AmbientMetallic.w",
-         "uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r", 2},
+         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4)).r", 2},
         {"easygl",
-         "texture(uNormalMap,cnaSampleUV(\" + normalUv + \",uRtFlipV.y)).rgb*2.0-1.0",
+         "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y)).rgb*2.0-1.0",
          "mr.g*uRoughnessFactor",
          "mr.b*uMetallicFactor",
-         "texture(uOcclusionMap,cnaSampleUV(\" + occlusionUv + \",uRtFlipVHi.x)).r", 2},
+         "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x)).r", 2},
         {"llgl",
-         ".rgb * 2.0 - 1.0",
+         "cnaPbrTransformUV(vTexCoord, 1)).rgb * 2.0 - 1.0",
          "mr.g * roughnessWeightsPad.x",
          "mr.b * emissiveMetallic.w",
-         "vTexCoord).r;", 3},
+         "cnaPbrTransformUV(vTexCoord, 4)).r;", 3},
         {"magnum",
-         "texture(uNormalMap, cnaSampleUV(vTexCoord, uRtFlipV.y)).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 1), uRtFlipV.y)).rgb * 2.0 - 1.0",
          "metallicRoughness.g * uRoughnessFactor",
          "metallicRoughness.b * uMetallicFactor",
-         "texture(uOcclusionMap, cnaSampleUV(vTexCoord, uRtFlipVHi.x)).r", 1},
+         "texture(uOcclusionMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 4), uRtFlipVHi.x)).r", 1},
         {"metal",
-         "normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0",
+         "normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0",
          "mr.g * pu.pbrFactors.y",
          "mr.b * pu.pbrFactors.x",
-         "occlusionMap.sample(occlusionSmp, in.uv).r", 1},
+         "occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r", 1},
         {"opengl2",
-         "texture2D(uNormalMap,vTex).rgb*2.0-1.0",
+         "texture2D(uNormalMap,cnaPbrTransformUV(vTex,1)).rgb*2.0-1.0",
          "mr.g*uRoughnessFactor",
          "mr.b*uMetallicFactor",
-         "texture2D(uOcclusionMap,vTex).r", 1},
+         "texture2D(uOcclusionMap,cnaPbrTransformUV(vTex,4)).r", 1},
         {"opengl4",
-         "texture(uNormalMap, vUV).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, cnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0",
          "mr.g * uRoughnessFactor",
          "mr.b * uMetallicFactor",
-         "texture(uOcclusionMap, vUV).r", 1},
+         "texture(uOcclusionMap, cnaPbrTransformUV(vUV, 4)).r", 1},
         {"sdl-gpu",
-         "texture(uNormalMap, fragUV).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, cnaPbrTransformUV(fragUV, 1)).rgb * 2.0 - 1.0",
          "mr.g * pbrp.roughnessFactor",
          "mr.b * pbrp.metallicFactor",
-         "texture(uOcclusionMap, fragUV).r", 1},
+         "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4)).r", 1},
         {"vulkan",
-         "texture(uNormalMap, vUV).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, CnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0",
          "mr.g * pbr.emissive_roughness.w",
          "mr.b * pbr.eyePos_metallic.w",
-         "texture(uOcclusionMap, vUV).r", 2},
+         "texture(uOcclusionMap, CnaPbrTransformUV(vUV, 4)).r", 2},
         {"webgpu",
-         "textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0",
+         "textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0",
          "mr.g * pf.metallicRoughness.y",
          "mr.b * pf.metallicRoughness.x",
-         "textureSample(occlusionTex, texSampler, input.uv).r", 2},
+         "textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r", 2},
         {"wicked",
-         "normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f",
+         "normalMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 1)).rgb * 2.0f - 1.0f",
          "mr.g * cb.pbrFactors.y",
          "mr.b * cb.pbrFactors.x",
-         "occlusionMap.Sample(sampler0, input.uv).r", 1},
+         "occlusionMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 4)).r", 1},
     }};
 
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
@@ -1064,18 +1202,57 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesNormalScaleAndOcclusio
         }
     }
 
-    // Rigid and skinned WebGPU pipelines share the same four-vec4 PbrFactors ABI. The old 16-byte
+    // Rigid and skinned WebGPU pipelines share the same 14-vec4 PbrFactors ABI. The old 16-byte
     // minimum accepted the first vector but caused Dawn to reject both pipelines as alpha coverage,
-    // colour transfer and Fresnel endpoints expanded the WGSL structure to 64 bytes.
+    // colour transfer, Fresnel endpoints and ten texture-transform rows expanded it to 224 bytes.
     const std::string webgpu = RendererSlotText(renderers, "webgpu");
     const std::string pbrFactorsSize = Normalize(
-        "uboEntries[2].buffer.minBindingSize = 16 * sizeof(float)");
+        "uboEntries[2].buffer.minBindingSize = 56 * sizeof(float)");
     std::size_t pbrFactorsSizeCount = 0;
     for (std::size_t at = webgpu.find(pbrFactorsSize); at != std::string::npos;
          at = webgpu.find(pbrFactorsSize, at + pbrFactorsSize.size()))
         ++pbrFactorsSizeCount;
     EXPECT_EQ(2u, pbrFactorsSizeCount)
-        << "both WebGPU PBR pipeline layouts must expose the complete 64-byte factors block";
+        << "both WebGPU PBR pipeline layouts must expose the complete 224-byte factors block";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesAllFiveTextureTransforms)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrTextureTransformAudit& audit : kPbrTextureTransformAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+
+        EXPECT_NE(std::string::npos, source.find(Normalize(audit.cpuUpload)))
+            << "the renderer does not upload pbrTextureTransformRows: " << audit.cpuUpload;
+        EXPECT_GE(CountOccurrences(source, Normalize(audit.secondAffineRow)), audit.shaderCopies)
+            << "the shader does not evaluate the transform's second affine row";
+
+        for (std::size_t slot = 0; slot < audit.samples.size(); ++slot)
+        {
+            EXPECT_GE(CountOccurrences(source, Normalize(audit.samples[slot])),
+                      audit.shaderCopies)
+                << "PBR map at transform slot " << slot
+                << " is not sampled with its own affine transform: " << audit.samples[slot];
+        }
+    }
+
+    // LLGL carries both Vulkan-style separate texture/sampler GLSL and a GL combined-sampler
+    // variant. The table above checks the former; require every map/slot pairing in the latter too.
+    const std::string llgl = RendererSlotText(renderers, "llgl");
+    for (const char* evidence : {
+             "texture(colorMap, cnaPbrTransformUV(vTexCoord, 0))",
+             "texture(normalMap, cnaPbrTransformUV(vTexCoord, 1))",
+             "texture(metallicRoughnessMap, cnaPbrTransformUV(vTexCoord, 2))",
+             "texture(emissiveMap, cnaPbrTransformUV(vTexCoord, 3))",
+             "texture(occlusionMap, cnaPbrTransformUV(vTexCoord, 4))"})
+    {
+        EXPECT_NE(std::string::npos, llgl.find(Normalize(evidence)))
+            << "LLGL's combined-sampler shader is missing: " << evidence;
+    }
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsColorSpaceDeclarations)
