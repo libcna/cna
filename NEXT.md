@@ -799,7 +799,40 @@
 > refuses to be destroyed while any component handle is alive, exactly as it already did for graphics
 > resources, content managers and audio resources. The inventory is now 5,106 implemented, 34
 > partial, 1,050 planned and 225 N/A; all four trees green at 63/63, ASan+UBSan clean.
-> **Next: CBIND-037E2**, the 57-row game-and-frame slice.
+> CBIND-037E2 then adds those 57 rows: the game's own state and frame control, its four events,
+> `GameTime`'s constructors, `LaunchParameters`, the framework pump and the title path and content.
+>
+> **The slice's real decision was made twice.** The canonical `Game` has five lifecycle hooks
+> `CNA_GameCallbacks` does not carry — initialization, begin and end of a run, begin and end of each
+> draw. Appending them to that table was tried first: it is ABI-safe, since the structure is
+> size-prefixed exactly so it can grow, and the adapter was changed to copy only what a caller's own
+> `struct_size` covers. It was reverted, because appending leaves **every positional initializer a
+> consumer has already written incomplete** — 33 files in this repo alone failed to compile under
+> `-Werror=missing-field-initializers`. The hooks are now a **second** table, `CNA_GameFrameHooks`,
+> installed with `cna_game_set_frame_hooks_ext`: one extra call at startup, nothing existing broken.
+> That trade belongs in `ABI_VERSIONING.md` when the growth rule is written down properly.
+>
+> One rule was extended rather than invented: `cna_game_tick` is **refused from inside a lifecycle
+> callback**, joining running and destroying the game, because a frame step called from within a
+> frame re-enters the loop it is part of. That was found by segfaulting the suite, not by reading.
+>
+> Canonical behaviors preserved rather than modernized: launch parameters split names and values on
+> the first **colon** — not an equals sign — trim leading flag markers, skip anything shorter than
+> three characters or without a colon, and keep the first occurrence of a name; the title path is
+> process-wide; and a missing title file's plain runtime error is reported as `CNA_RESULT_IO` rather
+> than reaching a caller as an internal failure. One deliberate narrowing: title content is read
+> **whole**, because this ABI has no stream handle for it, and incremental reads are the omission.
+> The inventory is now 5,154 implemented, 34 partial, 993 planned and 234 N/A; all four trees green
+> at 64/64, ASan+UBSan clean.
+> **Next: CBIND-037E3**, the 33-row game-window slice.
+>
+> Two findings from reading the canonical source, neither fixed here. `ExitingEventArgs` exists and
+> **nothing ever constructs or delivers it**: `Game::Exiting` is declared with the plain
+> event-argument type, so the named type is reachable only by a caller who builds one for its own
+> sake — recorded not-applicable, with the reason stated. And the game's content-manager property was
+> deliberately left out of this slice: mapping it needs a **borrowed** content-manager handle the
+> game-destroy path invalidates, which is a contract to settle in `OWNERSHIP.md` rather than a
+> signature to write. It is now `CBIND-037E2b`, three rows.
 >
 > A trap worth naming, because it cost three debugging cycles in this slice: **a refused subscribe
 > route clears its out-handle before validating anything else**, so a test that reuses a live

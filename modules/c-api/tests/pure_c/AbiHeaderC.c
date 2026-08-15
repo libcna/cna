@@ -1260,6 +1260,24 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_GameEvent) == sizeof(uint32_t) &&
+                   CNA_GAME_EVENT_ACTIVATED == UINT32_C(0) &&
+                   CNA_GAME_EVENT_DEACTIVATED == UINT32_C(1) &&
+                   CNA_GAME_EVENT_DISPOSED == UINT32_C(2) &&
+                   CNA_GAME_EVENT_EXITING == UINT32_C(3) &&
+                   CNA_GAME_EVENT_MAXIMUM == UINT32_C(3),
+               "CNA game event identities must remain stable");
+
+_Static_assert(sizeof(CNA_GameFrameHooks) == 56U &&
+                   _Alignof(CNA_GameFrameHooks) == 8U &&
+                   offsetof(CNA_GameFrameHooks, initialize) == 8U &&
+                   offsetof(CNA_GameFrameHooks, begin_run) == 16U &&
+                   offsetof(CNA_GameFrameHooks, end_run) == 24U &&
+                   offsetof(CNA_GameFrameHooks, begin_draw) == 32U &&
+                   offsetof(CNA_GameFrameHooks, end_draw) == 40U &&
+                   offsetof(CNA_GameFrameHooks, context) == 48U,
+               "CNA_GameFrameHooks layout must remain stable");
+
 _Static_assert(sizeof(CNA_GameComponentEvent) == sizeof(uint32_t) &&
                    CNA_GAME_COMPONENT_EVENT_ENABLED_CHANGED == UINT32_C(0) &&
                    CNA_GAME_COMPONENT_EVENT_UPDATE_ORDER_CHANGED == UINT32_C(1) &&

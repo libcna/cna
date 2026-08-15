@@ -143,6 +143,7 @@ enum class ObjectKind : uint32_t {
     Camera = 97,
     GameComponent = 98,
     GameComponentEventRegistration = 99,
+    GameEventRegistration = 100,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

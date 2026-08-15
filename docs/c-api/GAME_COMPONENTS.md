@@ -63,3 +63,44 @@ object implementing a C++ interface to register under one. So:
 Removing is permitted because the canonical operation permits it, and it cannot be undone from C.
 The game keeps working off the pointers it resolved while initializing, so what a removal changes is
 what a **later** lookup finds.
+
+## The game's own surface
+
+The game handle carries the rest of the runtime: focus, mouse visibility, fixed or variable timing,
+the target step and the inactive sleep, the derived frame rate and frame time, the run switch, the
+type name, and the four game events through `cna_game_subscribe`. Durations are 100-nanosecond ticks
+like every other duration in this ABI.
+
+**A frame step is refused from inside a lifecycle callback.** `cna_game_tick` joins running and
+destroying the game in that rule, for the same reason: a frame step called from within a frame
+re-enters the loop it is part of. Setting a flag — suppressing the next draw, forgetting the
+accumulated time — is fine from anywhere.
+
+### Frame hooks are a second table, deliberately
+
+The canonical `Game` has five more lifecycle hooks than `CNA_GameCallbacks` carries: initialization,
+begin and end of a run, and begin and end of each draw. They arrive as `CNA_GameFrameHooks`,
+installed with `cna_game_set_frame_hooks_ext`, rather than as new members on the published callback
+table.
+
+That is a design decision worth naming. Appending members to `CNA_GameCallbacks` would have been
+ABI-safe — the structure is size-prefixed exactly so it can grow — but it would have left every
+positional initializer any consumer has already written incomplete, which a compiler warns about and
+a strict build rejects. A separate table costs one extra call at startup and breaks nothing that
+exists. The pre-draw hook answers a boolean like the canonical one: clear the flag and the frame's
+drawing is skipped.
+
+### Launch parameters keep their canonical parsing
+
+The parser is the canonical one, not the one a reader expects: names and values split on the first
+**colon**, not an equals sign; leading flag markers are trimmed; an argument shorter than three
+characters or without a colon is skipped in silence; and the first occurrence of a name wins. Parsing
+an empty list clears the parameters rather than re-reading the command line.
+
+### Title content is read whole
+
+`cna_title_container_read_ext` delivers a **whole file** where the canonical operation hands back an
+open stream. This ABI has no stream handle for title content, and a title asset is read to be used;
+incremental reads are the deliberate omission. The title path is process-wide, exactly as
+canonically, and a missing file reports `CNA_RESULT_IO` rather than surfacing the canonical plain
+runtime error as an internal failure.

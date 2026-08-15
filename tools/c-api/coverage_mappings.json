@@ -4989,6 +4989,133 @@
       "tests": "Doxygen declaration inventory; no callable native operation exists for C",
       "status": "not-applicable",
       "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-events",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(Activated|Deactivated|Disposed|Exiting)$",
+      "kinds": [
+        "event"
+      ],
+      "mapping": "`cna_game_subscribe` with the four `CNA_GAME_EVENT_*` identities and `cna_game_unsubscribe`, one owned registration handle per subscription. Every canonical game event is declared with the plain event-argument type, so each handler receives only its context. The exiting **callback** in `CNA_GameCallbacks` remains a different thing: it can stop the game by failing, while these handlers only observe",
+      "tests": "`RuntimeGameSmoke.c` attaches and detaches all four, covers the undefined-identity, null-handler and null-output refusals and the released-registration refusal. Focus changes cannot be provoked in a headless session, so the activation events are proved to attach rather than to fire",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-collections-accessors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(getComponentsProperty|getServicesProperty)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no accessor of its own: a game owns exactly one component collection and one service container, so `CBIND-037E1`'s `cna_game_components_*` and `cna_game_services_*` routes address them directly from the game handle. Handing out a handle to a one-per-game object would add a lifetime to track for nothing",
+      "tests": "covered by `RuntimeComponentsSmoke.c`, which drives both through the game handle",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-state-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(getIsActiveProperty|getIsMouseVisibleProperty|setIsMouseVisibleProperty|getIsFixedTimeStepProperty|setIsFixedTimeStepProperty|getTargetElapsedTimeProperty|setTargetElapsedTimeProperty|getInactiveSleepTimeProperty|setInactiveSleepTimeProperty|getTargetFPSProperty|getTargetMsFrameTimeProperty|fpsToMillisecondsPerFrame|RunApplication|ResetElapsedTime|SuppressDraw|Tick|GetTypeName)$",
+      "kinds": [
+        "method",
+        "field"
+      ],
+      "mapping": "`cna_game_get_is_active`, the mouse-visibility, fixed-step, target-step and inactive-sleep pairs, the derived `_get_target_fps_ext`/`_get_target_ms_frame_time_ext` and the static `cna_game_fps_to_milliseconds_per_frame_ext`, the run-application switch, `cna_game_reset_elapsed_time`, `cna_game_suppress_draw`, `cna_game_tick` and the type-name pair. Durations are 100-nanosecond ticks like every other duration in this ABI. **A frame step is refused from inside a lifecycle callback**, exactly as running or destroying the game is, because a frame step called from within a frame re-enters the loop it is part of",
+      "tests": "`RuntimeGameSmoke.c` round-trips every property, proves the frame rate and frame time follow the target step, checks the static conversion, asserts the non-positive step and negative sleep refusals, proves a suppressed draw skips exactly one frame, calls the frame step from outside a callback and asserts it is refused from inside one, and checks the exact type name with its buffer-too-small case",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-frame-hooks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(Initialize|BeginRun|EndRun|BeginDraw|EndDraw)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "a **second** callback table, `CNA_GameFrameHooks`, installed with `cna_game_set_frame_hooks_ext`, rather than more members on the published `CNA_GameCallbacks`. Appending to the established table would have left every positional initializer a consumer has already written incomplete; a separate table costs one extra call and breaks nothing. The pre-draw hook answers a boolean like the canonical one — a handler that clears the flag skips the frame's drawing — and a null member is simply not called",
+      "tests": "`RuntimeGameSmoke.c` installs the hooks after creation, asserts initialization and both draw hooks ran around a real frame, proves clearing the pre-draw flag skips the draw callback, proves removing the table stops every hook, and covers the invalid-structure refusal",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-protected-raise-hooks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(OnActivated|OnDeactivated|ShowMissingRequirementMessage)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: the two activation hooks are the protected raise points for events C already subscribes to — the same treatment `CBIND-037E1` gives a component's — and the missing-requirement hook takes a **C++ exception object**, which C can neither author nor receive. Nothing is lost: the events are observable and a failing C callback already reports its own diagnostic",
+      "tests": "Doxygen declaration inventory; the observable half is the event coverage in `RuntimeGameSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-time-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameTime::GameTime$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "the fixed `CNA_GameTime` value every frame callback already receives and every route taking a timing snapshot accepts. A caller fills the two tick counts and the running-slowly flag directly, which is what the three canonical constructors set",
+      "tests": "`RuntimeComponentsSmoke.c` builds a timing snapshot by hand and drives a component update with it, asserting the elapsed ticks arrive unchanged; every game callback receives one built by the runtime",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "launch-parameters",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(LaunchParameters(::(LaunchParameters|ContainsKey|Add))?|Game::getLaunchParametersProperty)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "routes on the game's own parameters rather than a handle: `cna_game_launch_parameters_get_count`, `_contains_key`, the value count/copy pair, `_add` and `cna_game_launch_parameters_parse_ext` for the argument-list constructor. The default constructor's command-line parse is what a game is created with, and the parse route replaces it. **The canonical parsing rules are preserved rather than modernized**: names and values split on the first colon, not an equals sign; an argument shorter than three characters or without a colon is skipped in silence; and the first occurrence of a name wins",
+      "tests": "`RuntimeGameSmoke.c` parses a list covering both flag spellings and one argument the canonical parser drops, reads a value back, adds one of its own, asserts an absent name is refused rather than answering empty, and proves an empty list clears the parameters instead of re-reading the command line",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "exiting-event-arguments",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::ExitingEventArgs(::ExitingEventArgs)?$",
+      "kinds": [
+        "class",
+        "constructor"
+      ],
+      "mapping": "No C mapping, and the reason is a finding rather than a decision: the canonical exiting event is declared with the plain event-argument type, so **nothing in the runtime ever constructs or delivers this type**. It is reachable only by a caller who constructs it for its own sake. There is no behavior for C to reach",
+      "tests": "Doxygen declaration inventory; the exiting event itself is covered in `RuntimeGameSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "framework-dispatcher",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::FrameworkDispatcher(::Update)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_framework_dispatcher_update`, which takes a game handle for thread affinity only — the canonical pump is static and exists for applications that do not run the game loop. Calling it while the loop runs is harmless and does the work twice",
+      "tests": "`RuntimeGameSmoke.c` pumps it inside a live frame and asserts it succeeds",
+      "status": "implemented",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "framework-dispatcher-internals",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::FrameworkDispatcher::(ActiveSongChanged|MediaStateChanged|Streams|StreamsMutex)$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "No C mapping: these are the pump's own cross-module signalling — two flags the media player raises and the pump consumes, a list of raw audio-instance pointers and the mutex guarding it. A raw pointer list and a mutex have no C form, and the flags are inputs to the pump rather than an operation: C drives the pump and observes the media events it raises",
+      "tests": "Doxygen declaration inventory; the pump itself is covered in `RuntimeGameSmoke.c` and the media events in `MediaPlayerSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E2"
+    },
+    {
+      "id": "title-location-and-container",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(TitleLocation(::(getPathProperty|setPathProperty|Path))?|TitleContainer(::OpenStream)?)$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the title path as a count/copy pair plus `cna_title_location_set_path_ext` — the canonical alias and property return the same string, so C has one route for both — and `cna_title_container_read_ext` for the content. **The canonical operation hands back an open stream and this one delivers the whole file**: this ABI has no stream handle for title content, and a title asset is read to be used. Incremental reads are the deliberate omission. The path is process-wide exactly as canonically, and the canonical missing-file failure is a plain runtime error this route reports as I/O rather than letting it surface as an internal failure",
+      "tests": "`RuntimeGameSmoke.c` reads the path, points the title at the working directory, writes a file and reads it back byte-for-byte, covers the buffer-too-small case with no partial write, asserts a missing file is an I/O failure, and restores the original path",
+      "status": "implemented",
+      "task": "CBIND-037E2"
     }
   ]
 }

@@ -10,6 +10,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -90,6 +91,15 @@ public:
     void SetHandle(const CNA_Handle handle) noexcept
     {
         handle_ = handle;
+    }
+
+    void SetFrameHooks(const CNA_GameFrameHooks* const hooks) noexcept
+    {
+        if (hooks == nullptr) {
+            frameHooks_ = CNA_GameFrameHooks{};
+            return;
+        }
+        frameHooks_ = *hooks;
     }
 
     [[nodiscard]] bool IsInsideCallback() const noexcept
@@ -203,6 +213,62 @@ protected:
         Game::OnExiting(sender, args);
     }
 
+    void Initialize() override
+    {
+        Game::Initialize();
+        Invoke(frameHooks_.initialize, nullptr, frameHooks_.context);
+    }
+
+    void BeginRun() override
+    {
+        Game::BeginRun();
+        Invoke(frameHooks_.begin_run, nullptr, frameHooks_.context);
+    }
+
+    void EndRun() override
+    {
+        Invoke(frameHooks_.end_run, nullptr, frameHooks_.context);
+        Game::EndRun();
+    }
+
+    bool BeginDraw() override
+    {
+        if (!Game::BeginDraw()) {
+            return false;
+        }
+        if (frameHooks_.begin_draw == nullptr || callbackFailure_ != CNA_RESULT_SUCCESS) {
+            return true;
+        }
+        CNA_CallbackError callbackError = {
+            .struct_size = sizeof(CNA_CallbackError),
+            .struct_version = StructureVersion,
+            .message = {nullptr, 0U}
+        };
+        CNA_Bool shouldDraw = CNA_TRUE;
+        isInsideCallback_ = true;
+        const CNA_Result result = CallWithExceptionBarrier([&]() {
+            return frameHooks_.begin_draw(
+                handle_,
+                nullptr,
+                frameHooks_.context,
+                &shouldDraw,
+                &callbackError);
+        });
+        isInsideCallback_ = false;
+        InvalidateBorrowedGraphicsDevice();
+        if (result != CNA_RESULT_SUCCESS) {
+            RecordCallbackFailure(callbackError);
+            return false;
+        }
+        return shouldDraw != CNA_FALSE;
+    }
+
+    void EndDraw() override
+    {
+        Invoke(frameHooks_.end_draw, nullptr, frameHooks_.context);
+        Game::EndDraw();
+    }
+
 private:
     void NotifyExit()
     {
@@ -217,6 +283,14 @@ private:
         const CNA_GameLifecycleCallback callback,
         const CNA_GameTime* const gameTime)
     {
+        Invoke(callback, gameTime, callbacks_.context);
+    }
+
+    void Invoke(
+        const CNA_GameLifecycleCallback callback,
+        const CNA_GameTime* const gameTime,
+        void* const context)
+    {
         if (callback == nullptr || callbackFailure_ != CNA_RESULT_SUCCESS) {
             return;
         }
@@ -228,14 +302,20 @@ private:
         };
         isInsideCallback_ = true;
         const CNA_Result result = CallWithExceptionBarrier([&]() {
-            return callback(handle_, gameTime, callbacks_.context, &callbackError);
+            return callback(handle_, gameTime, context, &callbackError);
         });
         isInsideCallback_ = false;
         InvalidateBorrowedGraphicsDevice();
         if (result == CNA_RESULT_SUCCESS) {
             return;
         }
+        RecordCallbackFailure(callbackError);
+    }
 
+    // Shared by every callback shape, so a pre-draw handler that fails stops the game exactly as an
+    // update handler does.
+    void RecordCallbackFailure(const CNA_CallbackError& callbackError)
+    {
         std::string diagnostic;
         if (callbackError.struct_size >= sizeof(CNA_CallbackError) &&
             callbackError.struct_version == StructureVersion &&
@@ -262,6 +342,7 @@ private:
     }
 
     CNA_GameCallbacks callbacks_;
+    CNA_GameFrameHooks frameHooks_{};
     CNA_Handle handle_;
     CNA_Result callbackFailure_;
     bool isInsideCallback_;
@@ -567,6 +648,44 @@ CNA_Result cna_game_clear(const CNA_Handle gameHandle, const CNA_Color color)
             return result;
         }
         game->Clear(color);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_tick(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CGame> game;
+        // A frame step drives the game, so it is refused from inside a lifecycle callback for the
+        // same reason running or destroying the game is: it would re-enter the loop it is part of.
+        if (const CNA_Result result = GetCallableGame(gameHandle, &game);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        game->Tick();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_set_frame_hooks_ext(
+    const CNA_Handle gameHandle,
+    const CNA_GameFrameHooks* const hooks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (hooks != nullptr &&
+            (hooks->struct_size < sizeof(CNA_GameFrameHooks) ||
+             hooks->struct_version != StructureVersion)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The game frame hook table is not a valid structure.");
+        }
+        std::shared_ptr<CGame> game;
+        if (const CNA_Result result = GetGame(gameHandle, &game);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        game->SetFrameHooks(hooks);
         return CNA_RESULT_SUCCESS;
     });
 }
