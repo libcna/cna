@@ -28,6 +28,18 @@ typedef CNA_Handle CNA_ModelMeshPartCollectionHandle;
 /** @brief C-owned opaque tag value associated with a model mesh part. */
 typedef uint64_t CNA_ModelMeshPartTag;
 
+/** @brief Owned stable handle for a model mesh. */
+typedef CNA_Handle CNA_ModelMeshHandle;
+
+/** @brief Owned snapshot or live view of model meshes. */
+typedef CNA_Handle CNA_ModelMeshCollectionHandle;
+
+/** @brief Owned live view of effects associated with a model mesh. */
+typedef CNA_Handle CNA_ModelEffectCollectionHandle;
+
+/** @brief C-owned opaque tag value associated with a model mesh. */
+typedef uint64_t CNA_ModelMeshTag;
+
 /**
  * @brief Creates an owned default model bone.
  * @param out_bone Receives the owned bone handle.
@@ -342,6 +354,286 @@ CNA_C_API CNA_Result cna_model_mesh_part_collection_get_at(
     CNA_ModelMeshPartCollectionHandle collection,
     uint64_t index,
     CNA_ModelMeshPartHandle* out_part);
+
+/**
+ * @brief Creates an unnamed model mesh from retained parts.
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param parts Caller-owned part-handle array, or null only for zero count.
+ * @param part_count Number of handles in @p parts.
+ * @param out_mesh Receives the owned mesh handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_create(
+    CNA_Handle graphics_device,
+    const CNA_ModelMeshPartHandle* parts,
+    uint64_t part_count,
+    CNA_ModelMeshHandle* out_mesh);
+
+/**
+ * @brief Creates a named model mesh from retained parts and copied UTF-8.
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param name Mesh name copied by the call.
+ * @param parts Caller-owned part-handle array, or null only for zero count.
+ * @param part_count Number of handles in @p parts.
+ * @param out_mesh Receives the owned mesh handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_create_named(
+    CNA_Handle graphics_device,
+    CNA_StringView name,
+    const CNA_ModelMeshPartHandle* parts,
+    uint64_t part_count,
+    CNA_ModelMeshHandle* out_mesh);
+
+/**
+ * @brief Releases an owned model-mesh handle.
+ * @param mesh Model-mesh handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_destroy(CNA_ModelMeshHandle mesh);
+
+/**
+ * @brief Gets the model-mesh bounding sphere.
+ * @param mesh Model-mesh handle.
+ * @param out_value Receives the copied sphere.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_bounding_sphere(
+    CNA_ModelMeshHandle mesh,
+    CNA_BoundingSphere* out_value);
+
+/**
+ * @brief Sets the model-mesh bounding sphere.
+ * @param mesh Model-mesh handle.
+ * @param value Sphere copied by the call.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_set_bounding_sphere(
+    CNA_ModelMeshHandle mesh,
+    CNA_BoundingSphere value);
+
+/**
+ * @brief Gets an owned live view of the mesh-part collection.
+ * @param mesh Model-mesh handle.
+ * @param out_parts Receives the collection-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_mesh_parts(
+    CNA_ModelMeshHandle mesh,
+    CNA_ModelMeshPartCollectionHandle* out_parts);
+
+/**
+ * @brief Gets an owned live view of the mesh-effect collection.
+ * @param mesh Model-mesh handle.
+ * @param out_effects Receives the collection-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_effects(
+    CNA_ModelMeshHandle mesh,
+    CNA_ModelEffectCollectionHandle* out_effects);
+
+/**
+ * @brief Gets the exact UTF-8 mesh-name byte count.
+ * @param mesh Model-mesh handle.
+ * @param out_byte_count Receives the exact byte count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_name_byte_count(
+    CNA_ModelMeshHandle mesh,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the exact UTF-8 mesh name without a terminator.
+ * @param mesh Model-mesh handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_model_mesh_copy_name(
+    CNA_ModelMeshHandle mesh,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets an owned optional parent-bone view.
+ * @param mesh Model-mesh handle.
+ * @param out_has_parent Receives whether a parent is assigned.
+ * @param out_parent Receives the parent view, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_parent_bone(
+    CNA_ModelMeshHandle mesh,
+    CNA_Bool* out_has_parent,
+    CNA_ModelBoneHandle* out_parent);
+
+/**
+ * @brief Assigns a retained parent bone, or clears it with the invalid handle.
+ * @param mesh Model-mesh handle.
+ * @param parent Parent-bone handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_set_parent_bone(
+    CNA_ModelMeshHandle mesh,
+    CNA_ModelBoneHandle parent);
+
+/**
+ * @brief Gets the C-owned opaque mesh tag.
+ * @param mesh Model-mesh handle.
+ * @param out_tag Receives the tag.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_get_tag(
+    CNA_ModelMeshHandle mesh,
+    CNA_ModelMeshTag* out_tag);
+
+/**
+ * @brief Sets the C-owned opaque mesh tag.
+ * @param mesh Model-mesh handle.
+ * @param tag Opaque tag value.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_set_tag(
+    CNA_ModelMeshHandle mesh,
+    CNA_ModelMeshTag tag);
+
+/**
+ * @brief Draws all drawable parts through the native ModelMesh operation.
+ * @param mesh Model-mesh handle.
+ * @return A CNA result code, including an explicit renderer limitation.
+ */
+CNA_C_API CNA_Result cna_model_mesh_draw(CNA_ModelMeshHandle mesh);
+
+/**
+ * @brief Creates an owned collection snapshot retaining supplied meshes.
+ * @param meshes Caller-owned mesh-handle array, or null only for zero count.
+ * @param mesh_count Number of handles in @p meshes.
+ * @param out_collection Receives the collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_create(
+    const CNA_ModelMeshHandle* meshes,
+    uint64_t mesh_count,
+    CNA_ModelMeshCollectionHandle* out_collection);
+
+/**
+ * @brief Releases an owned model-mesh collection handle.
+ * @param collection Model-mesh collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_destroy(
+    CNA_ModelMeshCollectionHandle collection);
+
+/**
+ * @brief Gets the mesh count.
+ * @param collection Model-mesh collection handle.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_get_count(
+    CNA_ModelMeshCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets an owned stable mesh view at an index.
+ * @param collection Model-mesh collection handle.
+ * @param index Zero-based mesh index.
+ * @param out_mesh Receives the owned mesh view.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_get_at(
+    CNA_ModelMeshCollectionHandle collection,
+    uint64_t index,
+    CNA_ModelMeshHandle* out_mesh);
+
+/**
+ * @brief Finds the first mesh with an exact UTF-8 name.
+ * @param collection Model-mesh collection handle.
+ * @param name Exact UTF-8 name.
+ * @param out_found Receives whether a mesh was found.
+ * @param out_mesh Receives the owned mesh view, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_find(
+    CNA_ModelMeshCollectionHandle collection,
+    CNA_StringView name,
+    CNA_Bool* out_found,
+    CNA_ModelMeshHandle* out_mesh);
+
+/**
+ * @brief Tests whether a collection contains the exact mesh object.
+ * @param collection Model-mesh collection handle.
+ * @param mesh Mesh handle to test.
+ * @param out_contains Receives the identity result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_collection_contains(
+    CNA_ModelMeshCollectionHandle collection,
+    CNA_ModelMeshHandle mesh,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Releases an owned model-effect collection view.
+ * @param collection Model-effect collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_destroy(
+    CNA_ModelEffectCollectionHandle collection);
+
+/**
+ * @brief Gets the current effect count.
+ * @param collection Model-effect collection handle.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_get_count(
+    CNA_ModelEffectCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets the retained effect handle at an index.
+ * @param collection Model-effect collection handle.
+ * @param index Zero-based effect index.
+ * @param out_effect Receives the effect handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_get_at(
+    CNA_ModelEffectCollectionHandle collection,
+    uint64_t index,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Tests whether the collection contains an exact effect object.
+ * @param collection Model-effect collection handle.
+ * @param effect Effect handle to test.
+ * @param out_contains Receives the identity result.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_contains(
+    CNA_ModelEffectCollectionHandle collection,
+    CNA_EffectHandle effect,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Adds and retains an effect using native duplicate-preserving semantics.
+ * @param collection Model-effect collection handle.
+ * @param effect Same-device effect handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_add(
+    CNA_ModelEffectCollectionHandle collection,
+    CNA_EffectHandle effect);
+
+/**
+ * @brief Removes the first matching effect if present.
+ * @param collection Model-effect collection handle.
+ * @param effect Effect handle to remove.
+ * @return A CNA result code; absence is successful.
+ */
+CNA_C_API CNA_Result cna_model_effect_collection_remove(
+    CNA_ModelEffectCollectionHandle collection,
+    CNA_EffectHandle effect);
 
 #ifdef __cplusplus
 }

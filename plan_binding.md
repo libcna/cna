@@ -308,7 +308,7 @@ copied bulk transfers.
 |---|---:|---|---|---|
 | CBIND-035E1 | 23 | Complete ModelBone and ModelBoneCollection | ✅ | `models.h` maps standalone and hierarchy-owned bones through stable handles, exact UTF-8 names, signed indices, copied transforms, optional parent views, retained child relationships and live count/index/name/contains collections. Self-parenting and ancestor cycles are rejected; weak parent metadata prevents a retained child from exposing a dangling native pointer. Strict-C tests cover every route, hierarchy lifetime and invalid/stale/wrong-kind/wrong-thread behavior under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles. |
 | CBIND-035E2 | 28 | Complete ModelMeshPart and its collection | ✅ | `models.h` maps both constructors, exact signed scalar state, optional same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag through stable shared handles. Snapshot collections retain parts and replace native pointers/iterators with count/index aliases; the representation is ready for ModelMesh-owned live views in E3. Retained graphics resources reject typed destroy and generic dispose until cleared or the final part alias is released. Strict-C tests cover state, alias/snapshot lifetime, handle/thread/array errors and supported-buffer or honest renderer-refusal paths under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag. |
-| CBIND-035E3 | 38 | Complete ModelMesh, ModelMeshCollection and ModelEffectCollection | ⬜ | Map mesh construction/state/draw, parent/effect/part relationships and live count/index/name/contains views with transitive resource lifetime. |
+| CBIND-035E3 | 38 | Complete ModelMesh, ModelMeshCollection and ModelEffectCollection | ✅ | `models.h` maps both game-child ModelMesh constructors, exact UTF-8 names, bounding sphere/tag/retained-parent state, live part/effect views and capability-gated Draw. Retained mesh snapshots expose count/index/find/contains aliases; live effect views preserve duplicate Add, first-match Remove and identity while blocking early effect disposal. Parts belong to one live mesh and switch to synchronized detached native state when its final owner expires, preventing dangling parent access. Strict-C tests cover every route, transitive aliases, resource lifetime, invalid inputs/threading and HEADLESS success versus SDL_RENDERER Draw refusal plus ASan+UBSan; C/C++ assertions freeze all handles/tags. |
 | CBIND-035E4 | 14 | Complete Model | ⬜ | Map model construction, bone/mesh/root/tag ownership, all three copied transform operations and Draw through an owned game-child model handle. |
 | CBIND-035E5 | 20 | Complete morph-target extension values and operations | ⬜ | Map morph keyframes/tracks/data through fixed descriptors and validated handles plus copied weights, deltas, blended bytes and evaluation without exposing nested vectors. |
 | CBIND-035E6 | 36 | Complete SkinnedModelEXT | ⬜ | Map skeleton, clips, parts, owned GPU resources, transform computation, attach/remove and testing counts through stable handles and copied bulk inputs/outputs. |
@@ -420,7 +420,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 ## Current status
 
 `CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035D` and
-`CBIND-035C1`–`CBIND-035E2` are ✅; parent `CBIND-035` and `CBIND-035E` remain open, while
+`CBIND-035C1`–`CBIND-035E3` are ✅; parent `CBIND-035` and `CBIND-035E` remain open, while
 `CBIND-035F` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
@@ -507,4 +507,7 @@ cycle prevention and no dangling parent exposure. The snapshot is now 3,013 impl
 19 partial, 3,313 planned and 70 not applicable. CBIND-035E2 maps all 28 ModelMeshPart and
 ModelMeshPartCollection rows through stable shared parts, retained graphics-resource associations,
 opaque C tags and count/index snapshot aliases. The snapshot is now 3,041 implemented, 19 partial,
-3,285 planned and 70 not applicable, with CBIND-035E3 ModelMesh and its collections next.
+3,285 planned and 70 not applicable. CBIND-035E3 maps all 38 ModelMesh, ModelMeshCollection and
+ModelEffectCollection rows through owned game-child meshes, live part/effect views and retained
+mesh snapshots with transitive lifetime. The snapshot is now 3,079 implemented, 19 partial,
+3,247 planned and 70 not applicable, with CBIND-035E4 Model next.

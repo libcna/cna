@@ -27,7 +27,8 @@ textures and world/view/projection matrices, complete BasicEffect material/fog/l
 state and stable standalone/nested directional lights, complete AlphaTestEffect,
 DualTextureEffect, EnvironmentMapEffect and 72-bone SkinnedEffect state, plus ColorMatrixEffect and
 both PBR extensions with five retained texture slots and bounded skinning palettes, stable model
-bones/hierarchies and model mesh parts with retained resource associations/collections, plus
+bones/hierarchies, model mesh parts and game-child meshes with retained resource associations,
+live effect/part views and mesh snapshots, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability

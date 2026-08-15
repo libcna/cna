@@ -50,3 +50,29 @@ optional resource state, snapshot count/index and alias lifetime, invalid arrays
 wrong-kind and wrong-thread handles. It also proves that retained effects and supported buffers
 cannot be disposed or destroyed early. HEADLESS and SDL_RENDERER run the same strict-C source;
 backend buffer refusal remains an explicit `NOT_SUPPORTED` result.
+
+## Model meshes and aggregate collections
+
+`CNA_ModelMeshHandle` is an owned game child created from a callback-scoped graphics device and
+an array of retained mesh parts. Unnamed and copied UTF-8 named constructors are distinct. A part
+can belong to only one live mesh; its assigned graphics resources must match that mesh's device.
+Bounding spheres cross as copied `CNA_BoundingSphere` values, parent bones are optional retained
+stable nodes, and the native `System::Object*` tag is replaced by an opaque 64-bit C tag.
+
+Part and effect properties return owned live collection views that retain the mesh. Part aliases
+share mutation. If all mesh handles/views are released while an independent part handle remains,
+the adapter switches that part to a synchronized detached native value before destroying the
+mesh, so later part mutation never follows the native dangling parent pointer. Meshes count as
+game children until their last direct or collection alias is released.
+
+The live `CNA_ModelEffectCollectionHandle` mirrors native identity behavior. Part effect changes
+maintain the unique automatic set; explicit Add preserves duplicates and Remove erases the first
+match. Every entry retains its same-device Effect and blocks destroy/dispose. Count/index replace
+native iterators. `CNA_ModelMeshCollectionHandle` owns a retained snapshot with count/index,
+exact UTF-8 find and object-identity contains operations; its returned handles share mesh state.
+
+`cna_model_mesh_draw` calls native `ModelMesh::Draw` only when the device reports 3D support and
+otherwise returns `CNA_RESULT_NOT_SUPPORTED` before native mutation. `ModelMeshSmoke.c` covers
+both constructors, all properties, both collections, duplicate effects, transitive lifetime,
+safe surviving parts, draw capability behavior and error/thread paths under HEADLESS and
+SDL_RENDERER, plus a focused ASan+UBSan run.

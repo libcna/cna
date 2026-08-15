@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/models.h"
+#include "CNA/GraphicsCapability.hpp"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -27,13 +32,19 @@ using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::VertexBufferResource;
+using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Graphics::ModelBone;
 using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
+using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
+using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
 
 struct BoneNode final {
@@ -100,17 +111,74 @@ struct PartRetainedSlot final {
     }
 };
 
+struct MeshResource;
+
 struct PartResource final {
     std::shared_ptr<ModelMeshPart> value = std::make_shared<ModelMeshPart>();
+    std::shared_ptr<ModelMeshPart> detachedValue;
     PartRetainedSlot effect;
     PartRetainedSlot vertexBuffer;
     PartRetainedSlot indexBuffer;
     CNA_ModelMeshPartTag tag = 0U;
+    MeshResource* parentMesh = nullptr;
 };
 
 struct PartCollectionResource final {
     std::vector<std::shared_ptr<PartResource>> parts;
+    std::shared_ptr<MeshResource> mesh;
 };
+
+struct MeshEffectEntry final {
+    CNA_EffectHandle handle = CNA_INVALID_HANDLE;
+    std::shared_ptr<EffectResource> resource;
+};
+
+struct MeshResource final {
+    std::shared_ptr<ModelMesh> value;
+    CNA_Handle parentGame = CNA_INVALID_HANDLE;
+    std::vector<std::shared_ptr<PartResource>> parts;
+    std::vector<MeshEffectEntry> effects;
+    std::shared_ptr<BoneNode> parentBone;
+    CNA_ModelMeshTag tag = 0U;
+    bool supportsThreeD = false;
+    bool countedAsGraphicsResource = false;
+
+    ~MeshResource();
+};
+
+struct MeshCollectionResource final {
+    std::vector<std::shared_ptr<MeshResource>> meshes;
+};
+
+struct EffectCollectionResource final {
+    std::shared_ptr<MeshResource> mesh;
+};
+
+[[nodiscard]] const std::vector<std::shared_ptr<PartResource>>& PartList(
+    const PartCollectionResource& collection) noexcept
+{
+    return collection.mesh != nullptr ? collection.mesh->parts : collection.parts;
+}
+
+MeshResource::~MeshResource()
+{
+    for (const MeshEffectEntry& entry : effects) {
+        if (entry.resource != nullptr &&
+            entry.resource->activeModelReferenceCount != 0U) {
+            --entry.resource->activeModelReferenceCount;
+        }
+    }
+    for (const std::shared_ptr<PartResource>& part : parts) {
+        if (part->parentMesh != this) {
+            continue;
+        }
+        part->parentMesh = nullptr;
+        part->value = std::move(part->detachedValue);
+    }
+    if (countedAsGraphicsResource) {
+        RemoveOwnedGraphicsResource();
+    }
+}
 
 [[nodiscard]] CNA_Result InvalidArgument(const char* const message)
 {
@@ -232,6 +300,42 @@ struct PartCollectionResource final {
     return CNA_RESULT_SUCCESS;
 }
 
+[[nodiscard]] BoundingSphere ToNative(const CNA_BoundingSphere value) noexcept
+{
+    return BoundingSphere(
+        Microsoft::Xna::Framework::Vector3{
+            value.center.x, value.center.y, value.center.z},
+        value.radius);
+}
+
+[[nodiscard]] CNA_BoundingSphere ToC(const BoundingSphere value) noexcept
+{
+    return CNA_BoundingSphere{
+        {value.Center.X, value.Center.Y, value.Center.Z}, value.Radius};
+}
+
+[[nodiscard]] CNA_Result CopyMeshName(
+    const std::string& name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The ModelMesh name output buffer is invalid.");
+    }
+    *outByteCount = static_cast<uint64_t>(name.size());
+    if (capacity < name.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination cannot hold the complete ModelMesh name.");
+    }
+    if (!name.empty()) {
+        std::memcpy(destination, name.data(), name.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] CNA_Result GetPart(
     const CNA_ModelMeshPartHandle handle,
     std::shared_ptr<PartResource>* const outPart)
@@ -288,11 +392,135 @@ struct PartCollectionResource final {
             "The owned ModelMeshPartCollection handle could not be created.");
 }
 
+[[nodiscard]] CNA_Result GetMesh(
+    const CNA_ModelMeshHandle handle,
+    std::shared_ptr<MeshResource>* const outMesh)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ModelMesh, outMesh);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelMesh handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetMeshCollection(
+    const CNA_ModelMeshCollectionHandle handle,
+    std::shared_ptr<MeshCollectionResource>* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ModelMeshCollection, outCollection);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelMeshCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetEffectCollection(
+    const CNA_ModelEffectCollectionHandle handle,
+    std::shared_ptr<EffectCollectionResource>* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::ModelEffectCollection, outCollection);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelEffectCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateMeshHandle(
+    std::shared_ptr<MeshResource> mesh,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::ModelMesh, std::move(mesh), outMesh);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned ModelMesh handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateMeshCollectionHandle(
+    std::shared_ptr<MeshCollectionResource> collection,
+    CNA_ModelMeshCollectionHandle* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::ModelMeshCollection, std::move(collection), outCollection);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned ModelMeshCollection handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateEffectCollectionHandle(
+    std::shared_ptr<MeshResource> mesh,
+    CNA_ModelEffectCollectionHandle* const outCollection)
+{
+    const auto resource = std::make_shared<EffectCollectionResource>();
+    resource->mesh = std::move(mesh);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::ModelEffectCollection, resource, outCollection);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned ModelEffectCollection handle could not be created.");
+}
+
+[[nodiscard]] auto FindMeshEffect(
+    MeshResource& mesh,
+    const CNA_EffectHandle handle)
+{
+    return std::find_if(
+        mesh.effects.begin(),
+        mesh.effects.end(),
+        [handle](const MeshEffectEntry& entry) { return entry.handle == handle; });
+}
+
+void RemoveFirstMeshEffect(
+    MeshResource& mesh,
+    const CNA_EffectHandle handle) noexcept
+{
+    const auto iterator = FindMeshEffect(mesh, handle);
+    if (iterator == mesh.effects.end()) {
+        return;
+    }
+    if (iterator->resource != nullptr &&
+        iterator->resource->activeModelReferenceCount != 0U) {
+        --iterator->resource->activeModelReferenceCount;
+    }
+    mesh.effects.erase(iterator);
+}
+
+void AddMeshEffect(
+    MeshResource& mesh,
+    const CNA_EffectHandle handle,
+    const std::shared_ptr<EffectResource>& effect)
+{
+    mesh.effects.push_back(MeshEffectEntry{handle, effect});
+    ++effect->activeModelReferenceCount;
+}
+
 [[nodiscard]] CNA_Result ValidatePartDevice(
     const PartResource& part,
     const PartRetainedSlot* const replacedSlot,
     const CNA_Handle parentGame)
 {
+    if (part.parentMesh != nullptr && part.parentMesh->parentGame != parentGame) {
+        return InvalidArgument(
+            "A ModelMeshPart resource must belong to its parent mesh graphics device.");
+    }
     const PartRetainedSlot* const slots[] = {
         &part.effect, &part.vertexBuffer, &part.indexBuffer};
     for (const PartRetainedSlot* const slot : slots) {
@@ -372,33 +600,77 @@ struct PartCollectionResource final {
     const std::shared_ptr<PartResource>& part,
     const CNA_EffectHandle effectHandle)
 {
-    if (effectHandle == CNA_INVALID_HANDLE) {
-        part->value->setEffectProperty(nullptr);
-        part->effect.Reset();
-        return CNA_RESULT_SUCCESS;
-    }
     std::shared_ptr<EffectResource> effect;
-    if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
-    if (const CNA_Result result = ValidatePartDevice(
-            *part, &part->effect, effect->parentGame);
-        result != CNA_RESULT_SUCCESS) {
-        return result;
-    }
     if (effectHandle == part->effect.handle) {
         return CNA_RESULT_SUCCESS;
     }
-    if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
-        return Fail(
-            CNA_RESULT_OVERFLOW,
-            CNA_ERROR_CATEGORY_RANGE,
-            "The ModelMeshPart Effect retention count overflowed.");
+    if (effectHandle != CNA_INVALID_HANDLE) {
+        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidatePartDevice(
+                *part, &part->effect, effect->parentGame);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
     }
-    part->value->setEffectProperty(effect->value.get());
-    return part->effect.Set(
-        effectHandle, effect->parentGame, effect, &effect->activeModelReferenceCount);
+
+    MeshResource* const mesh = part->parentMesh;
+    const CNA_EffectHandle oldHandle = part->effect.handle;
+    bool removeOld = false;
+    bool addNew = false;
+    if (mesh != nullptr) {
+        removeOld = oldHandle != CNA_INVALID_HANDLE;
+        if (removeOld) {
+            for (const std::shared_ptr<PartResource>& sibling : mesh->parts) {
+                if (sibling.get() != part.get() && sibling->effect.handle == oldHandle) {
+                    removeOld = false;
+                    break;
+                }
+            }
+        }
+        addNew = effectHandle != CNA_INVALID_HANDLE &&
+            FindMeshEffect(*mesh, effectHandle) == mesh->effects.end();
+        if (addNew) {
+            mesh->effects.reserve(mesh->effects.size() + 1U);
+        }
+    }
+
+    if (effect != nullptr) {
+        const uint64_t addedReferences = addNew ? 2U : 1U;
+        if (effect->activeModelReferenceCount >
+            std::numeric_limits<uint64_t>::max() - addedReferences) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The ModelMeshPart Effect retention count overflowed.");
+        }
+    }
+
+    part->value->setEffectProperty(effect == nullptr ? nullptr : effect->value.get());
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->setEffectProperty(
+            effect == nullptr ? nullptr : effect->value.get());
+    }
+    part->effect.Reset();
+    if (effect != nullptr) {
+        const CNA_Result result = part->effect.Set(
+            effectHandle, effect->parentGame, effect,
+            &effect->activeModelReferenceCount);
+        if (result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+    }
+    if (mesh != nullptr) {
+        if (removeOld) {
+            RemoveFirstMeshEffect(*mesh, oldHandle);
+        }
+        if (addNew) {
+            AddMeshEffect(*mesh, effectHandle, effect);
+        }
+    }
+    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result SetPartVertexBuffer(
@@ -407,6 +679,9 @@ struct PartCollectionResource final {
 {
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetVertexBuffer(nullptr);
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetVertexBuffer(nullptr);
+        }
         part->vertexBuffer.Reset();
         return CNA_RESULT_SUCCESS;
     }
@@ -430,6 +705,9 @@ struct PartCollectionResource final {
             "The ModelMeshPart VertexBuffer retention count overflowed.");
     }
     part->value->SetVertexBuffer(buffer->value.get());
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetVertexBuffer(buffer->value.get());
+    }
     return part->vertexBuffer.Set(
         bufferHandle, buffer->parentGame, buffer, &buffer->activeModelReferenceCount);
 }
@@ -440,6 +718,9 @@ struct PartCollectionResource final {
 {
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetIndexBuffer(nullptr);
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetIndexBuffer(nullptr);
+        }
         part->indexBuffer.Reset();
         return CNA_RESULT_SUCCESS;
     }
@@ -463,8 +744,100 @@ struct PartCollectionResource final {
             "The ModelMeshPart IndexBuffer retention count overflowed.");
     }
     part->value->SetIndexBuffer(buffer->value.get());
+    if (part->detachedValue != nullptr) {
+        part->detachedValue->SetIndexBuffer(buffer->value.get());
+    }
     return part->indexBuffer.Set(
         bufferHandle, buffer->parentGame, buffer, &buffer->activeModelReferenceCount);
+}
+
+[[nodiscard]] CNA_Result CreateMesh(
+    const CNA_Handle graphicsDeviceHandle,
+    const std::string& name,
+    const bool named,
+    const CNA_ModelMeshPartHandle* const partHandles,
+    const uint64_t partCount,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            partHandles, partCount, sizeof(*partHandles), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The ModelMesh part-handle array is invalid or too large.");
+    }
+    static_cast<void>(byteCount);
+
+    std::shared_ptr<CNA::C::Detail::BorrowedGraphicsDevice> device;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    std::vector<std::shared_ptr<PartResource>> parts;
+    std::vector<ModelMeshPart*> nativeParts;
+    std::vector<std::shared_ptr<ModelMeshPart>> detachedParts;
+    if (partCount > parts.max_size()) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The ModelMesh part count is too large.");
+    }
+    parts.reserve(static_cast<std::size_t>(partCount));
+    nativeParts.reserve(static_cast<std::size_t>(partCount));
+    detachedParts.reserve(static_cast<std::size_t>(partCount));
+    for (uint64_t index = 0U; index < partCount; ++index) {
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandles[index], &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (part->parentMesh != nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "A ModelMeshPart cannot belong to more than one live ModelMesh.");
+        }
+        const PartRetainedSlot* const slots[] = {
+            &part->effect, &part->vertexBuffer, &part->indexBuffer};
+        for (const PartRetainedSlot* const slot : slots) {
+            if (slot->handle != CNA_INVALID_HANDLE &&
+                slot->parentGame != device->parentGame) {
+                return InvalidArgument(
+                    "Every ModelMeshPart resource must belong to the mesh graphics device.");
+            }
+        }
+        auto detached = std::make_shared<ModelMeshPart>(
+            part->value->getVertexBufferProperty(),
+            part->value->getIndexBufferProperty(),
+            part->value->getNumVerticesProperty(),
+            part->value->getPrimitiveCountProperty(),
+            part->value->getStartIndexProperty(),
+            part->value->getVertexOffsetProperty());
+        detached->setEffectProperty(part->value->getEffectProperty());
+        nativeParts.push_back(part->value.get());
+        detachedParts.push_back(std::move(detached));
+        parts.push_back(std::move(part));
+    }
+
+    auto mesh = std::make_shared<MeshResource>();
+    mesh->parentGame = device->parentGame;
+    mesh->supportsThreeD = device->value->SupportsCapability(
+        CNA::GraphicsCapability::ThreeD);
+    mesh->parts = parts;
+    for (std::size_t index = 0U; index < mesh->parts.size(); ++index) {
+        mesh->parts[index]->detachedValue = detachedParts[index];
+        mesh->parts[index]->parentMesh = mesh.get();
+    }
+    mesh->value = named
+        ? std::make_shared<ModelMesh>(device->value, name, std::move(nativeParts))
+        : std::make_shared<ModelMesh>(device->value, std::move(nativeParts));
+    AddOwnedGraphicsResource();
+    mesh->countedAsGraphicsResource = true;
+    return CreateMeshHandle(std::move(mesh), outMesh);
 }
 
 } // namespace
@@ -941,6 +1314,9 @@ CNA_Result cna_model_mesh_part_set_num_vertices(
             return result;
         }
         part->value->SetNumVertices(static_cast<int>(value));
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetNumVertices(static_cast<int>(value));
+        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -974,6 +1350,9 @@ CNA_Result cna_model_mesh_part_set_primitive_count(
             return result;
         }
         part->value->SetPrimitiveCount(static_cast<int>(value));
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetPrimitiveCount(static_cast<int>(value));
+        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1007,6 +1386,9 @@ CNA_Result cna_model_mesh_part_set_start_index(
             return result;
         }
         part->value->SetStartIndex(static_cast<int>(value));
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetStartIndex(static_cast<int>(value));
+        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1040,6 +1422,9 @@ CNA_Result cna_model_mesh_part_set_vertex_offset(
             return result;
         }
         part->value->SetVertexOffset(static_cast<int>(value));
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->SetVertexOffset(static_cast<int>(value));
+        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1255,7 +1640,7 @@ CNA_Result cna_model_mesh_part_collection_get_count(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outCount = static_cast<uint64_t>(collection->parts.size());
+        *outCount = static_cast<uint64_t>(PartList(*collection).size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1275,11 +1660,594 @@ CNA_Result cna_model_mesh_part_collection_get_at(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        if (index >= collection->parts.size()) {
+        const auto& parts = PartList(*collection);
+        if (index >= parts.size()) {
             return InvalidArgument(
                 "The ModelMeshPartCollection index is outside the valid range.");
         }
         return CreatePartHandle(
-            collection->parts[static_cast<std::size_t>(index)], outPart);
+            parts[static_cast<std::size_t>(index)], outPart);
+    });
+}
+
+CNA_Result cna_model_mesh_create(
+    const CNA_Handle graphicsDevice,
+    const CNA_ModelMeshPartHandle* const parts,
+    const uint64_t partCount,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMesh == nullptr) {
+            return InvalidArgument("The ModelMesh output handle is null.");
+        }
+        *outMesh = CNA_INVALID_HANDLE;
+        return CreateMesh(
+            graphicsDevice, std::string{}, false, parts, partCount, outMesh);
+    });
+}
+
+CNA_Result cna_model_mesh_create_named(
+    const CNA_Handle graphicsDevice,
+    const CNA_StringView name,
+    const CNA_ModelMeshPartHandle* const parts,
+    const uint64_t partCount,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMesh == nullptr) {
+            return InvalidArgument("The ModelMesh output handle is null.");
+        }
+        *outMesh = CNA_INVALID_HANDLE;
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The ModelMesh name is not valid UTF-8 text.");
+        }
+        return CreateMesh(
+            graphicsDevice, copiedName, true, parts, partCount, outMesh);
+    });
+}
+
+CNA_Result cna_model_mesh_destroy(const CNA_ModelMeshHandle meshHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(meshHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned ModelMesh handle could not be released.");
+    });
+}
+
+CNA_Result cna_model_mesh_get_bounding_sphere(
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_BoundingSphere* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ModelMesh bounding-sphere output is null.");
+        }
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(mesh->value->getBoundingSphereProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_set_bounding_sphere(
+    const CNA_ModelMeshHandle meshHandle,
+    const CNA_BoundingSphere value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        mesh->value->setBoundingSphereProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_get_mesh_parts(
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_ModelMeshPartCollectionHandle* const outParts)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outParts == nullptr) {
+            return InvalidArgument("The ModelMesh part-collection output is null.");
+        }
+        *outParts = CNA_INVALID_HANDLE;
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto collection = std::make_shared<PartCollectionResource>();
+        collection->mesh = std::move(mesh);
+        return CreatePartCollectionHandle(std::move(collection), outParts);
+    });
+}
+
+CNA_Result cna_model_mesh_get_effects(
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_ModelEffectCollectionHandle* const outEffects)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffects == nullptr) {
+            return InvalidArgument("The ModelMesh effect-collection output is null.");
+        }
+        *outEffects = CNA_INVALID_HANDLE;
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectCollectionHandle(std::move(mesh), outEffects);
+    });
+}
+
+CNA_Result cna_model_mesh_get_name_byte_count(
+    const CNA_ModelMeshHandle meshHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The ModelMesh name byte-count output is null.");
+        }
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(mesh->value->getNameProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_copy_name(
+    const CNA_ModelMeshHandle meshHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyMeshName(
+            mesh->value->getNameProperty(), destination, capacity, outByteCount);
+    });
+}
+
+CNA_Result cna_model_mesh_get_parent_bone(
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_Bool* const outHasParent,
+    CNA_ModelBoneHandle* const outParent)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasParent == nullptr || outParent == nullptr) {
+            return InvalidArgument("The ModelMesh parent-bone outputs are null.");
+        }
+        *outHasParent = CNA_FALSE;
+        *outParent = CNA_INVALID_HANDLE;
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (mesh->parentBone == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = CreateBoneHandle(mesh->parentBone, outParent);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasParent = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_set_parent_bone(
+    const CNA_ModelMeshHandle meshHandle,
+    const CNA_ModelBoneHandle parentHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (parentHandle == CNA_INVALID_HANDLE) {
+            mesh->value->setParentBoneProperty(nullptr);
+            mesh->parentBone.reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<BoneResource> bone;
+        if (const CNA_Result result = GetBone(parentHandle, &bone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        mesh->value->setParentBoneProperty(bone->node->value.get());
+        mesh->parentBone = bone->node;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_get_tag(
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_ModelMeshTag* const outTag)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTag == nullptr) {
+            return InvalidArgument("The ModelMesh tag output is null.");
+        }
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTag = mesh->tag;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_set_tag(
+    const CNA_ModelMeshHandle meshHandle,
+    const CNA_ModelMeshTag tag)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        mesh->tag = tag;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_draw(const CNA_ModelMeshHandle meshHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!mesh->supportsThreeD) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "ModelMesh drawing requires a renderer with 3D support.");
+        }
+        mesh->value->Draw();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_collection_create(
+    const CNA_ModelMeshHandle* const meshHandles,
+    const uint64_t meshCount,
+    CNA_ModelMeshCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The ModelMeshCollection output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::size_t byteCount = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                meshHandles, meshCount, sizeof(*meshHandles), &byteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The ModelMesh handle array is invalid or too large.");
+        }
+        static_cast<void>(byteCount);
+        auto collection = std::make_shared<MeshCollectionResource>();
+        if (meshCount > collection->meshes.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The ModelMesh collection is too large.");
+        }
+        collection->meshes.reserve(static_cast<std::size_t>(meshCount));
+        for (uint64_t index = 0U; index < meshCount; ++index) {
+            std::shared_ptr<MeshResource> mesh;
+            if (const CNA_Result result = GetMesh(meshHandles[index], &mesh);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            collection->meshes.push_back(std::move(mesh));
+        }
+        return CreateMeshCollectionHandle(std::move(collection), outCollection);
+    });
+}
+
+CNA_Result cna_model_mesh_collection_destroy(
+    const CNA_ModelMeshCollectionHandle collectionHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MeshCollectionResource> collection;
+        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned ModelMeshCollection handle could not be released.");
+    });
+}
+
+CNA_Result cna_model_mesh_collection_get_count(
+    const CNA_ModelMeshCollectionHandle collectionHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The ModelMeshCollection count output is null.");
+        }
+        std::shared_ptr<MeshCollectionResource> collection;
+        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(collection->meshes.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_collection_get_at(
+    const CNA_ModelMeshCollectionHandle collectionHandle,
+    const uint64_t index,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMesh == nullptr) {
+            return InvalidArgument("The ModelMeshCollection mesh output is null.");
+        }
+        *outMesh = CNA_INVALID_HANDLE;
+        std::shared_ptr<MeshCollectionResource> collection;
+        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index >= collection->meshes.size()) {
+            return InvalidArgument("The ModelMeshCollection index is outside the valid range.");
+        }
+        return CreateMeshHandle(
+            collection->meshes[static_cast<std::size_t>(index)], outMesh);
+    });
+}
+
+CNA_Result cna_model_mesh_collection_find(
+    const CNA_ModelMeshCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    CNA_ModelMeshHandle* const outMesh)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outMesh == nullptr) {
+            return InvalidArgument("The ModelMeshCollection find outputs are null.");
+        }
+        *outFound = CNA_FALSE;
+        *outMesh = CNA_INVALID_HANDLE;
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The ModelMesh lookup name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<MeshCollectionResource> collection;
+        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto iterator = std::find_if(
+            collection->meshes.begin(),
+            collection->meshes.end(),
+            [&copiedName](const std::shared_ptr<MeshResource>& mesh) {
+                return mesh->value->getNameProperty() == copiedName;
+            });
+        if (iterator == collection->meshes.end()) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = CreateMeshHandle(*iterator, outMesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outFound = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_collection_contains(
+    const CNA_ModelMeshCollectionHandle collectionHandle,
+    const CNA_ModelMeshHandle meshHandle,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return InvalidArgument("The ModelMeshCollection contains output is null.");
+        }
+        std::shared_ptr<MeshCollectionResource> collection;
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMeshCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = GetMesh(meshHandle, &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outContains = std::find(
+            collection->meshes.begin(), collection->meshes.end(), mesh) !=
+                collection->meshes.end()
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_destroy(
+    const CNA_ModelEffectCollectionHandle collectionHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectCollectionResource> collection;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned ModelEffectCollection handle could not be released.");
+    });
+}
+
+CNA_Result cna_model_effect_collection_get_count(
+    const CNA_ModelEffectCollectionHandle collectionHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The ModelEffectCollection count output is null.");
+        }
+        std::shared_ptr<EffectCollectionResource> collection;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(collection->mesh->effects.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_get_at(
+    const CNA_ModelEffectCollectionHandle collectionHandle,
+    const uint64_t index,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The ModelEffectCollection effect output is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectCollectionResource> collection;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index >= collection->mesh->effects.size()) {
+            return InvalidArgument("The ModelEffectCollection index is outside the valid range.");
+        }
+        *outEffect = collection->mesh->effects[static_cast<std::size_t>(index)].handle;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_contains(
+    const CNA_ModelEffectCollectionHandle collectionHandle,
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return InvalidArgument("The ModelEffectCollection contains output is null.");
+        }
+        std::shared_ptr<EffectCollectionResource> collection;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outContains = FindMeshEffect(*collection->mesh, effectHandle) !=
+                collection->mesh->effects.end()
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_add(
+    const CNA_ModelEffectCollectionHandle collectionHandle,
+    const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectCollectionResource> collection;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (effect->parentGame != collection->mesh->parentGame) {
+            return InvalidArgument(
+                "A ModelEffectCollection Effect must belong to its mesh graphics device.");
+        }
+        if (effect->activeModelReferenceCount == std::numeric_limits<uint64_t>::max()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The ModelEffectCollection retention count overflowed.");
+        }
+        collection->mesh->effects.reserve(collection->mesh->effects.size() + 1U);
+        collection->mesh->value->getEffectsPropertyMutable().Add(effect->value.get());
+        AddMeshEffect(*collection->mesh, effectHandle, effect);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_effect_collection_remove(
+    const CNA_ModelEffectCollectionHandle collectionHandle,
+    const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectCollectionResource> collection;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffectCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ResolveEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        collection->mesh->value->getEffectsPropertyMutable().Remove(effect->value.get());
+        RemoveFirstMeshEffect(*collection->mesh, effectHandle);
+        return CNA_RESULT_SUCCESS;
     });
 }

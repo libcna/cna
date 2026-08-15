@@ -396,6 +396,16 @@
       "task": "CBIND-035E2"
     },
     {
+      "id": "model-mesh-and-collections-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:ModelMesh|ModelMeshCollection|ModelEffectCollection)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_ModelMeshHandle` game children with copied UTF-8 names, bounding spheres, retained parts and optional parent bones, opaque C tags, live part/effect views and capability-gated Draw; `CNA_ModelMeshCollectionHandle` snapshots replace mesh pointers/name indexers/iterators with count/index/find/contains aliases; `CNA_ModelEffectCollectionHandle` live views preserve duplicate Add, first-match Remove and identity semantics while retaining same-device effects",
+      "tests": "both constructors, UTF-8/capacity, exact signed part mutation through live aliases, bounding sphere and tag state, retained parent bones, dynamic unique effects from part mutation, explicit duplicate add/first removal/contains/index and disposal protection, mesh snapshot index/find/contains and transitive alias lifetime, safe surviving detached parts, renderer-capability Draw, invalid arrays/names/re-parenting and wrong-thread paths in strict-C `ModelMeshSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze all handles and the tag",
+      "status": "implemented",
+      "task": "CBIND-035E3"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],
