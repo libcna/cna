@@ -738,3 +738,10 @@ static_assert(offsetof(CNA_GamePadCapabilities, gamepad_type) == 8U);
 static_assert(offsetof(CNA_GamePadCapabilities, is_connected) == 12U);
 static_assert(offsetof(CNA_GamePadCapabilities, has_accelerometer_ext) == 46U);
 static_assert(offsetof(CNA_GamePadCapabilities, reserved) == 47U);
+
+static_assert(sizeof(CNA_GamePadThumbSticks) == 16U);
+static_assert(sizeof(CNA_GamePadTriggers) == 8U);
+static_assert(offsetof(CNA_GamePadThumbSticks, right) == 8U);
+static_assert(offsetof(CNA_GamePadTriggers, right) == 4U);
+static_assert(sizeof(CNA_GamePadAnalogState) ==
+              sizeof(CNA_GamePadThumbSticks) + sizeof(CNA_GamePadTriggers));

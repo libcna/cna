@@ -2926,6 +2926,82 @@
       "tests": "`InputSnapshotsSmoke.c` reads all four slots inside the update callback and covers the wrong-thread, bad-player-index, null-output and wrong-struct-version refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B1"
+    },
+    {
+      "id": "gamepad-buttons-operators",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::operator(?:\\||&|~|\\|=|&=)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "no route, and none is needed: the canonical operators exist so a C++ scoped enumeration can be composed and masked at all, and the C identity is already a plain `CNA_GamePadButtonFlags` (`uint32_t`). A C consumer writes `|`, `&`, `~`, `|=` and `&=` directly on it, which is the same arithmetic the canonical operators perform. Every C route that accepts a mask validates it against `CNA_GAMEPAD_BUTTON_ALL`, so a bit the canonical enumeration does not define is refused rather than carried",
+      "tests": "`InputSnapshotsSmoke.c` composes masks with the C operators and feeds them to `cna_gamepad_buttons_init_from_mask`, `_is_pressed`, `_equals` and the snapshot constructors, and asserts an undefined bit is refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-buttons",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadButtons(?:::(?:GamePadButtons|FromButtonArray|Equals|GetHashCode|operator==|operator!=|get[A-Za-z0-9]+Property))?$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "the `CNA_GamePadButtonFlags` mask the C API already had, because the canonical type holds exactly one bit field and nothing else. `cna_gamepad_buttons_init` reproduces the default constructor, `_init_from_mask` the explicit one and `_init_from_button_array` the canonical factory. All eleven named property getters collapse into `cna_gamepad_buttons_is_pressed`, which answers a named button through the canonical getter that owns it and falls back to the same masked test for the identities this type exposes no getter for. Equality, inequality and the hash each get their own route because C has no operator overloading",
+      "tests": "`InputSnapshotsSmoke.c` covers the default, mask and array constructions including a repeated identity contributing once and an empty array, all eleven named getters pressed and released, an identity with no canonical getter, both comparisons in both directions, the hash matching the mask reinterpreted as signed, and every null-output and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-dpad",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadDPad(?:::(?:GamePadDPad|FromButtonArray|Equals|GetHashCode|operator==|operator!=|get[A-Za-z0-9]+Property))?$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "the same `CNA_GamePadButtonFlags` mask restricted to the four `CNA_GAMEPAD_BUTTON_DPAD_*` bits, because the canonical type holds four button states and CNA itself derives them from a button mask. `cna_gamepad_dpad_init` reproduces the default constructor, `_init_from_states` the four-state constructor and `_init_from_button_array` the canonical factory, which ignores non-directional identities. The four named getters collapse into `cna_gamepad_dpad_is_pressed`, which routes through the canonical getters and refuses a non-directional button. Equality compares only the four directional bits, and the hash reproduces the canonical weighting \u2014 Down 1, Left 2, Right 4, Up 8 \u2014 which is its own numbering rather than the button bits",
+      "tests": "`InputSnapshotsSmoke.c` covers all three constructions including a mixed array whose non-directional entries are dropped, each direction pressed and released, equality ignoring a non-directional bit, both comparisons, all four hash weights individually, and every null-output, non-directional-button and invalid-array refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-thumb-sticks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadThumbSticks(?:::(?:GamePadThumbSticks|Equals|GetHashCode|operator==|operator!=|get[A-Za-z0-9]+Property))?$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "the fixed 16-byte `CNA_GamePadThumbSticks` value \u2014 two `CNA_Vector2` positions, directly readable, with no version prefix because the canonical type is an immutable pair. It is byte-identical to the first half of the `CNA_GamePadAnalogState` a snapshot already carried, which is asserted rather than assumed, so the ABI never grows two representations of the same four numbers. `cna_gamepad_thumb_sticks_init` reproduces the default constructor and `_init_from_positions` the public one, including its **square clamp** to the inclusive range minus one through one; the dead-zone constructor is private and stays behind `cna_gamepad_apply_dead_zone`",
+      "tests": "`InputSnapshotsSmoke.c` covers the zero default, an in-range construction kept verbatim, an out-of-range construction square-clamped on all four components, equal and unequal comparisons in both directions, hash agreement for equal values, and every null-input and null-output refusal; ABI assertions freeze the layout and its identity with the analog block. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-triggers",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadTriggers(?:::(?:GamePadTriggers|Equals|GetHashCode|operator==|operator!=|get[A-Za-z0-9]+Property))?$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "the fixed 8-byte `CNA_GamePadTriggers` value \u2014 two directly readable floats, byte-identical to the second half of `CNA_GamePadAnalogState`, for the same reason as the thumbstick pair. `cna_gamepad_triggers_init` reproduces the default constructor and `_init_from_positions` the public one, including its **clamp** to the inclusive range zero through one. Equality preserves the canonical epsilon comparison rather than becoming an exact one",
+      "tests": "`InputSnapshotsSmoke.c` covers the zero default, a construction kept verbatim, a construction clamped from below and above, the epsilon comparison proved with the next representable float above a value \u2014 a genuinely different float that still compares equal \u2014 an unequal comparison, hash agreement, and every null-input and null-output refusal; ABI assertions freeze the layout. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
+    },
+    {
+      "id": "gamepad-state-values",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadState(?:::(?:GamePadState|Equals|GetHashCode|ToString|operator==|operator!=|get[A-Za-z0-9]+Property|setPacketNumberProperty))?$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "the versioned `CNA_GamePadState` snapshot the C API already had, plus routes for everything the canonical type computes. `cna_gamepad_state_init` reproduces the default constructor; `_init_from_components` and `_init_from_values` reproduce the two public ones, including the canonical derivation of extra button bits \u2014 a trigger past `CNA_GAMEPAD_TRIGGER_THRESHOLD` adds its trigger bit and a stick past its dead zone adds the matching virtual direction bits. The four component getters become projections out of the snapshot, and the CNA extension packet-number setter keeps an `_ext` suffix. The snapshot carries one button mask, exactly as every state CNA itself builds does \u2014 the capture path derives both the button set and the pad from one raw mask \u2014 so a supplied directional pad is merged into the button set rather than kept beside it. The hash mixes only the button set and the packet number, matching the canonical implementation, and the string is the fixed fully-qualified type name because the canonical type does not override its conversion",
+      "tests": "`InputSnapshotsSmoke.c` covers the default snapshot, both constructions with their derived trigger and virtual stick bits asserted individually, the merged directional pad read back, all four component projections, the extension packet-number setter observed through equality, equal and unequal comparisons, the hash ignoring a changed analog value, the exact fixed string with its count/copy round trip and a too-small capacity writing nothing, and every null, invalid-snapshot and undefined-bit refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B2"
     }
   ]
 }

@@ -9,7 +9,11 @@
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadButtons.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadDPad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
@@ -27,6 +31,8 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <string>
 
 namespace {
 
@@ -38,9 +44,13 @@ using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Input::ButtonState;
 using Microsoft::Xna::Framework::Input::Buttons;
 using Microsoft::Xna::Framework::Input::GamePad;
+using Microsoft::Xna::Framework::Input::GamePadButtons;
 using Microsoft::Xna::Framework::Input::GamePadCapabilities;
 using Microsoft::Xna::Framework::Input::GamePadDeadZone;
+using Microsoft::Xna::Framework::Input::GamePadDPad;
 using Microsoft::Xna::Framework::Input::GamePadState;
+using Microsoft::Xna::Framework::Input::GamePadThumbSticks;
+using Microsoft::Xna::Framework::Input::GamePadTriggers;
 using Microsoft::Xna::Framework::Input::GamePadType;
 using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::KeyboardState;
@@ -860,5 +870,814 @@ CNA_Result cna_gamepad_get_capabilities(
         }
         *outCapabilities = SnapshotCapabilities(GamePad::GetCapabilities(nativePlayerIndex));
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+constexpr CNA_GamePadButtonFlags DPadMask = CNA_GAMEPAD_BUTTON_DPAD_UP |
+    CNA_GAMEPAD_BUTTON_DPAD_DOWN | CNA_GAMEPAD_BUTTON_DPAD_LEFT | CNA_GAMEPAD_BUTTON_DPAD_RIGHT;
+
+[[nodiscard]] CNA_Result InvalidInput(const char* const message)
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+[[nodiscard]] CNA_Result ValidateMask(const CNA_GamePadButtonFlags mask)
+{
+    if ((mask & ~CNA_GAMEPAD_BUTTON_ALL) != 0U) {
+        return InvalidInput("The gamepad button mask contains an undefined bit.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CombineButtonArray(
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadButtonFlags* const outMask)
+{
+    if (buttons == nullptr && count != 0U) {
+        return InvalidInput("The gamepad button array is invalid.");
+    }
+    CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+    for (uint64_t index = 0U; index < count; ++index) {
+        if (const CNA_Result result = ValidateMask(buttons[index]);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        mask |= buttons[index];
+    }
+    *outMask = mask;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] GamePadButtons NativeButtons(const CNA_GamePadButtonFlags mask)
+{
+    return GamePadButtons(static_cast<Buttons>(mask));
+}
+
+// The canonical button set exposes eleven named getters and no way to read its raw field, so the
+// projection back to a mask asks it about each of them. Used for the default constructor, whose
+// emptiness is therefore observed rather than assumed.
+[[nodiscard]] CNA_GamePadButtonFlags MaskFromNamedButtons(const GamePadButtons& value)
+{
+    CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+    const auto add = [&mask](const ButtonState state, const CNA_GamePadButtonFlags bit) {
+        if (state == ButtonState::Pressed) {
+            mask |= bit;
+        }
+    };
+    add(value.getAProperty(), CNA_GAMEPAD_BUTTON_A);
+    add(value.getBProperty(), CNA_GAMEPAD_BUTTON_B);
+    add(value.getXProperty(), CNA_GAMEPAD_BUTTON_X);
+    add(value.getYProperty(), CNA_GAMEPAD_BUTTON_Y);
+    add(value.getBackProperty(), CNA_GAMEPAD_BUTTON_BACK);
+    add(value.getStartProperty(), CNA_GAMEPAD_BUTTON_START);
+    add(value.getBigButtonProperty(), CNA_GAMEPAD_BUTTON_BIG_BUTTON);
+    add(value.getLeftShoulderProperty(), CNA_GAMEPAD_BUTTON_LEFT_SHOULDER);
+    add(value.getRightShoulderProperty(), CNA_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+    add(value.getLeftStickProperty(), CNA_GAMEPAD_BUTTON_LEFT_STICK);
+    add(value.getRightStickProperty(), CNA_GAMEPAD_BUTTON_RIGHT_STICK);
+    return mask;
+}
+
+// A named button is answered through the canonical getter that owns it; the remaining identities
+// -- the directional pad, the triggers and the virtual stick directions -- have no canonical
+// getter on this type, so they fall back to the same masked test the canonical helper performs.
+[[nodiscard]] bool NamedButtonIsPressed(
+    const GamePadButtons& value,
+    const CNA_GamePadButtonFlags button,
+    bool* const outHandled)
+{
+    *outHandled = true;
+    switch (button) {
+        case CNA_GAMEPAD_BUTTON_A: return value.getAProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_B: return value.getBProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_X: return value.getXProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_Y: return value.getYProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_BACK: return value.getBackProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_START: return value.getStartProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_BIG_BUTTON:
+            return value.getBigButtonProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_LEFT_SHOULDER:
+            return value.getLeftShoulderProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+            return value.getRightShoulderProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_LEFT_STICK:
+            return value.getLeftStickProperty() == ButtonState::Pressed;
+        case CNA_GAMEPAD_BUTTON_RIGHT_STICK:
+            return value.getRightStickProperty() == ButtonState::Pressed;
+        default: break;
+    }
+    *outHandled = false;
+    return false;
+}
+
+[[nodiscard]] GamePadDPad NativeDPad(const CNA_GamePadButtonFlags mask)
+{
+    const auto state = [mask](const CNA_GamePadButtonFlags bit) {
+        return (mask & bit) == bit ? ButtonState::Pressed : ButtonState::Released;
+    };
+    return GamePadDPad(
+        state(CNA_GAMEPAD_BUTTON_DPAD_UP),
+        state(CNA_GAMEPAD_BUTTON_DPAD_DOWN),
+        state(CNA_GAMEPAD_BUTTON_DPAD_LEFT),
+        state(CNA_GAMEPAD_BUTTON_DPAD_RIGHT));
+}
+
+[[nodiscard]] GamePadThumbSticks NativeThumbSticks(const CNA_GamePadThumbSticks& value)
+{
+    return GamePadThumbSticks(
+        Vector2(value.left.x, value.left.y),
+        Vector2(value.right.x, value.right.y));
+}
+
+[[nodiscard]] GamePadTriggers NativeTriggers(const CNA_GamePadTriggers& value)
+{
+    return GamePadTriggers(value.left, value.right);
+}
+
+[[nodiscard]] CNA_GamePadState SnapshotState(const GamePadState& native)
+{
+    const Vector2& leftStick = native.getThumbSticksProperty().getLeftProperty();
+    const Vector2& rightStick = native.getThumbSticksProperty().getRightProperty();
+    CNA_GamePadState snapshot = {
+        sizeof(CNA_GamePadState),
+        StructureVersion,
+        native.getIsConnectedProperty() ? CNA_TRUE : CNA_FALSE,
+        {0U, 0U, 0U},
+        native.getPacketNumberProperty(),
+        CollectPressedButtons(native),
+        0U,
+        {
+            {leftStick.X, leftStick.Y},
+            {rightStick.X, rightStick.Y},
+            native.getTriggersProperty().getLeftProperty(),
+            native.getTriggersProperty().getRightProperty()
+        }
+    };
+    return snapshot;
+}
+
+[[nodiscard]] CNA_Result ValidateState(const CNA_GamePadState* const state)
+{
+    return ValidateVersionedStructure(state, "The gamepad snapshot is invalid.");
+}
+
+[[nodiscard]] CNA_Result CopyStateText(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidInput("The gamepad snapshot text output is invalid.");
+    }
+    *outBytes = value.size();
+    if (capacity < value.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination capacity is smaller than the gamepad snapshot text.");
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_gamepad_buttons_init(CNA_GamePadButtonFlags* const outButtons)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outButtons == nullptr) {
+            return InvalidInput("The gamepad button-set output is null.");
+        }
+        *outButtons = MaskFromNamedButtons(GamePadButtons());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_init_from_mask(
+    const CNA_GamePadButtonFlags buttons,
+    CNA_GamePadButtonFlags* const outButtons)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outButtons == nullptr) {
+            return InvalidInput("The gamepad button-set output is null.");
+        }
+        if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outButtons = buttons;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_init_from_button_array(
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadButtonFlags* const outButtons)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outButtons == nullptr) {
+            return InvalidInput("The gamepad button-set output is null.");
+        }
+        CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+        if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outButtons = mask;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_is_pressed(
+    const CNA_GamePadButtonFlags buttons,
+    const CNA_GamePadButtonFlags button,
+    CNA_Bool* const outIsPressed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsPressed == nullptr) {
+            return InvalidInput("The gamepad button-state output is null.");
+        }
+        if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateMask(button); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        bool handled = false;
+        const bool pressed = NamedButtonIsPressed(NativeButtons(buttons), button, &handled);
+        *outIsPressed = (handled ? pressed : (buttons & button) == button) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEquals == nullptr) {
+            return InvalidInput("The gamepad button-set comparison output is null.");
+        }
+        *outEquals = NativeButtons(left).Equals(NativeButtons(right)) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_not_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outNotEquals == nullptr) {
+            return InvalidInput("The gamepad button-set comparison output is null.");
+        }
+        *outNotEquals = NativeButtons(left) != NativeButtons(right) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_buttons_get_hash_code(
+    const CNA_GamePadButtonFlags buttons,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The gamepad button-set hash output is null.");
+        }
+        *outHash = static_cast<int32_t>(NativeButtons(buttons).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init(CNA_GamePadButtonFlags* const outDPad)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDPad == nullptr) {
+            return InvalidInput("The directional-pad output is null.");
+        }
+        *outDPad = CNA_GAMEPAD_BUTTON_NONE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init_from_states(
+    const CNA_Bool up,
+    const CNA_Bool down,
+    const CNA_Bool left,
+    const CNA_Bool right,
+    CNA_GamePadButtonFlags* const outDPad)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDPad == nullptr) {
+            return InvalidInput("The directional-pad output is null.");
+        }
+        CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+        if (up != CNA_FALSE) { mask |= CNA_GAMEPAD_BUTTON_DPAD_UP; }
+        if (down != CNA_FALSE) { mask |= CNA_GAMEPAD_BUTTON_DPAD_DOWN; }
+        if (left != CNA_FALSE) { mask |= CNA_GAMEPAD_BUTTON_DPAD_LEFT; }
+        if (right != CNA_FALSE) { mask |= CNA_GAMEPAD_BUTTON_DPAD_RIGHT; }
+        *outDPad = mask;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_init_from_button_array(
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadButtonFlags* const outDPad)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDPad == nullptr) {
+            return InvalidInput("The directional-pad output is null.");
+        }
+        CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+        if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDPad = mask & DPadMask;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_is_pressed(
+    const CNA_GamePadButtonFlags dpad,
+    const CNA_GamePadButtonFlags button,
+    CNA_Bool* const outIsPressed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsPressed == nullptr) {
+            return InvalidInput("The directional-pad state output is null.");
+        }
+        if (button != CNA_GAMEPAD_BUTTON_DPAD_UP && button != CNA_GAMEPAD_BUTTON_DPAD_DOWN &&
+            button != CNA_GAMEPAD_BUTTON_DPAD_LEFT && button != CNA_GAMEPAD_BUTTON_DPAD_RIGHT) {
+            return InvalidInput("The requested button is not a directional-pad direction.");
+        }
+        const GamePadDPad native = NativeDPad(dpad);
+        ButtonState state = ButtonState::Released;
+        switch (button) {
+            case CNA_GAMEPAD_BUTTON_DPAD_UP: state = native.getUpProperty(); break;
+            case CNA_GAMEPAD_BUTTON_DPAD_DOWN: state = native.getDownProperty(); break;
+            case CNA_GAMEPAD_BUTTON_DPAD_LEFT: state = native.getLeftProperty(); break;
+            default: state = native.getRightProperty(); break;
+        }
+        *outIsPressed = state == ButtonState::Pressed ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEquals == nullptr) {
+            return InvalidInput("The directional-pad comparison output is null.");
+        }
+        *outEquals = NativeDPad(left).Equals(NativeDPad(right)) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_not_equals(
+    const CNA_GamePadButtonFlags left,
+    const CNA_GamePadButtonFlags right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outNotEquals == nullptr) {
+            return InvalidInput("The directional-pad comparison output is null.");
+        }
+        *outNotEquals = NativeDPad(left) != NativeDPad(right) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_dpad_get_hash_code(
+    const CNA_GamePadButtonFlags dpad,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The directional-pad hash output is null.");
+        }
+        *outHash = static_cast<int32_t>(NativeDPad(dpad).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_init(CNA_GamePadThumbSticks* const outThumbSticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outThumbSticks == nullptr) {
+            return InvalidInput("The thumbstick output is null.");
+        }
+        const GamePadThumbSticks native;
+        outThumbSticks->left = {
+            native.getLeftProperty().X,
+            native.getLeftProperty().Y
+        };
+        outThumbSticks->right = {
+            native.getRightProperty().X,
+            native.getRightProperty().Y
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_init_from_positions(
+    const CNA_Vector2* const left,
+    const CNA_Vector2* const right,
+    CNA_GamePadThumbSticks* const outThumbSticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (left == nullptr || right == nullptr || outThumbSticks == nullptr) {
+            return InvalidInput("The thumbstick input or output is null.");
+        }
+        const GamePadThumbSticks native(
+            Vector2(left->x, left->y),
+            Vector2(right->x, right->y));
+        outThumbSticks->left = {
+            native.getLeftProperty().X,
+            native.getLeftProperty().Y
+        };
+        outThumbSticks->right = {
+            native.getRightProperty().X,
+            native.getRightProperty().Y
+        };
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_equals(
+    const CNA_GamePadThumbSticks* const left,
+    const CNA_GamePadThumbSticks* const right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (left == nullptr || right == nullptr || outEquals == nullptr) {
+            return InvalidInput("The thumbstick comparison input or output is null.");
+        }
+        *outEquals = NativeThumbSticks(*left).Equals(NativeThumbSticks(*right))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_not_equals(
+    const CNA_GamePadThumbSticks* const left,
+    const CNA_GamePadThumbSticks* const right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (left == nullptr || right == nullptr || outNotEquals == nullptr) {
+            return InvalidInput("The thumbstick comparison input or output is null.");
+        }
+        *outNotEquals = NativeThumbSticks(*left) != NativeThumbSticks(*right)
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_thumb_sticks_get_hash_code(
+    const CNA_GamePadThumbSticks* const thumbSticks,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (thumbSticks == nullptr || outHash == nullptr) {
+            return InvalidInput("The thumbstick hash input or output is null.");
+        }
+        *outHash = static_cast<int32_t>(NativeThumbSticks(*thumbSticks).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_triggers_init(CNA_GamePadTriggers* const outTriggers)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTriggers == nullptr) {
+            return InvalidInput("The trigger output is null.");
+        }
+        const GamePadTriggers native;
+        outTriggers->left = native.getLeftProperty();
+        outTriggers->right = native.getRightProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_triggers_init_from_positions(
+    const float left,
+    const float right,
+    CNA_GamePadTriggers* const outTriggers)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTriggers == nullptr) {
+            return InvalidInput("The trigger output is null.");
+        }
+        const GamePadTriggers native(left, right);
+        outTriggers->left = native.getLeftProperty();
+        outTriggers->right = native.getRightProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_triggers_equals(
+    const CNA_GamePadTriggers* const left,
+    const CNA_GamePadTriggers* const right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (left == nullptr || right == nullptr || outEquals == nullptr) {
+            return InvalidInput("The trigger comparison input or output is null.");
+        }
+        *outEquals = NativeTriggers(*left).Equals(NativeTriggers(*right)) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_triggers_not_equals(
+    const CNA_GamePadTriggers* const left,
+    const CNA_GamePadTriggers* const right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (left == nullptr || right == nullptr || outNotEquals == nullptr) {
+            return InvalidInput("The trigger comparison input or output is null.");
+        }
+        *outNotEquals = NativeTriggers(*left) != NativeTriggers(*right) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_triggers_get_hash_code(
+    const CNA_GamePadTriggers* const triggers,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (triggers == nullptr || outHash == nullptr) {
+            return InvalidInput("The trigger hash input or output is null.");
+        }
+        *outHash = static_cast<int32_t>(NativeTriggers(*triggers).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_init(CNA_GamePadState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The gamepad snapshot output is null.");
+        }
+        *outState = SnapshotState(GamePadState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_init_from_components(
+    const CNA_GamePadThumbSticks* const thumbSticks,
+    const CNA_GamePadTriggers* const triggers,
+    const CNA_GamePadButtonFlags buttons,
+    const CNA_GamePadButtonFlags dpad,
+    CNA_GamePadState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (thumbSticks == nullptr || triggers == nullptr || outState == nullptr) {
+            return InvalidInput("The gamepad snapshot input or output is null.");
+        }
+        if (const CNA_Result result = ValidateMask(buttons); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateMask(dpad); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The C snapshot carries a single button mask, and so does every state CNA itself builds:
+        // the capture path derives the button set and the directional pad from one raw mask. The
+        // pad argument is therefore merged into the button set rather than kept beside it, which
+        // is what makes it readable again through cna_gamepad_state_get_dpad.
+        *outState = SnapshotState(GamePadState(
+            NativeThumbSticks(*thumbSticks),
+            NativeTriggers(*triggers),
+            NativeButtons(buttons | dpad),
+            NativeDPad(dpad)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_init_from_values(
+    const CNA_Vector2* const leftThumbStick,
+    const CNA_Vector2* const rightThumbStick,
+    const float leftTrigger,
+    const float rightTrigger,
+    const CNA_GamePadButtonFlags* const buttons,
+    const uint64_t count,
+    CNA_GamePadState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (leftThumbStick == nullptr || rightThumbStick == nullptr || outState == nullptr) {
+            return InvalidInput("The gamepad snapshot input or output is null.");
+        }
+        CNA_GamePadButtonFlags mask = CNA_GAMEPAD_BUTTON_NONE;
+        if (const CNA_Result result = CombineButtonArray(buttons, count, &mask);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical convenience constructor feeds the same array to both the button set and
+        // the directional pad, so the C route does exactly that rather than taking two masks.
+        *outState = SnapshotState(GamePadState(
+            GamePadThumbSticks(
+                Vector2(leftThumbStick->x, leftThumbStick->y),
+                Vector2(rightThumbStick->x, rightThumbStick->y)),
+            GamePadTriggers(leftTrigger, rightTrigger),
+            NativeButtons(mask),
+            NativeDPad(mask)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_buttons(
+    const CNA_GamePadState* const state,
+    CNA_GamePadButtonFlags* const outButtons)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outButtons == nullptr) {
+            return InvalidInput("The gamepad button-set output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outButtons = state->pressed_buttons;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_dpad(
+    const CNA_GamePadState* const state,
+    CNA_GamePadButtonFlags* const outDPad)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDPad == nullptr) {
+            return InvalidInput("The directional-pad output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDPad = state->pressed_buttons & DPadMask;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_thumb_sticks(
+    const CNA_GamePadState* const state,
+    CNA_GamePadThumbSticks* const outThumbSticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outThumbSticks == nullptr) {
+            return InvalidInput("The thumbstick output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        outThumbSticks->left = state->analog.left_thumb_stick;
+        outThumbSticks->right = state->analog.right_thumb_stick;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_triggers(
+    const CNA_GamePadState* const state,
+    CNA_GamePadTriggers* const outTriggers)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTriggers == nullptr) {
+            return InvalidInput("The trigger output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        outTriggers->left = state->analog.left_trigger;
+        outTriggers->right = state->analog.right_trigger;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_set_packet_number_ext(
+    CNA_GamePadState* const state,
+    const int32_t packetNumber)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        state->packet_number = packetNumber;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_equals(
+    const CNA_GamePadState* const left,
+    const CNA_GamePadState* const right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEquals == nullptr) {
+            return InvalidInput("The gamepad snapshot comparison output is null.");
+        }
+        if (const CNA_Result result = ValidateState(left); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateState(right); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEquals = left->is_connected == right->is_connected &&
+                left->packet_number == right->packet_number &&
+                left->pressed_buttons == right->pressed_buttons &&
+                NativeThumbSticks({left->analog.left_thumb_stick, left->analog.right_thumb_stick})
+                    .Equals(NativeThumbSticks(
+                        {right->analog.left_thumb_stick, right->analog.right_thumb_stick})) &&
+                NativeTriggers({left->analog.left_trigger, left->analog.right_trigger})
+                    .Equals(NativeTriggers(
+                        {right->analog.left_trigger, right->analog.right_trigger}))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_not_equals(
+    const CNA_GamePadState* const left,
+    const CNA_GamePadState* const right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA_Bool equals = CNA_FALSE;
+        if (const CNA_Result result = cna_gamepad_state_equals(left, right, &equals);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outNotEquals == nullptr) {
+            return InvalidInput("The gamepad snapshot comparison output is null.");
+        }
+        *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_hash_code(
+    const CNA_GamePadState* const state,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The gamepad snapshot hash output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical hash mixes only the button set and the packet number.
+        *outHash = static_cast<int32_t>(
+            static_cast<unsigned>(NativeButtons(state->pressed_buttons).GetHashCode()) ^
+            (static_cast<unsigned>(state->packet_number) * 31U));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_get_string_size(
+    const CNA_GamePadState* const state,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The gamepad snapshot text output is null.");
+        }
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = GamePadState().ToString().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_state_copy_string(
+    const CNA_GamePadState* const state,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyStateText(GamePadState().ToString(), destination, capacity, outBytes);
     });
 }

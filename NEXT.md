@@ -355,6 +355,23 @@
 > disagree, and asserts the canonical disconnected value whenever a slot is empty. The inventory is
 > now 3,998 implemented, 30 partial, 2,270 planned and 117 N/A; all three trees and the sanitizer
 > tree stay green at 51/51.
+>
+> CBIND-037B2 then maps the five gamepad value types onto the representations the C API already
+> had, so the ABI never grows a second spelling of the same numbers. The button set and the
+> directional pad are the existing button mask — the pad restricted to its four bits — because that
+> is what each canonical type holds and how CNA itself derives one from the other; the new
+> thumbstick and trigger values are byte-identical to the two halves of the analog block a snapshot
+> already carried, which is asserted rather than assumed.
+>
+> Three canonical behaviors are preserved and asserted rather than tidied up: the thumbstick
+> constructor square-clamps to ±1 while the trigger constructor clamps to 0..1; trigger equality is
+> an **epsilon** comparison, proved with the next representable float above a value — a genuinely
+> different float that still compares equal; and the directional pad's hash uses its own weighting
+> (Down 1, Left 2, Right 4, Up 8) rather than the button bits. One representational limit is
+> recorded instead of hidden: the C snapshot carries a single button mask, so a supplied
+> directional pad is merged into it — which is the relationship every state CNA itself builds
+> already has, since the capture path derives both from one raw mask. The inventory is now 4,063
+> implemented, 30 partial, 2,205 planned and 117 N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -34,8 +34,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
 > the compile-time platform, desktop operating system, renderer identity and renderer name, and
 > both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
-> adds the gamepad controller type and the complete gamepad-capabilities value. The generated
-> inventory currently records 3,998 implemented, 30 partial, 2,270 planned and 117
+> adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
+> adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
+> snapshot itself — with every constructor, comparison, hash and string operation. The generated
+> inventory currently records 4,063 implemented, 30 partial, 2,205 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

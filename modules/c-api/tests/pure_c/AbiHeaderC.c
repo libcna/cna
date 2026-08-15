@@ -902,3 +902,26 @@ _Static_assert(sizeof(CNA_GamePadCapabilities) == 48U &&
                    offsetof(CNA_GamePadCapabilities, has_accelerometer_ext) == 46U &&
                    offsetof(CNA_GamePadCapabilities, reserved) == 47U,
                "CNA_GamePadCapabilities layout must remain stable");
+
+/* The canonical thumb-stick and trigger values are exactly the two halves of the analog block a
+   gamepad snapshot already carried, so the C API exposes one representation, not two. */
+_Static_assert(sizeof(CNA_GamePadThumbSticks) == 16U &&
+                   _Alignof(CNA_GamePadThumbSticks) == 4U &&
+                   offsetof(CNA_GamePadThumbSticks, left) == 0U &&
+                   offsetof(CNA_GamePadThumbSticks, right) == 8U &&
+                   sizeof(CNA_GamePadTriggers) == 8U &&
+                   _Alignof(CNA_GamePadTriggers) == 4U &&
+                   offsetof(CNA_GamePadTriggers, left) == 0U &&
+                   offsetof(CNA_GamePadTriggers, right) == 4U,
+               "CNA gamepad analog value layouts must remain stable");
+_Static_assert(offsetof(CNA_GamePadAnalogState, left_thumb_stick) ==
+                       offsetof(CNA_GamePadThumbSticks, left) &&
+                   offsetof(CNA_GamePadAnalogState, right_thumb_stick) ==
+                       offsetof(CNA_GamePadThumbSticks, right) &&
+                   offsetof(CNA_GamePadAnalogState, left_trigger) ==
+                       sizeof(CNA_GamePadThumbSticks) + offsetof(CNA_GamePadTriggers, left) &&
+                   offsetof(CNA_GamePadAnalogState, right_trigger) ==
+                       sizeof(CNA_GamePadThumbSticks) + offsetof(CNA_GamePadTriggers, right) &&
+                   sizeof(CNA_GamePadAnalogState) ==
+                       sizeof(CNA_GamePadThumbSticks) + sizeof(CNA_GamePadTriggers),
+               "CNA_GamePadAnalogState must stay the thumbstick and trigger values back to back");
