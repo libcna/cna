@@ -218,11 +218,16 @@ namespace
      * `SurfaceFormat`. So `SurfaceFormat::Color` is the only sampleable colour format it genuinely
      * offers, and leg J1 declares that boundary instead of pretending to measure a second one.
      */
+    // plan_runtimerenderer.md RTR-P9-10: this guard used to answer `false` in BOTH arms, so it
+    // decided nothing and every renderer printed the boundary note below -- a note whose text
+    // ("creates every Texture2D and render target as one fixed native colour format") is true of
+    // SDL_GPU and of no other renderer here. It now says what its own comment above always
+    // described, so only SDL_GPU declares that boundary.
     constexpr bool kSecondSampleableFormat =
 #if defined(CNA_RENDERER_SDL_GPU)
         false;
 #else
-        false;
+        true;
 #endif
 
     /**

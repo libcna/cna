@@ -352,3 +352,46 @@ return `{false, false, false}`, which is what their comments always claimed. Tho
 the **documented intent, not a measurement** — they cannot be checked here until one of those
 renderers builds. If either turns out to report a capability as true, the test will now say so
 instead of failing to compile.
+
+## 7. A renderer guard with the same value in both arms made every renderer claim SDL_GPU's boundary
+
+`modules/graphics/examples/rendertarget_effect_source_test.cpp` chose a capability constant like
+this:
+
+```cpp
+constexpr bool kSecondSampleableFormat =
+#if defined(CNA_RENDERER_SDL_GPU)
+    false;
+#else
+    false;
+#endif
+```
+
+Both arms are `false`, so the guard decides nothing. Its only use is:
+
+```cpp
+if (!kSecondSampleableFormat)
+    boundary(std::string("J1 ") + kRendererName + " creates every Texture2D and render target as "
+         "one fixed native colour format, so SurfaceFormat::Color is the only sampleable "
+         "colour format it offers -- capability boundary, not measured");
+```
+
+so **every** renderer that runs this example printed that sentence about itself. The claim is true
+of SDL_GPU — the doc comment above the constant explains exactly why, in SDL_GPU's terms — and is
+false of the others. The example is built by five renderer families (EasyGL, Vulkan, WebGPU,
+SDL_GPU, LLGL), so on an OPENGLES3 build it stated a fixed-single-format boundary for EasyGL, which
+is not one of EasyGL's boundaries at all.
+
+This is worse than a redundant guard. A "capability boundary, not measured" line is how this corpus
+records a renderer's real limits, so a wrong one is indistinguishable from a genuine finding by
+anyone reading the log later.
+
+**Fixed in RTR-P9-10** by making the `#else` arm `true`, which is what the constant's own comment
+always described: only SDL_GPU declares that boundary. Verified by building and running
+`cna_test_easygl_rt_effect_source` on OPENGLES3 — the sentence no longer appears and the example
+still passes 20/20 legs.
+
+**How it was found, and what else was checked.** Scanning for guards whose `#if` and `#else` bodies
+are textually identical: 96 renderer guards with an `#else` across `modules/`, exactly one of them
+dead. A separate scan for guards naming a `CNA_RENDERER_<X>` macro that CMake never generates found
+none — so no guard is stranded on a removed renderer identity.
