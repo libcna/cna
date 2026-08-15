@@ -4035,6 +4035,58 @@
       "tests": "`MediaSmoke.c` asserts the canonical default is zeroed across the whole length of both buffers, round-trips the fully-qualified type name and covers its buffer-too-small and null-argument refusals; the size constant and the layout are pinned by C and C++ ABI assertions",
       "status": "implemented",
       "task": "CBIND-037C1"
+    },
+    {
+      "id": "song",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song(::(Song|~Song|getNameProperty|getDurationProperty|setDurationProperty|getIsProtectedProperty|getIsRatedProperty|getPlayCountProperty|setPlayCountProperty|getRatingProperty|getTrackNumberProperty|getIsDisposedProperty|Dispose|Equals|GetHashCode|ToString|getHandle|FromUri|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned `CNA_SongHandle` with `cna_song_create`, `cna_song_create_with_duration` and `cna_song_create_from_uri` for the two constructors and the static factory — the factory's raw owning pointer becomes C-owned immediately, so no ownership decision is left to the caller — plus the property routes, `cna_song_dispose`/`cna_song_destroy` for the canonical disposal-versus-release split, `cna_song_equals`, `cna_song_get_hash_code`, and count/copy pairs for the name, the file-handle text and the type name. Several handles may share one song, so releasing one never destroys a song a collection still holds. Three canonical behaviors are preserved rather than tidied: **an omitted name stays empty** even though the canonical constructor's own comment claims it defaults to the file name — the C contract follows the behavior and says so; equality and the hash are computed from the **file path**, so two independently created songs over one file compare equal and hash equal, which is a deliberate CNA improvement over FNA's identity-based hash; and the duration and play-count setters store whatever they are given, exactly as the canonical ones do. `ToString` needs no route of its own because it returns the display name unchanged, and a missing file surfaces as `CNA_RESULT_IO` through the canonical file-not-found exception",
+      "tests": "`MediaSmoke.c` builds its fixture files through the storage API — the only portable way a strict-C17 test can obtain a real absolute path, and it uses a non-ASCII UTF-8 file name so the path crossing the ABI is not accidentally ASCII. It asserts the constructed defaults, the empty-name deviation, millisecond-to-tick conversion, both setters including a negative duration, path-based equality and hash agreement across two independently created songs, the `file://` URI resolving to the same song as the plain path, a foreign URI scheme refused as `INVALID_STATE`, a missing file refused as `IO`, idempotent disposal that leaves every other member answering, the exact type name, and stale-handle refusal on every route",
+      "status": "implemented",
+      "task": "CBIND-037C2"
+    },
+    {
+      "id": "song-friend-media-library",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::MediaLibrary$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets the canonical media library populate a song's album, artist and genre back-pointers, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037C2"
+    },
+    {
+      "id": "song-collection",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::SongCollection(::(SongCollection|operator\\[\\]|getCountProperty|getIsDisposedProperty|Dispose|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "operator",
+        "method"
+      ],
+      "mapping": "an owned `CNA_SongCollectionHandle` built from an array of song handles, with `cna_song_collection_get_at` for the canonical indexer, `_get_count`, `_get_is_disposed`, `_dispose`, `_destroy` and the type-name count/copy pair. **The collection retains every song it was given**: the canonical collection stores non-owning pointers, so C keeps the song resources alive beside it rather than letting a released handle leave a dangling element behind — a caller may release its own song handles immediately after building one. `cna_song_collection_get_at` hands back a new handle sharing the collection's song rather than a copy. The canonical disposal is preserved exactly: it **empties** the collection, so afterwards the count is zero and every index is out of range, while the songs themselves are untouched. The index is validated in C before the canonical indexer would throw",
+      "tests": "`MediaSmoke.c` builds a two-song collection, releases every caller-held song handle and then still reads a live song out of the collection by index — which is what proves the retention — and covers the empty collection, the null-array and null-output refusals, a negative and a past-the-end index, the exact type name, idempotent disposal emptying the collection while the songs survive, and double release",
+      "status": "implemented",
+      "task": "CBIND-037C2"
+    },
+    {
+      "id": "song-collection-iteration",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::SongCollection::(iterator|const_iterator|begin|end)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "No C mapping: a C++ iterator pair and its two type aliases have no C counterpart, and C reads the collection through `cna_song_collection_get_count` plus `cna_song_collection_get_at` instead. This is the same decision the touch collection's four iterator overloads already record",
+      "tests": "Doxygen declaration inventory; the index-addressed routes are covered in `MediaSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037C2"
     }
   ]
 }

@@ -116,6 +116,8 @@ enum class ObjectKind : uint32_t {
     JoystickState = 69,
     JoystickEventRegistration = 70,
     InputDeviceEventRegistration = 71,
+    Song = 72,
+    SongCollection = 73,
     Test = UINT32_MAX
 };
 

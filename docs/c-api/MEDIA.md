@@ -51,3 +51,48 @@ The canonical string conversion returns the display name unchanged, so it needs 
 `cna_media_source_get_name_size_at`/`_copy_name_at` give both the name and the text. The type name,
 unlike the visualization one, is addressed by index — the canonical member is an instance method and
 the source object cannot be constructed from outside the library.
+
+## Songs
+
+A `CNA_SongHandle` is owned by whoever created it, and **several handles may share one song**:
+releasing one handle never destroys a song that another handle — or a collection — still holds.
+`cna_song_dispose` and `cna_song_destroy` are the canonical disposal-versus-release split the mouse
+cursor and haptic device already use; disposal only marks the song, and every other member keeps
+answering afterwards.
+
+Three canonical behaviors are preserved rather than tidied up, and two of them will surprise a
+reader of the C++ header:
+
+- **An omitted name stays empty.** The canonical constructor's own documentation says the display
+  name defaults to the file name; its implementation stores the empty string it was given. This ABI
+  follows the behavior and says so, exactly as the touch-panel reset contract does.
+- **Equality and the hash come from the file path, not from handle identity.** Two independently
+  created songs over the same file compare equal and hash equal. That is a deliberate CNA
+  improvement over FNA, whose identity-based hash lets two equal songs hash differently.
+- **`getIsRated` is not "rating is nonzero".** Both tag formats reserve zero for unrated, so a file
+  with an explicit zero rating still reports not-rated.
+
+A song's file is only checked for existence, never opened or decoded, so a missing file surfaces as
+`CNA_RESULT_IO`. `cna_song_create_from_uri` accepts a `file:` URI or a plain path and refuses any
+other scheme with `CNA_RESULT_INVALID_STATE`; the canonical resolver strips a query or fragment
+before percent-decoding, so a percent-encoded `?` or `#` stays part of the file name.
+
+`cna_song_get_handle_text_size_ext`/`_copy_handle_text_ext` read the file path the song plays from —
+the string equality and hashing are computed from — while the name routes read the display name. The
+canonical string conversion returns the display name unchanged, so it needs no route of its own.
+
+## Song collections
+
+`cna_song_collection_create` takes an array of song handles and **retains every one of them**. The
+canonical collection stores non-owning pointers, so a C caller that released its own handles right
+after building a collection would otherwise be left with dangling elements; here the collection
+keeps the songs alive, and `cna_song_collection_get_at` hands back a new handle sharing the same
+song rather than a copy.
+
+Canonical disposal **empties** the collection: afterwards its count is zero and every index is out
+of range. The songs themselves are untouched, because the collection never owned them. Disposing
+twice is a successful no-op; releasing the handle twice is not.
+
+The canonical iterator pair and its two type aliases have no C counterpart and are recorded as
+not-applicable — C reads the collection through the count and the indexer, the same decision the
+touch collection already records.

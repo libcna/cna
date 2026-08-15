@@ -55,8 +55,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > closes the whole `input` module with the last host extensions: the motion sensors, the
 > mouse/keyboard/touch-device enumerations with their four hot-plug events, the system clipboard
 > and the host power state, and `CBIND-037C1` opens the media module with its identities, the
-> fixed visualization value and the media-source enumeration. The
-> generated inventory currently records 4,524 implemented, 30 partial, 1,732 planned and 129
+> fixed visualization value and the media-source enumeration, and `CBIND-037C2` adds `Song` and
+> `SongCollection` as reference-counted owned handles. The
+> generated inventory currently records 4,554 implemented, 30 partial, 1,695 planned and 136
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

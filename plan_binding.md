@@ -409,8 +409,8 @@ module list stays exactly what the C API adapts.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-037C1 | 25 | Establish media identities, visualization and sources | ✅ | `media.h` and `CnaCApiMedia.cpp` map `MediaState`, `MediaSourceType`, `VideoSoundtrackType`, `VisualizationData` and `MediaSource`. Two decisions carry the slice. **`CNA_MediaSourceType` keeps its canonical 0/4 gap** rather than being renumbered into a dense range, so it deliberately has no `MAXIMUM` and consumers validate membership of the two defined values instead of an upper bound — the same rule that kept `CNA_LOG_LEVEL_EXPERIMENT` at 100. And **the canonical source enumeration's ownership never crosses the ABI**: `MediaSource::GetAvailableMediaSources` allocates its sources with `new` and hands back raw pointers its caller must free, so each C route enumerates, reads the one source it was asked about and destroys the whole list before returning; an index is a point-in-time value with nothing to release, and the sanitizer tree with leak detection is what proves it rather than a comment claiming it. `ToString` needs no route of its own because the canonical implementation returns the display name unchanged, and the media-source type name is addressed by index because the canonical member is an instance method on a type not constructible from outside the library. `CNA_VisualizationData` is a fixed 2,056-byte value rather than a handle, since both canonical buffers are fixed at 256 floats and the canonical type exposes them both as fields and through getters — one value is both. Strict-C `MediaSmoke.c` plus C and C++ ABI assertions; green in all four trees (55/55) and under ASan+UBSan with leak detection on. |
-| CBIND-037C2 | 40 | Complete Song and SongCollection | ⬜ | Map `Song` and `SongCollection`. Decide the ownership split first: a song built from a file path is owned by its C caller, while a song reached through a library collection is owned by the library — the borrowed-view-keeps-its-parent-alive rule the net and model slices already use. Watch for the canonical hash, which is deliberately content-based where FNA's is identity-based, and for `IsRated`, which is not the same as a nonzero rating. |
-| CBIND-037C3 | 102 | Complete albums, artists, genres, playlists and their collections | ⬜ | Map `Album`, `Artist`, `Genre`, `Playlist` and their four collections. All five entity types are library-owned, so they should share one borrowed-view shape rather than five. |
+| CBIND-037C2 | 37 | Complete Song and SongCollection | ✅ | `media.h` grows an owned `CNA_SongHandle` (`ObjectKind` 72) and `CNA_SongCollectionHandle` (73). **Several handles share one song**: the resource is reference-counted, so releasing one handle never destroys a song a collection still holds — which is what lets `cna_song_collection_create` *retain* every song it was given, where the canonical collection merely stores non-owning pointers a released C handle would have dangled. Three canonical behaviors are preserved rather than tidied, and the first is a header-contradicts-implementation case like `TouchPanel::ResetForTests`: **an omitted song name stays empty** even though the constructor's own documentation claims it defaults to the file name; **equality and the hash come from the file path**, so two independently created songs over one file compare equal and hash equal — a deliberate CNA improvement over FNA's identity-based hash, kept rather than "fixed"; and `getIsRated` is **not** "rating is nonzero", because both tag formats reserve zero for unrated. `ToString` needs no route of its own (it returns the display name unchanged), a missing file surfaces as `CNA_RESULT_IO` through the canonical file-not-found exception, and a non-`file` URI scheme as `CNA_RESULT_INVALID_STATE`. Canonical collection disposal **empties** the collection, so its count drops to zero and every index is refused while the songs survive. Seven rows are `not-applicable` with reasons: the `MediaLibrary` friend declaration, and the collection's iterator pair with its two aliases. **Re-partitioned:** `getAlbumProperty`, `getArtistProperty` and `getGenreProperty` move to `CBIND-037C3` (37 rows here, 105 there), because they return library-owned entities whose handles do not exist yet. `MediaSmoke.c` builds its fixture files through the storage API — the only portable way a strict-C17 test can obtain a real absolute path — with one non-ASCII UTF-8 file name. Green in all four trees (55/55) and under ASan+UBSan with leak detection on. |
+| CBIND-037C3 | 105 | Complete albums, artists, genres, playlists and their collections | ⬜ | Map `Album`, `Artist`, `Genre`, `Playlist` and their four collections. All are library-owned, so they should share one borrowed-view shape rather than four. **Includes the three `Song` rows re-partitioned out of `CBIND-037C2`** — `getAlbumProperty`, `getArtistProperty` and `getGenreProperty`, which are non-owning back-pointers that are null for any song not produced by a library scan. |
 | CBIND-037C4 | 54 | Complete pictures and picture albums | ⬜ | Map `Picture`, `PictureAlbum` and their two collections, including thumbnail and image access — the first media rows that produce pixel data, so decide whether they reuse the existing texture transfer or a raw byte copy. |
 | CBIND-037C5 | 18 | Complete MediaLibrary | ⬜ | Map `MediaLibrary`, the owner of every collection above. |
 | CBIND-037C6 | 44 | Complete MediaPlayer and MediaQueue | ⬜ | Map the `MediaPlayer` statics, its events and the active queue. Expect the process-wide event registration shape the mouse, text-input and joystick surfaces already use. |
@@ -549,8 +549,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037C1`):** 414 headers / 6,415 symbols —
-**4,524 implemented, 30 partial, 1,732 planned, 129 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037C2`):** 414 headers / 6,415 symbols —
+**4,554 implemented, 30 partial, 1,695 planned, 136 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -566,7 +566,7 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,732 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,695 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -574,7 +574,7 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037C` media | 300 (after `C1`) | sub-partitioned into `C1`–`C7`; `C1` is done, `C2` Song is next |
+| 1 | `CBIND-037C` media | 263 (after `C1`–`C2`) | sub-partitioned into `C1`–`C7`; `C1` and `C2` are done, `C3` library entities is next |
 | 2 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
 | 3 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
 | 4 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
@@ -907,7 +907,15 @@ have. Two decisions are recorded: the media-source identity keeps its canonical 
 being renumbered dense, so it has no maximum and consumers validate membership; and the canonical
 source enumeration's `new`-ed pointers never cross the ABI — each route owns and destroys the list
 it enumerated, which the sanitizer tree with leak detection proves. The snapshot is now 4,524
-implemented, 30 partial, 1,732 planned and 129 not applicable.
+implemented, 30 partial, 1,732 planned and 129 not applicable. CBIND-037C2 then maps `Song` and
+`SongCollection`. Its shape decision is reference-counted sharing: several handles may name one
+song, which is what lets a collection retain the songs it was given where the canonical collection
+only stores non-owning pointers. Three canonical behaviors are preserved rather than tidied — an
+omitted name stays empty despite the constructor's own comment claiming otherwise, equality and the
+hash come from the file path rather than handle identity, and `IsRated` is not "rating is nonzero" —
+and three `Song` rows that return library-owned entities are re-partitioned into `CBIND-037C3`,
+where those handles will exist. The snapshot is now 4,554 implemented, 30 partial, 1,695 planned and
+136 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -920,21 +928,18 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037C2`, `Song` and `SongCollection` — **40 rows**. `CBIND-037C1` is done:
-  `media.h`, `CnaCApiMedia.cpp` and `MediaSmoke.c` exist, `cna_c_api` now links `cna_media`, and the
-  media identities plus `CNA_VisualizationData` are frozen. The remaining media slices and their row
-  counts are in the `CBIND-037C` table above.
+- **Next task:** `CBIND-037C3`, the library entities — **105 rows**: `Album`, `Artist`, `Genre`,
+  `Playlist`, their four collections, and the three `Song` back-pointer rows re-partitioned out of
+  `CBIND-037C2`. `C1` and `C2` are done, so `media.h`, `CnaCApiMedia.cpp` and `MediaSmoke.c` exist,
+  `cna_c_api` links `cna_media`, and the song handle these entities point at is already mapped.
 
-  The decision `C2` must make first is **ownership**. A `Song` built from a file path (the two
-  public constructors and `FromUri`) is the C caller's to release; a `Song` reached through a
-  library collection is owned by the `MediaLibrary` that scanned it, and its `getAlbumProperty`,
-  `getArtistProperty` and `getGenreProperty` are non-owning back-pointers that are **null** for any
-  standalone song. That is the borrowed-view-keeps-its-parent-alive rule the net and model slices
-  already use; do not invent a third shape. Two canonical behaviors to preserve rather than tidy,
-  both documented in `Song.hpp` itself: the hash is deliberately **content-based** where FNA's is
-  identity-based (FNA's own choice violates the Equals/GetHashCode contract, and CNA fixed it on
-  purpose), and `getIsRatedProperty` is **not** "rating != 0" — both tag formats reserve zero for
-  unrated, so an explicit zero rating still reports not-rated.
+  All four entity types are **library-owned**, and none of them is constructible from outside the
+  media library — check each header before assuming a constructor exists. Expect one shared shape
+  for all four rather than four variants, and expect the same reference-counted sharing `C2`
+  established, so an entity handle a caller holds keeps working while the library that owns it
+  lives. The three re-partitioned `Song` rows are non-owning back-pointers that are **null** for any
+  song not produced by a library scan, so the C routes need an availability flag rather than a
+  failure — the availability-separate-from-the-answer rule again.
 - **`CBIND-037D` has an environment decision already made by the owner (2026-08-15):** the entire
   `devices-ext` public surface is wrapped in `#ifdef CNA_DEVICES`, and that option is **OFF in all
   four verification trees**, so 83 of that slice's rows would otherwise only ever be tested in

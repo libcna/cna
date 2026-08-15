@@ -541,8 +541,28 @@
 > 2,056-byte value rather than a handle, because both canonical buffers are fixed at 256 floats and
 > the canonical type exposes them both as public fields and through getters. The inventory is now
 > 4,524 implemented, 30 partial, 1,732 planned and 129 N/A; all four trees are green at 55/55 with
-> the new `CApi_MediaSmoke` target. **Next: CBIND-037C2**, `Song` and `SongCollection` (40 rows),
-> whose first decision is the owned-versus-library-borrowed split.
+> the new `CApi_MediaSmoke` target.
+>
+> CBIND-037C2 then maps `Song` and `SongCollection`, 37 rows. The shape decision is
+> **reference-counted sharing**: several handles may name one song, which is what lets
+> `cna_song_collection_create` retain every song it was given — the canonical collection only stores
+> non-owning pointers, so a caller that released its handles after building one would otherwise be
+> left with dangling elements. The test proves the retention by releasing every caller-held handle
+> and then still reading a live song out of the collection. Three canonical behaviors are preserved
+> rather than tidied, and the first is another header-contradicts-implementation case like
+> `TouchPanel::ResetForTests`: an **omitted song name stays empty** even though the constructor's own
+> documentation says it defaults to the file name; **equality and the hash come from the file path**
+> rather than handle identity, so two independently created songs over one file compare equal and
+> hash equal (a deliberate CNA improvement over FNA's identity-based hash, kept rather than
+> "fixed"); and `getIsRated` is **not** "rating is nonzero", because both tag formats reserve zero
+> for unrated. Canonical collection disposal **empties** the collection, so its count drops to zero
+> and every index is refused while the songs survive. Seven rows are not-applicable with reasons
+> (the `MediaLibrary` friend declaration; the collection's iterator pair and its two aliases), and
+> three `Song` rows returning library-owned entities are re-partitioned into `CBIND-037C3`, where
+> those handles will exist. `MediaSmoke.c` builds its fixture files through the **storage API** —
+> the only portable way a strict-C17 test can obtain a real absolute path — with one non-ASCII UTF-8
+> file name. The inventory is now 4,554 implemented, 30 partial, 1,695 planned and 136 N/A; all four
+> trees green at 55/55. **Next: CBIND-037C3**, the 105-row library-entity slice.
 >
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
