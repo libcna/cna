@@ -18,7 +18,7 @@ subset; `planned` is not coverage and names the task that owns its design; and
 behavior to expose. Nothing is treated as implemented merely because a related C
 operation exists.
 
-Snapshot: **414 headers**, **6415 symbols**, **2339 implemented**, **19 partial**, **3987 planned**, **70 not applicable**. Explicitly excluded internal/detail headers: **95**.
+Snapshot: **414 headers**, **6415 symbols**, **2356 implemented**, **19 partial**, **3970 planned**, **70 not applicable**. Explicitly excluded internal/detail headers: **95**.
 
 Regenerate with:
 
@@ -40,7 +40,7 @@ gate is deliberately reserved for CBIND-043.
 | `devices` | 18 | 208 | 0 | 0 | 206 | 2 |
 | `devices-ext` | 17 | 87 | 0 | 0 | 83 | 4 |
 | `gamer-services` | 54 | 676 | 0 | 0 | 674 | 2 |
-| `graphics` | 128 | 2132 | 1073 | 15 | 1026 | 18 |
+| `graphics` | 128 | 2132 | 1090 | 15 | 1009 | 18 |
 | `graphics-ext` | 12 | 118 | 0 | 0 | 118 | 0 |
 | `input` | 50 | 861 | 247 | 0 | 599 | 15 |
 | `math` | 23 | 914 | 913 | 0 | 0 | 1 |
@@ -2829,12 +2829,12 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-5D96ED317880` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Matrix` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-6CFC2C63EA8A` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Object` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-6541D5C77C4B` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Scalar` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-37CA61EB391C` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Struct` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-95D170CD43FF` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Vector` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-C235EBE0061F` | 9 | public enum | `Microsoft::Xna::Framework::Graphics::EffectParameterClass` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-5D96ED317880` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Matrix` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-6CFC2C63EA8A` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Object` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-6541D5C77C4B` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Scalar` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-37CA61EB391C` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Struct` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-95D170CD43FF` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterClass::Vector` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-C235EBE0061F` | 9 | public enum | `Microsoft::Xna::Framework::Graphics::EffectParameterClass` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp`
 
@@ -2873,17 +2873,17 @@ gate is deliberately reserved for CBIND-043.
 
 | ID | Line | Access/kind | C++ symbol | C mapping | Tests | Status |
 |---|---:|---|---|---|---|---|
-| `CPP-2D8216D6C757` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Bool` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2C8C058E0E1D` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Int32` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-9F4744941781` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Single` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-BFD55F63E42F` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::String` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-A43632206E60` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture1D` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-5CD4E75343CF` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture2D` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8CA554889518` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture3D` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-2906E6A8A060` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::TextureCube` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-B1FECD996392` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-D3905F59FD8F` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Void` | Planned stable `CNA_*` constant (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
-| `CPP-8C70F8969715` | 9 | public enum | `Microsoft::Xna::Framework::Graphics::EffectParameterType` | Planned fixed-width `CNA_*` identity design (CBIND-035) | Pending C-only behavior/lifetime/ABI evidence (CBIND-035) | ⬜ planned (`CBIND-035`) |
+| `CPP-2D8216D6C757` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Bool` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-2C8C058E0E1D` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Int32` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-9F4744941781` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Single` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-BFD55F63E42F` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::String` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-A43632206E60` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture1D` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-5CD4E75343CF` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture2D` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-8CA554889518` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture3D` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-2906E6A8A060` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::TextureCube` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-B1FECD996392` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Texture` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-D3905F59FD8F` | 9 | public enum-value | `Microsoft::Xna::Framework::Graphics::EffectParameterType::Void` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
+| `CPP-8C70F8969715` | 9 | public enum | `Microsoft::Xna::Framework::Graphics::EffectParameterType` | fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h` | strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER | ✅ implemented (`CBIND-035D1`) |
 
 #### `modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectPass.hpp`
 

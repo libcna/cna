@@ -30,6 +30,25 @@ _Static_assert(sizeof(CNA_GraphicsRendererType) == sizeof(uint32_t),
                "CNA_GraphicsRendererType must have a fixed-width representation");
 _Static_assert(sizeof(CNA_GraphicsCapabilityFlags) == sizeof(uint64_t),
                "CNA_GraphicsCapabilityFlags must have a fixed-width representation");
+_Static_assert(sizeof(CNA_EffectParameterClass) == sizeof(uint32_t) &&
+                   CNA_EFFECT_PARAMETER_CLASS_SCALAR == UINT32_C(0) &&
+                   CNA_EFFECT_PARAMETER_CLASS_VECTOR == UINT32_C(1) &&
+                   CNA_EFFECT_PARAMETER_CLASS_MATRIX == UINT32_C(2) &&
+                   CNA_EFFECT_PARAMETER_CLASS_OBJECT == UINT32_C(3) &&
+                   CNA_EFFECT_PARAMETER_CLASS_STRUCT == UINT32_C(4),
+               "CNA effect-parameter class identities must remain stable");
+_Static_assert(sizeof(CNA_EffectParameterType) == sizeof(uint32_t) &&
+                   CNA_EFFECT_PARAMETER_TYPE_VOID == UINT32_C(0) &&
+                   CNA_EFFECT_PARAMETER_TYPE_BOOL == UINT32_C(1) &&
+                   CNA_EFFECT_PARAMETER_TYPE_INT32 == UINT32_C(2) &&
+                   CNA_EFFECT_PARAMETER_TYPE_SINGLE == UINT32_C(3) &&
+                   CNA_EFFECT_PARAMETER_TYPE_STRING == UINT32_C(4) &&
+                   CNA_EFFECT_PARAMETER_TYPE_TEXTURE == UINT32_C(5) &&
+                   CNA_EFFECT_PARAMETER_TYPE_TEXTURE1D == UINT32_C(6) &&
+                   CNA_EFFECT_PARAMETER_TYPE_TEXTURE2D == UINT32_C(7) &&
+                   CNA_EFFECT_PARAMETER_TYPE_TEXTURE3D == UINT32_C(8) &&
+                   CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE == UINT32_C(9),
+               "CNA effect-parameter type identities must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

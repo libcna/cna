@@ -287,6 +287,15 @@
       "task": "CBIND-035C7"
     },
     {
+      "id": "effect-parameter-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::EffectParameter(?:Class|Type)(?:::[A-Za-z0-9_]+)?$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "fixed-width `CNA_EffectParameterClass` / `CNA_EffectParameterType` identities and stable `CNA_EFFECT_PARAMETER_*` constants in `effects.h`",
+      "tests": "strict C17 and C++23 ABI assertions cover every identity and fixed storage width under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035D1"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],
