@@ -192,7 +192,9 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 
 ## 6. 🔌 Renderer System
 
-CNA exposes **46 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+CNA exposes **49 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+configuration). The canonical registration, implementation-sharing, capability, and platform-gate
+inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
 Renderers are normally chosen at **compile time**, one per build. CNA can also be built with
 several renderers and the concrete one chosen at **runtime**, before the game starts:
@@ -206,8 +208,6 @@ CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Vulkan);
 A renderer that is unavailable or fails to start is an **error** by default — CNA never silently
 substitutes another. An opt-in fallback chain is available when a game wants one. See
 [docs/runtime-renderer-selection.md](docs/runtime-renderer-selection.md).
-configuration). The canonical registration, implementation-sharing, capability, and platform-gate
-inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
 The former `ASCII` renderer identity was removed 2026-08 in favor of a renderer-neutral post-process
 effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usable with any renderer's
@@ -259,6 +259,7 @@ effect, `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`), usabl
 - `FNA3D` (FNA's own XNA-shaped graphics library; picks SDL_GPU/Direct3D 11/OpenGL at runtime, and executes XNA's actual stock effects — see [`docs/fna3d-renderer.md`](docs/fna3d-renderer.md))
 - `OPENVG` (OpenVG 1.1 2D vector graphics via ShivaVG on a desktop OpenGL context; desktop Linux/Windows/macOS -- see [`docs/openvg-renderer.md`](docs/openvg-renderer.md))
 - `PORTABLEGL` (CPU software OpenGL 3.x-ish pipeline via `rswinkle/PortableGL`; no GPU/window required -- see [`docs/portablegl-renderer.md`](docs/portablegl-renderer.md))
+- `IGL` (facebook/igl "Intermediate Graphics Library"; drives IGL's own OpenGL/GLX or Vulkan backend, selected per process with `CNA_IGL_BACKEND` -- see [`docs/igl-renderer.md`](docs/igl-renderer.md))
 
 ### Tradeoffs
 

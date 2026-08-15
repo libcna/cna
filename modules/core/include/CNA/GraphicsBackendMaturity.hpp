@@ -102,6 +102,7 @@ namespace CNA
             case GraphicsRendererType::Sokol:
             case GraphicsRendererType::Diligent:
             case GraphicsRendererType::Llgl:
+            case GraphicsRendererType::Igl:
             case GraphicsRendererType::Fna3d:
             case GraphicsRendererType::SvgDom:
             case GraphicsRendererType::OpenVg:

@@ -1,14 +1,18 @@
 # CNA renderer registry
 
-Current as of the addition of `PIXIJS` (2026-08-16, merged alongside `TINYGL` from a parallel
-branch): CNA exposes exactly **48 public renderer identities**. `TINYGL` (C-Chads/tinygl) is CNA's
-fixed-function CPU OpenGL renderer -- see `docs/tinygl-renderer.md` and `plan_tinygl.md`. Before
-these two, as of the eleven-lane renderer integration (2026-08-11), there were **46**. `ASCII` was
-removed as a public renderer identity and its reusable
+Current as of the `IGL` and `PIXIJS` renderer integrations (2026-08-15/16, developed on parallel
+branches and merged together): CNA exposes exactly **49 public renderer identities**. `IGL`
+(facebook/igl) is CNA's second portable-abstraction identity after `LLGL` -- see
+`docs/igl-renderer.md` and `plan_igl.md`. `PIXIJS` renders `SpriteBatch` output through PixiJS's
+own retained-mode WebGL scene graph, Emscripten-only. Before these two, as of the TINYGL addition
+(2026-08-13), there were **47**; `TINYGL` (C-Chads/tinygl) is CNA's fixed-function CPU OpenGL
+renderer -- see `docs/tinygl-renderer.md` and `plan_tinygl.md`. Before that, as of the eleven-lane
+renderer integration (2026-08-11), there were **46**. `ASCII` was removed as a public renderer
+identity and its reusable
 quantization/glyph-atlas logic migrated to a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) — see
 `docs/ascii-post-process-effect.md`. `OPENGLES2`, `BLEND2D`, `FNA3D`, `SVG_DOM`, `OPENVG`,
-`PORTABLEGL`, `TINYGL`, and `PIXIJS` were added since. EasyGL is an internal
+`PORTABLEGL`, `TINYGL`, `IGL`, and `PIXIJS` were added since. EasyGL is an internal
 implementation shared by five public GL profiles and does not add a public identity. Internal
 renderer/API choices made by bgfx, Skia, Sokol, Diligent, LLGL, or another abstraction likewise do
 not add CNA identities.
@@ -64,10 +68,11 @@ not add CNA identities.
 | 45 | `OpenVg` | `OPENVG` | `CNA_RENDERER_OPENVG` | ShivaVG / `OpenVgRenderer` | desktop OpenGL (compat profile) |
 | 46 | `PortableGL` | `PORTABLEGL` | `CNA_RENDERER_PORTABLEGL` | PortableGL / `PortableGLRenderer` | none (CPU-only, fetched header) |
 | 47 | `TinyGL` | `TINYGL` | `CNA_RENDERER_TINYGL` | TinyGL / `TinyGLRenderer` | none (CPU-only, fetched+built source) |
-| 48 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
+| 48 | `Igl` | `IGL` | `CNA_RENDERER_IGL` | IGL / `IglRenderer` | IGL dependency (OpenGL/GLX or Vulkan) |
+| 49 | `PixiJs` | `PIXIJS` | `CNA_RENDERER_PIXIJS` | PixiJS / `PixiJsRenderer` | Emscripten + vendored PixiJS UMD build |
 
-The five GL profiles share one implementation target, macro, and factory, so 48 public identities
-map to 44 concrete implementation factories. Their public contracts remain distinct because the
+The five GL profiles share one implementation target, macro, and factory, so 49 public identities
+map to 45 concrete implementation factories. Their public contracts remain distinct because the
 selected context, shader language/profile, and supported platform differ. `FREEDIRECT` is the
 renamed free-direct-backed identity; current `DIRECTX3` is the genuine DirectX 3 implementation.
 `EASYGL` and the temporary `DX30` are not accepted selectors or compatibility aliases.

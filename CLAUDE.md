@@ -519,7 +519,7 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `PIXIJS`). These are exactly 48
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL` | `IGL` | `PIXIJS`). These are exactly 49
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -535,6 +535,10 @@ is experimental and has a functional native
 counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
 not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
 `docs/tinygl-renderer.md` and `plan_tinygl.md` for the full boundary.
+`IGL` (facebook/igl) is the second portable-abstraction identity after `LLGL`: it drives IGL's own
+OpenGL (GLX) or Vulkan backend, fixed for the process by `CNA_IGL_BACKEND` because the platform
+window's render intent must be decided before the renderer exists -- see `plan_igl.md` and
+`docs/igl-renderer.md`.
 `SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and
