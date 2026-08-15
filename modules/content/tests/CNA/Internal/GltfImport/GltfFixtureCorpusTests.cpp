@@ -1890,7 +1890,17 @@ TEST(GltfFixtureCorpus, InlineGltfDocumentsDoNotGrowWithoutADecision)
     // GLTF-179 adds one loader-algorithm probe, not a corpus conformance asset: it exists only to
     // compare ExtractMesh's generated tangent bytes with six outputs measured from the external
     // MikkTSpace reference implementation. The corpus cannot derive those reference values itself.
-    constexpr int kCeiling = 261;
+    //
+    // 261 -> 263 buys no new document. GltfUvChannelTests' per-map transform builder splices
+    // `extensionExtras` and `materialExtras` into the middle of one document, and each splice
+    // closes and reopens the raw literal -- so three literal openings there are one glTF file,
+    // and the count below exceeds the document count by exactly that much. It is raised rather
+    // than the counter taught to see through concatenation, because the ratchet's job is to make
+    // the next addition a deliberate act, and it still does that from here.
+    //
+    // Note for whoever edits this comment: the scan counts the opening delimiter anywhere in a
+    // .cpp, comments included, so spelling it here would raise the very number it explains.
+    constexpr int kCeiling = 263;
 
     int found = 0;
     std::map<std::string, int> perFile;

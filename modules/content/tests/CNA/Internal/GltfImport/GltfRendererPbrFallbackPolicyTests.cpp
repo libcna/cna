@@ -729,11 +729,11 @@ namespace
         {"llgl",
          "uniforms[92 + row * 4 + component] = params.pbrTextureTransformRows[row][component]",
          "textureTransformRows[slot * 2 + 1].xyz",
-         {{"texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(vTexCoord, 0))",
-           "texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(vTexCoord, 1))",
-           "texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(vTexCoord, 2))",
-           "texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(vTexCoord, 3))",
-           "texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(vTexCoord, 4))"}}, 1},
+         {{"texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(cnaPbrUv(0), 0))",
+           "texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(cnaPbrUv(1), 1))",
+           "texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(cnaPbrUv(2), 2))",
+           "texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(cnaPbrUv(3), 3))",
+           "texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(cnaPbrUv(4), 4))"}}, 1},
         {"magnum",
          "const float* values = params.pbrTextureTransformRows[row]",
          "uTextureTransformRows[slot * 2 + 1].xyz",
@@ -839,8 +839,8 @@ namespace
          "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)",
          "vec3 F=F0+(F90-F0)*", 2},
         {"llgl",
-         "vec3 F0 = mix(dielectricFresnel.xyz, albedo, metallic)",
-         "vec3 F90 = mix(vec3(dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 3},
         {"magnum",
          "vec3 f0 = mix(dielectricF0, albedo, metallic)",
@@ -1000,10 +1000,10 @@ namespace
          "mr.b*uMetallicFactor",
          "texture(uOcclusionMap,cnaSampleUV(cnaPbrTransformUV(\" + occlusionUv + \",4),uRtFlipVHi.x)).r", 2},
         {"llgl",
-         "cnaPbrTransformUV(vTexCoord, 1)).rgb * 2.0 - 1.0",
+         "cnaPbrTransformUV(cnaPbrUv(1), 1)).rgb * 2.0 - 1.0",
          "mr.g * roughnessWeightsPad.x",
          "mr.b * emissiveMetallic.w",
-         "cnaPbrTransformUV(vTexCoord, 4)).r;", 3},
+         "cnaPbrTransformUV(cnaPbrUv(4), 4)).r;", 3},
         {"magnum",
          "texture(uNormalMap, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 1), uRtFlipV.y)).rgb * 2.0 - 1.0",
          "metallicRoughness.g * uRoughnessFactor",
@@ -1680,11 +1680,11 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesAllFiveTextureTransfor
     // variant. The table above checks the former; require every map/slot pairing in the latter too.
     const std::string llgl = RendererSlotText(renderers, "llgl");
     for (const char* evidence : {
-             "texture(colorMap, cnaPbrTransformUV(vTexCoord, 0))",
-             "texture(normalMap, cnaPbrTransformUV(vTexCoord, 1))",
-             "texture(metallicRoughnessMap, cnaPbrTransformUV(vTexCoord, 2))",
-             "texture(emissiveMap, cnaPbrTransformUV(vTexCoord, 3))",
-             "texture(occlusionMap, cnaPbrTransformUV(vTexCoord, 4))"})
+             "texture(colorMap, cnaPbrTransformUV(cnaPbrUv(0), 0))",
+             "texture(normalMap, cnaPbrTransformUV(cnaPbrUv(1), 1))",
+             "texture(metallicRoughnessMap, cnaPbrTransformUV(cnaPbrUv(2), 2))",
+             "texture(emissiveMap, cnaPbrTransformUV(cnaPbrUv(3), 3))",
+             "texture(occlusionMap, cnaPbrTransformUV(cnaPbrUv(4), 4))"})
     {
         EXPECT_NE(std::string::npos, llgl.find(Normalize(evidence)))
             << "LLGL's combined-sampler shader is missing: " << evidence;
