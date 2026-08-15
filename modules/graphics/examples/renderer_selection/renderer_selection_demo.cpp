@@ -10,6 +10,7 @@
 // explicit SetPreferred() call wins over the environment variable, which wins over the build
 // default.
 
+#include "CNA/GraphicsRendererFallbackRecord.hpp"
 #include "CNA/GraphicsRendererSelection.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -17,6 +18,7 @@
 
 #include <iostream>
 #include <string>
+#include <vector>
 
 int main(int argc, char** argv)
 {
@@ -59,11 +61,61 @@ int main(int argc, char** argv)
         }
     }
 
-    // 3. Creating a device latches the choice.
+    // 3. Optionally configure a fallback chain (plan_runtimerenderer.md RTR-P5-21).
+    //
+    // Off by default: a renderer that cannot run is an ERROR, and CNA never substitutes another
+    // one behind your back. Pass renderer names as further arguments to opt in.
+    //
+    //   cna_demo_renderer_selection LLGL OPENGLES3 SOFTWARE
+    //
+    // is a real example on a Wayland session, where LLGL genuinely cannot initialize -- it needs
+    // the x11 SDL video driver -- so the chain is exercised without anything being simulated.
+    if (argc > 2)
+    {
+        std::vector<CNA::GraphicsRendererType> chain;
+        for (int i = 2; i < argc; ++i)
+        {
+            CNA::GraphicsRendererType parsed{};
+            if (CNA::tryParseGraphicsRendererName(argv[i], parsed))
+            {
+                chain.push_back(parsed);
+            }
+            else
+            {
+                std::cout << "Ignoring unknown fallback renderer: " << argv[i] << '\n';
+            }
+        }
+        if (!chain.empty())
+        {
+            CNA::GraphicsRendererSelection::SetFallbackChain(chain);
+            std::cout << "Fallback chain enabled with " << chain.size() << " entr"
+                      << (chain.size() == 1 ? "y" : "ies") << ".\n";
+        }
+    }
+
+    // 4. Creating a device latches the choice.
     {
         Microsoft::Xna::Framework::Graphics::GraphicsDevice device;
         std::cout << "Active renderer: "
                   << CNA::getGraphicsRendererName(GraphicsRendererSelection::GetActive()) << '\n';
+    }
+
+    // 5. What actually happened. The history is empty unless a fallback substituted something --
+    // which is the point: a game that ends up on a different renderer than it asked for can say so.
+    const auto history = CNA::GraphicsRendererSelection::GetFallbackHistory();
+    if (history.empty())
+    {
+        std::cout << "No fallback occurred.\n";
+    }
+    else
+    {
+        std::cout << "Fallback history (" << history.size() << " renderer(s) passed over):\n";
+        for (const auto& record : history)
+        {
+            std::cout << "  - " << CNA::getGraphicsRendererName(record.type) << " ("
+                      << CNA::getGraphicsRendererFallbackReasonName(record.reason)
+                      << "): " << record.message << '\n';
+        }
     }
 
     // From here on the selection cannot change -- window flags, and in several renderers the whole

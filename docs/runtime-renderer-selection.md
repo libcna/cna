@@ -205,6 +205,9 @@ configure time, not merely to exist.
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
+| `OPENGLES3;SOKOL;SOFTWARE;HEADLESS;STUB` | ✅ two GL-based abstractions in one binary; all five selectable |
+| `OPENGLES3;MAGNUM;SOFTWARE;HEADLESS` | ✅ all four selectable |
+| `OPENGLES3;LLGL;SOFTWARE;HEADLESS` | ✅ all four selectable (`LLGL` needs `SDL_VIDEODRIVER=x11`; on Wayland it is the real fallback example above) |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
@@ -228,6 +231,28 @@ framework contract.
 Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
 238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
 function-pointer call per `GraphicsDevice` construction and none per frame.
+
+### A real fallback, start to finish
+
+`LLGL` needs SDL's `x11` video driver and cannot initialize on a Wayland session — a genuine
+environmental failure, nothing simulated:
+
+```
+$ cna_demo_renderer_selection LLGL OPENGLES3 SOFTWARE
+WARN [RENDER] graphics renderer LLGL was not used (InitializationFailed): LLGL renderer:
+  the SDL window exposes no X11 handles (video driver 'wayland'). This renderer needs the
+  x11 driver -- run with SDL_VIDEODRIVER=x11.
+Requested LLGL -- now selected: LLGL
+CNA: graphics renderer: OPENGLES3 (selected at runtime from 4 compiled in)
+Active renderer: OPENGLES3
+Fallback history (1 renderer(s) passed over):
+  - LLGL (InitializationFailed): LLGL renderer: the SDL window exposes no X11 handles ...
+```
+
+Note what survives: `GetSelected()` still reports what was **asked for**, `GetActive()` reports what
+was **created**, and the renderer's own diagnostic reaches the history verbatim rather than being
+reduced to "it did not work". Without the chain argument the same command fails outright, which is
+the default.
 
 ### Verifying a fallback chain
 

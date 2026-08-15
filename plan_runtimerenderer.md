@@ -803,12 +803,12 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-7 | ⬜ | `+ BLEND2D`. |
 | RTR-P10-8 | ⬜ | `+ OPENVG` — ShivaVG's own GL context alongside another GL renderer in the same binary. |
 | RTR-P10-9 | ⬜ | `+ BGFX` — its runtime `ResolveRendererType()` must not fight CNA's own selection. |
-| RTR-P10-10 | ⬜ | `+ LLGL` — likewise for `ResolveRendererModule()`. |
+| RTR-P10-10 | ✅ | `+ LLGL` — likewise for `ResolveRendererModule()`. |
 | RTR-P10-11 | ⬜ | `+ DILIGENT` — a runtime-dispatching renderer inside a runtime-dispatching framework; document the two-level selection clearly. |
 | RTR-P10-12 | ⬜ | `+ FNA3D` — likewise, plus MojoShader's symbol surface. |
-| RTR-P10-13 | ⬜ | `+ MAGNUM`. |
+| RTR-P10-13 | ✅ | `+ MAGNUM`. |
 | RTR-P10-14 | ⬜ | `+ WICKED`. |
-| RTR-P10-15 | ⬜ | `+ SOKOL` (GL). |
+| RTR-P10-15 | ✅ | `+ SOKOL` (GL). |
 | RTR-P10-16 | ⬜ | `+ WEBGPU` (native wgpu-native). |
 | RTR-P10-17 | ✅ | `+ OPENGL1 + OPENGL2 + OPENGL4` — three native GL renderers coexisting; verify no loader/symbol conflict. |
 | RTR-P10-18 | ⬜ | `+ OPENGLES1`. |
