@@ -10,8 +10,8 @@
 // a degenerate, EXACTLY hand-derivable scene: no directional lights enabled and AmbientLightColor
 // left at its default zero, so PbrLight()'s own returned contribution is (0,0,0,0) for every
 // light (multiplied by a zero lightColor) and the ambient term is zero too -- the shader's output
-// collapses to EmissiveFactor * emissiveMap exactly, with EmissiveMap deliberately left unbound so
-// the result also exercises the new default-white-SRV fallback path
+// collapses to EmissiveFactor * emissiveMap exactly. Quad A leaves both the base-colour map and
+// EmissiveMap unbound so the result also exercises the default-white-SRV fallback path
 // (DirectX11Renderer::GetOrCreateDefaultWhiteSrvEXT). EmissiveFactor=(1,0,0) with 0/1-only
 // channel values is also gamma/sRGB-invariant (the sRGB transfer function fixes both endpoints),
 // so the expected pixel is exactly pure red regardless of the swapchain's sRGB back buffer format.
@@ -152,10 +152,10 @@ protected:
             fx.setWorldProperty(Matrix::getIdentityProperty());
             fx.setViewProperty(Matrix::getIdentityProperty());
             fx.setProjectionProperty(Matrix::getIdentityProperty());
-            fx.setTextureProperty(&whiteTex);
             fx.setEmissiveFactorProperty(Vector3(1.0f, 0.0f, 0.0f));
-            // NormalMap/MetallicRoughnessMap/EmissiveMap/OcclusionMap deliberately left unbound --
-            // exercises DirectX11Renderer's new default-fallback-texture path for all four.
+            // BaseColorTexture/NormalMap/MetallicRoughnessMap/EmissiveMap/OcclusionMap are all
+            // deliberately unbound. The base fallback must contribute opaque-white alpha while
+            // the emissive fallback contributes white RGB, yielding exact opaque red.
 
             std::vector<PbrGpuVertex> verts;
             AppendPbrQuad(verts, -1.0f, -0.5f);

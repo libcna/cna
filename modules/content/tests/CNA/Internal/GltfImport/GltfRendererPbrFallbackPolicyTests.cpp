@@ -234,7 +234,8 @@ namespace
               sampler2D EmissiveMap : register(s3);
               sampler2D OcclusionMap : register(s4);)"}}},
         {"directx11", "SRV/sampler registers t0/s0 through t4/s4",
-         {{R"(srvs[0] = GetSrvForTextureEXT(params.texture0);
+         {{R"(srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                        : GetOrCreateDefaultWhiteSrvEXT();
               srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
               srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
               srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();

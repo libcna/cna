@@ -1425,7 +1425,12 @@ namespace CNA::Internal::Renderers::DirectX11
             // (flat tangent-space normal for the normal map; factor-only/no-emissive/fully-lit
             // white for the other three), so "map absent" reads as the correct BRDF input here too
             // rather than sampling an unbound (all-zero) shader resource.
-            srvs[0] = GetSrvForTextureEXT(params.texture0);
+            // GLTF-386: glTF baseColorTexture is optional. Sampling an unbound D3D11 SRV returns
+            // transparent black, which zeroed the material alpha and made every factor-only PBR
+            // primitive disappear from transparent reference captures. Match the other four PBR
+            // slots and every other full PBR renderer: an absent base-colour map is opaque white.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
             srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
             srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
