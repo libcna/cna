@@ -142,10 +142,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // UNLIKE InstancedVertexColorTests.cpp, this file grants NO renderer an exemption: every measured
 // renderer is asserted against the CONTRACT above, never against its own measured behaviour. That is
 // what makes it red-first -- it failed on bgfx before REMED-GFX-215 and passes after.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
-#define CNA_INSTANCED_DIFFUSE_MEASURED 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the measured set, asked of the ACTIVE renderer.
+[[nodiscard]] inline bool InstancedDiffuseMeasured()
+{
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU);
+}
 
 
 namespace
@@ -693,36 +694,39 @@ protected:
         const std::array<Rgba, kColumnCount>& colors, const char* leg)
     {
         PrintMeasurement(leg, snapshot);
-#ifdef CNA_INSTANCED_DIFFUSE_MEASURED
-        for (int column = 0; column < kColumnCount; ++column)
+        if (InstancedDiffuseMeasured())
         {
-            int spread = 0;
-            int lit = 0;
-            const Rgba sample = SampleColumn(snapshot, column, spread, lit);
-            const Rgba expected =
-                ExpectedColor(colors[static_cast<std::size_t>(column)], vertexColorEnabled, d);
-            EXPECT_GT(lit, 0) << leg << ": column " << column << " rendered nothing"
-                              << DescribeFrame(snapshot);
-            EXPECT_EQ(spread, 0) << leg << ": column " << column << " is not flat"
-                                 << DescribeFrame(snapshot);
-            EXPECT_TRUE(NearlyEqual(sample, expected))
-                << leg << ": column " << column << " carried " << sample.ToString()
-                << ", expected " << expected.ToString()
-                << " (DiffuseColor=(" << d.r << ',' << d.g << ',' << d.b << ") Alpha=" << d.a
-                << " VertexColorEnabled=" << (vertexColorEnabled ? "true" : "false")
-                << " COLOR0=" << colors[static_cast<std::size_t>(column)].ToString()
-                << "). REMED-GFX-215: raw COLOR0 would read "
-                << RawColor0(colors[static_cast<std::size_t>(column)]).ToString()
-                << " and a dropped COLOR0 "
-                << ExpectedColor(colors[static_cast<std::size_t>(column)], false, d).ToString()
-                << DescribeFrame(snapshot);
+            for (int column = 0; column < kColumnCount; ++column)
+            {
+                int spread = 0;
+                int lit = 0;
+                const Rgba sample = SampleColumn(snapshot, column, spread, lit);
+                const Rgba expected =
+                    ExpectedColor(colors[static_cast<std::size_t>(column)], vertexColorEnabled, d);
+                EXPECT_GT(lit, 0) << leg << ": column " << column << " rendered nothing"
+                                  << DescribeFrame(snapshot);
+                EXPECT_EQ(spread, 0) << leg << ": column " << column << " is not flat"
+                                     << DescribeFrame(snapshot);
+                EXPECT_TRUE(NearlyEqual(sample, expected))
+                    << leg << ": column " << column << " carried " << sample.ToString()
+                    << ", expected " << expected.ToString()
+                    << " (DiffuseColor=(" << d.r << ',' << d.g << ',' << d.b << ") Alpha=" << d.a
+                    << " VertexColorEnabled=" << (vertexColorEnabled ? "true" : "false")
+                    << " COLOR0=" << colors[static_cast<std::size_t>(column)].ToString()
+                    << "). REMED-GFX-215: raw COLOR0 would read "
+                    << RawColor0(colors[static_cast<std::size_t>(column)]).ToString()
+                    << " and a dropped COLOR0 "
+                    << ExpectedColor(colors[static_cast<std::size_t>(column)], false, d).ToString()
+                    << DescribeFrame(snapshot);
+            }
         }
-#else
-        (void)vertexColorEnabled;
-        (void)d;
-        (void)colors;
-        (void)leg;
-#endif
+        else
+        {
+            (void)vertexColorEnabled;
+            (void)d;
+            (void)colors;
+            (void)leg;
+        }
     }
 
     /// The route-agreement half: BasicEffect's shader index has no instancing term, so the two
@@ -730,26 +734,29 @@ protected:
     static void ExpectRoutesAgree(
         const FrameSnapshot& ordinary, const FrameSnapshot& instanced, const char* leg)
     {
-#ifdef CNA_INSTANCED_DIFFUSE_MEASURED
-        for (int column = 0; column < kColumnCount; ++column)
+        if (InstancedDiffuseMeasured())
         {
-            int spreadO = 0;
-            int litO = 0;
-            int spreadI = 0;
-            int litI = 0;
-            const Rgba o = SampleColumn(ordinary, column, spreadO, litO);
-            const Rgba i = SampleColumn(instanced, column, spreadI, litI);
-            EXPECT_TRUE(NearlyEqual(o, i))
-                << leg << ": column " << column << " -- the ordinary route rendered "
-                << o.ToString() << " and the instanced route " << i.ToString()
-                << ". BasicEffect's shader index has no instancing term, so the same DiffuseColor "
-                   "and VertexColorEnabled calculation must run for both";
+            for (int column = 0; column < kColumnCount; ++column)
+            {
+                int spreadO = 0;
+                int litO = 0;
+                int spreadI = 0;
+                int litI = 0;
+                const Rgba o = SampleColumn(ordinary, column, spreadO, litO);
+                const Rgba i = SampleColumn(instanced, column, spreadI, litI);
+                EXPECT_TRUE(NearlyEqual(o, i))
+                    << leg << ": column " << column << " -- the ordinary route rendered "
+                    << o.ToString() << " and the instanced route " << i.ToString()
+                    << ". BasicEffect's shader index has no instancing term, so the same DiffuseColor "
+                       "and VertexColorEnabled calculation must run for both";
+            }
         }
-#else
-        (void)ordinary;
-        (void)instanced;
-        (void)leg;
-#endif
+        else
+        {
+            (void)ordinary;
+            (void)instanced;
+            (void)leg;
+        }
     }
 
     /// One complete frame of the four-column mesh, through whichever route @p instanced selects.
@@ -1105,24 +1112,25 @@ TEST_F(InstancedDiffuseColorTest, TwoDrawsInOneFrameKeepTheirOwnColorState)
     device.SetRenderTarget(nullptr);
     const FrameSnapshot snapshot = CaptureTarget(target);
     PrintMeasurement("two-draws/one-frame", snapshot);
-#ifdef CNA_INSTANCED_DIFFUSE_MEASURED
-    for (int column = 0; column < kColumnCount; ++column)
+    if (InstancedDiffuseMeasured())
     {
-        const bool fromDrawA = column < 2;
-        const Rgba expected = ExpectedColor(
-            kColumnColors[static_cast<std::size_t>(column)], fromDrawA,
-            fromDrawA ? kNonNeutral : kAltState);
-        int spread = 0;
-        int lit = 0;
-        const Rgba sample = SampleColumn(snapshot, column, spread, lit);
-        EXPECT_GT(lit, 0) << "two-draws: column " << column << " rendered nothing"
-                          << DescribeFrame(snapshot);
-        EXPECT_TRUE(NearlyEqual(sample, expected))
-            << "two-draws: column " << column << " (draw " << (fromDrawA ? 'A' : 'B')
-            << ") carried " << sample.ToString() << ", expected " << expected.ToString()
-            << DescribeFrame(snapshot);
+        for (int column = 0; column < kColumnCount; ++column)
+        {
+            const bool fromDrawA = column < 2;
+            const Rgba expected = ExpectedColor(
+                kColumnColors[static_cast<std::size_t>(column)], fromDrawA,
+                fromDrawA ? kNonNeutral : kAltState);
+            int spread = 0;
+            int lit = 0;
+            const Rgba sample = SampleColumn(snapshot, column, spread, lit);
+            EXPECT_GT(lit, 0) << "two-draws: column " << column << " rendered nothing"
+                              << DescribeFrame(snapshot);
+            EXPECT_TRUE(NearlyEqual(sample, expected))
+                << "two-draws: column " << column << " (draw " << (fromDrawA ? 'A' : 'B')
+                << ") carried " << sample.ToString() << ", expected " << expected.ToString()
+                << DescribeFrame(snapshot);
+        }
     }
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -1248,16 +1256,17 @@ TEST_F(InstancedDiffuseColorTest, InstanceFrequencyKeepsTheFullContract)
         const FrameSnapshot snapshot = CaptureTarget(target);
         const std::string leg = "frequency" + std::to_string(frequency) + "/instanced-route";
         PrintMeasurement(leg.c_str(), snapshot);
-#ifdef CNA_INSTANCED_DIFFUSE_MEASURED
-        int spread = 0;
-        int lit = 0;
-        const Rgba sample = SampleColumn(snapshot, 0, spread, lit);
-        const Rgba expected = ExpectedColor(kColumnColors[0], true, kNonNeutral);
-        EXPECT_GT(lit, 0) << leg << ": column 0 rendered nothing" << DescribeFrame(snapshot);
-        EXPECT_TRUE(NearlyEqual(sample, expected))
-            << leg << ": column 0 carried " << sample.ToString() << ", expected "
-            << expected.ToString() << DescribeFrame(snapshot);
-#endif
+        if (InstancedDiffuseMeasured())
+        {
+            int spread = 0;
+            int lit = 0;
+            const Rgba sample = SampleColumn(snapshot, 0, spread, lit);
+            const Rgba expected = ExpectedColor(kColumnColors[0], true, kNonNeutral);
+            EXPECT_GT(lit, 0) << leg << ": column 0 rendered nothing" << DescribeFrame(snapshot);
+            EXPECT_TRUE(NearlyEqual(sample, expected))
+                << leg << ": column 0 carried " << sample.ToString() << ", expected "
+                << expected.ToString() << DescribeFrame(snapshot);
+        }
     }
 }
 
@@ -1361,82 +1370,83 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
     const auto ordinaryLit = report("positionOnly/false/ordinary-route", ordinary);
     const auto instancedLit = report("positionOnly/false/instanced-route", instanced);
 
-#ifdef CNA_INSTANCED_DIFFUSE_MEASURED
-    const Rgba expected = ExpectedColor(kColumnColors[0], false, kNonNeutral);
-
-    // A rejection must be LOUD and it must name the reason. WebGPU declines a stride its
-    // DrawColoredPrimitives cannot express and says so -- the same stride-16 requirement
-    // REMED-GFX-214 already tracks on its ordinary route, reached here with stride 12 instead of
-    // 24. That is a boundary, not a defect of this ticket: no WebGPU production is touched here and
-    // REMED-GFX-214 stays open and uninvestigated. What matters for REMED-GFX-215 is that the draw
-    // is refused rather than silently miscoloured.
-    const auto expectLoudRejection = [](const RouteResult& r, const char* leg) {
-        if (r.rendered)
-            return;
-        EXPECT_FALSE(r.rejection.empty())
-            << leg << ": the draw was refused without saying why. A renderer may decline a stride "
-                      "it cannot express, but the refusal has to be legible";
-    };
-    expectLoudRejection(ordinary, "positionOnly/ordinary");
-    expectLoudRejection(instanced, "positionOnly/instanced");
-
-    // REMED-GFX-215's own guarantee, and the whole of it: on any route that DID render, with the
-    // property disabled, the plain DiffuseColor is the ONLY colour that may reach the target. This
-    // holds no matter how the renderer derives its native layout, because a disabled COLOR0 is never
-    // consumed at all.
-    for (const auto& entry : instancedLit)
+    if (InstancedDiffuseMeasured())
     {
-        EXPECT_TRUE(NearlyEqual(entry.first, expected))
-            << "positionOnly/instanced: " << entry.second << " pixels carried "
-            << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
-               "that may appear is the plain DiffuseColor " << expected.ToString()
-            << DescribeLitColors(instancedLit);
-    }
-    for (const auto& entry : ordinaryLit)
-    {
-        EXPECT_TRUE(NearlyEqual(entry.first, expected))
-            << "positionOnly/ordinary: " << entry.second << " pixels carried "
-            << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
-               "that may appear is the plain DiffuseColor " << expected.ToString()
-            << DescribeLitColors(ordinaryLit);
-    }
+        const Rgba expected = ExpectedColor(kColumnColors[0], false, kNonNeutral);
 
-    int coverageOrdinary = 0;
-    for (const auto& entry : ordinaryLit)
-        coverageOrdinary += entry.second;
-    int coverageInstanced = 0;
-    for (const auto& entry : instancedLit)
-        coverageInstanced += entry.second;
+        // A rejection must be LOUD and it must name the reason. WebGPU declines a stride its
+        // DrawColoredPrimitives cannot express and says so -- the same stride-16 requirement
+        // REMED-GFX-214 already tracks on its ordinary route, reached here with stride 12 instead of
+        // 24. That is a boundary, not a defect of this ticket: no WebGPU production is touched here and
+        // REMED-GFX-214 stays open and uninvestigated. What matters for REMED-GFX-215 is that the draw
+        // is refused rather than silently miscoloured.
+        const auto expectLoudRejection = [](const RouteResult& r, const char* leg) {
+            if (r.rendered)
+                return;
+            EXPECT_FALSE(r.rejection.empty())
+                << leg << ": the draw was refused without saying why. A renderer may decline a stride "
+                          "it cannot express, but the refusal has to be legible";
+        };
+        expectLoudRejection(ordinary, "positionOnly/ordinary");
+        expectLoudRejection(instanced, "positionOnly/instanced");
 
-    // The COVERAGE half is a separate question from the colour one. When both routes rendered they
-    // must agree exactly, because a vertex layout derived before either route is chosen cannot
-    // differ between them -- and REMED-GFX-215 changed neither.
-    if (ordinary.rendered && instanced.rendered)
-    {
-        EXPECT_EQ(coverageOrdinary, coverageInstanced)
-            << "positionOnly: the ordinary route lit " << coverageOrdinary << " pixels and the "
-               "instanced route " << coverageInstanced
-            << ". A vertex layout derived before either route is chosen cannot differ between them";
-    }
+        // REMED-GFX-215's own guarantee, and the whole of it: on any route that DID render, with the
+        // property disabled, the plain DiffuseColor is the ONLY colour that may reach the target. This
+        // holds no matter how the renderer derives its native layout, because a disabled COLOR0 is never
+        // consumed at all.
+        for (const auto& entry : instancedLit)
+        {
+            EXPECT_TRUE(NearlyEqual(entry.first, expected))
+                << "positionOnly/instanced: " << entry.second << " pixels carried "
+                << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
+                   "that may appear is the plain DiffuseColor " << expected.ToString()
+                << DescribeLitColors(instancedLit);
+        }
+        for (const auto& entry : ordinaryLit)
+        {
+            EXPECT_TRUE(NearlyEqual(entry.first, expected))
+                << "positionOnly/ordinary: " << entry.second << " pixels carried "
+                << entry.first.ToString() << ", but VertexColorEnabled is false so the only colour "
+                   "that may appear is the plain DiffuseColor " << expected.ToString()
+                << DescribeLitColors(ordinaryLit);
+        }
 
-    // Every measured renderer that ACCEPTS the stride builds its native layout from the
-    // declaration, so the geometry lands exactly where it belongs and the full contract holds.
-    //
-    // bgfx carried a declared exemption here until REMED-GFX-216: its `MakeBgfxLayout` keyed on the
-    // buffer stride alone, so a stride-12 declaration fell to a fallback that emitted a 16-byte
-    // Position+Color0 layout over a 12-byte buffer and lit 27385 of these 50752 pixels. That arm
-    // asserted the measured shortfall precisely so it would FAIL the moment the defect was fixed --
-    // which is what happened, and why it is gone. Every colour was already correct under the wrong
-    // layout, which is what separated the two tickets in the first place.
-    constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
-                                  (kTargetSize - 2 * kGeometryInset);
-    if (instanced.rendered)
-    {
-        EXPECT_GT(coverageInstanced, kFullCoverage * 9 / 10)
-            << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
-            << " pixels rendered";
+        int coverageOrdinary = 0;
+        for (const auto& entry : ordinaryLit)
+            coverageOrdinary += entry.second;
+        int coverageInstanced = 0;
+        for (const auto& entry : instancedLit)
+            coverageInstanced += entry.second;
+
+        // The COVERAGE half is a separate question from the colour one. When both routes rendered they
+        // must agree exactly, because a vertex layout derived before either route is chosen cannot
+        // differ between them -- and REMED-GFX-215 changed neither.
+        if (ordinary.rendered && instanced.rendered)
+        {
+            EXPECT_EQ(coverageOrdinary, coverageInstanced)
+                << "positionOnly: the ordinary route lit " << coverageOrdinary << " pixels and the "
+                   "instanced route " << coverageInstanced
+                << ". A vertex layout derived before either route is chosen cannot differ between them";
+        }
+
+        // Every measured renderer that ACCEPTS the stride builds its native layout from the
+        // declaration, so the geometry lands exactly where it belongs and the full contract holds.
+        //
+        // bgfx carried a declared exemption here until REMED-GFX-216: its `MakeBgfxLayout` keyed on the
+        // buffer stride alone, so a stride-12 declaration fell to a fallback that emitted a 16-byte
+        // Position+Color0 layout over a 12-byte buffer and lit 27385 of these 50752 pixels. That arm
+        // asserted the measured shortfall precisely so it would FAIL the moment the defect was fixed --
+        // which is what happened, and why it is gone. Every colour was already correct under the wrong
+        // layout, which is what separated the two tickets in the first place.
+        constexpr int kFullCoverage = kColumnCount * (kColumnWidth - 2 * kGeometryInset) *
+                                      (kTargetSize - 2 * kGeometryInset);
+        if (instanced.rendered)
+        {
+            EXPECT_GT(coverageInstanced, kFullCoverage * 9 / 10)
+                << "positionOnly: only " << coverageInstanced << " of about " << kFullCoverage
+                << " pixels rendered";
+        }
     }
-#endif
 }
 
 // ---------------------------------------------------------------------------
