@@ -19,7 +19,7 @@
 // out as .cnj JSON + binary sidecar files, and the command-line entry point.
 //
 // The original MVP material scope cuts named by CNB-50/51/55/67/73 are closed: the complete
-// MaterialOut record (five texture slots, factors/scalars, alpha state and samplers) now survives
+// MaterialOut record (seven supported texture slots, factors/scalars, alpha state and samplers) survives
 // the .cnj path, locked by plan_gltf.md GLTF-236/GLTF-237. Current representation limits are
 // reported by GltfImportCore rather than copied into this CLI-specific file.
 //
@@ -364,7 +364,8 @@ namespace
             // plan_gltf.md GLTF-236/GLTF-237: the same complete carrier the runtime loader
             // consumes. Keeping another loose copy here was exactly how four fields fell out of
             // the .cnj path while the direct path stayed correct.
-            std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
+            std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile,
+                        pbrOcclusionMapFile, specularMapFile, specularColorMapFile;
             MaterialOut material;
             // Morph target CLI/.cnj serialization: morphFile is the binary sidecar path (empty =
             // no morph targets on this primitive), morphWeights are the default blend weights, and
@@ -603,7 +604,8 @@ namespace
                     }
                     return {};
                 };
-                std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile, pbrOcclusionMapFile;
+                std::string normalMapFile, metallicRoughnessMapFile, emissiveMapFile,
+                            pbrOcclusionMapFile, specularMapFile, specularColorMapFile;
                 if (meshOut.usePbr)
                 {
                     normalMapFile            = extractCached(meshOut.material.normalImage);
@@ -611,6 +613,9 @@ namespace
                         extractCached(meshOut.material.metallicRoughnessImage);
                     emissiveMapFile          = extractCached(meshOut.material.emissiveImage);
                     pbrOcclusionMapFile      = extractCached(meshOut.material.occlusionImage);
+                    specularMapFile          = extractCached(meshOut.material.specularImageEXT);
+                    specularColorMapFile     =
+                        extractCached(meshOut.material.specularColorImageEXT);
                 }
 
                 MeshEntry entry;
@@ -645,6 +650,8 @@ namespace
                 entry.metallicRoughnessMapFile = metallicRoughnessMapFile;
                 entry.emissiveMapFile = emissiveMapFile;
                 entry.pbrOcclusionMapFile = pbrOcclusionMapFile;
+                entry.specularMapFile = specularMapFile;
+                entry.specularColorMapFile = specularColorMapFile;
                 entry.material = meshOut.material;
                 entry.primitiveTopology = PrimitiveTopologyName(meshOut.topology);
                 entry.vertexColorEnabled = meshOut.colored;
@@ -725,6 +732,10 @@ namespace
                             extractCached(variantMesh.material.emissiveImage);
                         variantEntry.pbrOcclusionMapFile =
                             extractCached(variantMesh.material.occlusionImage);
+                        variantEntry.specularMapFile =
+                            extractCached(variantMesh.material.specularImageEXT);
+                        variantEntry.specularColorMapFile =
+                            extractCached(variantMesh.material.specularColorImageEXT);
                     }
 
                     variantEntry.effect =
@@ -1012,7 +1023,7 @@ namespace
             }
             // plan_gltf.md GLTF-237: sampler state is part of the material as it reaches a draw,
             // even though glTF declares it on the texture object. The direct path already stores
-            // all five slots on ModelMeshPart; preserve non-default states in .cnj as well. An
+            // all supported slots on ModelMeshPart; preserve non-default states in .cnj as well. An
             // explicit LinearWrap serialises to nothing because it is observationally identical
             // to the ModelMeshPart default.
             for (std::size_t slot = 0; slot < e.material.samplers.size(); ++slot)
@@ -1043,6 +1054,8 @@ namespace
                 if (!e.metallicRoughnessMapFile.empty()) { json << ", \"metallicRoughnessMap\": \"" << JsonEscape(e.metallicRoughnessMapFile) << "\""; }
                 if (!e.emissiveMapFile.empty()) { json << ", \"emissiveMap\": \"" << JsonEscape(e.emissiveMapFile) << "\""; }
                 if (!e.pbrOcclusionMapFile.empty()) { json << ", \"occlusionMap\": \"" << JsonEscape(e.pbrOcclusionMapFile) << "\""; }
+                if (!e.specularMapFile.empty()) { json << ", \"specularMap\": \"" << JsonEscape(e.specularMapFile) << "\""; }
+                if (!e.specularColorMapFile.empty()) { json << ", \"specularColorMap\": \"" << JsonEscape(e.specularColorMapFile) << "\""; }
                 json << ", \"metallicFactor\": " << e.material.metallicFactor
                      << ", \"roughnessFactor\": " << e.material.roughnessFactor
                      << ", \"emissiveFactor\": [" << e.material.emissiveFactor.X << ", "
@@ -1075,21 +1088,28 @@ namespace
                 if (e.material.occlusionStrength != 1.0f)
                     json << ", \"occlusionStrength\": " << e.material.occlusionStrength;
                 if (std::any_of(e.material.textureCoordinateSetsEXT.begin(),
-                                e.material.textureCoordinateSetsEXT.end(),
+                                e.material.textureCoordinateSetsEXT.begin() + 5,
                                 [](std::uint8_t set) { return set != 0; }))
                 {
                     json << ", \"textureCoordinateSets\": [";
                     for (std::size_t slot = 0;
-                         slot < e.material.textureCoordinateSetsEXT.size(); ++slot)
+                         slot < 5; ++slot)
                     {
                         if (slot != 0) json << ", ";
                         json << static_cast<int>(e.material.textureCoordinateSetsEXT[slot]);
                     }
                     json << "]";
                 }
+                if (e.material.textureCoordinateSetsEXT[5] != 0 ||
+                    e.material.textureCoordinateSetsEXT[6] != 0)
+                {
+                    json << ", \"specularTextureCoordinateSets\": ["
+                         << static_cast<int>(e.material.textureCoordinateSetsEXT[5]) << ", "
+                         << static_cast<int>(e.material.textureCoordinateSetsEXT[6]) << "]";
+                }
                 const Microsoft::Xna::Framework::Graphics::TextureTransformEXT identityTransform;
                 if (std::any_of(e.material.textureTransformsEXT.begin(),
-                                e.material.textureTransformsEXT.end(),
+                                e.material.textureTransformsEXT.begin() + 5,
                                 [&](const auto& transform) {
                                     return transform != identityTransform;
                                 }))
@@ -1097,9 +1117,23 @@ namespace
                     // Flat five-values-per-slot form keeps the deliberately small .cnj reader
                     // unambiguous: offset.xy, scale.xy, rotation for each established PBR slot.
                     json << ", \"textureTransforms\": [";
-                    for (std::size_t slot = 0; slot < e.material.textureTransformsEXT.size(); ++slot)
+                    for (std::size_t slot = 0; slot < 5; ++slot)
                     {
                         if (slot != 0) json << ", ";
+                        const auto& transform = e.material.textureTransformsEXT[slot];
+                        json << transform.Offset.X << ", " << transform.Offset.Y << ", "
+                             << transform.Scale.X << ", " << transform.Scale.Y << ", "
+                             << transform.Rotation;
+                    }
+                    json << "]";
+                }
+                if (e.material.textureTransformsEXT[5] != identityTransform ||
+                    e.material.textureTransformsEXT[6] != identityTransform)
+                {
+                    json << ", \"specularTextureTransforms\": [";
+                    for (std::size_t slot = 5; slot < 7; ++slot)
+                    {
+                        if (slot != 5) json << ", ";
                         const auto& transform = e.material.textureTransformsEXT[slot];
                         json << transform.Offset.X << ", " << transform.Offset.Y << ", "
                              << transform.Scale.X << ", " << transform.Scale.Y << ", "

@@ -1118,6 +1118,78 @@ namespace Microsoft::Xna::Framework::Content
             return result;
         }
 
+        static std::array<int, 2> ParseSpecularTextureCoordinateSetsEXT(
+            const std::string& j, std::size_t from)
+        {
+            std::array<int, 2> result{};
+            if (from == std::string::npos) { return result; }
+            std::size_t pos = from + 1;
+            for (std::size_t i = 0; i < result.size(); ++i)
+            {
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                std::size_t consumed = 0;
+                try { result[i] = std::stoi(j.substr(pos), &consumed); }
+                catch (...)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureCoordinateSets' must contain exactly two "
+                        "integers.");
+                }
+                if (consumed == 0 || result[i] < 0 || result[i] > 1)
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureCoordinateSets' entries must be 0 or 1.");
+                pos += consumed;
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                const char separator = i + 1 == result.size() ? ']' : ',';
+                if (pos >= j.size() || j[pos] != separator)
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureCoordinateSets' must contain exactly two "
+                        "integers.");
+                ++pos;
+            }
+            return result;
+        }
+
+        static std::array<Graphics::TextureTransformEXT, 2> ParseSpecularTextureTransformsEXT(
+            const std::string& j, std::size_t from)
+        {
+            std::array<Graphics::TextureTransformEXT, 2> result{};
+            if (from == std::string::npos) { return result; }
+            std::size_t pos = from + 1;
+            for (std::size_t valueIndex = 0; valueIndex < 10; ++valueIndex)
+            {
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                std::size_t consumed = 0;
+                float value = 0.0f;
+                try { value = std::stof(j.substr(pos), &consumed); }
+                catch (...)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureTransforms' must contain exactly 10 numbers.");
+                }
+                if (consumed == 0 || !std::isfinite(value))
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureTransforms' must contain exactly 10 numbers.");
+                pos += consumed;
+                Graphics::TextureTransformEXT& transform = result[valueIndex / 5];
+                switch (valueIndex % 5)
+                {
+                    case 0: transform.Offset.X = value; break;
+                    case 1: transform.Offset.Y = value; break;
+                    case 2: transform.Scale.X = value; break;
+                    case 3: transform.Scale.Y = value; break;
+                    default: transform.Rotation = value; break;
+                }
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                const char separator = valueIndex == 9 ? ']' : ',';
+                if (pos >= j.size() || j[pos] != separator)
+                    throw ContentLoadException(
+                        "Model .cnj 'specularTextureTransforms' must contain exactly 10 numbers.");
+                ++pos;
+            }
+            return result;
+        }
+
         static std::array<float, 3> JsonFloatArray3(const std::string& j, std::size_t from)
         {
             std::array<float, 3> r{};
@@ -2804,7 +2876,7 @@ namespace Microsoft::Xna::Framework::Content
                 bool pbr = false;
                 bool dualTexture = false;
                 bool colored = false;
-                std::array<std::uint8_t, 5> textureCoordinateSets{};
+                std::array<std::uint8_t, 7> textureCoordinateSets{};
                 bool operator==(const EffectCacheKey& other) const = default;
             };
             struct EffectCacheKeyHash
@@ -2896,6 +2968,12 @@ namespace Microsoft::Xna::Framework::Content
                     if (Graphics::Texture2D* occlusionTex =
                             loadTexture(meshOut.material.occlusionImage))
                         pbrFx.setOcclusionMapProperty(occlusionTex);
+                    if (Graphics::Texture2D* specularTex =
+                            loadTexture(meshOut.material.specularImageEXT))
+                        pbrFx.setSpecularMapEXTProperty(specularTex);
+                    if (Graphics::Texture2D* specularColorTex =
+                            loadTexture(meshOut.material.specularColorImageEXT))
+                        pbrFx.setSpecularColorMapEXTProperty(specularColorTex);
                     pbrFx.setMetallicFactorProperty(meshOut.material.metallicFactor);
                     pbrFx.setRoughnessFactorProperty(meshOut.material.roughnessFactor);
                     pbrFx.setIorEXTProperty(meshOut.material.iorEXT);
@@ -2905,8 +2983,7 @@ namespace Microsoft::Xna::Framework::Content
                     pbrFx.setEmissiveFactorProperty(meshOut.material.emissiveFactor);
                     pbrFx.setNormalScaleEXTProperty(meshOut.material.normalScale);
                     pbrFx.setOcclusionStrengthEXTProperty(meshOut.material.occlusionStrength);
-                    for (std::size_t slot = 0;
-                         slot < meshOut.material.textureCoordinateSetsEXT.size(); ++slot)
+                    for (std::size_t slot = 0; slot < 5; ++slot)
                     {
                         pbrFx.setTextureCoordinateSetEXTProperty(
                             static_cast<int>(slot),
@@ -2914,6 +2991,15 @@ namespace Microsoft::Xna::Framework::Content
                         pbrFx.setTextureTransformEXTProperty(
                             static_cast<int>(slot), meshOut.material.textureTransformsEXT[slot]);
                     }
+                    pbrFx.setSpecularTextureCoordinateSetEXTProperty(
+                        meshOut.material.textureCoordinateSetsEXT[5]);
+                    pbrFx.setSpecularColorTextureCoordinateSetEXTProperty(
+                        meshOut.material.textureCoordinateSetsEXT[6]);
+                    pbrFx.setSpecularTextureTransformEXTProperty(
+                        meshOut.material.textureTransformsEXT[5]);
+                    pbrFx.setSpecularColorTextureTransformEXTProperty(
+                        meshOut.material.textureTransformsEXT[6]);
+                    pbrFx.setSpecularColorTextureIsSrgbEXTProperty(true);
                     pbrFx.setDiffuseColorProperty(Vector3(
                         meshOut.material.baseColorFactor.X,
                         meshOut.material.baseColorFactor.Y,
@@ -3309,7 +3395,11 @@ namespace Microsoft::Xna::Framework::Content
                         state.setFilterProperty(sampler.filter);
                         state.setAddressUProperty(sampler.addressU);
                         state.setAddressVProperty(sampler.addressV);
-                        part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                        if (slot < 5)
+                            part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                        else
+                            part->setSpecularSamplerStateEXTProperty(
+                                static_cast<int>(slot - 5), state);
                     }
                     Graphics::ModelMeshPart* partPtr = part.get();
 
@@ -3429,6 +3519,8 @@ namespace Microsoft::Xna::Framework::Content
                         binding.defaultState.tag = partPtr->getTagProperty();
                         binding.defaultState.samplerStates =
                             partPtr->getSamplerStatesEXTProperty();
+                        binding.defaultState.specularSamplerStatesEXT =
+                            partPtr->getSpecularSamplerStatesEXTProperty();
                         binding.defaultState.numVertices = numVertices;
                         binding.variants.resize(static_cast<std::size_t>(data->variants_count));
 
@@ -3506,9 +3598,12 @@ namespace Microsoft::Xna::Framework::Content
                             {
                                 const SamplerOut& sampler =
                                     variantMesh.material.samplers[slot];
-                                state.samplerStates[slot].setFilterProperty(sampler.filter);
-                                state.samplerStates[slot].setAddressUProperty(sampler.addressU);
-                                state.samplerStates[slot].setAddressVProperty(sampler.addressV);
+                                Graphics::SamplerState& stateSampler = slot < 5
+                                    ? state.samplerStates[slot]
+                                    : state.specularSamplerStatesEXT[slot - 5];
+                                stateSampler.setFilterProperty(sampler.filter);
+                                stateSampler.setAddressUProperty(sampler.addressU);
+                                stateSampler.setAddressVProperty(sampler.addressV);
                             }
                             binding.variants.at(variant.variantIndex) = state;
                             res->vbs.push_back(std::move(variantVb));
@@ -3947,6 +4042,10 @@ namespace Microsoft::Xna::Framework::Content
                             const std::string metallicRoughnessMapFile = ExtractJsonStringField(mg, "metallicRoughnessMap");
                             const std::string emissiveMapFile = ExtractJsonStringField(mg, "emissiveMap");
                             const std::string occlusionMapFile = ExtractJsonStringField(mg, "occlusionMap");
+                            const std::string specularMapFile =
+                                ExtractJsonStringField(mg, "specularMap");
+                            const std::string specularColorMapFile =
+                                ExtractJsonStringField(mg, "specularColorMap");
                             CNA::Internal::GltfImport::MaterialOut material;
                             material.metallicFactor = JsonFloat(mg, "metallicFactor", 1.0f);
                             material.roughnessFactor = JsonFloat(mg, "roughnessFactor", 1.0f);
@@ -3976,8 +4075,22 @@ namespace Microsoft::Xna::Framework::Content
                                 material.textureCoordinateSetsEXT[slot] =
                                     static_cast<std::uint8_t>(textureCoordinateSets[slot]);
                             }
-                            material.textureTransformsEXT = ParseTextureTransformsEXT(
+                            const auto coreTextureTransforms = ParseTextureTransformsEXT(
                                 mg, FindKeyArray(mg, "textureTransforms"));
+                            std::copy(coreTextureTransforms.begin(), coreTextureTransforms.end(),
+                                      material.textureTransformsEXT.begin());
+                            const auto specularTextureCoordinateSets =
+                                ParseSpecularTextureCoordinateSetsEXT(
+                                    mg, FindKeyArray(mg, "specularTextureCoordinateSets"));
+                            material.textureCoordinateSetsEXT[5] = static_cast<std::uint8_t>(
+                                specularTextureCoordinateSets[0]);
+                            material.textureCoordinateSetsEXT[6] = static_cast<std::uint8_t>(
+                                specularTextureCoordinateSets[1]);
+                            const auto specularTextureTransforms =
+                                ParseSpecularTextureTransformsEXT(
+                                    mg, FindKeyArray(mg, "specularTextureTransforms"));
+                            material.textureTransformsEXT[5] = specularTextureTransforms[0];
+                            material.textureTransformsEXT[6] = specularTextureTransforms[1];
                             // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
                             // before them, whose defaults are glTF's own -- so an older asset loads
                             // as the opaque, single-sided material it could only ever have been.
@@ -4119,7 +4232,11 @@ namespace Microsoft::Xna::Framework::Content
                                 state.setFilterProperty(sampler.filter);
                                 state.setAddressUProperty(sampler.addressU);
                                 state.setAddressVProperty(sampler.addressV);
-                                part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                                if (slot < 5)
+                                    part->setSamplerStateEXTProperty(static_cast<int>(slot), state);
+                                else
+                                    part->setSpecularSamplerStateEXTProperty(
+                                        static_cast<int>(slot - 5), state);
                             }
                             Graphics::ModelMeshPart* partPtr = part.get();
 
@@ -4469,6 +4586,11 @@ namespace Microsoft::Xna::Framework::Content
                                     pbrFx->setEmissiveMapProperty(t);
                                 if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     pbrFx->setOcclusionMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(specularMapFile, "specularMap"))
+                                    pbrFx->setSpecularMapEXTProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(
+                                        specularColorMapFile, "specularColorMap"))
+                                    pbrFx->setSpecularColorMapEXTProperty(t);
                                 pbrFx->setMetallicFactorProperty(material.metallicFactor);
                                 pbrFx->setRoughnessFactorProperty(material.roughnessFactor);
                                 pbrFx->setIorEXTProperty(material.iorEXT);
@@ -4479,8 +4601,7 @@ namespace Microsoft::Xna::Framework::Content
                                 pbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 pbrFx->setOcclusionStrengthEXTProperty(
                                     material.occlusionStrength);
-                                for (std::size_t slot = 0;
-                                     slot < material.textureCoordinateSetsEXT.size(); ++slot)
+                                for (std::size_t slot = 0; slot < 5; ++slot)
                                 {
                                     pbrFx->setTextureCoordinateSetEXTProperty(
                                         static_cast<int>(slot), static_cast<int>(
@@ -4489,6 +4610,14 @@ namespace Microsoft::Xna::Framework::Content
                                         static_cast<int>(slot),
                                         material.textureTransformsEXT[slot]);
                                 }
+                                pbrFx->setSpecularTextureCoordinateSetEXTProperty(
+                                    material.textureCoordinateSetsEXT[5]);
+                                pbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
+                                    material.textureCoordinateSetsEXT[6]);
+                                pbrFx->setSpecularTextureTransformEXTProperty(
+                                    material.textureTransformsEXT[5]);
+                                pbrFx->setSpecularColorTextureTransformEXTProperty(
+                                    material.textureTransformsEXT[6]);
                                 pbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,
                                     material.baseColorFactor.Z));
@@ -4517,6 +4646,11 @@ namespace Microsoft::Xna::Framework::Content
                                     skinnedPbrFx->setEmissiveMapProperty(t);
                                 if (Graphics::Texture2D* t = loadPbrMap(occlusionMapFile, "occlusionMap"))
                                     skinnedPbrFx->setOcclusionMapProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(specularMapFile, "specularMap"))
+                                    skinnedPbrFx->setSpecularMapEXTProperty(t);
+                                if (Graphics::Texture2D* t = loadPbrMap(
+                                        specularColorMapFile, "specularColorMap"))
+                                    skinnedPbrFx->setSpecularColorMapEXTProperty(t);
                                 skinnedPbrFx->setMetallicFactorProperty(material.metallicFactor);
                                 skinnedPbrFx->setRoughnessFactorProperty(material.roughnessFactor);
                                 skinnedPbrFx->setIorEXTProperty(material.iorEXT);
@@ -4528,8 +4662,7 @@ namespace Microsoft::Xna::Framework::Content
                                 skinnedPbrFx->setNormalScaleEXTProperty(material.normalScale);
                                 skinnedPbrFx->setOcclusionStrengthEXTProperty(
                                     material.occlusionStrength);
-                                for (std::size_t slot = 0;
-                                     slot < material.textureCoordinateSetsEXT.size(); ++slot)
+                                for (std::size_t slot = 0; slot < 5; ++slot)
                                 {
                                     skinnedPbrFx->setTextureCoordinateSetEXTProperty(
                                         static_cast<int>(slot), static_cast<int>(
@@ -4538,6 +4671,14 @@ namespace Microsoft::Xna::Framework::Content
                                         static_cast<int>(slot),
                                         material.textureTransformsEXT[slot]);
                                 }
+                                skinnedPbrFx->setSpecularTextureCoordinateSetEXTProperty(
+                                    material.textureCoordinateSetsEXT[5]);
+                                skinnedPbrFx->setSpecularColorTextureCoordinateSetEXTProperty(
+                                    material.textureCoordinateSetsEXT[6]);
+                                skinnedPbrFx->setSpecularTextureTransformEXTProperty(
+                                    material.textureTransformsEXT[5]);
+                                skinnedPbrFx->setSpecularColorTextureTransformEXTProperty(
+                                    material.textureTransformsEXT[6]);
                                 skinnedPbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,
                                     material.baseColorFactor.Z));
@@ -4615,6 +4756,8 @@ namespace Microsoft::Xna::Framework::Content
                                 state.effect = effectPtr;
                                 state.tag = partPtr->getTagProperty();
                                 state.samplerStates = partPtr->getSamplerStatesEXTProperty();
+                                state.specularSamplerStatesEXT =
+                                    partPtr->getSpecularSamplerStatesEXTProperty();
                                 state.numVertices = numVertices;
                                 target = state;
 
@@ -4636,6 +4779,8 @@ namespace Microsoft::Xna::Framework::Content
                                     binding.defaultState.tag = partPtr->getTagProperty();
                                     binding.defaultState.samplerStates =
                                         partPtr->getSamplerStatesEXTProperty();
+                                    binding.defaultState.specularSamplerStatesEXT =
+                                        partPtr->getSpecularSamplerStatesEXTProperty();
                                     binding.defaultState.numVertices = numVertices;
                                     binding.variants.resize(materialVariantNames.size());
                                     variantBindingByEntry.emplace(

@@ -748,7 +748,8 @@ namespace
   "scenes": [ { "nodes": [0] } ],
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
   "meshes": [ { "primitives": [ { "attributes": {
-      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3
+      "POSITION": 0, "NORMAL": 1, "TANGENT": 2, "TEXCOORD_0": 3,
+      "TEXCOORD_1": 3
   }, "material": 0 } ] } ],
   "materials": [ {
     "pbrMetallicRoughness": {
@@ -775,7 +776,17 @@ namespace
       "KHR_materials_ior": { "ior": 2.0 },
       "KHR_materials_specular": {
         "specularFactor": 0.3,
-        "specularColorFactor": [0.25, 1.0, 12.0]
+        "specularColorFactor": [0.25, 1.0, 12.0],
+        "specularTexture": { "index": 3, "texCoord": 1, "extensions": {
+          "KHR_texture_transform": {
+            "offset": [0.2, 0.4], "scale": [0.3, 0.6], "rotation": 0.25
+          }
+        } },
+        "specularColorTexture": { "index": 0, "texCoord": 0, "extensions": {
+          "KHR_texture_transform": {
+            "offset": [0.7, 0.8], "scale": [1.5, 2.5], "rotation": -0.5
+          }
+        } }
       }
     }
   } ],
@@ -2116,6 +2127,15 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NE(std::string::npos, cnj.find("\"specularFactor\": 0.3"));
     EXPECT_NE(std::string::npos,
               cnj.find("\"specularColorFactor\": [0.25, 1, 12]"));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularMap\": \"pbr_tex3.png\""));
+    EXPECT_NE(std::string::npos, cnj.find("\"specularColorMap\": \"pbr_tex0.png\""));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularTextureCoordinateSets\": [1, 0]"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"specularTextureTransforms\": [0.2, 0.4, 0.3, 0.6, 0.25"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6Filter\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6AddressU\": 1"));
+    EXPECT_NE(std::string::npos, cnj.find("\"sampler6AddressV\": 2"));
     EXPECT_NE(std::string::npos,
               cnj.find("\"textureTransforms\": [0.125, 0.375, 2, 0.5"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0Filter\": 1"));
@@ -2125,7 +2145,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     const std::filesystem::path vertsPath = contentRoot.path() / "pbr_mesh0_verts.bin";
     std::ifstream f(vertsPath, std::ios::binary);
     std::vector<char> bytes((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    ASSERT_EQ(bytes.size(), 3u * 48u); // stride 48, VertexPositionNormalTangentTexture
+    ASSERT_EQ(bytes.size(), 3u * 60u); // PBR layout with packed TextureCoordinate0/1
 
     float tangent0[4];
     std::memcpy(tangent0, bytes.data() + 24, sizeof(tangent0));
@@ -2157,6 +2177,8 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_NE(pbrFx->getMetallicRoughnessMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getEmissiveMapProperty(), nullptr);
     ASSERT_NE(pbrFx->getOcclusionMapProperty(), nullptr);
+    ASSERT_NE(pbrFx->getSpecularMapEXTProperty(), nullptr);
+    ASSERT_NE(pbrFx->getSpecularColorMapEXTProperty(), nullptr);
     EXPECT_NEAR(pbrFx->getMetallicFactorProperty(), 0.5f, 1e-5f);
     EXPECT_NEAR(pbrFx->getRoughnessFactorProperty(), 0.3f, 1e-5f);
     EXPECT_NEAR(pbrFx->getIorEXTProperty(), 2.0f, 1e-5f);
@@ -2176,6 +2198,16 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_EQ(pbrFx->getAlphaModeEXTProperty(), AlphaModeEXT::Mask);
     EXPECT_NEAR(pbrFx->getAlphaCutoffEXTProperty(), 0.73f, 1e-5f);
     EXPECT_TRUE(pbrFx->getDoubleSidedEXTProperty());
+    EXPECT_EQ(pbrFx->getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(pbrFx->getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Offset.X, 0.2f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Offset.Y, 0.4f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Scale.X, 0.3f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularTextureTransformEXTProperty().Scale.Y, 0.6f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Offset.X, 0.7f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Offset.Y, 0.8f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Scale.X, 1.5f);
+    EXPECT_FLOAT_EQ(pbrFx->getSpecularColorTextureTransformEXTProperty().Scale.Y, 2.5f);
 
     const auto& baseTransform = pbrFx->getTextureTransformsEXTProperty()[0];
     EXPECT_FLOAT_EQ(baseTransform.Offset.X, 0.125f);
@@ -2193,6 +2225,14 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     auto* runtimeFx = dynamic_cast<PbrEffect*>(runtimeModel.getMeshesProperty()[0]
         ->getMeshPartsProperty()[0]->getEffectProperty());
     ASSERT_NE(runtimeFx, nullptr);
+    ASSERT_NE(runtimeFx->getSpecularMapEXTProperty(), nullptr);
+    ASSERT_NE(runtimeFx->getSpecularColorMapEXTProperty(), nullptr);
+    EXPECT_EQ(runtimeFx->getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(runtimeFx->getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(runtimeFx->getSpecularTextureTransformEXTProperty(),
+              pbrFx->getSpecularTextureTransformEXTProperty());
+    EXPECT_EQ(runtimeFx->getSpecularColorTextureTransformEXTProperty(),
+              pbrFx->getSpecularColorTextureTransformEXTProperty());
     for (std::size_t slot = 0; slot < 5; ++slot)
     {
         const auto& direct = runtimeFx->getTextureTransformsEXTProperty()[slot];
@@ -2208,6 +2248,12 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_EQ(TextureFilter::Point, sampler.getFilterProperty());
     EXPECT_EQ(TextureAddressMode::Clamp, sampler.getAddressUProperty());
     EXPECT_EQ(TextureAddressMode::Mirror, sampler.getAddressVProperty());
+    const auto& specularSamplers =
+        mesh->getMeshPartsProperty()[0]->getSpecularSamplerStatesEXTProperty();
+    EXPECT_EQ(TextureFilter::Linear, specularSamplers[0].getFilterProperty());
+    EXPECT_EQ(TextureFilter::Point, specularSamplers[1].getFilterProperty());
+    EXPECT_EQ(TextureAddressMode::Clamp, specularSamplers[1].getAddressUProperty());
+    EXPECT_EQ(TextureAddressMode::Mirror, specularSamplers[1].getAddressVProperty());
 
     const Matrix identity = Matrix::getIdentityProperty();
     const auto runtimeDraws = CnaTest::GltfOracle::CaptureDrawParamsEXT(

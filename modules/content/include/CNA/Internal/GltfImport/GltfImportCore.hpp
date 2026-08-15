@@ -287,6 +287,10 @@ namespace CNA::Internal::GltfImport
         Emissive = 3,
         /** @brief `occlusionTexture`. */
         Occlusion = 4,
+        /** @brief `KHR_materials_specular.specularTexture`. */
+        Specular = 5,
+        /** @brief `KHR_materials_specular.specularColorTexture`. */
+        SpecularColor = 6,
     };
 
     /**
@@ -308,19 +312,21 @@ namespace CNA::Internal::GltfImport
         /** @brief Source material identity, or nullptr for glTF's implicit default material. */
         const cgltf_material* sourceMaterialEXT = nullptr;
 
-        /** @brief Decoded texture images for the five core material slots, or nullptr. */
+        /** @brief Decoded texture images for the core and supported extension slots, or nullptr. */
         const cgltf_image* baseColorImage = nullptr;
         const cgltf_image* normalImage = nullptr;
         const cgltf_image* metallicRoughnessImage = nullptr;
         const cgltf_image* occlusionImage = nullptr;
         const cgltf_image* emissiveImage = nullptr;
+        const cgltf_image* specularImageEXT = nullptr;
+        const cgltf_image* specularColorImageEXT = nullptr;
 
         /** @brief `normalTexture.scale` (glTF default 1). */
         float normalScale = 1.0f;
         /** @brief `occlusionTexture.strength` (glTF default 1). */
         float occlusionStrength = 1.0f;
         /** @brief One sampler per @ref TextureSlotEXT, including defaults for absent slots. */
-        std::array<SamplerOut, 5> samplers{};
+        std::array<SamplerOut, 7> samplers{};
         /**
          * @brief GPU texture-coordinate attribute (0 or 1) sampled by each texture slot.
          *
@@ -328,7 +334,7 @@ namespace CNA::Internal::GltfImport
          * using authored sets 1 and 3 can carry them as GPU attributes 0 and 1 while
          * @ref MeshOut::packedTexcoordSourceSetsEXT preserves that mapping. Absent maps use 0.
          */
-        std::array<std::uint8_t, 5> textureCoordinateSetsEXT{};
+        std::array<std::uint8_t, 7> textureCoordinateSetsEXT{};
         /**
          * @brief One shader-side UV transform per texture slot, in @ref TextureSlotEXT order.
          *
@@ -336,7 +342,7 @@ namespace CNA::Internal::GltfImport
          * the default for an absent extension; unlike the former bake, maps sharing one vertex UV
          * stream may therefore carry different transforms without changing vertex bytes.
          */
-        std::array<Microsoft::Xna::Framework::Graphics::TextureTransformEXT, 5>
+        std::array<Microsoft::Xna::Framework::Graphics::TextureTransformEXT, 7>
             textureTransformsEXT{};
 
         /** @brief `pbrMetallicRoughness.baseColorFactor` (glTF default white/opaque). */

@@ -2030,6 +2030,22 @@ namespace CNA::Internal::GltfImport
         return ImageForTexture(prim.material->emissive_texture.texture, "emissive", unsupportedOut);
     }
 
+    const cgltf_image* FindSpecularImageEXT(const cgltf_primitive& prim,
+                                            std::vector<std::string>* unsupportedOut = nullptr)
+    {
+        if (!prim.material || !prim.material->has_specular) { return nullptr; }
+        return ImageForTexture(prim.material->specular.specular_texture.texture,
+                               "specular strength", unsupportedOut);
+    }
+
+    const cgltf_image* FindSpecularColorImageEXT(
+        const cgltf_primitive& prim, std::vector<std::string>* unsupportedOut = nullptr)
+    {
+        if (!prim.material || !prim.material->has_specular) { return nullptr; }
+        return ImageForTexture(prim.material->specular.specular_color_texture.texture,
+                               "specular color", unsupportedOut);
+    }
+
     /// GLTF-202: the sampler a texture view's texture declares, mapped to XNA state. A view with no
     /// texture, or a texture with no sampler, yields glTF's own default (repeat + linear) with
     /// `declared` left false -- so "the author chose repeat" and "the author said nothing" stay
@@ -2557,6 +2573,10 @@ namespace CNA::Internal::GltfImport
         out.material.metallicRoughnessImage =
             FindMetallicRoughnessImage(prim, &out.unsupportedTextureSourcesEXT);
         out.material.emissiveImage = FindEmissiveImage(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.specularImageEXT =
+            FindSpecularImageEXT(prim, &out.unsupportedTextureSourcesEXT);
+        out.material.specularColorImageEXT =
+            FindSpecularColorImageEXT(prim, &out.unsupportedTextureSourcesEXT);
         // PBR + skinning combo: a skinned primitive with a normal/metallic-roughness map is
         // imported through SkinnedPbrEffect (stride 68) instead of plain SkinnedEffect -- the
         // vertex-color combo (usePbr && colored) is still not attempted, matching PbrEffect's own
@@ -2623,8 +2643,7 @@ namespace CNA::Internal::GltfImport
         // plan_gltf.md GLTF-343/GLTF-344: cgltf already parses these extensions, but nothing in
         // CNA copied their factor state before this point. Keep the raw values in MaterialOut;
         // PbrEffect/SkinnedPbrEffect derive shader-ready dielectric F0/F90 when filling the draw
-        // block. The optional textures remain a named open residue because they require two new
-        // sampler bindings and per-map UV/colour-space handling on every PBR renderer.
+        // block. GLTF-344 carries the two optional texture views independently below.
         if (prim.material && prim.material->has_ior)
         {
             out.material.iorEXT = prim.material->ior.ior;
@@ -2769,8 +2788,15 @@ namespace CNA::Internal::GltfImport
                 SamplerForTextureView(prim.material->emissive_texture);
             out.material.samplers[slot(TextureSlotEXT::Occlusion)] =
                 SamplerForTextureView(prim.material->occlusion_texture);
+            if (prim.material->has_specular)
+            {
+                out.material.samplers[slot(TextureSlotEXT::Specular)] =
+                    SamplerForTextureView(prim.material->specular.specular_texture);
+                out.material.samplers[slot(TextureSlotEXT::SpecularColor)] =
+                    SamplerForTextureView(prim.material->specular.specular_color_texture);
+            }
 
-            // GLTF-184/GLTF-336: transforms follow the same five source views as images, samplers
+            // GLTF-184/GLTF-336/GLTF-344: transforms follow the same source views as images, samplers
             // and texCoord selectors. The archived specular-glossiness conversion uses its
             // diffuse view as base colour here too, preventing that compatibility path from
             // choosing one view's image and another view's transform.
@@ -2791,6 +2817,13 @@ namespace CNA::Internal::GltfImport
                 TextureTransformForViewEXT(prim.material->emissive_texture);
             out.material.textureTransformsEXT[slot(TextureSlotEXT::Occlusion)] =
                 TextureTransformForViewEXT(prim.material->occlusion_texture);
+            if (prim.material->has_specular)
+            {
+                out.material.textureTransformsEXT[slot(TextureSlotEXT::Specular)] =
+                    TextureTransformForViewEXT(prim.material->specular.specular_texture);
+                out.material.textureTransformsEXT[slot(TextureSlotEXT::SpecularColor)] =
+                    TextureTransformForViewEXT(prim.material->specular.specular_color_texture);
+            }
 
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
             // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
@@ -2848,6 +2881,10 @@ namespace CNA::Internal::GltfImport
                                 out.material.emissiveImage, "emissiveTexture");
             noteMissingMipChain(TextureSlotEXT::Occlusion,
                                 out.material.occlusionImage, "occlusionTexture");
+            noteMissingMipChain(TextureSlotEXT::Specular,
+                                out.material.specularImageEXT, "specularTexture");
+            noteMissingMipChain(TextureSlotEXT::SpecularColor,
+                                out.material.specularColorImageEXT, "specularColorTexture");
         }
         else if (out.useDualTexture)
         {
@@ -2862,24 +2899,31 @@ namespace CNA::Internal::GltfImport
         // image, not which coordinates an absent sample would have used.
         if (out.usePbr && prim.material)
         {
-            const std::array<const cgltf_texture_view*, 5> views{{
+            const std::array<const cgltf_texture_view*, 7> views{{
                 BaseColorTextureViewEXT(prim.material),
                 &prim.material->normal_texture,
                 prim.material->has_pbr_metallic_roughness
                     ? &prim.material->pbr_metallic_roughness.metallic_roughness_texture : nullptr,
                 &prim.material->emissive_texture,
                 &prim.material->occlusion_texture,
+                prim.material->has_specular
+                    ? &prim.material->specular.specular_texture : nullptr,
+                prim.material->has_specular
+                    ? &prim.material->specular.specular_color_texture : nullptr,
             }};
-            const std::array<const cgltf_image*, 5> images{{
+            const std::array<const cgltf_image*, 7> images{{
                 out.material.baseColorImage,
                 out.material.normalImage,
                 out.material.metallicRoughnessImage,
                 out.material.emissiveImage,
                 out.material.occlusionImage,
+                out.material.specularImageEXT,
+                out.material.specularColorImageEXT,
             }};
-            static constexpr const char* names[5] = {
+            static constexpr const char* names[7] = {
                 "baseColorTexture", "normalTexture", "metallicRoughnessTexture",
-                "emissiveTexture", "occlusionTexture"};
+                "emissiveTexture", "occlusionTexture", "specularTexture",
+                "specularColorTexture"};
 
             std::vector<int> packedSets;
             for (std::size_t slotIndex = 0; slotIndex < views.size(); ++slotIndex)
@@ -4064,7 +4108,7 @@ namespace CNA::Internal::GltfImport
         static const std::vector<GltfExtensionRecordEXT> registry = [] {
             std::vector<GltfExtensionRecordEXT> out = {
                 {"KHR_texture_transform", GltfExtensionSupportEXT::Implemented, true,
-                 "All five PBR maps retain independent offset/rotation/scale and texCoord state "
+                 "All supported PBR maps retain independent offset/rotation/scale and texCoord state "
                  "through direct and offline loading. Every PBR renderer applies the resulting "
                  "affine rows, and a discriminating EasyGL L7 fixture proves two maps sharing one "
                  "authored UV stream can use different transforms.",
@@ -4130,8 +4174,10 @@ namespace CNA::Internal::GltfImport
                 {"KHR_materials_specular", GltfExtensionSupportEXT::ImplementedWithNamedLimit,
                  false,
                  "Factor and colour are converted to dielectric F0/F90 and consumed by all 15 "
-                 "PBR renderers. The optional specularTexture and specularColorTexture are not "
-                 "imported, so required use remains refused and optional use is warned by name.",
+                 "PBR renderers. The optional specularTexture and specularColorTexture now survive "
+                 "direct import and offline .cnj with independent UV, transform, sampler and "
+                 "colour-space state, but renderer shader bindings do not sample them yet. "
+                 "Required use remains refused and optional use is warned by name.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,
                  "A second specular lobe -- a large shader change.",

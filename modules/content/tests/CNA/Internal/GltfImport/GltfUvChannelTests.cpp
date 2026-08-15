@@ -71,7 +71,9 @@ namespace
 
     /// A primitive with POSITION, TEXCOORD_0 and TEXCOORD_1, and a base-colour texture whose
     /// `texCoord` / `KHR_texture_transform` block is `baseColorExtras`.
-    std::string TwoUvSetDocument(const std::string& baseColorExtras)
+    std::string TwoUvSetDocument(const std::string& baseColorExtras,
+                                 const std::string& materialExtras = {},
+                                 const std::string& extensionExtras = {})
     {
         std::vector<std::uint8_t> buffer;
         AppendFloats(buffer, {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f});
@@ -85,14 +87,14 @@ namespace
   "scene": 0,
   "scenes": [ { "nodes": [0] } ],
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
-  "extensionsUsed": [ "KHR_texture_transform" ],
+  "extensionsUsed": [ "KHR_texture_transform")GLTF" + extensionExtras + R"GLTF( ],
   "meshes": [ { "primitives": [ {
       "attributes": { "POSITION": 0, "TEXCOORD_0": 1, "TEXCOORD_1": 2 },
       "material": 0, "mode": 4
   } ] } ],
   "materials": [ { "pbrMetallicRoughness": {
       "baseColorTexture": { "index": 0)GLTF") + baseColorExtras + R"GLTF( }
-  } } ],
+  })GLTF" + materialExtras + R"GLTF( } ],
   "textures": [ { "source": 0 } ],
   "images": [ { "uri": "t.png", "mimeType": "image/png" } ],
   "buffers": [ { "byteLength": )GLTF" + std::to_string(buffer.size()) +
@@ -295,6 +297,40 @@ TEST(GltfUvChannel, AnIdentityTextureTransformLeavesTheUvsExactlyAlone)
     const std::vector<float> uv = UvOfVertex(mesh, 0);
     EXPECT_NEAR(kUv0[0], uv[0], kTolerance);
     EXPECT_NEAR(kUv0[1], uv[1], kTolerance);
+}
+
+TEST(GltfUvChannel, SpecularViewsKeepIndependentImagesUvsTransformsAndSamplers)
+{
+    const MeshOut mesh = ExtractFirst(TwoUvSetDocument(
+        "",
+        R"(, "extensions": { "KHR_materials_specular": {
+          "specularTexture": { "index": 0, "texCoord": 1,
+            "extensions": { "KHR_texture_transform": {
+              "offset": [0.125, 0.25], "scale": [2.0, 3.0] } } },
+          "specularColorTexture": { "index": 0, "texCoord": 0,
+            "extensions": { "KHR_texture_transform": {
+              "offset": [0.75, 0.5], "scale": [0.5, 4.0] } } }
+        } })",
+        R"(, "KHR_materials_specular")"));
+
+    const std::size_t strength = static_cast<std::size_t>(TextureSlotEXT::Specular);
+    const std::size_t color = static_cast<std::size_t>(TextureSlotEXT::SpecularColor);
+    ASSERT_NE(mesh.material.specularImageEXT, nullptr);
+    ASSERT_NE(mesh.material.specularColorImageEXT, nullptr);
+    EXPECT_EQ(mesh.material.specularImageEXT, mesh.material.specularColorImageEXT);
+    EXPECT_EQ(mesh.material.textureCoordinateSetsEXT[strength], 1);
+    EXPECT_EQ(mesh.material.textureCoordinateSetsEXT[color], 0);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[strength].Offset.X, 0.125f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[strength].Offset.Y, 0.25f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[strength].Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[strength].Scale.Y, 3.0f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[color].Offset.X, 0.75f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[color].Offset.Y, 0.5f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[color].Scale.X, 0.5f);
+    EXPECT_FLOAT_EQ(mesh.material.textureTransformsEXT[color].Scale.Y, 4.0f);
+    EXPECT_FALSE(mesh.material.samplers[strength].declared);
+    EXPECT_FALSE(mesh.material.samplers[color].declared);
+    EXPECT_TRUE(mesh.uvSetMismatchedMapsEXT.empty());
 }
 
 TEST(GltfUvChannel, CorpusCarriesDifferentTransformsForMapsSharingOneUvStream)
