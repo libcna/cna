@@ -575,6 +575,27 @@ TEST(SpriteBatchSortModeTest, DeferredDoesNotFlushBeforeEnd)
     EXPECT_EQ(rec->drawCalls.size(), 1u);
 }
 
+TEST(SpriteBatchSortModeTest, DeferredRetainsTextureRendererThroughEnd)
+{
+    auto renderer = std::make_unique<RecordingSpriteBatchRenderer>();
+    RecordingSpriteBatchRenderer* rec = renderer.get();
+    SpriteBatch batch(std::move(renderer));
+    auto textureRenderer = std::make_shared<DummyTextureRenderer>(4, 4);
+    std::weak_ptr<DummyTextureRenderer> lifetime = textureRenderer;
+
+    batch.Begin();
+    {
+        Texture2D texture = Texture2D::CreateWithRendererForTests(
+            4, 4, std::move(textureRenderer));
+        batch.Draw(texture, 1.0f, 2.0f);
+    }
+
+    EXPECT_FALSE(lifetime.expired());
+    EXPECT_NO_THROW(batch.End());
+    EXPECT_EQ(rec->drawCalls.size(), 1u);
+    EXPECT_TRUE(lifetime.expired());
+}
+
 // -----------------------------------------------------------------------
 // Task 413: complete tests for SpriteSortMode::Deferred (Task 162 dependency)
 //

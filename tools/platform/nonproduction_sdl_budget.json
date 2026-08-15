@@ -9,13 +9,13 @@
       "category": "audio-native-integration",
       "max_references": 29
     },
-    "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioDeviceTests.cpp": {
-      "category": "audio-native-integration",
-      "max_references": 19
-    },
     "modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp": {
       "category": "audio-native-integration",
       "max_references": 1
+    },
+    "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioDeviceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 19
     },
     "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioRecordingDeviceTests.cpp": {
       "category": "audio-native-integration",
@@ -169,13 +169,13 @@
       "category": "containment-assertion",
       "max_references": 2
     },
-    "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
-      "category": "platform-sdl3-integration",
-      "max_references": 195
-    },
     "modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp": {
       "category": "platform-sdl2-integration",
       "max_references": 12
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 195
     },
     "modules/platform/tests/CNA/Platform/Sdl3InputDevicesTests.cpp": {
       "category": "platform-sdl3-integration",
@@ -520,6 +520,10 @@
     "modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 1
+    },
+    "modules/renderers/fna3d/examples/fna3d_device_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 16
     },
     "modules/renderers/freedirect/examples/freedirect_logical_transform_test.cpp": {
       "category": "renderer-integration-executable",

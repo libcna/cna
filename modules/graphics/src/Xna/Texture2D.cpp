@@ -30,6 +30,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba1010102.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PackedVector/Rgba64.hpp"
 #include "Microsoft/Xna/Framework/Vector2.hpp"
+#include "System/ObjectDisposedException.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "System/IO/Stream.hpp"
@@ -382,6 +383,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetData(const Color* data, int elementCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
@@ -431,6 +434,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetData(int level, const Rectangle* rect,
                             const Color* data, int startIndex, int elementCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
                 "Texture2D::SetData: Color data requires a Color-compatible 32-bit format");
@@ -566,6 +571,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::SetDataBytes(int level, const Rectangle* rect, const std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -687,6 +694,8 @@ namespace Microsoft::Xna::Framework::Graphics
                                            const std::uint8_t* data, int startIndex,
                                            int elementCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::SetData: data must not be null");
         if (startIndex < 0)
@@ -1289,6 +1298,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::SetDataRGBA(const uint8_t* data, int pixelCount)
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (format_ != SurfaceFormat::Color)
             throw std::invalid_argument(
                 "Texture2D::SetDataRGBA: raw RGBA requires SurfaceFormat::Color");
@@ -1361,6 +1372,8 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void Texture2D::GetData(Color* data, int startIndex, int elementCount) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
@@ -1450,6 +1463,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetData(int level, const Rectangle* rect,
                             Color* data, int startIndex, int elementCount) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!IsColorTransferFormatEXT(format_))
             throw std::invalid_argument(
                 "Texture2D::GetData: Color data requires a Color-compatible 32-bit format");
@@ -1553,6 +1568,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                  int startIndex, int elementCount, int elementBytes) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)
@@ -1626,6 +1643,8 @@ namespace Microsoft::Xna::Framework::Graphics
     void Texture2D::GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                            int startIndex, int elementCount) const
     {
+        if (isDisposed_)
+            throw System::ObjectDisposedException("Texture2D");
         if (!data || elementCount <= 0)
             throw std::invalid_argument("Texture2D::GetData: data must not be null");
         if (startIndex < 0)

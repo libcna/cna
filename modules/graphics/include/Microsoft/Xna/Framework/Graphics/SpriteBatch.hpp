@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -41,7 +42,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
     private:
         struct SpriteInfo {
-            const Texture2D* texture = nullptr;
+            std::shared_ptr<ITextureRenderer> texture;
             Rectangle destRect       = {0, 0, 0, 0};
             Rectangle srcRect        = {0, 0, 0, 0};
             Color color              = Color(255, 255, 255, 255);
