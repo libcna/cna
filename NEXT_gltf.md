@@ -9,9 +9,10 @@ session needs to start work without re-deriving the state.
 - **Branch:** `feature/gltf`, with local commits. The owner explicitly requested a push when the
   current autonomous run reaches its weekly-limit cutoff; no pull request has been requested. (The campaign ran on
   `claude/gltf-011-center-collapse-swdjna` until 2026-08-12.)
-- **Working document:** `plan_gltf.md`, 460 numbered rows. **450 closed (`✔` 274, `✅` 176),
-  5 `⬜` remaining.** The other 5 carry a deliberate partial marker: 1 `🔬` (investigation, no
-  implementation owed) and 4 `✅/⬜`; there is no `✅/🐛` residue, standalone `🐛`, or `⛔`.
+- **Working document:** `plan_gltf.md`, 460 numbered rows. **Three remain open: `GLTF-344`
+  (`✅/⬜`, the specular texture pair on 3 of 15 PBR renderers), `GLTF-459` and `GLTF-460`.**
+  Everything else is closed. §27.2 now carries a row-by-row ROBUST assessment — 9 of 12 green —
+  and that section, not this file, is the current record of what the milestone still needs.
 - **Draco is no longer optional local state:** `third_party/draco` is a gitlink pinned to
   Draco **1.5.7** (`8786740086a9f4d83f44aa83badfbea4dce7a1b5`). The normal build uses it; the sanitizer
   workflow also runs `CNA_ENABLE_DRACO=OFF` so the named refusal path cannot rot.
@@ -170,31 +171,36 @@ narrower than the old table implied:
 
 | Boundary | Rows | Note |
 |---|---|---|
-| **format/material breadth** | `GLTF-184`, `244`, `344` | §27.1 row 7 is green: strides 60/76 carry two sampled UV sets, direct/offline selectors agree, and EasyGL OPENGLES2/3 plus the pinned Khronos comparison prove the image. Per-map `KHR_texture_transform` matrices and the two `KHR_materials_specular` texture inputs remain. `GLTF-244` still requires its full material matrix at L7 on two rasterisers. |
-| **renderer/platform residue** | `GLTF-379`, `385`–`387` | The seven completed semantic-audit slices stay recorded under the investigation row. Vulkan, DirectX11/DXVK and SOFTWARE have strong numerical/native evidence, but no renderer-specific whole-corpus L7 capture/tolerance policy. |
-| **milestone chain** | `GLTF-459`–`460` | CORE and the matching `FUTURE.md` update (`GLTF-449`/`458`) are closed. Evaluate ROBUST separately against all twelve §27.2 rows before writing the retrospective. |
+| **format/material breadth** | `GLTF-344` | `GLTF-184` and `GLTF-244` are closed. Per-map `KHR_texture_transform` landed, and the two `KHR_materials_specular` texture inputs now reach **12 of the 15** PBR renderers. `metal`, `webgpu` and `wicked` sample neither, and none of the three carries a second UV stream at all, so the dual-UV foundation comes first. The split is machine-checked by `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` -- read it rather than this row, which is a snapshot. |
+| **renderer/platform residue** | *(none)* | **This row was stale and misled a later session; keep it corrected.** `GLTF-379` and `385`–`387` all closed with exactly the whole-corpus L7 capture/tolerance policies the old text said were missing: EasyGL, Vulkan, SOFTWARE and **DirectX11 under Xvfb + Wine + DXVK** each have reviewed goldens, a policy file, a hash report and a passing no-display guard test. What remains for §27.2 row 12 is Gate C's own protocol (`scripts/gltf-viewer-retake.py`), whose real-world rows ran on one renderer. |
+| **milestone chain** | `GLTF-459`–`460` | CORE and the matching `FUTURE.md` update (`GLTF-449`/`458`) are closed. ROBUST **has now been assessed row by row in §27.2 itself: 9 of 12 green.** Rows 3, 6 and 12 remain; read §27.2, not this table. |
 
 ## Suggested next clusters
 
-Ordered by value, not by number. Rewritten 2026-08-14 after the 145-asset corpus, vendored Draco,
-viewer integration and pinned reference subset became green.
+Rewritten 2026-08-15 after §27.2 was assessed row by row. Four of the five clusters the previous
+list named are now closed (`GLTF-184`, `GLTF-244`, `GLTF-379`, `385`–`387`); what is left is the
+three open ROBUST rows, ordered by cost.
 
-1. **Finish per-map `KHR_texture_transform` state (`GLTF-184`) on the landed UV2 foundation.**
-   Strides 60/76 and the five map selectors are green; the remaining loss is a different transform
-   per texture reference. Move it to renderer-consumed PBR state, keep legacy 48/68 behaviour
-   stable, and retire the named baking diagnostic only after the L7 witness passes.
-2. **Complete the two-renderer material raster gate (`GLTF-244`).** Reuse the final viewer harness
-   and keep numerical L6 first; define the second renderer's measured pixel policy instead of
-   copying EasyGL's tolerances without evidence.
-3. **Finish the remaining `KHR_materials_specular` texture inputs (`GLTF-344`)** on top of the
-   per-map UV selector, with the specular scalar texture kept linear and the colour texture decoded
-   from sRGB.
-4. **Finish renderer/platform residue (`GLTF-379`, `385`–`387`)** with explicit renderer-specific
-   image evidence or a documented release-boundary decision; do not turn existing L1–L6/native
-   success into an unstated L7 claim.
-5. **Close the remaining milestone chain in order** (`GLTF-459`–`460`). CORE is declared; ROBUST
-   is a separate gate. The optional-extension and cross-renderer residue above does not reopen a
-   green §27.1 row, but it still blocks the broader ROBUST claim and therefore the retrospective.
+1. **Re-run Gate C's real-world rows on three more renderers (§27.2 row 12).** The cheapest of the
+   three and the least obvious, because the hard part is already done: EasyGL, Vulkan, SOFTWARE and
+   DirectX11-under-DXVK each hold whole-corpus, tolerance-0, reviewed-golden image evidence with a
+   passing guard test. What ran on only one renderer is `scripts/gltf-viewer-retake.py` itself —
+   specifically its real-world rows, since the generated corpus deliberately contains no ≥ 50 MB
+   asset (`GLTF-019`). This is a protocol re-run on renderers that already have the pipeline.
+2. **The `KHR_materials_specular` texture pair on `metal`, `webgpu`, `wicked` (`GLTF-344`,
+   §27.2 row 3).** Not three small bindings: none of the three carries a second UV stream, and the
+   binding contract is defined per map with its own UV selector, so the dual-UV foundation comes
+   first. Weigh verifiability before starting — `metal` cannot be built or run in this environment
+   at all, and `GLTF-157`'s rule is that a renderer change nobody can verify is not a fix.
+   `GltfRendererPbrFallbackPolicy.SpecularTextureInventoryClassifiesEveryPbrRenderer` holds the
+   partition and must be edited deliberately when one of the three moves.
+3. **Real point and spot lights (§27.2 row 6).** The largest item between here and ROBUST, and
+   scoped out on purpose: the light block is shared shader ABI across every renderer, and XNA's
+   `IEffectLights` names exactly three directional lights and cannot express a point or spot light.
+   `GLTF-331` carries the four-step design sketch; `GLTF-326`/`327` already count and report the
+   loss, so nothing is silent meanwhile.
+
+Then `GLTF-459` (declare ROBUST) and `GLTF-460` (retrospective), in that order.
 
 **Before starting anything, read `docs/gltf-conformance.md` §3.7 and §3.8.** They now record how to
 add a fixture and when a document belongs inline instead — both were learned the expensive way.
