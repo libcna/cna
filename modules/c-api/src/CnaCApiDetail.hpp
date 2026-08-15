@@ -115,6 +115,7 @@ enum class ObjectKind : uint32_t {
     HapticDevice = 68,
     JoystickState = 69,
     JoystickEventRegistration = 70,
+    InputDeviceEventRegistration = 71,
     Test = UINT32_MAX
 };
 

@@ -3863,6 +3863,115 @@
       "tests": "`JoystickSmoke.c` enumerates every device this machine reports and round-trips each descriptor and name, refuses an index at or past the count — which pins the zero-device case every verification tree actually has — proves an unconnected identifier is an ordinary answer for both capabilities and capture, and drives both hot-plug events end to end: each callback receives its own identifier and context, releasing one registration detaches exactly that subscription, and a registration released after the process event was cleared removes nothing rather than failing",
       "status": "implemented",
       "task": "CBIND-037B7a"
+    },
+    {
+      "id": "sensor-type",
+      "qualified_name_regex": "^CNA::Input::SensorTypeEXT(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_SensorType` with one `CNA_SENSOR_TYPE_*` macro per canonical value at its canonical ordinal, plus `CNA_SENSOR_TYPE_MAXIMUM` for validation. Every route taking a kind refuses an ordinal above the maximum",
+      "tests": "`InputDevicesSmoke.c` round-trips all seven identities through a descriptor comparison and refuses the first undefined one; every enumerated sensor is asserted to report a defined kind, and the ordinals are pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "sensor-info",
+      "qualified_name_regex": "^CNA::Input::SensorInfoEXT(::(id|name|type))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed 16-byte `CNA_SensorInfo` value plus `cna_sensor_info_init` for the canonical default, with the canonical `name` field left outside the POD and read through `cna_sensors_get_name_size_at`/`_copy_name_at` — the same split the joystick and haptic descriptors use",
+      "tests": "`InputDevicesSmoke.c` asserts the canonical default, reads the name of every sensor this machine enumerates, and pins the layout through C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "sensor-info-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const SensorInfoEXT &left, const SensorInfoEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_sensor_info_equals`, which takes the two names alongside the two values because the name lives outside the POD, and so reproduces the canonical three-field comparison exactly. The canonical `!=` is this comparison negated and needs no route of its own",
+      "tests": "`InputDevicesSmoke.c` separates two descriptors on the identifier, on the kind and on the name alone, and covers the undefined-identity, invalid-structure and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "sensors-facade",
+      "qualified_name_regex": "^CNA::Input::Sensors(::(GetSensorsEXT|GetAccelerometerEXT|GetGyroscopeEXT))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the index-addressed enumeration `cna_sensors_get_count` plus `cna_sensors_get_info_at` and the name count/copy pair, and `cna_sensors_get_accelerometer`/`cna_sensors_get_gyroscope` for the two reads. Both reads follow the **availability-separate-from-the-answer** rule: the canonical `bool` return becomes an `out_available` flag, having no sensor is an ordinary success, and the reading output is **left unchanged** when nothing answered, exactly as the canonical query leaves its reference. These are the host machine's sensors, distinct from a controller's `cna_gamepad_get_gyro_ext`/`_get_accelerometer_ext`",
+      "tests": "`InputDevicesSmoke.c` enumerates whatever this machine reports, refuses an index at or past the count — which pins the zero-sensor case every verification tree actually has — and proves the untouched-output contract by pre-filling the reading with sentinel components and asserting they survive when the flag reports no sensor",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "input-device-info",
+      "qualified_name_regex": "^CNA::Input::InputDeviceInfoEXT(::(id|name))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed 16-byte `CNA_InputDeviceInfo` value plus `cna_input_device_info_init`, with the name outside the POD as elsewhere in this family. Its identifier is `uint64_t` rather than the `uint32_t` the sensor and joystick descriptors use, because a touch-device identifier is 64-bit natively; that widens the value's alignment to 8 and is pinned by an ABI assertion",
+      "tests": "`InputDevicesSmoke.c` asserts the canonical default, round-trips an identifier above the 32-bit range so a narrowing conversion could not pass unnoticed, and pins the layout through C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "input-device-info-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const InputDeviceInfoEXT &left, const InputDeviceInfoEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_input_device_info_equals`, which takes the two names alongside the two values and so reproduces the canonical two-field comparison exactly. The canonical `!=` is this comparison negated and needs no route of its own",
+      "tests": "`InputDevicesSmoke.c` separates two descriptors on a 64-bit identifier and on the name alone, and covers the invalid-structure, malformed-UTF-8 and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "input-devices-facade",
+      "qualified_name_regex": "^CNA::Input::InputDevices(::(GetMiceEXT|GetKeyboardsEXT|GetTouchDevicesEXT|MouseConnectedEXT|MouseDisconnectedEXT|KeyboardConnectedEXT|KeyboardDisconnectedEXT|ResetForTests))?$",
+      "kinds": [
+        "class",
+        "method",
+        "field"
+      ],
+      "mapping": "three index-addressed enumerations — `cna_input_devices_get_mouse_count`/`_get_mouse_info_at`/`_get_mouse_name_size_at`/`_copy_mouse_name_at` and the keyboard and touch-device equivalents — plus one `cna_input_devices_subscribe_*_ext` route per static multicast field, all four released by one shared `cna_input_devices_unsubscribe_ext`, a matching raise route each, and `cna_input_devices_reset_for_tests_ext` for the canonical helper that clears all four events at once. This is metadata only, exactly as the canonical class documents: an identifier here does not select a device to read from, because XNA input state stays merged across devices",
+      "tests": "`InputDevicesSmoke.c` drives all three enumerations through one shared validator — so the protocol is proven identically for mice, keyboards and touch devices, including the buffer-too-small-writes-nothing case — and drives all four events end to end: each callback receives its own identifier, releasing one registration detaches exactly that subscription, the canonical reset clears all four at once, and a registration released afterwards removes nothing rather than failing",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "clipboard",
+      "qualified_name_regex": "^CNA::Input::Clipboard(::(GetTextEXT|SetTextEXT|HasTextEXT))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_clipboard_get_text_size`/`cna_clipboard_copy_text` for the read, `cna_clipboard_set_text` taking a borrowed UTF-8 view, and `cna_clipboard_get_has_text`. The canonical setter returns nothing and therefore reports no platform outcome, and the C route reproduces that rather than inventing one: **success means the request was made, not that the clipboard changed**, since a headless session or a gesture-gated browser may ignore it. The clipboard is process-external state, so the count is documented as a hint and every copy reports its own byte count",
+      "tests": "`InputDevicesSmoke.c` captures the pre-existing clipboard, probes with non-ASCII UTF-8, and asserts a **relationship** rather than a fixed answer — if the write took effect the read must return exactly those bytes, and the presence flag must agree with a non-empty read in both directions — then proves the empty-clipboard and buffer-too-small cases only on a platform that actually stored the text, refuses malformed UTF-8, and restores the original content because this is state the suite does not own",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
+    },
+    {
+      "id": "power",
+      "qualified_name_regex": "^CNA::Input::Power(::GetInfoEXT)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_power_get_info`, which returns the canonical `PowerStateEXT` as the `CNA_PowerState` identity `CBIND-037B3` already froze and writes both canonical output references as `int32_t`. All three outputs are always written; `CNA_POWER_STATE_UNKNOWN` and `CNA_POWER_STATE_ERROR` are canonical answers rather than C failures, and -1 means \"unknown\" rather than \"none left\", the same convention the gamepad power query uses",
+      "tests": "`InputDevicesSmoke.c` asserts the state is a defined identity, that both numbers are written and within their documented ranges (-1 or 0 through 100 for the percent), and covers each null-output refusal plus the wrong-thread refusal",
+      "status": "implemented",
+      "task": "CBIND-037B7b"
     }
   ]
 }

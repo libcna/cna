@@ -1132,3 +1132,29 @@ _Static_assert(sizeof(CNA_JoystickCapabilities) == 40U &&
                    offsetof(CNA_JoystickCapabilities, is_connected) == 36U &&
                    offsetof(CNA_JoystickCapabilities, reserved) == 37U,
                "CNA_JoystickCapabilities layout must remain stable");
+
+_Static_assert(sizeof(CNA_InputDeviceEventRegistrationHandle) == 8U &&
+                   sizeof(CNA_SensorType) == sizeof(uint32_t) &&
+                   CNA_SENSOR_TYPE_UNKNOWN == UINT32_C(0) &&
+                   CNA_SENSOR_TYPE_ACCELEROMETER == UINT32_C(1) &&
+                   CNA_SENSOR_TYPE_GYROSCOPE == UINT32_C(2) &&
+                   CNA_SENSOR_TYPE_ACCELEROMETER_LEFT == UINT32_C(3) &&
+                   CNA_SENSOR_TYPE_GYROSCOPE_LEFT == UINT32_C(4) &&
+                   CNA_SENSOR_TYPE_ACCELEROMETER_RIGHT == UINT32_C(5) &&
+                   CNA_SENSOR_TYPE_GYROSCOPE_RIGHT == UINT32_C(6) &&
+                   CNA_SENSOR_TYPE_MAXIMUM == UINT32_C(6),
+               "CNA sensor kind identities must remain stable");
+
+_Static_assert(sizeof(CNA_SensorInfo) == 16U &&
+                   _Alignof(CNA_SensorInfo) == 4U &&
+                   offsetof(CNA_SensorInfo, id) == 8U &&
+                   offsetof(CNA_SensorInfo, type) == 12U,
+               "CNA_SensorInfo layout must remain stable");
+
+/* The device identifier is 64-bit where the sensor and joystick ones are 32-bit, because a touch
+   device identifier is natively 64-bit; that widens the alignment of this value to 8. */
+_Static_assert(sizeof(CNA_InputDeviceInfo) == 16U &&
+                   _Alignof(CNA_InputDeviceInfo) == 8U &&
+                   offsetof(CNA_InputDeviceInfo, id) == 8U &&
+                   sizeof(((CNA_InputDeviceInfo*)0)->id) == 8U,
+               "CNA_InputDeviceInfo layout must remain stable");

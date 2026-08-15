@@ -237,8 +237,47 @@ currently holds open and is a point-in-time snapshot taken by each call, so an i
 `cna_joysticks_get_count` is only valid until the device set changes. Trackball values are relative
 motion since the previous read, so capturing consumes them.
 
+## Host sensors, device enumeration, clipboard and power
+
+`input_devices.h` maps the last four `CNA::Input` extensions, all of them small host-system
+queries: the machine's own motion sensors, the connected-device lists, the system clipboard and the
+battery state. None has an XNA counterpart, so the routes take no `_ext` suffix except the hot-plug
+events and the test reset.
+
+**Availability is separate from the answer, and the answer is left alone.**
+`cna_sensors_get_accelerometer` and `cna_sensors_get_gyroscope` report through an `out_available`
+flag; having no sensor is an ordinary success, not a failure. When the flag is false the reading
+output is **left exactly as the caller left it**, because the canonical query leaves its reference
+untouched — so a caller that pre-fills a value keeps it. These are the machine's own sensors; a
+controller's are `cna_gamepad_get_gyro_ext` and `cna_gamepad_get_accelerometer_ext`.
+
+The three device lists — mice, keyboards, touch devices — are the same index-addressed enumeration
+the joystick and haptic families use: `cna_input_devices_get_mouse_count`, `_get_mouse_info_at`,
+`_get_mouse_name_size_at`, `_copy_mouse_name_at`, and the keyboard and touch equivalents. They are
+**metadata only**, exactly as the canonical class documents: XNA input state stays merged across
+devices, so an identifier here does not select a device to read from. `CNA_InputDeviceInfo` carries
+a `uint64_t` identifier, wider than the sensor and joystick descriptors, because a touch-device
+identifier is 64-bit natively.
+
+The four hot-plug events work like the joystick pair: process-wide static fields, so their
+subscriptions take no game handle, one shared `cna_input_devices_unsubscribe_ext` releases any of
+them, each has a raise route, and `cna_input_devices_reset_for_tests_ext` clears all four at once.
+
+**The clipboard's setter reports that the request was made, not that it succeeded.** The canonical
+operation returns nothing, so there is no platform outcome to forward, and this ABI does not invent
+one: `cna_clipboard_set_text` succeeds even where the platform ignores it — a headless session with
+no clipboard, or a browser that requires a user gesture. Read it back with
+`cna_clipboard_get_text_size`/`cna_clipboard_copy_text` if the outcome matters. The clipboard is
+also process-external state that another application can change between two calls, so treat the size
+as a hint and always use the byte count the copy itself reports.
+
+`cna_power_get_info` returns the same `CNA_PowerState` identity the gamepad power query uses and
+always writes all three outputs. `CNA_POWER_STATE_UNKNOWN` and `CNA_POWER_STATE_ERROR` are canonical
+answers rather than C failures, and -1 in the remaining-seconds or percent output means "unknown"
+rather than "none left".
+
 ## Current scope boundary
 
-Apart from the text-input and joystick hot-plug events above, the input families deliberately expose
-no live native state pointer or per-key platform call. The remaining `CNA::Input` sensor, clipboard,
-power and device-enumeration extensions remain planned for complete-public-API coverage.
+Apart from the text-input, joystick and device hot-plug events above, the input families
+deliberately expose no live native state pointer or per-key platform call. Every public `input`
+declaration now has a C mapping, so the module's share of the coverage matrix is closed.

@@ -501,7 +501,30 @@
 > trees are green at 53/53 with the new `CApi_JoystickSmoke` target, the sanitizer tree with leak
 > detection on. **Next: CBIND-037B7b** — the last 38 `input` rows (host sensors, device enumeration,
 > clipboard, power), which closes parents `CBIND-037B7` and `CBIND-037B` and the whole `input`
-> module.
+> module. **Done — see below.**
+>
+> CBIND-037B7b then completes those last 38 `input` rows in `input_devices.h` /
+> `CnaCApiInputDevices.cpp` / `InputDevicesSmoke.c`, reusing the shapes B7a settled rather than
+> inventing new ones. Three decisions are recorded. The two sensor reads follow the
+> availability-separate-from-the-answer rule and go one step further: when the flag reports no
+> sensor the reading output is **left exactly as the caller left it**, because that is what the
+> canonical query does with its reference — the test proves it with sentinel components that must
+> survive. `CNA_InputDeviceInfo` carries a **`uint64_t`** identifier where the sensor and joystick
+> descriptors carry `uint32_t`, since a touch-device identifier is natively 64-bit; the test
+> round-trips a value above the 32-bit range so a narrowing conversion could not pass unnoticed.
+> And `cna_clipboard_set_text` **reports that the request was made, not that it succeeded** — the
+> canonical setter returns nothing, so there is no platform outcome to forward and this ABI does not
+> invent one. Because the clipboard is process-external state the suite does not own, its test
+> captures the pre-existing content, asserts a relationship (if the write took effect the read must
+> return exactly those bytes; the presence flag must agree with a non-empty read in both
+> directions), proves the empty and buffer-too-small cases only where the platform actually stored
+> the text, and restores what it found. The inventory is now 4,499 implemented, 30 partial, 1,757
+> planned and 129 N/A; all four trees are green at 54/54 with the new `CApi_InputDevicesSmoke`
+> target, the sanitizer tree with leak detection on. **The `input` module is closed** — 834
+> implemented, 0 partial, 0 planned, 27 N/A — joining `storage`, `content`, `net` and `core`.
+> **Next: CBIND-037C**, the 325-row `media` module; note that `cna_c_api` does not link `cna_media`
+> yet, and that FFmpeg is available in all four trees so the video surface is real rather than a
+> compiled-out stub.
 >
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /

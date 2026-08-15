@@ -34,6 +34,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiInput.cpp
     src/CnaCApiInputHaptics.cpp
     src/CnaCApiInputJoystick.cpp
+    src/CnaCApiInputDevices.cpp
     src/CnaCApiMath.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
@@ -832,6 +833,24 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_JoystickSmoke COMMAND cna_c_api_joystick_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_JoystickSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_input_devices_smoke
+        tests/pure_c/InputDevicesSmoke.c
+    )
+    set_target_properties(cna_c_api_input_devices_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_input_devices_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_input_devices_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_input_devices_smoke)
+    add_test(NAME CApi_InputDevicesSmoke COMMAND cna_c_api_input_devices_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_InputDevicesSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()

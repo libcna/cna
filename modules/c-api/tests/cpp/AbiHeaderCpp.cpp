@@ -816,3 +816,14 @@ static_assert(sizeof(CNA_JoystickCapabilities) == 40U);
 static_assert(alignof(CNA_JoystickCapabilities) == 4U);
 static_assert(offsetof(CNA_JoystickCapabilities, power_percent) == 32U);
 static_assert(offsetof(CNA_JoystickCapabilities, reserved) == 37U);
+
+static_assert(sizeof(CNA_InputDeviceEventRegistrationHandle) == 8U);
+static_assert(sizeof(CNA_SensorType) == sizeof(uint32_t));
+static_assert(CNA_SENSOR_TYPE_GYROSCOPE == UINT32_C(2));
+static_assert(CNA_SENSOR_TYPE_MAXIMUM == UINT32_C(6));
+static_assert(sizeof(CNA_SensorInfo) == 16U);
+static_assert(alignof(CNA_SensorInfo) == 4U);
+static_assert(offsetof(CNA_SensorInfo, type) == 12U);
+static_assert(sizeof(CNA_InputDeviceInfo) == 16U);
+static_assert(alignof(CNA_InputDeviceInfo) == 8U);
+static_assert(offsetof(CNA_InputDeviceInfo, id) == 8U);
