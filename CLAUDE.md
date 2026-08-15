@@ -492,7 +492,7 @@ Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL`). These are exactly 46
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL`). These are exactly 47
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -504,6 +504,10 @@ is experimental and has a functional native
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
 `plan_diligent.md` and `docs/diligent-renderer.md`.
+`TINYGL` is the fixed-function CPU OpenGL renderer (C-Chads/tinygl) -- the fixed-function
+counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
+not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
+`docs/tinygl-renderer.md` and `plan_tinygl.md` for the full boundary.
 `SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and

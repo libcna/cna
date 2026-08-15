@@ -229,6 +229,13 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // because RenderTarget2D::GetRenderTargetRenderer() is null, and PortableGLRenderer::
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+#elif defined(CNA_RENDERER_TINYGL)
+    // TinyGL has the same shape for its own reason: it keeps IGraphicsRenderer's nullptr
+    // CreateRenderTarget2D()/CreateRenderTargetCube() defaults -- TinyGL renders into exactly one
+    // ZBuffer and has no off-screen framebuffer concept -- so GraphicsDevice rejects the bind
+    // before reaching the renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set
+    // as well (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
+    EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #elif defined(CNA_RENDERER_OPENGLES1)
     // plan_opengles1.md: OpenGL ES 1.1 has no MRT mechanism, and no extension in the CM registry
     // adds one -- a third distinct case from the single-target renderers above (which support one)
@@ -263,9 +270,10 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_TINYGL)
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
+    // TinyGL joins them -- it renders into exactly one ZBuffer and creates no render target at all.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
 #else
     EXPECT_NO_THROW(gd.SetRenderTargets(bindings));
@@ -287,7 +295,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)
+#if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...
     EXPECT_TRUE(gd.GetRenderTargets().empty());

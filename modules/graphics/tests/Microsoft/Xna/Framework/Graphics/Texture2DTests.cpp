@@ -213,24 +213,44 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
     EXPECT_EQ(Texture2D(gd, 1, 1, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
 }
 
+// TinyGL stores and samples level 0 only, so any request that would actually produce a mip chain
+// is refused at construction (TinyGLTextureRenderer's mipLevels != 1 guard) rather than silently
+// collapsed to one level. A single-level request is still an ordinary success, which is why the
+// 1x1 case below stays an equality assertion on every renderer.
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 // -----------------------------------------------------------------------
@@ -244,14 +264,22 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
 {
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
-    constexpr int kLevelCount = 4;
     GraphicsDevice gd;
+#ifdef CNA_RENDERER_TINYGL
+    // TinyGL owns level 0 only, so the mipmapped texture this test needs cannot be constructed at
+    // all -- the refusal itself is the contract worth asserting here (see LevelCountTest above).
+    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
+                 System::NotSupportedException);
+    GTEST_SKIP() << "TINYGL stores level 0 only -- no mip chain exists to walk";
+#else
+    constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
 
     const std::vector<std::vector<Color>> expected =
         PopulateEveryMip(texture, kWidth, kHeight);
     ExpectEveryMipExact(texture, kWidth, kHeight, expected);
+#endif
 }
 
 TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSourceUnchanged)

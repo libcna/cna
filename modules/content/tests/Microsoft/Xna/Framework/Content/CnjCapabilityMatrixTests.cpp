@@ -204,7 +204,7 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
     defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
     defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
     defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_OPENVG) || \
-    defined(CNA_RENDERER_PORTABLEGL)
+    defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)
 constexpr bool kCubeStorageSupported = false;
 #else
 constexpr bool kCubeStorageSupported = true;

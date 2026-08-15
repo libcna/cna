@@ -168,7 +168,7 @@ set(_cna_renderer_modules
     directx7 directx8 directx9 directx10 directx11 directx12
     easygl fna3d freedirect gdi glide headless html-dom llgl magnum metal opengl1
     opengl2 opengl4 opengles1 openvg portablegl sdl-gpu sdl-renderer skia software sokol
-    stub svg-dom vulkan
+    stub svg-dom tinygl vulkan
     webgpu wicked common/d3d)
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")

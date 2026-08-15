@@ -75,17 +75,23 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
-#if defined(CNA_RENDERER_SDL_RENDERER) || \
-    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
-    defined(CNA_RENDERER_BLEND2D) || \
-    defined(CNA_RENDERER_OPENVG)
 // OPENVG keeps IGraphicsRenderer::CreateTextureCube's nullptr default under the default Throw
 // policy (OpenVgRenderer::CreateTextureCube only ever returns a real object under the opt-in
 // WarnAndStub policy, and even then a discard-everything null object, never real storage) --
 // ShivaVG/OpenVG has no cube-map concept at all. Same "no cube resource exists" shape as
-// Native-2D/Canvas/HTML_DOM/FreeDirect/GDI above. || \
-    defined(CNA_RENDERER_PORTABLEGL)
+// Native-2D/Canvas/HTML_DOM/FreeDirect/GDI below.
+//
+// PORTABLEGL and TINYGL keep the same nullptr CreateTextureCube default for their own reasons
+// (docs/portablegl-renderer.md, docs/tinygl-renderer.md): neither CPU OpenGL implementation has a
+// cube-map resource at all. PORTABLEGL was previously written after this comment block with its
+// `|| \` continuation inside a `//` line, which spliced the term into the comment and left it
+// inert -- every term now sits in the directive itself so the guard means what it reads.
+#if defined(CNA_RENDERER_SDL_RENDERER) || \
+    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
+    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
+    defined(CNA_RENDERER_BLEND2D) || \
+    defined(CNA_RENDERER_OPENVG) || \
+    defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)
 constexpr bool kCubeLevel0ReadbackSupported = false;
 constexpr bool kCubeStorageSupported        = false;
 #else

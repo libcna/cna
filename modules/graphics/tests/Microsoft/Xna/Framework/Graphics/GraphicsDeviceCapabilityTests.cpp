@@ -132,6 +132,17 @@ constexpr bool kExpectCustomEffects         = false;
 constexpr bool kExpectMultipleRenderTargets = false;
 constexpr bool kExpectOcclusionQuery        = false;
 constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_TINYGL)
+// TinyGL answers the same three refusals as PortableGL above, for its own fixed-function reasons:
+// CreateRenderTarget2D()/CreateRenderTargetCube() keep IGraphicsRenderer's nullptr defaults and
+// SetRenderTargets() refuses a non-empty binding, CreateOcclusionQuery() keeps its nullptr default,
+// and TinyGL has no shader stage of any kind for a CNA Effect to be compiled into, so
+// CreateEffectRenderer() keeps its nullptr default and TinyGLSpriteBatchRenderer::SetCustomEffect()
+// refuses a non-null Effect. Each refusal is backed by
+// modules/renderers/tinygl/examples/tinygl_rejection_test.cpp.
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_RENDERER_DILIGENT)
 // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
 // honest, narrower profile at this point in its implementation -- no custom ShaderEffect
@@ -192,6 +203,27 @@ TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
     EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
         << "OpenVG has no depth/stencil concept whatsoever -- OpenVgRenderer::SupportsDepthStencil "
            "returns false unconditionally";
+}
+#elif defined(CNA_RENDERER_TINYGL)
+// TinyGL splits the pair the arms above keep together: it is genuinely 3D-capable, but its
+// ZBuffer carries a depth plane and no stencil plane. DepthStencilBuffer names the pair, so the
+// honest answer is false even though the depth half is real and implemented -- see
+// TinyGLRenderer::SupportsCapability(). SupportsStencilBuffer below asserts the same truth from
+// the renderer's own side.
+TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
+{
+    GraphicsDevice gd;
+    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD))
+        << "TinyGL's fixed-function 3D routes (DrawPrimitivesEx/DrawIndexedPrimitivesEx) are real "
+           "and covered by modules/renderers/tinygl/examples/tinygl_3d_test.cpp";
+}
+
+TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
+{
+    GraphicsDevice gd;
+    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
+        << "TinyGL's ZBuffer has a depth plane but no stencil plane, so the depth/stencil pair "
+           "this capability names cannot be claimed";
 }
 #else
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)

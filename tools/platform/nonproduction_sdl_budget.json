@@ -1104,6 +1104,10 @@
     "modules/renderers/svg-dom/examples/svgdom_smoke_test.cpp": {
       "category": "renderer-integration-executable",
       "max_references": 7
+    },
+    "modules/renderers/tinygl/examples/tinygl_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
     }
   }
 }

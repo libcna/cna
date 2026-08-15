@@ -2242,12 +2242,14 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void GraphicsDevice::createOrAttachWindow()
     {
-#if (defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL)) && defined(CNA_PLATFORM_SDL3)
+#if (defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_PORTABLEGL) || defined(CNA_RENDERER_TINYGL)) && defined(CNA_PLATFORM_SDL3)
         // CPU renderers selected beside the SDL3 platform keep their established no-video path:
         // asking SDL3 for even a hidden window would require a display server they deliberately
-        // do not need. A HEADLESS or TERMINAL platform, however, creates an in-memory/terminal
-        // IPlatformWindow in the ordinary branch below, making the ownership seam testable
-        // without introducing a native display dependency.
+        // do not need. PortableGL and TinyGL are both of that shape -- rswinkle/PortableGL's
+        // shader-era CPU OpenGL and C-Chads/tinygl's fixed-function one. A HEADLESS or TERMINAL
+        // platform, however, creates an in-memory/terminal IPlatformWindow in the ordinary branch
+        // below, making the ownership seam testable without introducing a native display
+        // dependency.
         // GraphicsRendererCreateArgs::surface stays windowless; viewport sizing falls back to the
         // renderer and presentation application already treats a missing platform window as a
         // no-op.

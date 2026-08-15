@@ -25,6 +25,20 @@ using namespace Microsoft::Xna::Framework;
 
 namespace
 {
+    // Every Game constructs a GraphicsDevice, and therefore a renderer. TinyGL keeps its GL
+    // context in one process-wide global (glInit/glClose) and offers no make-current entry point,
+    // so exactly one TinyGLRenderer -- and thus one live Game -- may exist at a time; its
+    // constructor refuses the second one loudly rather than corrupting the first one's context.
+    // The nested-lifetime cases below need two simultaneously live games by construction, so on
+    // such a renderer there is no behaviour to assert rather than a behaviour that is wrong.
+    // The sequential cases (construct, destroy, construct again) are unaffected and still run,
+    // which is what keeps the install/uninstall contract covered on every renderer.
+#if defined(CNA_RENDERER_TINYGL)
+    constexpr bool kSupportsConcurrentGames = false;
+#else
+    constexpr bool kSupportsConcurrentGames = true;
+#endif
+
     class QuietGame : public Game
     {
     public:
@@ -109,6 +123,9 @@ TEST_F(GamePlatformOwnershipTest, DestroyingAGameUninstallsItsPlatform)
 
 TEST_F(GamePlatformOwnershipTest, AnInnerGameRestoresTheOuterOnesPlatformWhenItGoesAway)
 {
+    if (!kSupportsConcurrentGames)
+        GTEST_SKIP() << "this renderer allows only one live Game per process";
+
     // Two live games is not a shape a real title has, but tests construct them in nested scopes
     // routinely. The inner one takes over the installation while it exists and must hand it back
     // on the way out: clearing instead of restoring would leave the outer, still-running game's
@@ -128,6 +145,9 @@ TEST_F(GamePlatformOwnershipTest, AnInnerGameRestoresTheOuterOnesPlatformWhenItG
 
 TEST_F(GamePlatformOwnershipTest, AnOuterGameOutlivingAnInnerOneDoesNotOverwriteTheInstallation)
 {
+    if (!kSupportsConcurrentGames)
+        GTEST_SKIP() << "this renderer allows only one live Game per process";
+
     // The mirror case: destroying a game whose platform is no longer the installed one must
     // leave the installation alone rather than restore its own saved predecessor over the top.
     QuietGame* outer = new QuietGame();
@@ -142,6 +162,9 @@ TEST_F(GamePlatformOwnershipTest, AnOuterGameOutlivingAnInnerOneDoesNotOverwrite
 
 TEST_F(GamePlatformOwnershipTest, OutOfOrderDestructionLeavesNoDanglingInstallation)
 {
+    if (!kSupportsConcurrentGames)
+        GTEST_SKIP() << "this renderer allows only one live Game per process";
+
     // The case that rules out the obvious implementation. If each game merely remembered "the
     // platform I displaced" and restored it, the inner game below would restore a pointer to the
     // outer game's platform -- which was already destroyed -- and the ambient accessor would hand
@@ -162,6 +185,9 @@ TEST_F(GamePlatformOwnershipTest, OutOfOrderDestructionLeavesNoDanglingInstallat
 
 TEST_F(GamePlatformOwnershipTest, EachGameOwnsItsOwnPlatform)
 {
+    if (!kSupportsConcurrentGames)
+        GTEST_SKIP() << "this renderer allows only one live Game per process";
+
     QuietGame first;
     QuietGame second;
     EXPECT_NE(&first.GetPlatformEXT(), &second.GetPlatformEXT());
