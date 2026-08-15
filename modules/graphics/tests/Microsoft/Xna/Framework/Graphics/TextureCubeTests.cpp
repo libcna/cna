@@ -90,13 +90,25 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // case. That made CubeStorageSupported() true under PORTABLEGL, claiming cube storage this CPU
 // software renderer may well not have.
 //
-// The runtime form has no line continuations, so the trap cannot recur; PortableGL is left OUT to
-// reproduce today's behaviour exactly, because deciding whether it belongs in that set is a
-// question about that renderer, not about this conversion. Answering it needs a single-renderer
-// PORTABLEGL run of this suite.
+// PortableGL is now IN the list, restoring what the code plainly intended: modules/content/tests'
+// own cube-storage guards -- whose comment says they use "the same reviewed renderer set" as this
+// file -- have always listed PORTABLEGL and state that "PortableGL keeps the same nullptr
+// CreateTextureCube default -- no cube resource exists there either". The two lists were meant to
+// be identical; only this one lost an entry to the comment.
+//
+// Measured consequence: none. A single-renderer PORTABLEGL build passes this suite 85/85 both with
+// and without PortableGL in the list, because the assertions these constants drive
+// (ExpectUploadStoredOrRefused) accept either "stored" or "refused with NotSupportedException" --
+// they exist to forbid the third outcome, silently discarding data. So the swallowed condition was
+// real but benign HERE. It is corrected because the list is also read by humans as the statement of
+// which renderers own cube pixels, and because a future assertion that does distinguish the two
+// would have inherited the wrong answer.
+//
+// The runtime form has no line continuations, so the trap cannot recur.
 [[nodiscard]] inline bool CubeStorageSupported()
 {
-    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D, OpenVg);
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D,
+                            OpenVg, PortableGL);
 }
 
 /// Level-0 readback and storage are the same set: a renderer either owns cube pixels or it does not.

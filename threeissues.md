@@ -181,7 +181,7 @@ unnoticed until someone tries the target. CNA has an Emscripten preset (`CMakePr
 | 1 | `WEBGL1` may take ES 3.0 paths | no — needs a browser | no | no, preserved verbatim and documented |
 | 2 | `OPENGL33` glTF segfault | yes, at `c5045553b` | no | no |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | worked around with flags only |
-| 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes (mechanism) | no | behaviour preserved, trap removed |
+| 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |
 
 ---
 
@@ -223,24 +223,31 @@ int in_list = 0;
 
 `gcc -E -DC` yields `in_list = 0` — `defined(C)` is not in the condition.
 
-### Consequence
+### Consequence: real bug, no observable effect *here*
 
-Under a `PORTABLEGL` build, `kCubeStorageSupported` was `true`, so the suite asserted that this CPU
-software renderer stores and reads back cube-map faces. Whether it actually does is the open
-question; the surrounding comments place it with the renderers that do **not**.
+Under a `PORTABLEGL` build `kCubeStorageSupported` was `true`, claiming this CPU software renderer
+stores and reads back cube-map faces.
+
+Measured, rather than assumed: a single-renderer `PORTABLEGL` build passes the cube suites **85/85
+both with and without** `PortableGL` in the list. The assertions those constants drive
+(`ExpectUploadStoredOrRefused`) accept either "stored" or "refused with `NotSupportedException`" —
+they exist to forbid the third outcome, silently discarding the data. So the swallowed condition
+never changed a verdict.
+
+That the two lists disagree is still a defect: `modules/content/tests` has always included
+`PORTABLEGL` in what its own comment calls "the same reviewed renderer set", and states that
+"PortableGL keeps the same nullptr `CreateTextureCube` default — no cube resource exists there
+either".
 
 ### What was done about it
 
-The guard is now a runtime function, which has no line continuations, so the trap cannot recur.
-`PortableGL` is deliberately left **out** of the list, reproducing today's behaviour exactly —
-deciding whether it belongs there is a question about that renderer, not about the conversion. The
-reasoning is recorded at the code.
+The guard is now a runtime function — no line continuations, so the trap cannot recur — and
+`PortableGL` is back in the list, matching the sibling list and the surrounding comments. Verified
+against a real single-renderer `PORTABLEGL` build: 85/85 either way.
 
-### How to settle it
-
-Build single-renderer `PORTABLEGL` and run `CnaTests --gtest_filter="*Cube*"`. If the suite fails,
-`PortableGL` belongs in the no-storage list and adding it is a one-line change; if it passes, the
-current (accidental) behaviour was right all along and should be made deliberate.
+It is corrected rather than left alone because the list is also read by humans as the statement of
+which renderers own cube pixels, and because a future assertion that *does* distinguish "stored"
+from "refused" would have silently inherited the wrong answer.
 
 ### Worth checking elsewhere
 

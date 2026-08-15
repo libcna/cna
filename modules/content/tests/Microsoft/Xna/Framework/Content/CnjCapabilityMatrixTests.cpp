@@ -13,6 +13,11 @@
 #include <fstream>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "System/NotSupportedException.hpp"
 #include <memory>
 #include <vector>
@@ -200,15 +205,13 @@ TEST_F(CnjCapabilityMatrixTest, SoundEffectDelegatesViaSourceFile)
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-#if defined(CNA_RENDERER_SDL_RENDERER) || \
-    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
-    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_OPENVG) || \
-    defined(CNA_RENDERER_PORTABLEGL)
-constexpr bool kCubeStorageSupported = false;
-#else
-constexpr bool kCubeStorageSupported = true;
-#endif
+// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
+// renderer rather than the build default.
+[[nodiscard]] inline bool CubeStorageSupported()
+{
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
+                            OpenVg, PortableGL);
+}
 
 TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
 {
@@ -220,7 +223,7 @@ TEST_F(CnjCapabilityMatrixTest, TextureCubeDelegatesViaSourceFile)
     ContentManager cm(nullptr, root.path().string());
     cm.setGraphicsDevice(gd);
 
-    if (!kCubeStorageSupported)
+    if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)cm.Load<TextureCube>("cube"), System::NotSupportedException);
         return;
