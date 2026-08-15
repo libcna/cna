@@ -95,7 +95,16 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include <bgfx/bgfx.h>
 #endif
 
@@ -1459,7 +1468,7 @@ TEST_F(InstancedDiffuseColorTest, PositionOnlyDeclarationRendersDiffuseColorWhen
 // object counts, and they lag one frame, so every reading is taken after two Presents.
 // ---------------------------------------------------------------------------
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 
 class BgfxInstancedColorCardinalityTest : public InstancedDiffuseColorTest
 {
@@ -1529,6 +1538,9 @@ protected:
 
 TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesTheCache)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1598,6 +1610,9 @@ TEST_F(BgfxInstancedColorCardinalityTest, ColorStateCreatesNoProgramAndReusesThe
 
 TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!InstancedDiffuse())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1691,5 +1706,5 @@ TEST_F(BgfxInstancedColorCardinalityTest, InstancedColorDrawSubmitsExactlyOnce)
     }
 }
 
-#endif   // CNA_RENDERER_BGFX
+#endif   // CNA_TEST_BGFX_AVAILABLE
 

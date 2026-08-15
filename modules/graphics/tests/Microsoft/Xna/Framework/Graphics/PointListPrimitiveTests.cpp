@@ -70,7 +70,16 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
@@ -567,7 +576,7 @@ TEST_F(PointListPrimitiveTest, IndexedPointListHonorsThirtyTwoBitIndexElements)
     vertexBuffer.SetData(vertices.data(), 8);
     indexBuffer.SetData(indices.data(), 8);
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
     auto* nativeIndex =
         dynamic_cast<CNA::Internal::Renderers::Bgfx::BgfxIndexBufferRenderer*>(
             &indexBuffer.GetRenderer());
@@ -1229,11 +1238,14 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
         pixels, Color::Black, 3, "non-indexed point range with vertexStart");
 }
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 // Bgfx expresses topology as per-submission state (BGFX_STATE_PT_*), not as a cached graphics
 // pipeline object, so switching to and from point topology must not allocate any native resource.
 TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
 
     device.Present();
@@ -1308,6 +1320,9 @@ TEST_F(PointListPrimitiveTest, BgfxPointDrawsAllocateNoPerDrawNativeResources)
 // asserted here: three point-sized marks, never area geometry.
 TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequestedVertices)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequirePointRendering();
 
     const int width = BackbufferWidth();

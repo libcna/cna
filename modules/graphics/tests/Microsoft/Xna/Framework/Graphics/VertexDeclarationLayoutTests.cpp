@@ -85,7 +85,16 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionNormalTextureSkinned.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionTexture.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include <bgfx/bgfx.h>
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
@@ -1210,7 +1219,7 @@ void main() { FragColor = vColor; }
 // DECISION, which is what REMED-GFX-216 is actually about.
 // ---------------------------------------------------------------------------
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 
 class BgfxVertexLayoutTest : public VertexDeclarationLayoutTest
 {
@@ -1269,6 +1278,9 @@ protected:
 
 TEST_F(BgfxVertexLayoutTest, NativeLayoutMatchesTheDeclaration)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1310,6 +1322,9 @@ TEST_F(BgfxVertexLayoutTest, NativeLayoutMatchesTheDeclaration)
 
 TEST_F(BgfxVertexLayoutTest, SameStrideDifferentDeclarationsGetDifferentNativeLayouts)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1342,6 +1357,9 @@ TEST_F(BgfxVertexLayoutTest, SameStrideDifferentDeclarationsGetDifferentNativeLa
 
 TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1394,6 +1412,9 @@ TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
 // the renderer shipped before is a regression here rather than a rendering surprise later.
 TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1496,6 +1517,9 @@ TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
 // submitted -- never replaced by a nearby built-in guess, which is what the stride table did.
 TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1554,6 +1578,9 @@ TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically
 
 TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
     if (!DeclarationLayout())
         GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
@@ -1588,5 +1615,5 @@ TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
            "so nothing may be reallocated";
 }
 
-#endif   // CNA_RENDERER_BGFX
+#endif   // CNA_TEST_BGFX_AVAILABLE
 

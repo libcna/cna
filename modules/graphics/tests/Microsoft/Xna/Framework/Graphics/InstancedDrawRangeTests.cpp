@@ -86,7 +86,16 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
@@ -1960,7 +1969,7 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 }
 #endif
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 // REMED-GFX-121, pinned: `vs_instanced3d.sc` builds the per-instance world matrix with the raw
 // `mat4(i_data0, i_data1, i_data2, i_data3)` constructor. bgfx maps `mat4()` to GLSL's COLUMN
 // constructor on the GLSL profile and to HLSL's `float4x4` ROW constructor on SPIR-V/HLSL/Metal/
@@ -1973,6 +1982,9 @@ TEST_F(InstancedDrawRangeTest, DisposingAfterQueuedInstancedDrawsIsSafe)
 // boundary explicit and makes the follow-up fix an obvious, deliberate change.
 TEST_F(InstancedDrawRangeTest, BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderersOnly)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
 
     const bgfx::RendererType::Enum renderer = bgfx::getRendererType();
@@ -2000,6 +2012,9 @@ TEST_F(InstancedDrawRangeTest, BgfxPerInstanceWorldMatrixIsAppliedOnGlslRenderer
 // this replaced carried none of the public range at all.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
 
     auto* renderer =
@@ -2097,6 +2112,9 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedBindingsAreTheExactPublicRanges)
 // zero -- while still drawing only the requested triangles' edges, for every instance.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBasedVertexBinding)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
 
     auto* renderer =
@@ -2166,6 +2184,9 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedWireframeKeepsItsRangeWithAZeroBased
 // many different ranges and instance counts, and returns to the process baseline after disposal.
 TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResources)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
 
     device.Present();
@@ -2251,6 +2272,9 @@ TEST_F(InstancedDrawRangeTest, BgfxInstancedRangesAllocateNoPerDrawNativeResourc
 // instance buffer would move one of these counters.
 TEST_F(InstancedDrawRangeTest, BgfxInstanceFrequencyCostsNoExtraSubmissionOrTransientMemory)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireInstancedRendering();
 
     const GridLayout layout = BackbufferLayout();

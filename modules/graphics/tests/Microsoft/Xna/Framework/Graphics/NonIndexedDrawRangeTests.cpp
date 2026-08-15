@@ -79,7 +79,16 @@ using namespace CNA::Testing::Renderers;
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#ifdef CNA_RENDERER_BGFX
+// plan_runtimerenderer.md RTR-P9-9: this file's bgfx blocks call bgfx:: directly and hold a
+// BgfxRenderer pointer, so they stay COMPILE-time -- no runtime predicate makes a type exist. The
+// condition widens from the DEFAULT renderer's macro to "compiled into this build", so a
+// multi-renderer build holding bgfx without selecting it still compiles them; each test inside then
+// checks at runtime that bgfx is the ACTIVE renderer.
+#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_PRESENT_BGFX)
+#define CNA_TEST_BGFX_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_BGFX_AVAILABLE
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #endif
 
@@ -1338,7 +1347,7 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
         << "one topology's draw consumed another topology's vertices";
 }
 
-#ifdef CNA_RENDERER_BGFX
+#ifdef CNA_TEST_BGFX_AVAILABLE
 // The exact native binding, not just its pixels. bgfx offers no way to read a submitted draw's
 // stream range back, so BgfxRenderer records the (startVertex, numVertices) pair it handed
 // to bgfx::setVertexBuffer; this asserts that pair equals the public element offset and the
@@ -1346,6 +1355,9 @@ TEST_F(NonIndexedDrawRangeTest, TopologySwitchesKeepTheirOwnRangesInOneFrame)
 // (0, UINT32_MAX) and let bgfx clamp to the buffer's own allocated size.
 TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
 
     auto* renderer =
@@ -1410,6 +1422,9 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedBindingIsTheExactElementRange)
 // the requested triangles' edges.
 TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexStart)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
 
     auto* renderer =
@@ -1454,6 +1469,9 @@ TEST_F(NonIndexedDrawRangeTest, BgfxWireframeNonIndexedRangeStillHonorsVertexSta
 // many different ranges and returns to the process baseline after disposal.
 TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedRangesAllocateNoPerDrawNativeResources)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
 
     device.Present();
@@ -1509,6 +1527,9 @@ TEST_F(NonIndexedDrawRangeTest, BgfxNonIndexedRangesAllocateNoPerDrawNativeResou
 // The public buffer may be disposed while draws that referenced it are still queued for the frame.
 TEST_F(NonIndexedDrawRangeTest, BgfxDisposingAfterQueuedRangedDrawsIsSafe)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever bgfx is in the build,
+    // run only when bgfx is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::Bgfx);
     RequireRangeRendering();
 
     const SlotLayout layout = BackbufferLayout();
