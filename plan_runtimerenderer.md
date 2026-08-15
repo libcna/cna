@@ -824,6 +824,15 @@ Each set is its own task because each will surface its own third-party integrati
 
 ### P11 — EasyGL runtime profile (unblocks 5 identities coexisting)
 
+**Pre-existing OPENGL33 finding, unrelated to this phase.** Running the full corpus with OPENGL33 as
+the *default* renderer segfaults in
+`GltfSceneGraphBones.SharedMeshGetsOneBonePerInstancingNode`. Confirmed pre-existing by building
+single-renderer OPENGL33 at `c5045553b` (the commit before P11) and reproducing the identical crash
+in the identical test. OPENGL33 had never been exercised against the corpus in this campaign before
+now, which is why it surfaced here. Not investigated further — it is a defect in that renderer's own
+glTF path, not in renderer selection.
+
+
 | ID | St | Task |
 |---|---|---|
 | RTR-P11-1 | ✅ | Audit every `CNA_GL_PROFILE_*` use inside `modules/renderers/easygl/` and classify: context-creation attributes, shader-source selection, feature gating. |

@@ -26,7 +26,10 @@ IDENTITIES_SCRIPT = os.path.join(REPO, "scripts", "check_renderer_identities.py"
 RULES = {
     "PORTABLEGL": "PORTABLEGL",
     "GDI + SOFTWARE": "GDI",
-    "shared EasyGL": "EasyGL",
+    # The "shared EasyGL" rule was REMOVED by plan_runtimerenderer.md phase P11, which made that
+    # family's GL profile a runtime value. Its five identities now coexist, so there is no rule to
+    # keep in step -- and listing one here would demand documentation for a restriction that no
+    # longer exists.
     "platform partition": "platform",
     "GLIDE": "GLIDE",
 }
