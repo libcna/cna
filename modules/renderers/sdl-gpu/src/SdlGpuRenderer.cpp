@@ -913,8 +913,8 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         // pbr3d.frag.glsl's tertiary PbrParams block: material/map factors, alpha coverage,
-        // transfer flags, dielectric Fresnel endpoints, and ten affine texture-transform rows.
-        void FillPbrParams(std::array<float, 56>& out, const GpuDrawParams& p)
+        // transfer flags, specular Fresnel inputs, and fourteen affine texture-transform rows.
+        void FillPbrParams(std::array<float, 72>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -927,15 +927,19 @@ namespace CNA::Internal::Renderers::SdlGpu
             out[8] = p.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f;
             out[9] = p.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f;
             out[10] = p.pbrEncodeOutputToSrgb ? 1.0f : 0.0f;
-            out[11] = 0.0f;
-            out[12] = p.pbrDielectricF0[0];
-            out[13] = p.pbrDielectricF0[1];
-            out[14] = p.pbrDielectricF0[2];
-            out[15] = p.pbrDielectricF90;
+            out[11] = p.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+            out[12] = p.pbrDielectricF0Unclamped[0];
+            out[13] = p.pbrDielectricF0Unclamped[1];
+            out[14] = p.pbrDielectricF0Unclamped[2];
+            out[15] = p.pbrSpecularFactor;
             for (int row = 0; row < 10; ++row)
                 for (int component = 0; component < 4; ++component)
                     out[16 + row * 4 + component] =
                         p.pbrTextureTransformRows[row][component];
+            for (int row = 0; row < 4; ++row)
+                for (int component = 0; component < 4; ++component)
+                    out[56 + row * 4 + component] =
+                        p.pbrSpecularTextureTransformRows[row][component];
         }
 
         // Mirrors VulkanRenderer::FillAlphaTestPushConst()/WebGPURenderer::
@@ -4473,7 +4477,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         fsInfo.entrypoint = "main";
         fsInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
         fsInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-        fsInfo.num_samplers = 5;  // base color, normal, metallic-roughness, emissive, occlusion
+        fsInfo.num_samplers = 7;  // core five plus specular strength and colour
         fsInfo.num_uniform_buffers = 3;  // PC, LitLightParams, PbrParams
         resources.CreateShader(
             ConstructionShader::PbrFragment,
@@ -4860,10 +4864,15 @@ namespace CNA::Internal::Renderers::SdlGpu
         command.metallicRoughnessMap = ResolveSampledTextureEXT(params.pbrMetallicRoughnessMap, "PbrEffect.MetallicRoughnessMap");
         command.emissiveMap = ResolveSampledTextureEXT(params.pbrEmissiveMap, "PbrEffect.EmissiveMap");
         command.occlusionMap = ResolveSampledTextureEXT(params.pbrOcclusionMap, "PbrEffect.OcclusionMap");
+        command.specularMap = ResolveSampledTextureEXT(params.pbrSpecularMap, "PbrEffect.SpecularMapEXT");
+        command.specularColorMap = ResolveSampledTextureEXT(
+            params.pbrSpecularColorMap, "PbrEffect.SpecularColorMapEXT");
         command.textureFilter = samplerSlots_[0].filter;
         command.addressU = samplerSlots_[0].addressU;
         command.addressV = samplerSlots_[0].addressV;
         command.maxAnisotropy = samplerSlots_[0].maxAnisotropy;  // REMED-GFX-170
+        command.specularSampler = samplerSlots_[5];
+        command.specularColorSampler = samplerSlots_[6];
 
         if (ib != nullptr)
         {
@@ -5127,14 +5136,13 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (command.skinned)
             SDL_BindGPUVertexStorageBuffers(pass, 0, &command.uploadedBoneBuffer, 1);
 
-        // 5 samplers: base color, normal, metallic-roughness, emissive, occlusion. Optional maps
+        // 7 samplers: the core five plus KHR_materials_specular strength and colour. Optional maps
         // fall back to the lazily-created default textures (EnsureDefaultPbrTextures(), already
         // invoked at Queue-time) so "map absent" reads as the correct neutral value per semantic
         // (flat normal, factor-only, no emissive tint, fully lit) -- mirrors
-        // EasyGLRenderer::BindDrawParams()'s identical fallback set. All 5 share the base
-        // color texture's own sampler state (GraphicsDevice.SamplerStates[0]) -- GpuDrawParams has
-        // no independent per-PBR-map sampler state to select from.
-        SDL_GPUTextureSamplerBinding samplerBindings[5]{};
+        // EasyGLRenderer::BindDrawParams()'s identical fallback set. The original five retain the
+        // base color texture's sampler state; extension maps use their imported slots 5 and 6.
+        SDL_GPUTextureSamplerBinding samplerBindings[7]{};
         SDL_GPUSampler* sampler = GetOrCreateSampler(command.textureFilter, command.addressU,
                                                     command.addressV, command.maxAnisotropy,
                                                     "Pbr3D");
@@ -5148,7 +5156,21 @@ namespace CNA::Internal::Renderers::SdlGpu
         samplerBindings[3].sampler = sampler;
         samplerBindings[4].texture = command.occlusionMap ? command.occlusionMap.texture : defaultWhiteTexture_->Texture();
         samplerBindings[4].sampler = sampler;
-        SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 5);
+        SDL_GPUSampler* specularSampler = GetOrCreateSampler(
+            command.specularSampler.filter, command.specularSampler.addressU,
+            command.specularSampler.addressV, command.specularSampler.maxAnisotropy,
+            "Pbr3D.Specular");
+        SDL_GPUSampler* specularColorSampler = GetOrCreateSampler(
+            command.specularColorSampler.filter, command.specularColorSampler.addressU,
+            command.specularColorSampler.addressV, command.specularColorSampler.maxAnisotropy,
+            "Pbr3D.SpecularColor");
+        samplerBindings[5].texture = command.specularMap
+            ? command.specularMap.texture : defaultWhiteTexture_->Texture();
+        samplerBindings[5].sampler = specularSampler;
+        samplerBindings[6].texture = command.specularColorMap
+            ? command.specularColorMap.texture : defaultWhiteTexture_->Texture();
+        samplerBindings[6].sampler = specularColorSampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 7);
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {

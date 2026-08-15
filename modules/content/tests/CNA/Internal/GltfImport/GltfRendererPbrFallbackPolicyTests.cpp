@@ -405,18 +405,24 @@ namespace
               uniform sampler2D uMetallicRoughnessMap;
               uniform sampler2D uEmissiveMap;
               uniform sampler2D uOcclusionMap;)"}}},
-        {"sdl-gpu", "fragment sampler bindings 0,1,2,3,4",
+        {"sdl-gpu", "fragment sampler bindings 0 through 6",
          {{R"(samplerBindings[0].texture = command.texture.texture)",
            R"(samplerBindings[1].texture = command.normalMap ? command.normalMap.texture : defaultFlatNormalTexture_->Texture())",
            R"(samplerBindings[2].texture = command.metallicRoughnessMap ? command.metallicRoughnessMap.texture : defaultWhiteTexture_->Texture())",
            R"(samplerBindings[3].texture = command.emissiveMap ? command.emissiveMap.texture : defaultWhiteTexture_->Texture())",
            R"(samplerBindings[4].texture = command.occlusionMap ? command.occlusionMap.texture : defaultWhiteTexture_->Texture())",
-           R"(SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 5))",
+           R"(samplerBindings[5].texture = command.specularMap
+                  ? command.specularMap.texture : defaultWhiteTexture_->Texture())",
+           R"(samplerBindings[6].texture = command.specularColorMap
+                  ? command.specularColorMap.texture : defaultWhiteTexture_->Texture())",
+           R"(SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings, 7))",
            R"(layout(set = 2, binding = 0) uniform sampler2D uTexture;
               layout(set = 2, binding = 1) uniform sampler2D uNormalMap;
               layout(set = 2, binding = 2) uniform sampler2D uMetallicRoughnessMap;
               layout(set = 2, binding = 3) uniform sampler2D uEmissiveMap;
-              layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;)"}}},
+              layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;
+              layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
+              layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;)"}}},
         {"vulkan", "descriptor set 0 bindings 0,1,2,3,4",
          {{R"(VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion })",
            R"(writes[i].dstBinding = i)",
@@ -834,8 +840,8 @@ namespace
          "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"sdl-gpu",
-         "vec3 F0 = mix(pbrp.dielectricFresnel.xyz, albedo, metallic)",
-         "vec3 F90 = mix(vec3(pbrp.dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"vulkan",
          "vec3 F0 = mix(pbr.dielectricFresnel.xyz, albedo, metallic)",
@@ -1928,6 +1934,36 @@ TEST(GltfRendererPbrFallbackPolicy, MagnumSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing Magnum specular binding evidence: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "sdl-gpu");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "std::array<float, 72> pbrParams",
+             "out[12] = p.pbrDielectricF0Unclamped[0]",
+             "out[15] = p.pbrSpecularFactor",
+             "p.pbrSpecularColorTextureIsSrgb",
+             "p.pbrSpecularTextureTransformRows[row][component]",
+             "params.pbrSpecularMap, \"PbrEffect.SpecularMapEXT\"",
+             "params.pbrSpecularColorMap, \"PbrEffect.SpecularColorMapEXT\"",
+             "command.specularSampler = samplerSlots_[5]",
+             "command.specularColorSampler = samplerSlots_[6]",
+             "fsInfo.num_samplers = 7",
+             "layout(set = 2, binding = 5) uniform sampler2D uSpecularMap",
+             "layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap",
+             "texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0)).a",
+             "uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1)).rgb",
+             "mix(specularColorTex, cnaSrgbToLinear(specularColorTex), pbrp.srgbFlags.w)",
+             "pbrp.specularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight",
+             "mix(vec3(specularWeight), vec3(1.0), metallic)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing SDL-GPU specular binding evidence: " << evidence;
     }
 }
 

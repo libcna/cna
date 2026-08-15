@@ -9,7 +9,7 @@ layout(location = 5) in vec4 fragFog;    // REMED-GFX-009
 
 layout(location = 0) out vec4 outColor;
 
-// PbrEffect's base color texture plus the 4 glTF metallic-roughness maps (normal,
+// PbrEffect's base color texture plus the 6 glTF material maps (normal,
 // metallic-roughness [G=roughness,B=metallic], emissive, occlusion). Each aux map falls back to
 // a default texture whose sampled value is the correct "map absent" constant for its own
 // semantic when the effect leaves it unbound (see SdlGpuRenderer::EnsureDefaultPbrTextures'
@@ -19,6 +19,8 @@ layout(set = 2, binding = 1) uniform sampler2D uNormalMap;
 layout(set = 2, binding = 2) uniform sampler2D uMetallicRoughnessMap;
 layout(set = 2, binding = 3) uniform sampler2D uEmissiveMap;
 layout(set = 2, binding = 4) uniform sampler2D uOcclusionMap;
+layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
+layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;
 
 layout(set = 3, binding = 0) uniform PC {
     mat4  mvp;             // vertex-stage only, unused here
@@ -53,9 +55,10 @@ layout(set = 3, binding = 2) uniform PbrParams {
     float normalScale;
     float occlusionStrength;
     vec4 alphaTest;
-    vec4 srgbFlags; // x=decode base, y=decode emissive, z=encode output
-    vec4 dielectricFresnel; // xyz=dielectric F0, w=dielectric F90
+    vec4 srgbFlags; // x=decode base, y=decode emissive, z=encode output, w=decode specular colour
+    vec4 specularFresnelInputs; // xyz=unclamped dielectric F0, w=specular factor
     vec4 textureTransformRows[10];
+    vec4 specularTextureTransformRows[4];
 } pbrp;
 
 vec3 cnaSrgbToLinear(vec3 c) {
@@ -108,6 +111,12 @@ vec2 cnaPbrTransformUV(vec2 uv, int slot) {
                 dot(value, pbrp.textureTransformRows[slot * 2 + 1].xyz));
 }
 
+vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot) {
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, pbrp.specularTextureTransformRows[slot * 2].xyz),
+                dot(value, pbrp.specularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 void main() {
     vec4 baseColorTex = texture(uTexture, cnaPbrTransformUV(fragUV, 0));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), pbrp.srgbFlags.x);
@@ -131,8 +140,16 @@ void main() {
     float metallic  = clamp(mr.b * pbrp.metallicFactor, 0.0, 1.0);
 
     vec3 V = safeNormalize(lp.eyePos_pad.xyz - fragWorldPos);
-    vec3 F0 = mix(pbrp.dielectricFresnel.xyz, albedo, metallic);
-    vec3 F90 = mix(vec3(pbrp.dielectricFresnel.w), vec3(1.0), metallic);
+    float specularWeight = pbrp.specularFresnelInputs.w
+        * texture(uSpecularMap, cnaPbrSpecularTransformUV(fragUV, 0)).a;
+    vec3 specularColorTex = texture(
+        uSpecularColorMap, cnaPbrSpecularTransformUV(fragUV, 1)).rgb;
+    specularColorTex = mix(
+        specularColorTex, cnaSrgbToLinear(specularColorTex), pbrp.srgbFlags.w);
+    vec3 dielectricF0 = min(
+        pbrp.specularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;
+    vec3 F0 = mix(dielectricF0, albedo, metallic);
+    vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic);
 
     vec3 Lo = vec3(0.0);
     Lo += PbrLight(finalNormal, V, safeNormalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
