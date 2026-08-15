@@ -149,9 +149,45 @@ The display size, orientation, enabled gestures, window handle and device-exists
 process-wide state. Restore what you change. As with text input, do not assume the window handle
 starts at zero — a windowed backend publishes a real one.
 
+## Haptics
+
+`input_haptics.h` maps the `CNA::Input` force-feedback family. It is the only input family with no
+XNA counterpart at all, so — following `core_ext.h` — the whole header maps a CNA-namespace surface
+and its routes carry no `_ext` suffix. It is also the only input family whose canonical type is an
+owned resource rather than a value: `HapticDevice` becomes an owned `CNA_HapticDeviceHandle`, with
+the same destructor/`Dispose` split `MouseCursor` uses, so a caller can close a device without
+giving up its handle.
+
+**A closed device is not an error state.** `cna_haptics_open`, `..._open_from_joystick` and
+`..._open_from_mouse` never fail for want of hardware: each hands back a real handle, and
+`cna_haptic_device_get_is_open` reports whether anything is behind it. Every other route on a closed
+device succeeds and answers `CNA_FALSE`, zero or -1 through its output. That is what makes the
+family usable — and testable — on a machine with no force-feedback hardware, which is the normal
+case.
+
+Two representational decisions are worth knowing before using the header:
+
+- **A custom waveform travels beside the effect, not inside it.** The canonical descriptor owns its
+  sample vector; `CNA_HapticEffect` does not, so it stays a plain copyable POD. Every route that
+  takes an effect takes a `custom_data` pointer and a sample count alongside it.
+- **The device name is not part of the capability value.** A string does not belong in a POD, so
+  read it with `cna_haptic_device_get_name_size`/`_copy_name`. That is why
+  `cna_haptic_capabilities_equals` takes both names as arguments: it reproduces the canonical
+  comparison exactly rather than quietly comparing fewer fields than the canonical operator does.
+
+Canonical behavior preserved rather than tidied up: rumble strength, gain and autocenter are handed
+to the platform unvalidated; freeing an unknown effect identifier is a successful no-op, because the
+canonical operation reports nothing; and a closed device's capability value keeps `max_effects` and
+`max_effects_playing` at **-1**, which means "unknown" and is deliberately distinguishable from
+"none". `CNA_HapticFeature` is a real bit set, so its five canonical operators need no route — C
+composes them itself, and every route validates against `CNA_HAPTIC_FEATURE_ALL`.
+
+No `SDL_Haptic` ever crosses the ABI. The device enumeration is a point-in-time snapshot taken by
+each call, so an index from `cna_haptics_get_count` is only valid until the device set changes.
+
 ## Current scope boundary
 
 Apart from the text-input events above, the input families deliberately expose no live native state
-pointer, per-key platform call or device event subscription. The haptics family and the remaining
-`CNA::Input` joystick, sensor, clipboard, power and device-enumeration extensions remain planned
-for complete-public-API coverage.
+pointer, per-key platform call or device event subscription. The remaining `CNA::Input` joystick,
+sensor, clipboard, power and device-enumeration extensions remain planned for
+complete-public-API coverage.

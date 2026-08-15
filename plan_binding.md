@@ -876,17 +876,37 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. Parent `CBIND-037B4` is closed, and the
   `Microsoft::Xna::Framework::Input::Touch` namespace and the whole haptics family have no planned
   row left.
-- **Next task:** `CBIND-037B7`, the remaining `CNA::Input` extensions — 92 rows after the borrows
-  `CBIND-037B3`, `B4a` and `B4d` already took (button labels, connection state, power state, key
-  modifiers and the text-input type are done). It closes parent `CBIND-037B` and covers joysticks,
-  sensors, clipboard, power, and device enumeration. Expect the joystick surface to look like the
-  haptics one — a facade plus an owned device handle — and reuse that shape rather than inventing a
-  second. `ObjectKind` 69 is the next free number.
+- **Next task:** `CBIND-037B7`, the remaining `CNA::Input` extensions — **92 rows**, verified
+  against the inventory, after the borrows `CBIND-037B3`, `B4a` and `B4d` already took (button
+  labels, connection state, power state, key modifiers and the text-input type are done). It closes
+  parent `CBIND-037B`, and with it the whole `input` module. The rows split by header:
+
+  | rows | header | shape to expect |
+  |---:|---|---|
+  | 18 | `Sensors.hpp` | queries; watch for the availability-separate-from-answer rule |
+  | 13 | `JoystickCapabilities.hpp` | fixed value, like `HapticCapabilitiesEXT` |
+  | 11 | `JoystickType.hpp` | ordinal identity |
+  | 10 | `JoystickHatPosition.hpp` | probably a bit set — check before assuming |
+  | 9 | `InputDevices.hpp` | facade |
+  | 7 | `JoystickState.hpp` | fixed value snapshot |
+  | 7 | `Joysticks.hpp` | facade, mirrors `Haptics` |
+  | 6 | `JoystickInfo.hpp` | id + name; reuse the haptics index-addressed enumeration |
+  | 5 | `InputDeviceInfo.hpp` | id + name, same shape |
+  | 4 | `Clipboard.hpp` | count/copy strings |
+  | 2 | `Power.hpp` | `PowerStateEXT` itself is already done by `B3` |
+
+  Three shapes are already solved and should be reused rather than reinvented: the **facade plus
+  owned device handle** (`Haptics`/`HapticDevice`), the **index-addressed enumeration with count/copy
+  names** (`HapticInfoEXT`), and the **closed-device-is-not-an-error** contract. As a `CNA::Input`
+  surface the whole header takes no `_ext` suffixes. `ObjectKind` 69 is the next free number if the
+  joystick device turns out to be an owned resource — check whether `Joysticks::OpenEXT` returns an
+  RAII object like `HapticDevice` or a plain value before deciding.
 - Do not reopen a closed slice without a concrete demonstrated defect.
-- **Two Claude sessions have run against this one working tree at once.** If another session is
-  active, agree on who owns the slice *before* writing: a read-modify-write from the other session
-  silently discards edits made in the same second, and the four build trees cannot be built
-  concurrently (the plan already records a spurious `ranlib` failure from exactly that).
+- The four verification trees and the shared ccache are set up and warm; nothing needs configuring
+  before the next slice. See *Environment and disk hygiene* below for what was cleaned up on
+  2026-08-15 and what must not be undone.
+- **Check for a second Claude session before writing anything.** See the trap entry below; this
+  campaign lost work to it twice in one afternoon.
 
 ### Code map — what one slice touches
 
@@ -1026,9 +1046,9 @@ were rewritten once for exactly this reason.
   *better* evidence: force the unbound case to prove the null-guarded contract everywhere, then
   restore whatever the backend really bound and assert only the *relationship* between the answers
   (activation that took effect must be undone by stopping it). On `SDL_RENDERER` that is a real
-  activate/deactivate round trip. `TouchPanel` has the same window-handle property, so `CBIND-037B5`
-  will meet this again — and any route that resets this state must put it back, because it is
-  process-wide state the suite does not own.
+  activate/deactivate round trip. `TouchPanel` has the same window-handle property and `CBIND-037B5`
+  did meet it again — any route that resets this state must put it back, because it is process-wide
+  state the suite does not own. Expect the remaining `CNA::Input` families to have their own.
 - **Out-parameter clobbering.** Routes set `*out = CNA_INVALID_HANDLE` before validating, so
   reusing one variable for an expected-failure call destroys a live handle. Hit three times; use a
   separate scratch variable for the failure case. **Versioned output structures have the same
@@ -1048,9 +1068,46 @@ were rewritten once for exactly this reason.
 - **Do not pipe a build into `grep … | head`.** SIGPIPE kills the build and leaves a target
   unlinked, which then shows up as a mysterious "Not Run" in ctest. Redirect to a log and grep the
   log.
+- **A second Claude session on this working tree will silently destroy your edits.** It happened
+  twice on 2026-08-15, and both times the first symptom was `git status` listing files the session
+  had not touched, or a file changing mtime mid-read. The damage: a duplicated
+  `validate_text_input_family` block appended to `InputSnapshotsSmoke.c`, and a read-modify-write
+  that could have dropped the other session's concurrent write. It also produced a **false test
+  failure** — a `sdlrenderer` red that looked like a mapping bug but was another session's
+  mid-flight state. Detect it before writing: `ListAgents`, or
+  `ps -eo pid,args | grep "[c]laude" | grep "resume .*cnabinding"`. Background sessions run with
+  `--permission-mode auto`, survive their terminal being closed, and can respawn after being killed.
+  If one is active, agree on who owns the slice *before* writing, and never build the same tree
+  concurrently — a spurious `ranlib` failure from exactly that is already on record.
 - Read the canonical `.cpp`, not just the header. Several slices turned on behavior only the
   implementation reveals: a square clamp, an epsilon comparison, a silent drop, a no-op disposal,
   a hash that ignores half the fields.
+
+### Environment and disk hygiene
+
+Settled on 2026-08-15 after an audit; a future context should keep it this way rather than
+rediscover it.
+
+- **One shared ccache, not one per campaign.** `CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache`
+  (20 GB ceiling, ~31% hit rate across 21 build configurations). The binding trees briefly had their
+  own `tmp/ccache`; it reached a **0.69% hit rate over 6,932 compilations** because it started cold
+  and never saw the CNA and sharp-runtime objects the shared cache already holds. It was deleted.
+  Do not give these trees a private cache again.
+- **Do not shrink the shared cache.** It sits at 96.5% of its ceiling and still misses 69% of the
+  time, which means it is undersized for this workload, not oversized. Shrinking it causes more
+  compilation, which means more SSD writes — the opposite of what the build rules are protecting.
+- **Never build `all` in a binding tree.** Someone did, once, in
+  `cmake-build-binding-headless`: it left **56 stray executables and their object trees, 2.6 GB**,
+  none of which the C API loop ever links against. They were deleted; the tree went 3.7 GB → 1.1 GB
+  with zero recompilation afterwards. Build `make -C <tree>/modules/c-api -j3` and nothing else.
+  To check a tree for the same rot:
+  `find <tree> -maxdepth 1 \( -name 'cna_test_*' -o -name 'cna_demo_*' -o -name 'CnaTests' \)`.
+- **The four binding trees are the only build directories this campaign owns.** Everything else
+  under `/media/robertvokac/claude/tmp/cna/` (`cmake-build-multi`, `gltf-*`, `fna3d*`,
+  `develop-opengles`, `next-*`, `software`, `sdlgpu`, …) belongs to other checkouts and other
+  sessions. Do not delete or build in them.
+- Session scratchpads and per-run build logs are disposable; write throwaway probes there, never a
+  build tree.
 
 ### Standing constraints
 
