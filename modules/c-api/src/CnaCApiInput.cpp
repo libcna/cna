@@ -2,6 +2,7 @@
 
 #include "CNA/C/input.h"
 #include "CNA/C/input_gamepad.h"
+#include "CNA/C/input_keyboard.h"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
@@ -16,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Input/GamePadTriggers.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "CNA/Input/GamePadButtonLabel.hpp"
+#include "CNA/Input/KeyModifiers.hpp"
 #include "CNA/Input/GamePadConnectionState.hpp"
 #include "CNA/Input/PowerState.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -37,6 +39,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <unordered_set>
 #include <string>
 
 namespace {
@@ -2297,5 +2300,404 @@ CNA_Result cna_gamepad_get_touchpad_finger_ext(
             *outAvailable = CNA_FALSE;
         }
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result ValidateKey(const CNA_Key key)
+{
+    if (key >= KeyboardSlotCount) {
+        return InvalidInput("The key identity is outside the canonical 256-slot range.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] KeyboardState NativeKeyboardState(const CNA_KeyboardState& state)
+{
+    std::unordered_set<Keys> pressed;
+    for (CNA_Key key = UINT32_C(0); key < KeyboardSlotCount; ++key) {
+        if (IsKeyDown(state, key)) {
+            pressed.insert(static_cast<Keys>(key));
+        }
+    }
+    return KeyboardState(pressed);
+}
+
+[[nodiscard]] CNA_KeyboardState SnapshotKeyboard(const KeyboardState& native)
+{
+    CNA_KeyboardState snapshot = {
+        sizeof(CNA_KeyboardState), StructureVersion, {0U, 0U, 0U, 0U}
+    };
+    for (const Keys key : native.GetPressedKeys()) {
+        const auto value = static_cast<uint32_t>(key);
+        if (value < KeyboardSlotCount) {
+            snapshot.pressed_key_words[value >> 6U] |= UINT64_C(1) << (value & UINT32_C(63));
+        }
+    }
+    return snapshot;
+}
+
+[[nodiscard]] CNA_KeyModifiers MapKeyModifiers(const CNA::Input::KeyModifiersEXT value) noexcept
+{
+    return static_cast<CNA_KeyModifiers>(static_cast<std::uint32_t>(value));
+}
+
+using KeyTextRoute = std::string (*)(Keys);
+
+[[nodiscard]] CNA_Result ReportKeyTextSize(
+    const KeyTextRoute route,
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr) {
+        return InvalidInput("The key text size output is null.");
+    }
+    if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outBytes = route(static_cast<Keys>(key)).size();
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyKeyTextValue(
+    const KeyTextRoute route,
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return CopyDeviceText(route(static_cast<Keys>(key)), destination, capacity, outBytes);
+}
+
+using KeyLookupRoute = Keys (*)(const std::string&);
+
+[[nodiscard]] CNA_Result LookUpKey(
+    const KeyLookupRoute route,
+    const CNA_Handle gameHandle,
+    const CNA_StringView name,
+    CNA_Key* const outKey)
+{
+    if (outKey == nullptr) {
+        return InvalidInput("The key identity output is null.");
+    }
+    std::string text;
+    if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, true, &text);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            CNA::C::Detail::ErrorCategoryForResult(result),
+            "The key name is invalid.");
+    }
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outKey = static_cast<CNA_Key>(route(text));
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_keyboard_state_init(CNA_KeyboardState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The keyboard snapshot output is null.");
+        }
+        *outState = SnapshotKeyboard(KeyboardState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_init_from_keys(
+    const CNA_Key* const keys,
+    const uint64_t count,
+    CNA_KeyboardState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The keyboard snapshot output is null.");
+        }
+        if (keys == nullptr && count != 0U) {
+            return InvalidInput("The key array is invalid.");
+        }
+        // The canonical constructors silently drop a key outside the 256-slot bit field; C refuses
+        // instead, so a caller can never lose a key without being told.
+        std::unordered_set<Keys> pressed;
+        for (uint64_t index = 0U; index < count; ++index) {
+            if (const CNA_Result result = ValidateKey(keys[index]);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            pressed.insert(static_cast<Keys>(keys[index]));
+        }
+        *outState = SnapshotKeyboard(KeyboardState(pressed));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_get_key_state(
+    const CNA_KeyboardState* const state,
+    const CNA_Key key,
+    CNA_KeyState* const outKeyState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outKeyState == nullptr) {
+            return InvalidInput("The key-state output is null.");
+        }
+        if (const CNA_Result result = ValidateKey(key); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateKeyboardState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outKeyState = NativeKeyboardState(*state).getItem(static_cast<Keys>(key)) ==
+                Microsoft::Xna::Framework::Input::KeyState::Down
+            ? CNA_KEY_STATE_DOWN
+            : CNA_KEY_STATE_UP;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_equals(
+    const CNA_KeyboardState* const left,
+    const CNA_KeyboardState* const right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEquals == nullptr) {
+            return InvalidInput("The keyboard comparison output is null.");
+        }
+        if (const CNA_Result result = ValidateKeyboardState(left);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateKeyboardState(right);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEquals = NativeKeyboardState(*left).Equals(NativeKeyboardState(*right))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_not_equals(
+    const CNA_KeyboardState* const left,
+    const CNA_KeyboardState* const right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA_Bool equals = CNA_FALSE;
+        if (const CNA_Result result = cna_keyboard_state_equals(left, right, &equals);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outNotEquals == nullptr) {
+            return InvalidInput("The keyboard comparison output is null.");
+        }
+        *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_get_hash_code(
+    const CNA_KeyboardState* const state,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The keyboard hash output is null.");
+        }
+        if (const CNA_Result result = ValidateKeyboardState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHash = static_cast<int32_t>(NativeKeyboardState(*state).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_get_string_size(
+    const CNA_KeyboardState* const state,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The keyboard text output is null.");
+        }
+        if (const CNA_Result result = ValidateKeyboardState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = KeyboardState().ToString().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_state_copy_string(
+    const CNA_KeyboardState* const state,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateKeyboardState(state);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyDeviceText(KeyboardState().ToString(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_state_for_player(
+    const CNA_Handle gameHandle,
+    const CNA_PlayerIndex playerIndex,
+    CNA_KeyboardState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateKeyboardState(outState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        PlayerIndex nativePlayerIndex = PlayerIndex::One;
+        if (const CNA_Result result =
+                BeginGamePadCall(gameHandle, playerIndex, &nativePlayerIndex);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = SnapshotKeyboard(Keyboard::GetState(nativePlayerIndex));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_get_key_from_scancode_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Key scancode,
+    CNA_Key* const outKey)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outKey == nullptr) {
+            return InvalidInput("The key identity output is null.");
+        }
+        if (const CNA_Result result = ValidateKey(scancode); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outKey = static_cast<CNA_Key>(
+            Keyboard::GetKeyFromScancodeEXT(static_cast<Keys>(scancode)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_get_mod_state_ext(
+    const CNA_Handle gameHandle,
+    CNA_KeyModifiers* const outModifiers)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModifiers == nullptr) {
+            return InvalidInput("The modifier-state output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outModifiers = MapKeyModifiers(Keyboard::GetModStateEXT());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_keyboard_get_scancode_name_size_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportKeyTextSize(&Keyboard::GetScancodeNameEXT, gameHandle, key, outBytes);
+    });
+}
+
+CNA_Result cna_keyboard_copy_scancode_name_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyKeyTextValue(
+            &Keyboard::GetScancodeNameEXT,
+            gameHandle,
+            key,
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_scancode_from_name_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView name,
+    CNA_Key* const outKey)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LookUpKey(&Keyboard::GetScancodeFromNameEXT, gameHandle, name, outKey);
+    });
+}
+
+CNA_Result cna_keyboard_get_key_name_size_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReportKeyTextSize(&Keyboard::GetKeyNameEXT, gameHandle, key, outBytes);
+    });
+}
+
+CNA_Result cna_keyboard_copy_key_name_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Key key,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyKeyTextValue(
+            &Keyboard::GetKeyNameEXT,
+            gameHandle,
+            key,
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_keyboard_get_key_from_name_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView name,
+    CNA_Key* const outKey)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LookUpKey(&Keyboard::GetKeyFromNameEXT, gameHandle, name, outKey);
     });
 }

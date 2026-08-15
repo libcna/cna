@@ -384,6 +384,16 @@
 > slice, because three of these statics return them and cannot be mapped without them. The
 > inventory is now 4,108 implemented, 30 partial, 2,160 planned and 117 N/A; all four trees stay
 > green at 51/51.
+>
+> CBIND-037B4 then splits by device — the cursor is an owned disposable type and text input is
+> event-driven, while the keyboard and mouse are plain snapshots — and CBIND-037B4a closes the
+> keyboard. The whole `KeyboardState` value surface and every `Keyboard` static map over the
+> 256-slot bit field C already had; one canonical behavior is deliberately **not** reproduced and
+> is recorded as a deviation: the canonical constructors silently drop a key outside that field,
+> and C refuses instead, so a caller can never lose a key without being told. Both key-name
+> families use the count/copy protocol with borrowed views for the reverse lookups, and an unknown
+> name answers with the canonical none identity rather than failing. The inventory is now 4,143
+> implemented, 30 partial, 2,125 planned and 117 N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

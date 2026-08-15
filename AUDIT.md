@@ -39,7 +39,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > snapshot itself — with every constructor, comparison, hash and string operation, and
 > `CBIND-037B3` adds the `GamePad` statics: vibration, light bar, sensors, player index, power
 > info, button labels, the four identity strings, connection state and the touchpad queries. The
-> generated inventory currently records 4,108 implemented, 30 partial, 2,160 planned and 117
+> `CBIND-037B4a` adds the keyboard: the whole `KeyboardState` value surface, the key-state
+> identity and every `Keyboard` static including both key-name families. The
+> generated inventory currently records 4,143 implemented, 30 partial, 2,125 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

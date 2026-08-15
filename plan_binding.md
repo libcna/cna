@@ -384,10 +384,14 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B1 | 86 | Complete gamepad capabilities and controller type | ✅ | `input_gamepad.h` maps `GamePadType` at its canonical ordinals and the whole `GamePadCapabilities` surface as one fixed 48-byte value: `struct_size`/`struct_version`, the controller type and 35 directly readable **and writable** flags, because every canonical property has both a getter and a setter. A value rather than a handle, since the canonical type is a copyable snapshot with no identity, and direct fields rather than 74 routes, since that is what the getter/setter pair means in C. The ten CNA extension properties keep an `_ext` suffix on their fields. `cna_gamepad_capabilities_init` reproduces the canonical default constructor exactly. **Borrowed from CBIND-037B3:** `GamePad::GetCapabilities` is mapped here as `cna_gamepad_get_capabilities` (86 rows here, 24 left there), because a capabilities value with no producer cannot be tested against anything real. It takes an active game handle for the same reason `cna_gamepad_get_state` does, and an empty slot is an ordinary answer rather than a failure. `InputSnapshotsSmoke.c` cross-checks connection against the state snapshot so the two can never disagree, and runs green in all three trees (51/51) plus ASan+UBSan with leak detection on. |
 | CBIND-037B2 | 65 | Complete gamepad state values | ✅ | `input_gamepad.h` maps all five canonical value types onto the representations the C API already had, so the ABI never grows a second spelling of the same numbers. `GamePadButtons` and `GamePadDPad` are the existing `CNA_GamePadButtonFlags` mask — the pad restricted to its four bits — because that is exactly what each canonical type holds and how CNA itself derives one from the other. `CNA_GamePadThumbSticks` (16 B) and `CNA_GamePadTriggers` (8 B) are new plain values that are **byte-identical to the two halves of the analog block a snapshot already carried**, asserted rather than assumed. The eleven named button getters and the four pad getters each collapse into one `_is_pressed` route that answers through the canonical getter owning the button. Three canonical behaviors are preserved and asserted rather than tidied up: the thumbstick constructor square-clamps to ±1 and the trigger constructor clamps to 0..1; trigger equality is an **epsilon** comparison, proved with the next representable float above a value; and the pad hash uses its own weighting (Down 1, Left 2, Right 4, Up 8), not the button bits. `GamePadState` gains both public constructions with their derived trigger and virtual-stick bits, the four component projections, the `_ext` packet-number setter, equality, the hash that mixes only buttons and packet number, and the fixed type-name string. One representational limit is documented, not hidden: the C snapshot carries a single button mask — as does every state CNA itself builds, since the capture path derives both the button set and the pad from one raw mask — so a supplied pad is merged into the button set. The `Buttons` flag operators need no route: C composes the `uint32_t` identity with its own operators, and every route validates against `CNA_GAMEPAD_BUTTON_ALL`. `InputSnapshotsSmoke.c` grew four validators with per-family return codes and runs green in all three trees (51/51) plus ASan+UBSan with leak detection on. |
 | CBIND-037B3 | 45 | Complete the GamePad statics | ✅ | `input_gamepad.h` maps every remaining `GamePad` static as one `cna_gamepad_*` route, each taking an active game handle for the same reason the state and capability captures do: CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception and takes none, being a pure value operation; the three dead-zone constants were already exposed as macros carrying the canonical expressions verbatim. Two canonical shapes are preserved rather than collapsed: a query reporting availability through its return value and its answer through an output reference keeps **both** answers separate in C, so "no sensor" is an ordinary answer rather than a failure, and the four identity strings use the project count/copy protocol. The touchpad finger query's four output references become one fixed 16-byte `CNA_GamePadTouchpadFinger`. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary. **Borrowed from CBIND-037B7:** `GamePadButtonLabelEXT`, `GamePadConnectionStateEXT` and `PowerStateEXT` (21 rows), because three of these statics return them and cannot be mapped without them — 45 rows here, 117 left there. `InputSnapshotsSmoke.c` asserts the shape of an empty-slot answer for every route, the count/copy round trip for all four identity strings, and the per-route out-of-range, null-output, undefined-bit and wrong-thread refusals; all three trees green (51/51) plus ASan+UBSan with leak detection on. |
-| CBIND-037B4 | 80 | Complete keyboard, mouse and text input | ⬜ | Map the remaining `Keyboard`/`KeyboardState`, `Mouse`/`MouseState`, `KeyState`, `MouseCursor` and `TextInputEXT` rows. |
+| CBIND-037B4 | 80 | Complete keyboard, mouse and text input | 🟨 | Map the remaining `Keyboard`/`KeyboardState`, `Mouse`/`MouseState`, `KeyState`, `MouseCursor` and `TextInputEXT` rows. Split further by device, because the cursor is an owned disposable type and the text-input surface is event-driven while the keyboard and mouse are plain snapshots. |
+| CBIND-037B4a | 35 | Complete the keyboard | ✅ | `input_keyboard.h` maps `KeyState`, the whole `KeyboardState` value surface and every `Keyboard` static over the versioned 256-slot bit field the C API already had. `cna_keyboard_state_init_from_keys` maps **both** canonical set-taking constructors, since an initializer list and an unordered set are the same deduplicated array in C. **Documented deviation:** the canonical constructors silently drop a key outside the 256-slot field; C refuses instead, so a caller can never lose a key without being told, and the refusal matches every other keyboard route. The player-slot `GetState` overload reports the same snapshot for every slot, because CNA has one keyboard. Both name families use the project count/copy protocol with borrowed `CNA_StringView` reverse lookups, so no `std::string` crosses the boundary, and an unknown name answers with the canonical none identity rather than failing. **Borrowed from CBIND-037B7:** `KeyModifiersEXT` and its five operators (15 rows), because `GetModStateEXT` returns it — 35 rows here, 102 left there. The flag operators need no route: unlike the gamepad button identities these really are flags, and C masks them with its own operators. `InputSnapshotsSmoke.c` covers every value operation and query plus their refusals, green in all three trees (51/51) and under ASan+UBSan with leak detection on. |
+| CBIND-037B4b | 22 | Complete the mouse | ⬜ | Map the remaining `Mouse` statics — window handle, position, cursor, relative mode, capture, global position and warp, the clicked event — and the `MouseState` value surface. |
+| CBIND-037B4c | 21 | Complete the mouse cursor | ⬜ | Map `MouseCursor` as an owned disposable handle: the stock singletons, texture-derived cursors and disposal, without exposing `SDL_Cursor`. |
+| CBIND-037B4d | 27 | Complete text input | ⬜ | Map `TextInputEXT`: the three events, activation and screen-keyboard queries, typed start, and the input rectangle. Borrows `TextInputTypeEXT` from CBIND-037B7. |
 | CBIND-037B5 | 80 | Complete touch and gestures | ⬜ | Map the remaining `TouchPanel`, `TouchCollection`, `TouchLocation`, `TouchPanelCapabilities`, `GestureType` and `GestureSample` rows. |
 | CBIND-037B6 | 126 | Complete the haptics extension family | ⬜ | Map `CNA::Input` haptics: devices, features, effects, effect types, capabilities, directions and the haptics facade. |
-| CBIND-037B7 | 117 | Complete the remaining input extensions | ⬜ | Map the `CNA::Input` joystick, sensor, key-modifier, button-label, text-input-type, device-enumeration, clipboard, power and connection-state surfaces. |
+| CBIND-037B7 | 102 | Complete the remaining input extensions | ⬜ | Map the `CNA::Input` joystick, sensor, key-modifier, button-label, text-input-type, device-enumeration, clipboard, power and connection-state surfaces. |
 
 #### CBIND-036B content implementation slices
 
@@ -733,7 +737,12 @@ value with no producer cannot be tested against anything real. The snapshot is n
 implemented, 30 partial, 2,270 planned and 117 not applicable. CBIND-037B3 then maps the `GamePad` statics, keeping the canonical
 availability-plus-answer shape of the sensor and touchpad queries instead of folding "no sensor"
 into a failure, and borrowing the three CNA::Input identity enumerations three of those statics
-return. The snapshot is now 4,108 implemented, 30 partial, 2,160 planned and 117 not applicable. CBIND-037B2 then maps the five
+return. The snapshot is now 4,108 implemented, 30 partial, 2,160 planned and 117 not applicable.
+CBIND-037B4 splits again by device, and CBIND-037B4a closes the keyboard: the whole `KeyboardState`
+value surface and every `Keyboard` static over the 256-slot bit field C already had, with the
+canonical silent drop of an out-of-range key deliberately replaced by a refusal so nothing is lost
+without the caller knowing. The snapshot is now 4,143 implemented, 30 partial, 2,125 planned and
+117 not applicable. CBIND-037B2 then maps the five
 gamepad value types onto the representations C already had rather than adding a second spelling of
 the same numbers, and preserves three canonical behaviors worth naming: the thumbstick square clamp
 and trigger clamp, the epsilon trigger comparison, and the directional pad's own hash weighting. It
@@ -744,11 +753,16 @@ CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-037B3 is the final task completed in this handoff. Parent
+- Branch: `feature/binding`; CBIND-037B4a is the final task completed in this handoff. Parent
   CBIND-036 closed with CBIND-036E5, and parent CBIND-035 with CBIND-035G.
-- Next task: `CBIND-037B4` complete keyboard, mouse and text input (80 planned rows). Do not
-  reopen closed CBIND-035, CBIND-036, CBIND-037A or CBIND-037B1–B3 slices without a concrete
-  demonstrated defect.
+- Next task: `CBIND-037B4b` complete the mouse (22 planned rows). Do not reopen closed CBIND-035,
+  CBIND-036, CBIND-037A, CBIND-037B1–B3 or CBIND-037B4a slices without a concrete demonstrated
+  defect.
+- When a coverage rule matches a free operator in a shared namespace (`CNA::Input::operator|` and
+  friends), add a `signature_regex`: without one it silently swallows the identically named
+  operators of *other* enumerations in that namespace and claims coverage that does not exist.
+  This was caught once, on the haptics operators, by checking the implemented delta against the
+  slice's row count — always do that check.
 - `sharp-runtime` is a **sibling checkout that other sessions edit live**
   (`/rv/data/development/github.com/openeggbert/sharp-runtime`). A build failure inside it is very
   likely someone else's in-progress edit, not a regression here: check `git status`/`git log` there
@@ -771,8 +785,8 @@ CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-037B3: 414 headers / 6,415 symbols; 4,108 implemented, 30 partial,
-  2,160 planned and 117 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-037B4a: 414 headers / 6,415 symbols; 4,143 implemented, 30
+  partial, 2,125 planned and 117 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

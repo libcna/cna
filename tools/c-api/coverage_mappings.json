@@ -3061,6 +3061,79 @@
       "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts the reported state is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B3"
+    },
+    {
+      "id": "key-state",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyState(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_KeyState` and the `CNA_KEY_STATE_*` identities at the canonical ordinals, returned by `cna_keyboard_state_get_key_state`. The same question is also answerable as a boolean through `cna_keyboard_state_is_key_down`; both exist because the canonical API has both an indexer and a predicate",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` reads a pressed and an unpressed key through the indexer route, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
+    },
+    {
+      "id": "keyboard-state-values",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::KeyboardState::(?:KeyboardState|getItem|Equals|GetHashCode|ToString|operator==|operator!=)$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "routes over the versioned `CNA_KeyboardState` 256-slot bit field the C API already had. `cna_keyboard_state_init` reproduces the default constructor and `_init_from_keys` **both** canonical set-taking constructors, since an initializer list and an unordered set are the same deduplicated array in C. The indexer becomes `_get_key_state`, and equality, inequality, the hash and the string each get their own route. **Documented deviation:** the canonical constructors silently drop a key outside the 256-slot field; C refuses instead, so a caller can never lose a key without being told, and the refusal matches every other keyboard route",
+      "tests": "`InputSnapshotsSmoke.c` covers the empty default, a construction whose duplicate key contributes once, the out-of-range refusal, the indexer in both states, equal and unequal comparisons in both directions, hash agreement for equal snapshots, the exact fixed string with a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
+    },
+    {
+      "id": "keyboard-statics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keyboard(?:::(?:GetKeyFromScancodeEXT|GetModStateEXT|GetScancodeNameEXT|GetScancodeFromNameEXT|GetKeyNameEXT|GetKeyFromNameEXT))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "one `cna_keyboard_*` route per canonical static, each taking an active game handle for the same reason the gamepad queries do. The class itself has no handle: its canonical constructor is deleted and every member is static. The player-slot overload becomes `cna_keyboard_get_state_for_player`, which reports the same snapshot for every slot because CNA has one keyboard. The two name families use the project count/copy protocol and their reverse lookups take a borrowed `CNA_StringView`, so no `std::string` crosses the boundary; an unknown name answers with the canonical none identity rather than failing",
+      "tests": "`InputSnapshotsSmoke.c` asserts every slot reports the identical snapshot, the modifier mask stays inside the defined bits, the scancode translation stays in range, both name families round-trip through count/copy and back through the reverse lookup, an unknown name answers `CNA_KEY_NONE`, and every out-of-range-key, out-of-range-slot, invalid-view and null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
+    },
+    {
+      "id": "input-key-modifiers",
+      "qualified_name_regex": "^CNA::Input::KeyModifiersEXT(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_KeyModifiers` and the `CNA_KEY_MODIFIER_*` identities at the canonical bit values, plus `CNA_KEY_MODIFIER_ALL`. **Borrowed into CBIND-037B4a** from the input-extension slice, because `Keyboard::GetModStateEXT` returns it and cannot be mapped without it. Unlike the gamepad button identities, these really are flags, so they combine and mask with C's own operators",
+      "tests": "C and C++ ABI assertions freeze the bit values; `InputSnapshotsSmoke.c` asserts the reported mask contains no bit outside `CNA_KEY_MODIFIER_ALL`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
+    },
+    {
+      "id": "input-key-modifier-operators",
+      "qualified_name_regex": "^CNA::Input::operator(?:\\||&|~|\\|=|&=)$",
+      "signature_regex": "^\\(KeyModifiersEXT ?&?[a-z]+(?:, KeyModifiersEXT [a-z]+)?\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "no route, and none is needed: the canonical operators exist so a C++ scoped enumeration can be combined at all, and the C identity is already a plain `uint32_t` a consumer masks with `|`, `&` and `~` directly",
+      "tests": "`InputSnapshotsSmoke.c` masks the reported modifier state against `CNA_KEY_MODIFIER_ALL` with the C operators, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
+    },
+    {
+      "id": "keyboard-get-state-for-player",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Keyboard::GetState$",
+      "signature_regex": "^\\(Microsoft::Xna::Framework::PlayerIndex playerIndex\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_keyboard_get_state_for_player`, which reports the same snapshot for every slot because CNA has one keyboard; the overload exists in C because the canonical API has it",
+      "tests": "`InputSnapshotsSmoke.c` asserts all four slots report a snapshot byte-identical to `cna_keyboard_get_state`, plus the out-of-range-slot and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4a"
     }
   ]
 }

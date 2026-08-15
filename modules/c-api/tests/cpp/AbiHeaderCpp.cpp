@@ -754,3 +754,9 @@ static_assert(CNA_GAMEPAD_CONNECTION_STATE_WIRELESS == UINT32_C(2));
 static_assert(CNA_POWER_STATE_CHARGED == UINT32_C(5));
 static_assert(sizeof(CNA_GamePadTouchpadFinger) == 16U);
 static_assert(offsetof(CNA_GamePadTouchpadFinger, pressure) == 12U);
+
+static_assert(sizeof(CNA_KeyState) == sizeof(uint32_t));
+static_assert(sizeof(CNA_KeyModifiers) == sizeof(uint32_t));
+static_assert(CNA_KEY_STATE_DOWN == UINT32_C(1));
+static_assert(CNA_KEY_MODIFIER_MODE == UINT32_C(0x80));
+static_assert(CNA_KEY_MODIFIER_ALL == UINT32_C(0xFF));

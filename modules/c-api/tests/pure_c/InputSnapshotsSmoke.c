@@ -628,6 +628,100 @@ static int validate_pure_state_value_helpers(void)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static int validate_pure_keyboard_value_helpers(void)
+{
+    static const CNA_Key keys[3] = {CNA_KEY_A, CNA_KEY_B, CNA_KEY_A};
+    static const CNA_Key out_of_range[1] = {UINT32_C(256)};
+    CNA_KeyboardState state;
+    CNA_KeyboardState other;
+    CNA_KeyState key_state = UINT32_C(999);
+    CNA_Bool flag = UINT8_C(9);
+    int32_t hash = 9;
+    int32_t other_hash = 9;
+    uint64_t bytes = UINT64_C(0);
+    uint32_t count = UINT32_C(9);
+    char text[64];
+
+    if (cna_keyboard_state_init(&state) != CNA_RESULT_SUCCESS ||
+        state.struct_size != sizeof(CNA_KeyboardState) ||
+        state.struct_version != UINT32_C(1) ||
+        cna_keyboard_state_get_pressed_key_count(&state, &count) != CNA_RESULT_SUCCESS ||
+        count != 0U ||
+        cna_keyboard_state_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* A duplicate key contributes once, exactly as the canonical set would. */
+    if (cna_keyboard_state_init_from_keys(keys, UINT64_C(3), &state) != CNA_RESULT_SUCCESS ||
+        cna_keyboard_state_get_pressed_key_count(&state, &count) != CNA_RESULT_SUCCESS ||
+        count != 2U ||
+        cna_keyboard_state_is_key_down(&state, CNA_KEY_A, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_keyboard_state_is_key_down(&state, CNA_KEY_C, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    /* Documented deviation: the canonical constructor drops an out-of-range key silently, C
+       refuses so a caller can never lose one without being told. */
+    if (cna_keyboard_state_init_from_keys(out_of_range, UINT64_C(1), &other) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_init_from_keys(0, UINT64_C(1), &other) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_init_from_keys(keys, UINT64_C(1), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_keyboard_state_get_key_state(&state, CNA_KEY_A, &key_state) != CNA_RESULT_SUCCESS ||
+        key_state != CNA_KEY_STATE_DOWN ||
+        cna_keyboard_state_get_key_state(&state, CNA_KEY_C, &key_state) != CNA_RESULT_SUCCESS ||
+        key_state != CNA_KEY_STATE_UP ||
+        cna_keyboard_state_get_key_state(&state, UINT32_C(256), &key_state) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_get_key_state(&state, CNA_KEY_A, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_get_key_state(0, CNA_KEY_A, &key_state) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    other = state;
+    if (cna_keyboard_state_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_keyboard_state_not_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_keyboard_state_get_hash_code(&state, &hash) != CNA_RESULT_SUCCESS ||
+        cna_keyboard_state_get_hash_code(&other, &other_hash) != CNA_RESULT_SUCCESS ||
+        hash != other_hash) {
+        return 0;
+    }
+    if (cna_keyboard_state_init_from_keys(keys, UINT64_C(1), &other) != CNA_RESULT_SUCCESS ||
+        cna_keyboard_state_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_keyboard_state_not_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_keyboard_state_equals(&state, &other, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_not_equals(0, &other, &flag) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_state_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The canonical type does not override its string conversion. */
+    memset(text, 0, sizeof(text));
+    if (cna_keyboard_state_get_string_size(&state, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)strlen("Microsoft.Xna.Framework.Input.KeyboardState") ||
+        cna_keyboard_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.Input.KeyboardState") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    return cna_keyboard_state_copy_string(&state, text, UINT64_C(2), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL &&
+        text[0] == '\0' &&
+        cna_keyboard_state_get_string_size(0, &bytes) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_keyboard_state_copy_string(&state, text, UINT64_C(64), 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static int validate_pure_dead_zone_exclusion(void)
 {
     float value = 9.0F;
@@ -826,6 +920,115 @@ static int validate_device_queries(const CNA_Handle game)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+/* The keyboard queries need a running game for the same reason every other device query does. No
+   verification tree types anything, so these assert the shape of the answer and the refusals. */
+static int validate_keyboard_queries(const CNA_Handle game)
+{
+    CNA_KeyboardState state;
+    CNA_KeyboardState per_player;
+    CNA_KeyModifiers modifiers = UINT32_C(0xFFFFFFFF);
+    CNA_Key key = UINT32_C(999);
+    CNA_PlayerIndex player = CNA_PLAYER_INDEX_ONE;
+    uint64_t bytes = UINT64_C(9);
+    char text[64];
+
+    if (cna_keyboard_state_init(&state) != CNA_RESULT_SUCCESS ||
+        cna_keyboard_get_state(game, &state) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* CNA has one keyboard, so every slot reports the same snapshot. */
+    for (player = CNA_PLAYER_INDEX_ONE; player <= CNA_PLAYER_INDEX_FOUR; ++player) {
+        if (cna_keyboard_state_init(&per_player) != CNA_RESULT_SUCCESS ||
+            cna_keyboard_get_state_for_player(game, player, &per_player) !=
+                CNA_RESULT_SUCCESS ||
+            memcmp(&per_player, &state, sizeof(state)) != 0) {
+            return 0;
+        }
+    }
+    if (cna_keyboard_get_state_for_player(game, UINT32_C(4), &per_player) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_get_state_for_player(game, CNA_PLAYER_INDEX_ONE, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_keyboard_get_mod_state_ext(game, &modifiers) != CNA_RESULT_SUCCESS ||
+        (modifiers & ~CNA_KEY_MODIFIER_ALL) != 0U ||
+        cna_keyboard_get_mod_state_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_keyboard_get_key_from_scancode_ext(game, CNA_KEY_A, &key) != CNA_RESULT_SUCCESS ||
+        key >= UINT32_C(256) ||
+        cna_keyboard_get_key_from_scancode_ext(game, UINT32_C(256), &key) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_keyboard_get_key_from_scancode_ext(game, CNA_KEY_A, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Both name families use the same count/copy protocol, and both look back up by name. */
+    memset(text, 0, sizeof(text));
+    if (cna_keyboard_get_key_name_size_ext(game, CNA_KEY_A, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_keyboard_copy_key_name_ext(game, CNA_KEY_A, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        (uint64_t)strlen(text) != bytes) {
+        return 0;
+    }
+    if (bytes != UINT64_C(0)) {
+        CNA_StringView name;
+        name.data = text;
+        name.byte_length = bytes;
+        if (cna_keyboard_get_key_from_name_ext(game, name, &key) != CNA_RESULT_SUCCESS ||
+            key != CNA_KEY_A) {
+            return 0;
+        }
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_keyboard_get_scancode_name_size_ext(game, CNA_KEY_A, &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_keyboard_copy_scancode_name_ext(
+            game, CNA_KEY_A, text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS ||
+        (uint64_t)strlen(text) != bytes) {
+        return 0;
+    }
+    if (bytes != UINT64_C(0)) {
+        CNA_StringView name;
+        name.data = text;
+        name.byte_length = bytes;
+        if (cna_keyboard_get_scancode_from_name_ext(game, name, &key) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    {
+        CNA_StringView unknown;
+        CNA_StringView invalid;
+        unknown.data = "not a key name at all";
+        unknown.byte_length = (uint64_t)strlen("not a key name at all");
+        invalid.data = 0;
+        invalid.byte_length = UINT64_C(4);
+        /* An unknown name is an ordinary answer -- the canonical none identity -- not a failure. */
+        if (cna_keyboard_get_key_from_name_ext(game, unknown, &key) != CNA_RESULT_SUCCESS ||
+            key != CNA_KEY_NONE ||
+            cna_keyboard_get_scancode_from_name_ext(game, unknown, &key) !=
+                CNA_RESULT_SUCCESS ||
+            key != CNA_KEY_NONE ||
+            cna_keyboard_get_key_from_name_ext(game, invalid, &key) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_keyboard_get_key_from_name_ext(game, unknown, 0) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+    }
+    return cna_keyboard_get_key_name_size_ext(game, UINT32_C(256), &bytes) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_keyboard_get_scancode_name_size_ext(game, CNA_KEY_A, 0) ==
+            CNA_RESULT_INVALID_ARGUMENT &&
+        cna_keyboard_copy_key_name_ext(game, CNA_KEY_A, text, UINT64_C(64), 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -911,7 +1114,7 @@ static CNA_Result on_update(
         }
     }
 
-    if (!validate_device_queries(game)) {
+    if (!validate_device_queries(game) || !validate_keyboard_queries(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -1029,8 +1232,11 @@ int main(void)
     if (!validate_pure_state_value_helpers()) {
         return 14;
     }
-    if (!validate_pure_dead_zone_exclusion()) {
+    if (!validate_pure_keyboard_value_helpers()) {
         return 15;
+    }
+    if (!validate_pure_dead_zone_exclusion()) {
+        return 17;
     }
     if (!validate_pure_touch_helpers()) {
         return 16;

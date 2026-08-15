@@ -944,3 +944,13 @@ _Static_assert(sizeof(CNA_GamePadTouchpadFinger) == 16U &&
                    offsetof(CNA_GamePadTouchpadFinger, y) == 8U &&
                    offsetof(CNA_GamePadTouchpadFinger, pressure) == 12U,
                "CNA_GamePadTouchpadFinger layout must remain stable");
+
+_Static_assert(sizeof(CNA_KeyState) == sizeof(uint32_t) &&
+                   sizeof(CNA_KeyModifiers) == sizeof(uint32_t) &&
+                   CNA_KEY_STATE_UP == UINT32_C(0) &&
+                   CNA_KEY_STATE_DOWN == UINT32_C(1) &&
+                   CNA_KEY_MODIFIER_NONE == UINT32_C(0) &&
+                   CNA_KEY_MODIFIER_SHIFT == UINT32_C(1) &&
+                   CNA_KEY_MODIFIER_MODE == UINT32_C(0x80) &&
+                   CNA_KEY_MODIFIER_ALL == UINT32_C(0xFF),
+               "CNA keyboard identities must remain stable");
