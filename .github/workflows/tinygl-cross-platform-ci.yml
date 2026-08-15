@@ -108,6 +108,12 @@ jobs:
         if: runner.os == 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@v4
 
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        run: |
+          /c/vcpkg/vcpkg.exe install zlib:x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> "${GITHUB_ENV}"
+
       - name: Configure TinyGL
         working-directory: cna
         run: |
