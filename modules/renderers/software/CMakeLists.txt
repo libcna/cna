@@ -4,8 +4,13 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "SOFTWARE")
     file(GLOB _cna_software_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
     list(REMOVE_ITEM _cna_software_sources
         "${CMAKE_CURRENT_SOURCE_DIR}/src/SoftwareRenderer2D.cpp")
-    add_library(${RENDERER_TARGET} STATIC ${_cna_software_sources})
-    cna_renderer_common_setup()
+    # plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the
+    # global scalar, which names the build DEFAULT and is only correct here because the caller
+    # happens to have overwritten it first.
+    cna_renderer_target_name(_cna_software_target)
+    add_library(${_cna_software_target} STATIC ${_cna_software_sources})
+    cna_renderer_common_setup(${_cna_software_target})
+    set(RENDERER_TARGET "${_cna_software_target}")
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "GDI")
     # GDI consumes the CPU 2D implementation through a dedicated translation unit. It deliberately
     # compiles neither the Software 3D/cube resource implementations nor the 3D draw entry points;
