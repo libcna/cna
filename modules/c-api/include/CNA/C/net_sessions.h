@@ -3,6 +3,7 @@
 #ifndef CNA_C_NET_SESSIONS_H
 #define CNA_C_NET_SESSIONS_H
 
+#include "CNA/C/gamer_services.h"
 #include "CNA/C/net_gamers.h"
 
 #ifdef __cplusplus
@@ -906,6 +907,269 @@ CNA_C_API CNA_Result cna_network_session_dispose(CNA_NetworkSessionHandle sessio
  * open, or a documented handle/thread failure.
  */
 CNA_C_API CNA_Result cna_network_session_destroy(CNA_NetworkSessionHandle session);
+
+/** @brief Owned handle for one session event subscription. */
+typedef CNA_Handle CNA_NetworkSessionEventRegistrationHandle;
+
+/**
+ * @brief Receives a game-started event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description, valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_GameStartedCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_GameStartedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a game-ended event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description, valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_GameEndedCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_GameEndedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a gamer-joined event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description; its gamer handle is valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_GamerJoinedCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_GamerJoinedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a gamer-left event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description; its gamer handle is valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_GamerLeftCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_GamerLeftEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a host-changed event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description; its gamer handles are valid only for this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_HostChangedCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_HostChangedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a session-ended event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description, valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_NetworkSessionEndedCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_NetworkSessionEndedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a leaderboard-write event.
+ *
+ * @param session The session that raised the event.
+ * @param info The event description; its gamer handle is valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_WriteLeaderboardsCallback)(
+    CNA_NetworkSessionHandle session,
+    const CNA_WriteLeaderboardsEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives an accepted-invite event.
+ *
+ * @param info The event description; its gamer handle is valid only for the duration of this call.
+ * @param context Caller-owned context supplied at subscription.
+ */
+typedef void (*CNA_InviteAcceptedCallback)(
+    const CNA_InviteAcceptedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Subscribes to a session's game-started event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_game_started(
+    CNA_NetworkSessionHandle session,
+    CNA_GameStartedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's game-ended event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_game_ended(
+    CNA_NetworkSessionHandle session,
+    CNA_GameEndedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's gamer-joined event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical event replays itself for every gamer already in the session the moment a handler
+ * subscribes, so the callback fires before this call returns when the session is not empty.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_gamer_joined(
+    CNA_NetworkSessionHandle session,
+    CNA_GamerJoinedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's gamer-left event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_gamer_left(
+    CNA_NetworkSessionHandle session,
+    CNA_GamerLeftCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's host-changed event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_host_changed(
+    CNA_NetworkSessionHandle session,
+    CNA_HostChangedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's session-ended event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_session_ended(
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkSessionEndedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's arbitrated-leaderboard write event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_write_arbitrated_leaderboard(
+    CNA_NetworkSessionHandle session,
+    CNA_WriteLeaderboardsCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's unarbitrated-leaderboard write event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_write_unarbitrated_leaderboard(
+    CNA_NetworkSessionHandle session,
+    CNA_WriteLeaderboardsCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to a session's true-skill write event.
+ *
+ * @param session Owned session handle.
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_write_true_skill(
+    CNA_NetworkSessionHandle session,
+    CNA_WriteLeaderboardsCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to the process-wide accepted-invite event.
+ *
+ * @param callback Non-null callback invoked synchronously when the event is raised.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread/native failure.
+ *
+ * The canonical event is a static member, so the subscription belongs to the process rather than
+ * to any one session handle.
+ */
+CNA_C_API CNA_Result cna_network_session_subscribe_invite_accepted(
+    CNA_InviteAcceptedCallback callback,
+    void* context,
+    CNA_NetworkSessionEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Unsubscribes and releases a session event registration.
+ *
+ * @param registration Owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure. A second release returns
+ * `CNA_RESULT_INVALID_HANDLE`.
+ *
+ * Releasing a registration whose session is already gone is a no-op rather than a failure.
+ */
+CNA_C_API CNA_Result cna_network_session_unsubscribe(
+    CNA_NetworkSessionEventRegistrationHandle registration);
 
 #ifdef __cplusplus
 }

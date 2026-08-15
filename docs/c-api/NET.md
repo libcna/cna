@@ -5,8 +5,7 @@
 `CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
 event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions, their
-collection and the session object itself. Session events, live discovery, join and local gamers are
-later coverage tasks. Nothing here opens a socket unless a `SystemLink` session is created; a
+collection and the session object itself. Live discovery, join and local gamers are later coverage tasks. Nothing here opens a socket unless a `SystemLink` session is created; a
 `Local` session touches no transport at all.
 
 ## Identities
@@ -177,3 +176,24 @@ Two lifetime rules follow from the canonical contract rather than from the bindi
 
 A packet event queued on a non-`SystemLink` session is a deliberate no-op in the canonical pump, so
 `cna_network_session_send_network_event_ext` succeeds and delivers nothing there.
+
+## Session events
+
+Each of the nine instance events and the static `InviteAccepted` event has its own
+`cna_network_session_subscribe_*` route taking a typed callback, and they share one
+`cna_network_session_unsubscribe`.
+
+A payload gamer is handed to the callback as a handle that exists **only for the duration of that
+call**. A consumer that needs the gamer afterwards must copy what it needs while the callback runs;
+it can never retain a pointer into session-owned state.
+
+An instance registration holds a weak reference to its session, so releasing it after the session
+is gone is a no-op rather than a failure. `InviteAccepted` is a static event, so its subscription
+belongs to the process and takes no session handle.
+
+`GamerJoined` carries one canonical behavior worth knowing: it replays itself for every gamer
+already in the session the instant a handler subscribes, so the callback fires before
+`cna_network_session_subscribe_gamer_joined` returns whenever the session is not empty.
+
+Nothing in the canonical implementation currently raises the three leaderboard events or
+`InviteAccepted`; their subscriptions are real and released normally, but no delivery happens yet.

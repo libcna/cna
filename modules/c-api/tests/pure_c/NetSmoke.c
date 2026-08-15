@@ -1073,6 +1073,223 @@ static int validate_session_remote_gamers(const CNA_NetworkSessionHandle session
         number == 0;
 }
 
+typedef struct SessionEventCounters {
+    int started;
+    int ended;
+    int joined;
+    int left;
+    int host_changed;
+    int session_ended;
+    int leaderboards;
+    int invites;
+    int joined_gamer_ok;
+} SessionEventCounters;
+
+static void on_game_started(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GameStartedEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->started += 1;
+}
+
+static void on_game_ended(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GameEndedEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->ended += 1;
+}
+
+static void on_gamer_joined(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GamerJoinedEventInfo* const info,
+    void* const context)
+{
+    SessionEventCounters* const counters = (SessionEventCounters*)context;
+    CNA_Bool local = CNA_FALSE;
+    counters->joined += 1;
+    (void)session;
+    /* The payload handle is live for the duration of the callback and no longer. */
+    if (info->gamer != CNA_INVALID_HANDLE &&
+        cna_network_gamer_get_is_local(info->gamer, &local) == CNA_RESULT_SUCCESS) {
+        counters->joined_gamer_ok += 1;
+    }
+}
+
+static void on_gamer_left(
+    const CNA_NetworkSessionHandle session,
+    const CNA_GamerLeftEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->left += 1;
+}
+
+static void on_host_changed(
+    const CNA_NetworkSessionHandle session,
+    const CNA_HostChangedEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->host_changed += 1;
+}
+
+static void on_session_ended(
+    const CNA_NetworkSessionHandle session,
+    const CNA_NetworkSessionEndedEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->session_ended += 1;
+}
+
+static void on_write_leaderboards(
+    const CNA_NetworkSessionHandle session,
+    const CNA_WriteLeaderboardsEventInfo* const info,
+    void* const context)
+{
+    (void)session;
+    (void)info;
+    ((SessionEventCounters*)context)->leaderboards += 1;
+}
+
+static void on_invite_accepted(const CNA_InviteAcceptedEventInfo* const info, void* const context)
+{
+    (void)info;
+    ((SessionEventCounters*)context)->invites += 1;
+}
+
+static int subscribe_all(
+    const CNA_NetworkSessionHandle session,
+    SessionEventCounters* const counters,
+    CNA_NetworkSessionEventRegistrationHandle registrations[10])
+{
+    for (int index = 0; index < 10; ++index) {
+        registrations[index] = CNA_INVALID_HANDLE;
+    }
+    return cna_network_session_subscribe_game_started(
+            session, on_game_started, counters, &registrations[0]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_game_ended(
+            session, on_game_ended, counters, &registrations[1]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_gamer_joined(
+            session, on_gamer_joined, counters, &registrations[2]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_gamer_left(
+            session, on_gamer_left, counters, &registrations[3]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_host_changed(
+            session, on_host_changed, counters, &registrations[4]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_session_ended(
+            session, on_session_ended, counters, &registrations[5]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_write_arbitrated_leaderboard(
+            session, on_write_leaderboards, counters, &registrations[6]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_write_unarbitrated_leaderboard(
+            session, on_write_leaderboards, counters, &registrations[7]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_write_true_skill(
+            session, on_write_leaderboards, counters, &registrations[8]) == CNA_RESULT_SUCCESS &&
+        cna_network_session_subscribe_invite_accepted(
+            on_invite_accepted, counters, &registrations[9]) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_session_subscriptions(const CNA_NetworkSessionHandle session)
+{
+    SessionEventCounters counters = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    CNA_NetworkSessionEventRegistrationHandle registrations[10];
+    CNA_NetworkSessionEventRegistrationHandle rejected = UINT64_C(9);
+    CNA_NetworkGamerHandle remote = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle local_view = CNA_INVALID_HANDLE;
+    CNA_NetworkEventInfo event = {
+        sizeof(CNA_NetworkEventInfo), UINT32_C(1), CNA_NETWORK_EVENT_TYPE_HOST_CHANGE,
+        CNA_SEND_DATA_OPTIONS_NONE, CNA_NETWORK_SESSION_STATE_LOBBY,
+        CNA_NETWORK_SESSION_END_REASON_DISCONNECTED, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+        0, UINT64_C(0)
+    };
+    int32_t number = -1;
+
+    if (cna_network_session_subscribe_game_started(session, 0, 0, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_network_session_subscribe_invite_accepted(on_invite_accepted, 0, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* Drain anything earlier phases queued so every count below is exact. */
+    if (cna_network_session_update(session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_get_gamer_count(session, CNA_NETWORK_SESSION_ROSTER_ALL, &number) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (!subscribe_all(session, &counters, registrations)) {
+        return 0;
+    }
+    /* The canonical gamer-joined event replays itself for every gamer already present. */
+    if (counters.joined != number || counters.joined_gamer_ok != number) {
+        return 0;
+    }
+
+    if (cna_network_gamer_create(session, view("Late"), &remote) != CNA_RESULT_SUCCESS ||
+        cna_network_session_add_remote_gamer_ext(session, remote) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_destroy(remote) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS ||
+        counters.joined != number + 1) {
+        return 0;
+    }
+    if (cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_REMOTE, 0, &remote) !=
+            CNA_RESULT_SUCCESS ||
+        cna_network_session_remove_gamer_ext(
+            session, remote, CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_destroy(remote) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.left != 1) {
+        return 0;
+    }
+
+    if (cna_network_session_start_game(session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.started != 1 ||
+        cna_network_session_end_game(session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.ended != 1) {
+        return 0;
+    }
+
+    if (cna_network_session_get_gamer(session, CNA_NETWORK_SESSION_ROSTER_LOCAL, 0, &local_view) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    event.gamer = local_view;
+    if (cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS || counters.host_changed != 1 ||
+        cna_network_gamer_destroy(local_view) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    event.type = CNA_NETWORK_EVENT_TYPE_STATE_CHANGE;
+    event.state = CNA_NETWORK_SESSION_STATE_ENDED;
+    event.gamer = CNA_INVALID_HANDLE;
+    if (cna_network_session_send_network_event_ext(session, &event) != CNA_RESULT_SUCCESS ||
+        cna_network_session_update(session) != CNA_RESULT_SUCCESS ||
+        counters.session_ended != 1) {
+        return 0;
+    }
+    /* Nothing in the canonical implementation raises the leaderboard or invite events yet, so
+       their subscriptions are exercised through registration and release only. */
+    if (counters.leaderboards != 0 || counters.invites != 0) {
+        return 0;
+    }
+
+    for (int index = 0; index < 10; ++index) {
+        if (cna_network_session_unsubscribe(registrations[index]) != CNA_RESULT_SUCCESS ||
+            cna_network_session_unsubscribe(registrations[index]) != CNA_RESULT_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
 {
     CNA_NetworkSessionPropertiesHandle properties = CNA_INVALID_HANDLE;
@@ -1172,7 +1389,8 @@ static int validate_sessions(void)
     }
 
     const int ok = validate_session_state(session) && validate_session_rosters(session) &&
-        validate_session_events(session) && validate_session_remote_gamers(session);
+        validate_session_events(session) && validate_session_remote_gamers(session) &&
+        validate_session_subscriptions(session);
     if (!ok) {
         (void)cna_network_session_destroy(session);
         return 0;

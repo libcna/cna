@@ -856,3 +856,10 @@ _Static_assert(sizeof(CNA_NetworkEventInfo) == 56U && _Alignof(CNA_NetworkEventI
                    offsetof(CNA_NetworkEventInfo, packet) == 40U &&
                    offsetof(CNA_NetworkEventInfo, packet_byte_count) == 48U,
                "CNA_NetworkEventInfo layout must remain stable");
+_Static_assert(sizeof(CNA_NetworkSessionEventRegistrationHandle) == 8U &&
+                   sizeof(CNA_InviteAcceptedEventInfo) == 24U &&
+                   _Alignof(CNA_InviteAcceptedEventInfo) == 8U &&
+                   offsetof(CNA_InviteAcceptedEventInfo, gamer) == 8U &&
+                   offsetof(CNA_InviteAcceptedEventInfo, is_current_session) == 16U &&
+                   offsetof(CNA_InviteAcceptedEventInfo, reserved) == 17U,
+               "CNA_InviteAcceptedEventInfo layout must remain stable");

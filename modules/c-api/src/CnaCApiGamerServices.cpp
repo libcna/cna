@@ -80,7 +80,65 @@ CNA_Result BorrowSignedInGamer(const CNA_Handle handle, SignedInGamer** const ou
     return CNA_RESULT_SUCCESS;
 }
 
+CNA_Result CreateBorrowedSignedInGamer(SignedInGamer* const value, CNA_Handle* const outGamer)
+{
+    if (outGamer == nullptr) {
+        return InvalidArgument("The SignedInGamer output handle is null.");
+    }
+    *outGamer = CNA_INVALID_HANDLE;
+    if (value == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    const auto resource = std::make_shared<SignedInGamerResource>();
+    // A borrowed view never owns the canonical object, so the aliasing constructor keeps the
+    // pointer without ever deleting it.
+    resource->value = std::shared_ptr<SignedInGamer>(std::shared_ptr<void>(), value);
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::SignedInGamer,
+        resource,
+        outGamer);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The borrowed SignedInGamer handle could not be created.");
+}
+
+CNA_Result ReleaseBorrowedSignedInGamer(const CNA_Handle handle)
+{
+    if (handle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return GetRuntimeHandles().Release(handle);
+}
+
 } // namespace CNA::C::Detail
+
+CNA_Result cna_invite_accepted_event_info_init(
+    const CNA_SignedInGamerHandle gamer,
+    const CNA_Bool isCurrentSession,
+    CNA_InviteAcceptedEventInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_InviteAcceptedEventInfo) ||
+            outInfo->struct_version != UINT32_C(1)) {
+            return InvalidArgument("The event description structure is invalid.");
+        }
+        if (gamer != CNA_INVALID_HANDLE) {
+            std::shared_ptr<SignedInGamerResource> resource;
+            if (const CNA_Result result = GetSignedInGamer(gamer, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        outInfo->gamer = gamer;
+        outInfo->is_current_session = isCurrentSession;
+        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+        return CNA_RESULT_SUCCESS;
+    });
+}
 
 CNA_Result cna_signed_in_gamer_create_ext(
     const CNA_StringView gamertag,

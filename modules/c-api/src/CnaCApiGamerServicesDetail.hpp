@@ -17,6 +17,14 @@ namespace CNA::C::Detail {
     CNA_Handle handle,
     Microsoft::Xna::Framework::GamerServices::SignedInGamer** outGamer);
 
+// The accepted-invite event carries a signed-in gamer, so the session adapter needs a handle for
+// one it does not own; the view lives only as long as the callback that receives it.
+[[nodiscard]] CNA_Result CreateBorrowedSignedInGamer(
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer* value,
+    CNA_Handle* outGamer);
+
+[[nodiscard]] CNA_Result ReleaseBorrowedSignedInGamer(CNA_Handle handle);
+
 } // namespace CNA::C::Detail
 
 #endif

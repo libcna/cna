@@ -2602,6 +2602,30 @@
       "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
       "status": "implemented",
       "task": "CBIND-036E2"
+    },
+    {
+      "id": "network-session-events",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::(?:GameStarted|GameEnded|GamerJoined|GamerLeft|HostChanged|SessionEnded|WriteArbitratedLeaderboard|WriteUnarbitratedLeaderboard|WriteTrueSkill|InviteAccepted)$",
+      "kinds": [
+        "event"
+      ],
+      "mapping": "one `cna_network_session_subscribe_*` route per event, each taking a typed callback that receives the matching `CNA_*EventInfo` description, plus one shared `cna_network_session_unsubscribe`. A payload gamer is handed over as a handle that lives only for the duration of the callback, so a consumer can never retain a pointer into session-owned state. An instance registration holds a weak reference to its session, so releasing it after the session is gone is a no-op; `InviteAccepted` is a static event and its subscription belongs to the process rather than to any session handle",
+      "tests": "`NetSmoke.c` subscribes to all ten events on a live session, asserts the canonical gamer-joined replay fires once per gamer already present at subscription time and that its payload handle is usable inside the callback, then drives a real join, leave, start, end, host change and session end through the pump and counts each delivery exactly; the leaderboard and invite events are registered and released because nothing in the canonical implementation raises them yet. Null callbacks and null outputs are refused, and every registration is released twice to prove the second release reports a stale handle",
+      "status": "implemented",
+      "task": "CBIND-036E3"
+    },
+    {
+      "id": "invite-accepted-event-arguments",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::InviteAcceptedEventArgs(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "the fixed `CNA_InviteAcceptedEventInfo` description with `cna_invite_accepted_event_info_init`, delivered by value to the accepted-invite callback. Borrowed ahead of the gamer-services coverage task because the session slice maps the event that carries it",
+      "tests": "`NetSmoke.c` subscribes to all ten events on a live session, asserts the canonical gamer-joined replay fires once per gamer already present at subscription time and that its payload handle is usable inside the callback, then drives a real join, leave, start, end, host change and session end through the pump and counts each delivery exactly; the leaderboard and invite events are registered and released because nothing in the canonical implementation raises them yet. Null callbacks and null outputs are refused, and every registration is released twice to prove the second release reports a stale handle",
+      "status": "implemented",
+      "task": "CBIND-036E3"
     }
   ]
 }

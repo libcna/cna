@@ -286,7 +286,17 @@
 > deliberate no-op; and a remote gamer is retained by the C layer because the canonical add
 > explicitly does not take ownership, so releasing the caller's own handle must not invalidate the
 > roster. The inventory is now 3,792 implemented, 30 partial, 2,477 planned and 116 N/A; all three
-> trees stay green at 50/50. CBIND-036E3 (the ten session event registrations, 10 rows) is next.
+> trees stay green at 50/50.
+>
+> CBIND-036E3 then maps the ten session events. Each gets its own typed subscribe route delivering
+> the matching event description, with one shared unsubscribe. The payload gamer is handed over as a
+> handle that exists only for the duration of the callback, so a consumer can never retain a pointer
+> into session-owned state, and an instance registration holds a weak reference to its session so
+> releasing it after the session is gone is a no-op rather than a use-after-free. The canonical
+> gamer-joined replay — which fires once per gamer already present the moment a handler subscribes —
+> is asserted directly. The inventory is now 3,806 implemented, 30 partial, 2,463 planned and 116
+> N/A; all three trees stay green at 50/50. CBIND-036E4 (discovery, join and the fake-async pairs,
+> 17 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

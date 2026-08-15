@@ -63,6 +63,40 @@ CNA_C_API CNA_Result cna_signed_in_gamer_copy_gamertag(
     uint64_t* out_bytes);
 
 /**
+ * @brief Describes an accepted-invite event.
+ */
+typedef struct CNA_InviteAcceptedEventInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief The gamer that accepted the invite, or `CNA_INVALID_HANDLE`. */
+    CNA_SignedInGamerHandle gamer;
+
+    /** @brief `CNA_TRUE` when the invite names the session already in progress. */
+    CNA_Bool is_current_session;
+
+    /** @brief Reserved bytes; always zero. */
+    uint8_t reserved[7];
+} CNA_InviteAcceptedEventInfo;
+
+/**
+ * @brief Initializes an accepted-invite event description.
+ *
+ * @param gamer The gamer that accepted the invite, or `CNA_INVALID_HANDLE`.
+ * @param is_current_session `CNA_TRUE` when the invite names the session already in progress.
+ * @param out_info Caller-provided versioned structure to initialize.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` for a handle that is not a live
+ * signed-in gamer, or `CNA_RESULT_INVALID_ARGUMENT` for an invalid structure.
+ */
+CNA_C_API CNA_Result cna_invite_accepted_event_info_init(
+    CNA_SignedInGamerHandle gamer,
+    CNA_Bool is_current_session,
+    CNA_InviteAcceptedEventInfo* out_info);
+
+/**
  * @brief Releases an owned signed-in gamer handle.
  *
  * @param gamer Owned signed-in gamer handle.
