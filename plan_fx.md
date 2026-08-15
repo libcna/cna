@@ -564,10 +564,20 @@ The feature may be advertised as usable on FNA3D only when all of the following 
 - fuzz/sanitizer and full regression gates are clean;
 - `CompiledEffects` is true only on FNA3D and documentation says so precisely.
 
-#### Assessment (2026-08-14)
+#### Assessment (updated 2026-08-15)
 
-`FX-057` is **not** declared. Six of the eight criteria pass; two do not, and neither is a matter
-of remaining effort alone.
+`FX-057` is **not** declared. Seven of the eight criteria now pass. The oracle criterion moved from
+"no oracle exists" to passing once `mono` and the June 2010 DirectX SDK's `fxc` were made available
+on 2026-08-15: CNA now has both a conformance source it controls compiled by the compiler XNA used,
+and FNA's own reflection of every committed binary as checked-in test data.
+
+What remains is the fuzz gate, and it is worth being precise about why that one is not a formality.
+It is not that the campaign has not been run -- it has, in three shapes, and it has found
+twenty-five distinct ways untrusted bytecode crashed the process. Every one of them was in the
+pinned MojoShader rather than in CNA, and every one is fixed. But the campaign keeps finding more
+as it runs longer and as it reaches new code, and the SPIR-V emitter the SDL_GPU driver uses still
+validates shader bytecode with `assert()` in about fifty places. Declaring the gate passed while
+that is true would be claiming a property the evidence does not support.
 
 | Criterion | State |
 |---|---|
@@ -577,7 +587,7 @@ of remaining effort alone.
 | SpriteBatch and 3D pixel tests | **Pass** — deterministic pixels for both paths and for a blend-factor state oracle |
 | clone and lifetime | **Pass** — clone chains, device reset, disposal ordering, repeated cycles |
 | malformed input and unsupported renderers fail explicitly and safely | **Partial.** Unsupported renderers refuse by name, and CNA's own layer rejects every malformed category tested. But a fuzz campaign still reaches a wild read inside pinned MojoShader after a few thousand mutations, so "safely" does not yet hold for arbitrary hostile content. Documented as a trust boundary rather than claimed |
-| fuzz/sanitizer and regression gates clean | **Partial.** Sanitizers are clean for CNA-owned code (`FX-052`) and the full regression is explained (`FX-054`), but the fuzz gate is not clean (`FX-051`) |
+| fuzz/sanitizer and regression gates clean | **Partial, and the only criterion still open.** Sanitizers are clean for CNA-owned code (`FX-052`) and the full regression is explained (`FX-054`). The fuzz gate is not clean: twenty-five crash classes found and fixed so far, all upstream, and the campaign still finds more the longer it runs |
 | `CompiledEffects` true only on FNA3D, documented precisely | **Pass** |
 
 So the accurate public statement today is: compiled effects work on FNA3D for content the game
