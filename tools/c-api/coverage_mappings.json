@@ -4300,6 +4300,56 @@
       "tests": "Doxygen declaration inventory; the singleton's observable state is covered in `MediaPlayerSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037C6"
+    },
+    {
+      "id": "media-video",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Video(::(Video|getWidthProperty|getHeightProperty|getFramesPerSecondProperty|getVideoSoundtrackTypeProperty|getDurationProperty|setDurationProperty|FromUriEXT|SetAudioTrackEXT|SetVideoTrackEXT|getFileNameProperty|getGraphicsDeviceProperty|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_VideoHandle` from three routes: `cna_video_create` (the probing constructor), `cna_video_create_with_metadata` (the compiled-asset one, which never touches the file) and `cna_video_create_from_uri_ext`. Each takes a callback-scoped borrowed graphics-device handle, which is where the canonical device argument comes from. **The graphics device is reported as presence, not handed back**: a borrowed device handle is valid only inside the callback that produced it, so returning one from a video created in an earlier frame would be a promise this ABI cannot keep — `cna_video_get_has_graphics_device` answers the question the canonical null check asks. Two canonical behaviors are reported rather than corrected: a file that exists but cannot be decoded leaves width, height, frame rate and duration at **zero** instead of failing, and the URI factory **does not parse URIs** — it forwards the text straight to the file constructor, so a scheme-bearing string is simply a path that does not exist",
+      "tests": "`VideoSmoke.c` proves the missing-file refusal, the zeroed metadata of an existing but undecodable file, the exact declared metadata of the compiled-asset constructor including its duration in ticks, the file name and type name round trips, the unvalidated duration setter and both track selectors, and that the URI factory accepts a plain path while a `http:` string fails as a missing file",
+      "status": "implemented",
+      "task": "CBIND-037C7"
+    },
+    {
+      "id": "media-video-info",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VideoPlayer::VideoInfo(::(width|height|fps))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed `CNA_VideoInfo` value with `cna_video_info_init` for its zeroed default and `cna_video_get_info` to fill it from a video. The canonical nested value has no public producer of its own; rather than exposing a type nothing can create meaningfully, C fills it from the video that already carries the same three numbers",
+      "tests": "`VideoSmoke.c` asserts the zeroed default, fills it from a video with declared metadata and checks all three fields, and covers the invalid-structure and null refusals",
+      "status": "implemented",
+      "task": "CBIND-037C7"
+    },
+    {
+      "id": "media-video-player",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VideoPlayer(::(VideoPlayer|~VideoPlayer|Dispose|getIsDisposedProperty|getIsLoopedProperty|setIsLoopedProperty|getIsMutedProperty|setIsMutedProperty|getPlayPositionProperty|getStateProperty|getVideoProperty|getVolumeProperty|setVolumeProperty|GetTexture|Play|Stop|Pause|Resume|SetAudioTrackEXT|SetVideoTrackEXT|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_VideoPlayerHandle` with the loop, mute, volume, position, state and video properties, the four transport routes, both track selectors, and the canonical dispose-versus-release split. **The frame texture is the slice's one hard problem, and it is solved by lifetime rather than by copying**: the player owns and replaces its frame texture, so `cna_video_player_get_texture` hands back a borrowed `CNA_Texture2DHandle` that the C layer itself **invalidates on the next call to that player** — any later route, including another `get_texture`, releases it, so a stale frame handle fails with `CNA_RESULT_INVALID_HANDLE` instead of touching freed memory. Asking before playback is an ordinary `CNA_FALSE`, because the canonical implementation deliberately answers null there where the original API faults. Playing a file the platform cannot decode leaves the player stopped rather than failing, and disposal makes every playback route report the canonical disposed-object failure while the disposal query keeps answering. The C resource retains the video it was told to play, so releasing the caller's video handle can never leave the player pointing at a destroyed video",
+      "tests": "`VideoSmoke.c` covers creation, every property round trip, the no-frame answer before playback, playing an undecodable file leaving the player stopped, the played video reported back, transport calls in every state, releasing the caller's video handle while the player still holds it, and disposal turning every playback route into `INVALID_STATE` while the disposal query still answers",
+      "status": "implemented",
+      "task": "CBIND-037C7"
+    },
+    {
+      "id": "media-video-player-test-access",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VideoPlayer::VideoPlayerTestAccess$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration granting the canonical test harness access to private decoder state, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037C7"
     }
   ]
 }

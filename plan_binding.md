@@ -370,7 +370,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 |---|---:|---|---|---|
 | CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
 | CBIND-037B | 599 | Complete the input module | ✅ | `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration) are mapped. Decomposed into CBIND-037B1–B7 below; **closed by CBIND-037B7b**, after which the `input` module records 834 implemented, 0 partial, 0 planned and 27 not applicable. |
-| CBIND-037C | 325 | Complete the media module | 🟨 | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; the parent becomes complete only when all seven rows and every `media` inventory row are closed. |
+| CBIND-037C | 325 | Complete the media module | ✅ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; **closed by CBIND-037C7**, after which the `media` module records 276 implemented, 0 partial, 0 planned and 52 not applicable. |
 | CBIND-037D | 289 | Complete the devices and devices-ext modules | ⬜ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). |
 | CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
@@ -414,7 +414,7 @@ module list stays exactly what the C API adapts.
 | CBIND-037C4 | 60 | Complete pictures, picture albums and the library's picture surface | ✅ | `media_library.h` grows `CNA_PictureHandle`, `CNA_PictureAlbumHandle` and their two collections (`ObjectKind` 83–86), plus the six `MediaLibrary` picture rows re-partitioned in from `CBIND-037C3`. Two shapes are new. **The picture-album tree is the only tree in the media family**, and the root's absent parent is what makes it walkable: `cna_picture_album_get_parent` reports availability rather than failing, so a caller climbs until the flag turns false; `cna_media_library_get_root_picture_album` answers the same way, because a device with no readable picture location has no tree at all. And **a picture's date is the ABI's first point in time**: durations elsewhere are 100-nanosecond ticks from zero, so the date uses the same tick counted from the Unix epoch — the canonical clock's own epoch — rather than inventing a second time unit. Everything else reuses shapes already settled: image and thumbnail bytes follow the album-art contract (the canonical caller-owned stream is read to its end and destroyed inside the call, so no stream enters the ABI, and the thumbnail is the same image), and the collections are the same six-route shape the music collections use. `cna_media_library_save_picture_from_stream` takes a **storage stream handle**, since a storage stream is the only byte source this ABI owns — the same decision `content_readers.h` made — borrowed for the call and left the caller's to close. Twelve rows are `not-applicable`: the two collections' iterator pairs and aliases. The `CBIND-037C3` fixture is extended with a one-pixel BMP, so the picture side is as deterministic as the music side; the suite deletes the picture it saves so repeated runs start from the same state. Green in all four trees (56/56) and under ASan+UBSan with leak detection on. |
 | CBIND-037C5 | 0 | Complete MediaLibrary | ✅ | **Absorbed into `CBIND-037C3`** (music surface) and `CBIND-037C4` (picture surface). `MediaLibrary` could not be a slice of its own in either direction: its members return the entity collections, and none of those entities can be obtained without it. |
 | CBIND-037C6 | 44 | Complete MediaPlayer and MediaQueue | ✅ | `media_player.h` and `CnaCApiMediaPlayer.cpp` map the static `MediaPlayer` as free game-scoped routes and the queue as a **view of one process-lifetime object** (`ObjectKind` 87, registrations 88). Two canonical behaviors are preserved rather than tightened — the volume setter clamps instead of refusing, and the indexed `Play` overload is not range-checked — and two deviations are forced by ownership and documented: **a queue entry crosses as an independently owned copy** rather than a borrowed view, because the canonical queue destroys its entries on every clear (which every play route does) and a borrowed handle would dangle, and **`cna_media_queue_add` appends a copy** because the canonical `Add` adopts the pointer it is given, which C cannot do without leaving the caller a stale handle. Both copies carry the same file and name, so they compare equal to the original — and appending a copy is exactly what the canonical player itself does when it enqueues a song. Four rows are `not-applicable` with a stated limitation: the queue's constructor, destructor and move operations, since exactly one queue exists and C never constructs, moves or destroys it. The test asserts the playback transitions **as a relationship**, because whether `play` actually starts playing depends on the platform's ability to decode the fixture rather than on the C API — the paused/playing round trip is asserted when playback began and the no-op contract otherwise. Green in all four trees (57/57) and under ASan+UBSan with leak detection on. |
-| CBIND-037C7 | 42 | Complete Video and VideoPlayer | ⬜ | Map `Video` and `VideoPlayer`, the only media rows that touch the graphics device. FFmpeg is available in all four verification trees, so the decoder is real rather than compiled out; the per-frame texture must reuse the existing `CNA_Texture2DHandle` contract rather than inventing a second one. |
+| CBIND-037C7 | 42 | Complete Video and VideoPlayer | ✅ | `video.h` and `CnaCApiVideo.cpp` map both types (`ObjectKind` 89–90) and **close the media module**. The slice's one hard problem is the frame texture, and it is solved by lifetime rather than by copying: the player owns and replaces its texture, so `cna_video_player_get_texture` hands back a borrowed `CNA_Texture2DHandle` that the C layer **invalidates on the next call to that player** — any later route, including another `get_texture`, releases it, so a stale frame fails with `CNA_RESULT_INVALID_HANDLE` instead of touching freed memory. The graphics device is reported as **presence only**, because a borrowed device handle is valid solely inside the callback that produced it. Three canonical behaviors are reported rather than corrected, and two of them were established by running the code rather than reading the header: an undecodable file leaves the metadata zeroed and, on play, leaves the player stopped **with its video cleared**, so `get_video` answers `CNA_FALSE`; and `FromUriEXT` **does not parse URIs** at all — unlike the song factory it forwards the text to the file constructor, so an `http:` string is just a missing path. `VideoInfo` gains a real producer (`cna_video_get_info`) instead of being exposed as a type nothing can fill. One row is `not-applicable`: the test-access friend declaration. The test writes its own non-video fixture rather than depending on another suite's files — a dependency that first showed up as a parallel-ctest failure. Green in all four trees (58/58) and under ASan+UBSan with leak detection on. **`media` now records 276 implemented, 0 partial, 0 planned and 52 not applicable**, closing parent `CBIND-037C`. |
 
 #### CBIND-036B content implementation slices
 
@@ -549,8 +549,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037C6`):** 414 headers / 6,415 symbols —
-**4,734 implemented, 30 partial, 1,474 planned, 177 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037C7`):** 414 headers / 6,415 symbols —
+**4,775 implemented, 30 partial, 1,432 planned, 178 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -561,12 +561,13 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 | `CBIND-035` (math, geometry, textures, effects, models, device and draw submission) | ✅ closed by `CBIND-035G` |
 | `CBIND-036` (storage, content, networking, fake-async) | ✅ closed by `CBIND-036E5` |
 | `CBIND-037A` core, `CBIND-037B` **the whole input module** (gamepad, keyboard, mouse, cursor, text input, touch, haptics, joysticks, host devices) | ✅ |
+| `CBIND-037C` **the whole media module** (identities, songs, the library catalog, pictures, playback, video) | ✅ |
 
-**Five modules now have no planned row left: `storage`, `content`, `net`, `core`, `input`.**
+**Six modules now have no planned row left: `storage`, `content`, `net`, `core`, `input`, `media`.**
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,474 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,432 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -574,11 +575,10 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037C` media | 42 (after `C1`–`C6`) | only `C7` Video/VideoPlayer left, which closes the media module |
-| 2 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
-| 3 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
-| 4 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
-| 5 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
+| 1 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
+| 2 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
+| 3 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
+| 4 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
 
 `CBIND-043` is done — the matrix is a gate in both CTest and CI, so an unmapped public symbol now
 fails a build rather than merely showing up in a report. After `CBIND-037` closes: `CBIND-038`–`042`,
@@ -937,7 +937,13 @@ on every clear, and appending copies because the canonical `Add` adopts the poin
 and both copies compare equal to the original, which is exactly what the canonical player does when
 it enqueues a song. The playback transitions are asserted as a relationship, because whether a play
 call really starts playing depends on the platform's decoder rather than on the C API. The snapshot
-is now 4,734 implemented, 30 partial, 1,474 planned and 177 not applicable.
+is now 4,734 implemented, 30 partial, 1,474 planned and 177 not applicable. CBIND-037C7 then closes
+the media module with video. Its frame texture is solved by lifetime rather than by copying — the C
+layer invalidates the borrowed handle on the next call to that player, so a stale frame fails
+deterministically — and three canonical behaviors are reported rather than corrected, two of them
+discovered by running the code: an undecodable file leaves the player stopped with its video
+cleared, and the URI factory does not parse URIs at all. The snapshot is now 4,775 implemented, 30
+partial, 1,432 planned and 178 not applicable, with six modules fully mapped.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -950,19 +956,15 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037C7`, `Video` and `VideoPlayer` — **42 rows**, the last of the media
-  module. `C1`–`C6` are done, so songs, the library, the music entities, the picture tree and
-  playback all exist and are tested against a deterministic generated fixture.
+- **Next task:** `CBIND-037D`, the `devices` and `devices-ext` modules — **289 rows**, the first
+  slice outside media since the input module closed. Sub-partition it on arrival. The rows split
+  roughly into the `Microsoft::Devices::Sensors` family (accelerometer, gyroscope, compass,
+  motion, the sensor base and their reading values), `VibrateController`, and the `CNA::Devices`
+  extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and
+  system info).
 
-  What to know before starting: **FFmpeg is available in all four verification trees**, so
-  `VideoPlayer` is real rather than compiled out — `modules/media/CMakeLists.txt` excludes
-  `VideoDecoder.cpp`, `VideoPlayer.cpp` and `Video.cpp` only when `CNA_FFMPEG_AVAILABLE` is false,
-  and every tree's cache has it. This is the one media family that touches the graphics device: the
-  player produces a texture per frame, so it must reuse the existing `CNA_Texture2DHandle` contract
-  rather than inventing a second one, and the borrowed-device rule from `graphics.h` applies. The
-  fixture mechanism is already there if a video file is needed; generating a decodable one in C is
-  harder than the tag-only MP3 was, so decide early whether the slice can be evidenced with an
-  undecodable file plus the honest failure path, the way the audio slice handles a missing device.
+  **Read the next bullet before starting** — this slice is the one with a standing environment
+  decision, and it must be honored.
 - **`CBIND-037D` has an environment decision already made by the owner (2026-08-15):** the entire
   `devices-ext` public surface is wrapped in `#ifdef CNA_DEVICES`, and that option is **OFF in all
   four verification trees**, so 83 of that slice's rows would otherwise only ever be tested in
@@ -986,13 +988,13 @@ order:
 
 | File | Role |
 |---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 51 today (`media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 54 today (`video.h`, `media_player.h`, `media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
-| `src/CnaCApi<Family>.cpp` | the adapter — 41 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
-| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 89**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
+| `src/CnaCApi<Family>.cpp` | the adapter — 44 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
+| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 91**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (56 tests today). |
-| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 51 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (58 tests today). |
+| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 54 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
 | `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
 | `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
 | `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
@@ -1088,7 +1090,7 @@ unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap paral
 | `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
 | `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
 
-All four run the same 56 C API tests green. The sanitizer tree runs with
+All four run the same 58 C API tests green. The sanitizer tree runs with
 `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
 `detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
 `-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no

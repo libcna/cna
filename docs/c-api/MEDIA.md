@@ -197,3 +197,34 @@ Two deviations inside the queue are forced by ownership and are worth knowing:
 Whether playback actually starts depends on the platform's ability to decode the file, not on this
 ABI. `cna_media_player_get_state` reports what really happened, so a C application should read the
 state back rather than assume `play` began playing.
+
+## Video
+
+`video.h` maps `Video` and `VideoPlayer`, the one media family that touches the graphics device.
+Each video-creating route takes a callback-scoped borrowed device handle, which is where the
+canonical device argument comes from — and the device is reported back only as **presence**
+(`cna_video_get_has_graphics_device`), because a borrowed device handle is valid solely inside the
+callback that produced it and handing one out later would be a promise this ABI cannot keep.
+
+**The frame texture is solved by lifetime, not by copying.** The player owns and replaces its frame
+texture, so `cna_video_player_get_texture` hands back a borrowed `CNA_Texture2DHandle` that the C
+layer itself invalidates on the **next call to that player** — any later route, including another
+`get_texture`, releases it. A stale frame handle therefore fails with `CNA_RESULT_INVALID_HANDLE`
+instead of touching freed memory. Draw with it or copy its pixels before calling anything else on
+that player.
+
+Three canonical behaviors are reported rather than corrected:
+
+- A file that exists but cannot be decoded leaves the video's width, height, frame rate and
+  duration at **zero**. It is not an error; playing it is what surfaces the problem.
+- Playing an undecodable file leaves the player **stopped**, and the canonical player then clears
+  its video — so `cna_video_player_get_video` answers `CNA_FALSE`. Read the state back rather than
+  assuming a play call started playback.
+- The URI factory **does not parse URIs**. Unlike the song factory, it forwards its string straight
+  to the file constructor, so a `file:` URI is not resolved and an `http:` one is simply a path that
+  does not exist.
+
+Asking for a frame before playback is an ordinary `CNA_FALSE`: the canonical implementation
+deliberately answers null there, where the original API faults. Disposal makes every playback route
+report the canonical disposed-object failure as `CNA_RESULT_INVALID_STATE`, while the disposal query
+keeps answering.

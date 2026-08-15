@@ -39,6 +39,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiMedia.cpp
     src/CnaCApiMediaLibrary.cpp
     src/CnaCApiMediaPlayer.cpp
+    src/CnaCApiVideo.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
     src/CnaCApiNet.cpp
@@ -918,6 +919,28 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_player_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_media_player_smoke)
+    add_executable(cna_c_api_video_smoke
+        tests/pure_c/VideoSmoke.c
+    )
+    set_target_properties(cna_c_api_video_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_video_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_video_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_video_smoke)
+    add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_VideoSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy"
+        )
+    else()
+        set_tests_properties(CApi_VideoSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy"
+        )
+    endif()
+
     add_test(NAME CApi_MediaPlayerSmoke COMMAND cna_c_api_media_player_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES

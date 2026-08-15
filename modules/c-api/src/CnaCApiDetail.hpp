@@ -133,6 +133,8 @@ enum class ObjectKind : uint32_t {
     PictureAlbumCollection = 86,
     MediaQueue = 87,
     MediaPlayerEventRegistration = 88,
+    Video = 89,
+    VideoPlayer = 90,
     Test = UINT32_MAX
 };
 

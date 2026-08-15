@@ -629,6 +629,31 @@
 > and `VideoPlayer` (42 rows), which closes the media module — FFmpeg is available in all four
 > trees, and it is the one media family that touches the graphics device.
 >
+> CBIND-037C7 then does exactly that and **closes the media module**: 276 implemented, 0 partial, 0
+> planned, 52 N/A. Its one hard problem is the frame texture, and it is solved by **lifetime rather
+> than by copying**: the player owns and replaces its texture, so `cna_video_player_get_texture`
+> hands back a borrowed `CNA_Texture2DHandle` that the C layer invalidates on the **next call to
+> that player** — any later route, including another `get_texture`, releases it, so a stale frame
+> fails with `INVALID_HANDLE` instead of touching freed memory. The graphics device is reported as
+> **presence only**, because a borrowed device handle is valid solely inside the callback that
+> produced it.
+>
+> Three canonical behaviors are reported rather than corrected, and two of them were established by
+> running the code rather than reading the header: an undecodable file leaves the metadata zeroed
+> and, on play, leaves the player stopped **with its video cleared** (so `get_video` answers false);
+> and `Video::FromUriEXT` **does not parse URIs at all** — unlike the song factory it forwards its
+> string straight to the file constructor, so an `http:` string is simply a missing path. Both were
+> found by probing the built library when the first test draft failed, which is the pattern this
+> campaign keeps rewarding: read the `.cpp`, then check the running code.
+>
+> One process lesson worth keeping: the first version of `VideoSmoke.c` reused the media fixture
+> that `MediaLibrarySmoke` writes at runtime, and passed when run alone but failed under parallel
+> ctest, because test order is not a dependency. It now writes its own fixture. The inventory is now
+> 4,775 implemented, 30 partial, 1,432 planned and 178 N/A; all four trees green at 58/58. **Next:
+> CBIND-037D**, the 289-row devices slice — and note the standing owner decision recorded in
+> `plan_binding.md`: flip `CNA_DEVICES=ON` in the `sdlrenderer` and `asan` trees so the
+> `#ifdef CNA_DEVICES` half of `devices-ext` is actually exercised.
+>
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
 > TextureCube, input events and other families that later slices implemented. It belongs to
