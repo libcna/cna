@@ -442,6 +442,72 @@ TEST(GltfFixtureCorpus, ViewerRetakeMatrixIsPinnedCompleteAndStrict)
     EXPECT_NE(caseIds.end(), caseIds.find("sparse-index"));
 }
 
+TEST(GltfFixtureCorpus, VulkanMaterialL7ReportIsCompleteExactAndReproducible)
+{
+    // GLTF-244: EasyGL already owns the complete corpus oracle.  The second-renderer material
+    // claim is narrower, so keep its exact 14-fixture boundary, zero-delta policy, input hashes
+    // and Vulkan goldens reviewable without requiring a display in this integrity test.
+    const std::filesystem::path repository =
+        CorpusDirectory().parent_path().parent_path().parent_path();
+    const std::filesystem::path reportPath =
+        repository / "docs" / "gltf-l7-vulkan-materials-report.json";
+    const std::vector<std::uint8_t> reportBytes = ReadAllBytes(reportPath);
+    const std::string text(reportBytes.begin(), reportBytes.end());
+    JsonValue report;
+    ASSERT_NO_THROW(report = CNA::Internal::ParseJson(text));
+    ASSERT_EQ(JsonType::Object, report.type);
+    EXPECT_EQ("VULKAN", StringOr(report, "renderer", ""));
+    EXPECT_NE(std::string::npos, StringOr(report, "scope", "").find("not a claim of whole-corpus"));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "alphaTolerance", -1.0));
+
+    std::set<std::string> expectedIds;
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(CorpusDirectory()))
+    {
+        const std::string name = entry.path().filename().string();
+        if (entry.is_regular_file() && name.starts_with("mat-") && name.ends_with(".gltf"))
+        {
+            expectedIds.insert(entry.path().stem().string());
+        }
+    }
+    ASSERT_EQ(14u, expectedIds.size());
+
+    const JsonValue& results = Member(report, "results");
+    ASSERT_EQ(JsonType::Array, results.type);
+    ASSERT_EQ(expectedIds.size(), results.arrayValue.size());
+    std::set<std::string> seen;
+    System::Security::Cryptography::SHA256 sha;
+    for (const JsonValue& result : results.arrayValue)
+    {
+        const std::string id = StringOr(result, "id", "");
+        ASSERT_NE(expectedIds.end(), expectedIds.find(id)) << "unknown material result " << id;
+        EXPECT_TRUE(seen.insert(id).second) << "duplicate material result " << id;
+        EXPECT_TRUE(BoolOr(result, "twoProcessPngByteIdentical", false)) << id;
+        EXPECT_GT(NumberOr(result, "nonClearPixelCount", 0.0), 0.0) << id;
+
+        const std::filesystem::path source = repository / StringOr(result, "source", "");
+        const std::filesystem::path golden = repository / StringOr(result, "golden", "");
+        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << source.string();
+        ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << golden.string();
+        EXPECT_EQ(StringOr(result, "sourceSha256", ""),
+                  HexDigest(sha.ComputeHash(ReadAllBytes(source)))) << id;
+        const std::string goldenDigest = HexDigest(sha.ComputeHash(ReadAllBytes(golden)));
+        EXPECT_EQ(StringOr(result, "goldenPngSha256", ""), goldenDigest) << id;
+        EXPECT_EQ(StringOr(result, "twoProcessPngSha256", ""), goldenDigest) << id;
+    }
+    EXPECT_EQ(expectedIds, seen);
+
+    const std::filesystem::path script = repository / "scripts" / "gltf-l7-vulkan-materials.py";
+    const std::vector<std::uint8_t> scriptBytes = ReadAllBytes(script);
+    const std::string scriptText(scriptBytes.begin(), scriptBytes.end());
+    EXPECT_NE(std::string::npos, scriptText.find("sorted(corpus.glob(\"mat-*.gltf\"))"));
+    EXPECT_NE(std::string::npos, scriptText.find("if len(assets) != 14"));
+    EXPECT_NE(std::string::npos, scriptText.find("require_equal(first, second"));
+    EXPECT_NE(std::string::npos, scriptText.find("maximum != 0"));
+    EXPECT_NE(std::string::npos, scriptText.find("[Vulkan] GPU:"));
+}
+
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
 {
     // GLTF-015: the CI tool is external, but which tool CI trusts is checkout state. Pin the exact

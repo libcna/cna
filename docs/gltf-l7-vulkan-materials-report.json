@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "tasks": [
+    "GLTF-244",
+    "GLTF-385"
+  ],
+  "capturedOn": "2026-08-15",
+  "scope": "All 14 generated mat-* fixtures; not a claim of whole-corpus Vulkan L7.",
+  "renderer": "VULKAN",
+  "rendererEnvironment": [
+    "[Vulkan] GPU: llvmpipe (LLVM 19.1.7, 256 bits)"
+  ],
+  "cnaCommit": "13a8f17e8f9d47ee144a9bcc38f03fc178476c49",
+  "viewerCommit": "3cd89e9deddf4903f0c766c75c75ba367a4d0749",
+  "viewerExecutableSha256": "35b7a5c08a13cdaa55393fec70287419477798480d04dcd97cee4bda81e4c226",
+  "capture": {
+    "processesPerAsset": 2,
+    "resolution": [
+      512,
+      512
+    ],
+    "clearPixel": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "viewerArguments": [
+      "--direct",
+      "--capture",
+      "--reference-capture"
+    ],
+    "environment": {
+      "SDL_VIDEODRIVER": "x11",
+      "SDL_AUDIODRIVER": "dummy",
+      "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.json"
+    }
+  },
+  "goldenComparison": {
+    "rgbTolerance": 0,
+    "alphaTolerance": 0
+  },
+  "results": [
+    {
+      "id": "mat-alpha-mask-cutoff",
+      "source": "tests/assets/gltf/mat-alpha-mask-cutoff.gltf",
+      "sourceSha256": "161f87c232dbb5774efca109c61dc1000f0b59b741bf8a99db59560064867aa5",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-alpha-mask-cutoff.png",
+      "goldenPngSha256": "36cbe51c7dbdc6fb20caec22b6cdc0775efdd54e578caf84f9bfee7434e95493",
+      "twoProcessPngSha256": "36cbe51c7dbdc6fb20caec22b6cdc0775efdd54e578caf84f9bfee7434e95493",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-authored-tangent",
+      "source": "tests/assets/gltf/mat-authored-tangent.gltf",
+      "sourceSha256": "a9b4ca6b0926f7425092adb9da49b3c4056bf5e91002116869481d475ffb58aa",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-authored-tangent.png",
+      "goldenPngSha256": "89521f90c3940704864afa9867b3e298e634fd4d8336feb2edb60752684491ae",
+      "twoProcessPngSha256": "89521f90c3940704864afa9867b3e298e634fd4d8336feb2edb60752684491ae",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-basecolor-factor-times-texture",
+      "source": "tests/assets/gltf/mat-basecolor-factor-times-texture.gltf",
+      "sourceSha256": "611e461857583fcf69deb574e2808ee621ab0e61abc68917ba2befd33a225bd4",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-basecolor-factor-times-texture.png",
+      "goldenPngSha256": "10a2642b4bf961d71068f1dc080d20c56ba55f3d7d9a5bea44ef1dcef8542e31",
+      "twoProcessPngSha256": "10a2642b4bf961d71068f1dc080d20c56ba55f3d7d9a5bea44ef1dcef8542e31",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-default",
+      "source": "tests/assets/gltf/mat-default.gltf",
+      "sourceSha256": "0703c9010adf137c4d531394c21eb5dd065a567e41a3b53affa6673deaa43389",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-default.png",
+      "goldenPngSha256": "acae1ef8c842f58d5f63f7852d0296778ab260e19c04519262f0e92689651961",
+      "twoProcessPngSha256": "acae1ef8c842f58d5f63f7852d0296778ab260e19c04519262f0e92689651961",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-emissive-factor",
+      "source": "tests/assets/gltf/mat-emissive-factor.gltf",
+      "sourceSha256": "caaf4c06044f939fdd319595148ac6d45e260832b1e01df0ef68452e655aa092",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-emissive-factor.png",
+      "goldenPngSha256": "5d5ea575938021f5aa0e40d45ebc5af53f46ecf80516fc6f1f813eeabbe5be85",
+      "twoProcessPngSha256": "5d5ea575938021f5aa0e40d45ebc5af53f46ecf80516fc6f1f813eeabbe5be85",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-emissive-strength",
+      "source": "tests/assets/gltf/mat-emissive-strength.gltf",
+      "sourceSha256": "54a287a3e077333da4ae1dc950d0ea86374c5453ce79314cefa1e892c62d6300",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-emissive-strength.png",
+      "goldenPngSha256": "3439eb27f635674e47f722cf94466337e22fdcee94dd6de19c61ce2fee8d9539",
+      "twoProcessPngSha256": "3439eb27f635674e47f722cf94466337e22fdcee94dd6de19c61ce2fee8d9539",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-factor-only-gold",
+      "source": "tests/assets/gltf/mat-factor-only-gold.gltf",
+      "sourceSha256": "74d0f59e7846f1096498a0e3aaa18e7c10b98bbd087b6c7525d5a92fda4a7d67",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-factor-only-gold.png",
+      "goldenPngSha256": "960f768a546210fb6af95e87d62408c3bc3568e42f66491acf14c5db8ceaecdb",
+      "twoProcessPngSha256": "960f768a546210fb6af95e87d62408c3bc3568e42f66491acf14c5db8ceaecdb",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-material-variants",
+      "source": "tests/assets/gltf/mat-material-variants.gltf",
+      "sourceSha256": "138dff69bd104d71f6a22154898f0d73a66a39cd04bbbd7bc6ee8cc9693eecf1",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-material-variants.png",
+      "goldenPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-normal-occlusion-scale",
+      "source": "tests/assets/gltf/mat-normal-occlusion-scale.gltf",
+      "sourceSha256": "e064468974424066ce80c3e603da46d163e9940e3a9c5180049cdc72a1eb8b44",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-normal-occlusion-scale.png",
+      "goldenPngSha256": "fdef1f699147817051255ddc2c76949acea06cdd9bc39e745244f6fe3774e5cc",
+      "twoProcessPngSha256": "fdef1f699147817051255ddc2c76949acea06cdd9bc39e745244f6fe3774e5cc",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-specular-glossiness",
+      "source": "tests/assets/gltf/mat-specular-glossiness.gltf",
+      "sourceSha256": "3837a028b46e04bb60319673e8bdf72e2c5ae0000f64c8ce01f83feeadc8785c",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-specular-glossiness.png",
+      "goldenPngSha256": "8e24cbb2df8427154ff211587afa73b9fe73797b8bed3ec3c56f2ecca272f87e",
+      "twoProcessPngSha256": "8e24cbb2df8427154ff211587afa73b9fe73797b8bed3ec3c56f2ecca272f87e",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-unimplemented-extensions",
+      "source": "tests/assets/gltf/mat-unimplemented-extensions.gltf",
+      "sourceSha256": "d1bc631acd576ccf7694f530cf368840fb2befdf7e2b14a8a1f22d54a5385372",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-unimplemented-extensions.png",
+      "goldenPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngSha256": "eb82dc69851aa502341383a77b64af2e0dec5e340354701dc98af2975bb978ac",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-unlit-vertex-color-alpha",
+      "source": "tests/assets/gltf/mat-unlit-vertex-color-alpha.gltf",
+      "sourceSha256": "d2e86e0ecb089bb17cb4e4c552e5a47833e8fae7c928ddf5eefa05d09a503634",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-unlit-vertex-color-alpha.png",
+      "goldenPngSha256": "1ac656a8bd994fdf90c17878b7a2462e3c23078d5ed3512f52736ef0c3267a3c",
+      "twoProcessPngSha256": "1ac656a8bd994fdf90c17878b7a2462e3c23078d5ed3512f52736ef0c3267a3c",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-unlit",
+      "source": "tests/assets/gltf/mat-unlit.gltf",
+      "sourceSha256": "9ff62f69098e2807c5624d1aa312dfcc1926d44beec6feefab6706a594a16387",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-unlit.png",
+      "goldenPngSha256": "cd44a968b630de441994164900adaa450fb921703a1b2bd94618772cf1244550",
+      "twoProcessPngSha256": "cd44a968b630de441994164900adaa450fb921703a1b2bd94618772cf1244550",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    },
+    {
+      "id": "mat-vertex-color-pbr",
+      "source": "tests/assets/gltf/mat-vertex-color-pbr.gltf",
+      "sourceSha256": "12ef25a44f62737f758ce2a663d75f14e935a4e35b1a0c91190cb66a9531523a",
+      "golden": "tests/gltf-l7/vulkan-materials/mat-vertex-color-pbr.png",
+      "goldenPngSha256": "98d4fd2047f81eb051d2ec2c77a991e55bf6c5e28d528558a8207749fc1fad00",
+      "twoProcessPngSha256": "98d4fd2047f81eb051d2ec2c77a991e55bf6c5e28d528558a8207749fc1fad00",
+      "twoProcessPngByteIdentical": true,
+      "nonClearPixelCount": 23729
+    }
+  ]
+}

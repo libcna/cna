@@ -873,10 +873,20 @@ meaning on the skinned path.
 `GLTF-237` applies the same L6 contract across the loader boundary. The offline converter and
 direct runtime loader both start from `MaterialOut`; the former serialises it through `.cnj`, then
 `OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForTheCorpus` compares every material-bearing
-draw for all 12 generated `mat-*` fixtures. The comparison covers effect selection, five map
+draw for all 14 generated `mat-*` fixtures. The comparison covers effect selection, five map
 bindings, every factor/scalar, alpha state and five sampler slots. A separate rich probe authors
 every value non-default so an omitted field cannot accidentally agree through defaults. This is
-the L6 half of `GLTF-244`; its L7/two-rasterising-renderer half remains open.
+the L6 half of `GLTF-244`.
+
+The L7 half is now equally directory-driven on two independent shader implementations. EasyGL's
+complete 145-asset two-process oracle includes all 14 material fixtures. The narrower Vulkan runner
+`scripts/gltf-l7-vulkan-materials.py` discovers the same 14 `mat-*` inputs, launches the production
+viewer twice per asset on an explicitly selected lavapipe ICD, rejects a clear capture and requires
+exact RGBA equality both between processes and against `tests/gltf-l7/vulkan-materials/`. All 14
+pass with 23,729 foreground pixels apiece. The zero-delta policy, executable/input/output hashes
+and explicit non-whole-corpus scope are in `docs/gltf-l7-vulkan-materials-report.json`; the checkout-only
+`GltfFixtureCorpus.VulkanMaterialL7ReportIsCompleteExactAndReproducible` guard keeps that boundary,
+the 14 source/golden hashes and the runner's two-process/exact-comparison clauses from drifting.
 
 `GltfPbrBrdf` is the renderer-independent analytic half of the shader contract (`GLTF-235`,
 `GLTF-343`, `GLTF-344`). It pins GGX distribution, direct-light Smith-Schlick geometry, Schlick
