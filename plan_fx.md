@@ -53,6 +53,10 @@ Delivered task groups:
   only by asserts, register copies unbounded against the register file they write into, and a
   pass's shader object index used without a range or type check on a union -- with the remaining
   exposure recorded and reproducible rather than hidden (`FX-050`, `FX-051`);
+- one crash class of CNA's own, found by the same campaign after 1,627,248 executions: the
+  sampler-texture map selected parameters by sampler type alone, where the storage layout follows
+  the class first and the type second, and read a small value buffer as an array of sampler states
+  (`FX-051`);
 - lifecycle coverage for device reset, out-of-order clone-chain disposal, disposed-effect
   rejection, repeated mid-construction native failure, and repeated create/apply/dispose cycles
   (`FX-038`);

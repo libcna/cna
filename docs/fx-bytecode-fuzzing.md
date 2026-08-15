@@ -122,10 +122,11 @@ the campaign.
 
 ## What the campaign found (2026-08-14)
 
-Every finding was in the pinned MojoShader, none in CNA. Each is now fixed by
-`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`, and each fix was confirmed by
-the campaign running measurably deeper afterwards: on the GLSL profile the first crash moved from
-iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then away entirely.
+All but one were in the pinned MojoShader, fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`; the last one is CNA's own and is
+fixed in `Fna3dCompiledEffect.cpp`. Each fix was confirmed by the campaign running measurably
+deeper afterwards: on the GLSL profile the first crash moved from iteration 0 to 100, 300, 500,
+700, 1,200, 3,700, 4,000, 6,400, 8,700 and then away entirely.
 
 | Site | Defect |
 |---|---|
@@ -162,6 +163,7 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_effects.c` object tables | Three related holes that all end in the shader parser running off the payload: an object block's length was never bounded against what remains, the XNA4 wrapper skip *added* to the remaining-length counter instead of subtracting (and every real XNA4-wrapped effect takes that branch), and a zero-length shader program told `MOJOSHADER_parse` the size was unknown, which sets its token count to 4 billion and scans for an end token that is not there. Found after 395,357 coverage-guided executions |
 | `mojoshader.c` `parse_ctab_typeinfo` | A struct's member-table offset was read from the constant table and never bounded, so a structure in untrusted bytecode could point its member list anywhere. Found after 275,896 coverage-guided executions |
 | `mojoshader_common.c` `MOJOSHADER_printFloat` | Advances its cursor past the buffer on purpose, so the return value stays the length the caller needed -- but then kept formatting *through* that cursor, writing past the end. Each step now asks `snprintf` for the needed length instead of writing once the cursor is out of bounds |
+| `Fna3dCompiledEffect.cpp` `BuildSamplerMap` | **The one finding whose root cause is CNA's own.** Same defect as the row below, in CNA's code and with every fact needed to avoid it in hand: the sampler-texture map selected parameters by sampler *type* and then walked `valuesSS`, so a parameter naming a sampler type in a non-object class had its much smaller value buffer read as an array of sampler states. Found after 1,627,248 SDL_GPU executions -- the deepest finding so far, and past the point where the driver had already run a million clean |
 | `mojoshader_effects.c` `freevalue` | A value's storage layout is chosen by its class first and its type second: only an OBJECT of a sampler type is allocated as an array of sampler states. `readvalue` and `copyvalue` both ask that two-part question; `freevalue` asked about the type alone, so a parameter naming a sampler type in some other class was freed as an array of much larger structures -- `free()` on whatever the heap held past the end. The two-part test is now one shared predicate, used by `freevalue`, by both shader-sampler binding sites and by the object table's sampler-state lookup, which also gained the range checks its content-supplied indices never had. Found after 660,870 SDL_GPU executions |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which

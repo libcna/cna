@@ -111,6 +111,16 @@ namespace CNA::Internal::Renderers::Fna3d
                    value <= MOJOSHADER_SYMTYPE_SAMPLERCUBE;
         }
 
+        /// A value's storage layout follows its class first and its type second: only an object of
+        /// a sampler type is allocated as an array of MOJOSHADER_effectSamplerState. Class and type
+        /// are independent fields of the compiled binary, so asking about the type alone can walk a
+        /// much smaller array of plain values as if it held sampler states.
+        bool IsSamplerValue(const MOJOSHADER_effectValue& value)
+        {
+            return ReadEnumStorage(value.type.parameter_class) == MOJOSHADER_SYMCLASS_OBJECT &&
+                   IsSamplerType(ReadEnumStorage(value.type.parameter_type));
+        }
+
         bool IsShaderObjectType(std::underlying_type_t<MOJOSHADER_symbolType> value)
         {
             return value == MOJOSHADER_SYMTYPE_VERTEXSHADER ||
@@ -670,7 +680,7 @@ namespace CNA::Internal::Renderers::Fna3d
         for (int i = 0; i < effectData_->param_count; ++i)
         {
             const MOJOSHADER_effectValue& sampler = effectData_->params[i].value;
-            if (!IsSamplerType(ReadEnumStorage(sampler.type.parameter_type))) continue;
+            if (!IsSamplerValue(sampler)) continue;
             const auto* states = sampler.valuesSS;
             if (sampler.value_count > kMaximumReflectedItems ||
                 (sampler.value_count > 0 && states == nullptr))

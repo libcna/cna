@@ -36,11 +36,13 @@ iterations across two seeds; the SPIR-V emitter still validates with `assert()` 
 
 A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
 written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
-(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found thirty-nine distinct ways it crashed the
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found forty distinct ways it crashed the
 process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
 their own bounds check, register copies sized by a constant table rather than by the parsed
 storage, an unchecked shader-array selector, and a union member read without checking the object's
-type. Each is now an ordinary parser error. `docs/fx-bytecode-fuzzing.md` lists them.
+type. Thirty-nine are upstream and are now ordinary parser errors; the fortieth was CNA's own
+sampler-texture map reading a parameter's value storage as sampler states on the strength of its
+type alone. `docs/fx-bytecode-fuzzing.md` lists them.
 
 What remains: the campaign reaches roughly iteration 6,400 before a wild read inside
 `MOJOSHADER_effectCommitChanges`'s shader-array selection path. Reproduce with
