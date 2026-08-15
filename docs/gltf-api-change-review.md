@@ -224,8 +224,8 @@ with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the gra
 always one. The core defaults are algebraically identical to the former constants. The repository-
 wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
 test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
-`KHR_materials_specular` is implemented with a named limit and remains unclaimed because its two
-optional textures still need bindings plus per-map colour-space/UV handling.
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed because ten PBR
+renderers still need bindings for its two optional textures.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
 2, specular factor 0.3 and colour `(0.25,1,12)`, making the derived F0
@@ -236,7 +236,8 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL2 and OpenGL4 sample them, and the remaining renderer bindings stay explicitly open.
+OpenGL2, OpenGL4, DirectX11 and DirectX12 sample them, and the remaining ten renderer bindings
+stay explicitly open.
 
 ---
 
@@ -295,8 +296,9 @@ properties and the two named specular properties; no existing index changes mean
 **Test.** Default/setter/ownership/clone tests cover both effect classes and assert draw slots 5/6,
 selector bits 5/6, the separate four affine extension rows and colour-space state. Import and direct/offline parity use
 independent texture views, UV selectors, transforms and samplers. Renderer source-policy tests pin
-both samples and their Khronos channel/colour-space equations, followed by an EasyGL pixel witness
-and the whole-corpus L7 policies.
+both samples and their Khronos channel/colour-space equations. EasyGL supplies the official
+Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL2/4 compile natively; DirectX11/12
+cross-compile after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile.
 
 ---
 

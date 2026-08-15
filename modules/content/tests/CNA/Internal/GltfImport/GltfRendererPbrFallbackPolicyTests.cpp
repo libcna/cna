@@ -233,14 +233,16 @@ namespace
               sampler2D MetallicRoughnessMap : register(s2);
               sampler2D EmissiveMap : register(s3);
               sampler2D OcclusionMap : register(s4);)"}}},
-        {"directx11", "SRV/sampler registers t0/s0 through t4/s4",
+        {"directx11", "SRV/sampler registers t0/s0 through t6/s6",
          {{R"(srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                         : GetOrCreateDefaultWhiteSrvEXT();
               srvs[1] = params.pbrNormalMap ? GetSrvForTextureEXT(params.pbrNormalMap) : GetOrCreateDefaultFlatNormalSrvEXT();
               srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
               srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
-              srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();)",
-           R"(context_->PSSetShaderResources(0, 5, srvs))",
+              srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
+              srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
+              srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();)",
+           R"(context_->PSSetShaderResources(0, 7, srvs))",
            R"(Texture2D uTexture : register(t0);
               SamplerState uTextureSampler : register(s0);
               Texture2D uNormalMap : register(t1);
@@ -250,13 +252,19 @@ namespace
               Texture2D uEmissiveMap : register(t3);
               SamplerState uEmissiveMapSampler : register(s3);
               Texture2D uOcclusionMap : register(t4);
-              SamplerState uOcclusionMapSampler : register(s4);)"}}},
-        {"directx12", "separate descriptor tables for t0/s0 through t4/s4",
+              SamplerState uOcclusionMapSampler : register(s4);
+              Texture2D uSpecularMap : register(t5);
+              SamplerState uSpecularMapSampler : register(s5);
+              Texture2D uSpecularColorMap : register(t6);
+              SamplerState uSpecularColorMapSampler : register(s6);)"}}},
+        {"directx12", "separate descriptor tables for t0/s0 through t6/s6",
          {{R"(srvTextures[0] = params.texture0;
               srvTextures[1] = params.pbrNormalMap ? params.pbrNormalMap : GetOrCreateDefaultFlatNormalTextureEXT();
               srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
               srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
-              srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();)",
+              srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
+              srvTextures[5] = params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT();
+              srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();)",
            R"(range.BaseShaderRegister = static_cast<UINT>(t))",
            R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + i, srvHandles[i]))",
            R"(cmdList->SetGraphicsRootDescriptorTable(numCbvs + numSrvs + i, GetSamplerGpuHandleEXT(i)))",
@@ -269,7 +277,11 @@ namespace
               Texture2D uEmissiveMap : register(t3);
               SamplerState uEmissiveMapSampler : register(s3);
               Texture2D uOcclusionMap : register(t4);
-              SamplerState uOcclusionMapSampler : register(s4);)"}}},
+              SamplerState uOcclusionMapSampler : register(s4);
+              Texture2D uSpecularMap : register(t5);
+              SamplerState uSpecularMapSampler : register(s5);
+              Texture2D uSpecularColorMap : register(t6);
+              SamplerState uSpecularColorMapSampler : register(s6);)"}}},
         {"easygl", "GL texture units 0,1,2,3,4",
          {{R"(p.prog.set_uniform(p.loc_texture, 0))",
            R"(params.texture0->BindGL(0))",
@@ -779,12 +791,12 @@ namespace
          "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
         {"directx11",
-         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
-         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F0 = lerp(dielectricF0, albedo, metallic)",
+         "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
         {"directx12",
-         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
-         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F0 = lerp(dielectricF0, albedo, metallic)",
+         "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
         {"easygl",
          "vec3 F0=mix(dielectricF0,albedo,metallic)",
@@ -1221,7 +1233,7 @@ namespace
             "currentCullMode_ = cullMode",
             "case CullMode::None: return D3D11_CULL_NONE",
             "psoDesc.cullMode = currentCullMode_",
-            "variant = params.skinned ? D3DShaderVariant::PbrSkinned3d : D3DShaderVariant::Pbr3d",
+            "variant = params.skinned",
             "rs.CullMode = static_cast<D3D12_CULL_MODE>(CullModeToD3D11(desc.cullMode))"}}},
         {"easygl", {{
             "if (cullMode == 0) { device.set_cull_face_enabled(false); }",
@@ -1472,7 +1484,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrMapReachesTheShaderBindingIntendedBy
     }
 }
 
-TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepTheSameFiveBindings)
+TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepMatchingPbrBindings)
 {
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
@@ -1502,7 +1514,11 @@ TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepTheSameFive
             Texture2D uEmissiveMap : register(t3);
             SamplerState uEmissiveMapSampler : register(s3);
             Texture2D uOcclusionMap : register(t4);
-            SamplerState uOcclusionMapSampler : register(s4);)"},
+            SamplerState uOcclusionMapSampler : register(s4);
+            Texture2D uSpecularMap : register(t5);
+            SamplerState uSpecularMapSampler : register(s5);
+            Texture2D uSpecularColorMap : register(t6);
+            SamplerState uSpecularColorMapSampler : register(s6);)"},
         {"vulkan", "vulkan/src/shaders/pbr3d.frag.glsl",
          "vulkan/src/shaders/pbr3d_skinned.frag.glsl",
          R"(layout(set = 0, binding = 0) uniform sampler2D uTexture;
@@ -1777,6 +1793,63 @@ TEST(GltfRendererPbrFallbackPolicy, OpenGLRenderersSampleBothKhrMaterialsSpecula
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, ModernDirectXRenderersSampleBothKhrMaterialsSpecularTextures)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    const std::string dx11 = RendererSlotText(renderers, "directx11");
+    const std::string dx12 = RendererSlotText(renderers, "directx12");
+    ASSERT_FALSE(dx11.empty());
+    ASSERT_FALSE(dx12.empty());
+
+    for (const std::string* source : {&dx11, &dx12})
+    {
+        for (const char* evidence : {
+                 "pbrDielectricF0Unclamped[0]",
+                 "pbrSpecularFactor",
+                 "pbrSpecularColorTextureIsSrgb",
+                 "pbrSpecularTextureTransformRows",
+                 "pbrTextureCoordinateSetMask & 0x7fu",
+                 "uSpecularMap : register(t5)",
+                 "uSpecularColorMap : register(t6)",
+                 "CnaPbrSpecularTransformUv(CNA_PBR_UV(5), 0)",
+                 "CnaPbrSpecularTransformUv(CNA_PBR_UV(6), 1)"})
+        {
+            EXPECT_NE(std::string::npos, source->find(Normalize(evidence)))
+                << "missing DirectX specular state: " << evidence;
+        }
+        EXPECT_GE(CountOccurrences(*source, Normalize(
+            "min(SpecularFresnelInputs.xyz * specularColorTex, 1.0) * specularWeight")), 2u);
+        EXPECT_GE(CountOccurrences(*source, Normalize(
+            "lerp(float3(specularWeight, specularWeight, specularWeight), "
+            "float3(1.0, 1.0, 1.0), metallic)")), 2u);
+    }
+
+    for (const char* evidence : {
+             "ID3D11ShaderResourceView* srvs[7]",
+             "context_->PSSetShaderResources(0, 7, srvs)",
+             "params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT()",
+             "params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT()"})
+    {
+        EXPECT_NE(std::string::npos, dx11.find(Normalize(evidence)))
+            << "missing DirectX 11 specular binding evidence: " << evidence;
+    }
+
+    for (const char* evidence : {
+             "numSrvs = 7",
+             "const ITextureRenderer* srvTextures[7]",
+             "params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT()",
+             "params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT()",
+             "(stride == 60) ? D3DShaderVariant::Pbr3dDualUv",
+             "(stride == 76) ? D3DShaderVariant::PbrSkinned3dDualUv",
+             "case 60: count = static_cast<UINT>(std::size(kStride60D3D12))",
+             "case 76: count = static_cast<UINT>(std::size(kStride76D3D12))"})
+    {
+        EXPECT_NE(std::string::npos, dx12.find(Normalize(evidence)))
+            << "missing DirectX 12 specular/dual-UV binding evidence: " << evidence;
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChannels)
 {
     const std::filesystem::path renderers =
@@ -1840,9 +1913,8 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
         "int mask = int(pbr.textureCoordinateSets.x + 0.5)")))
         << "both Vulkan dual-UV PBR fragment variants must decode the transported selector";
 
-    // GLTF-386 applies the same complete contract to DirectX11. D3D12 intentionally keeps its
-    // existing stride-48/68 variants; the distinct DXBC variants prevent changing its input
-    // signatures merely because both backends share these HLSL sources.
+    // GLTF-386 applies the same complete contract to both modern DirectX renderers. Their shared
+    // HLSL keeps distinct DXBC variants so each PSO/input layout matches its authored stride.
     const std::string directx11 = RendererSlotText(renderers, "directx11");
     for (const char* evidence : {
              "stride != 48 && stride != 60",
@@ -1851,12 +1923,12 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
              "D3DShaderVariant::PbrSkinned3dDualUv",
              R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
              R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
-             "static_cast<float>(params.pbrTextureCoordinateSetMask & 0x1fu)"})
+             "static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu)"})
     {
         EXPECT_NE(std::string::npos, directx11.find(Normalize(evidence)))
             << "DirectX11 dual-UV PBR path is missing: " << evidence;
     }
-    for (std::size_t slot = 0; slot < 5; ++slot)
+    for (std::size_t slot = 0; slot < 7; ++slot)
     {
         const std::string sample = "CNA_PBR_UV(" + std::to_string(slot) + ")";
         EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(sample)))
@@ -1866,6 +1938,20 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
     EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(
         "int mask = int(TextureCoordinateSets.x + 0.5)")))
         << "both DirectX11 dual-UV PBR fragment variants must decode the transported selector";
+
+    const std::string directx12 = RendererSlotText(renderers, "directx12");
+    for (const char* evidence : {
+             "stride != 48 && stride != 60",
+             "stride != 68 && stride != 76",
+             "D3DShaderVariant::Pbr3dDualUv",
+             "D3DShaderVariant::PbrSkinned3dDualUv",
+             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 })",
+             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 68, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 })",
+             "static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu)"})
+    {
+        EXPECT_NE(std::string::npos, directx12.find(Normalize(evidence)))
+            << "DirectX12 dual-UV PBR path is missing: " << evidence;
+    }
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheCoreMaterialFactors)

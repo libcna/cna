@@ -1403,13 +1403,13 @@ namespace CNA::Internal::Renderers::DirectX11
         const Matrix wvp = world * view * projection;
 
         // DX-65/DX-66: dual_texture3d needs t0+t1 (both Texture2D); env_map3d needs t0 (Texture2D)
-        // + t1 (TextureCube). plan_cnj.md CNB-58 follow-up: pbr3d/pbr_skinned3d need 5 (t0 base
-        // color + t1 normal + t2 metallic-roughness + t3 emissive + t4 occlusion). Every other
-        // variant only ever binds t0 -- srvs[1..4] stay null, which is harmless for a shader that
-        // declares no t1-t4 registers. Always the full 5-wide range (unused slots explicitly
-        // null) so no variant can see a stale SRV binding left by a previous, differently-shaped
-        // draw call (same discipline this file's own cbs[3] comment below already documents).
-        ID3D11ShaderResourceView* srvs[5] = { nullptr, nullptr, nullptr, nullptr, nullptr };
+        // + t1 (TextureCube). PBR needs seven slots: the five core maps plus KHR_materials_specular
+        // strength/colour at t5/t6. Every other variant only ever binds t0 -- higher entries stay
+        // null, which is harmless for a shader that does not declare them. Always bind the full
+        // seven-wide range (unused slots explicitly null) so no variant can see a stale SRV left
+        // by a previous, differently-shaped draw call (same discipline as cbs[3] below).
+        ID3D11ShaderResourceView* srvs[7] = {
+            nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
         if (needsDualTex)
         {
             srvs[0] = GetSrvForTextureEXT(params.texture0);
@@ -1438,6 +1438,8 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[2] = params.pbrMetallicRoughnessMap ? GetSrvForTextureEXT(params.pbrMetallicRoughnessMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[5] = params.pbrSpecularMap ? GetSrvForTextureEXT(params.pbrSpecularMap) : GetOrCreateDefaultWhiteSrvEXT();
+            srvs[6] = params.pbrSpecularColorMap ? GetSrvForTextureEXT(params.pbrSpecularColorMap) : GetOrCreateDefaultWhiteSrvEXT();
         }
         else if (needsSkinned)
         {
@@ -1615,7 +1617,16 @@ namespace CNA::Internal::Renderers::DirectX11
             std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
                         sizeof(perDraw.TextureTransformRows));
             perDraw.TextureCoordinateSets[0] =
-                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x1fu);
+                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+            perDraw.SpecularFresnelInputs[0] = params.pbrDielectricF0Unclamped[0];
+            perDraw.SpecularFresnelInputs[1] = params.pbrDielectricF0Unclamped[1];
+            perDraw.SpecularFresnelInputs[2] = params.pbrDielectricF0Unclamped[2];
+            perDraw.SpecularFresnelInputs[3] = params.pbrSpecularFactor;
+            perDraw.SpecularMapFlags[0] =
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+            std::memcpy(perDraw.SpecularTextureTransformRows,
+                        params.pbrSpecularTextureTransformRows,
+                        sizeof(perDraw.SpecularTextureTransformRows));
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];
@@ -1891,12 +1902,12 @@ namespace CNA::Internal::Renderers::DirectX11
         context_->VSSetShader(vs.Get(), nullptr, 0);
         context_->PSSetShader(ps.Get(), nullptr, 0);
 
-        // Always rebind the full 3-slot-cbuffer/5-slot-SRV range (unused slots explicitly null,
+        // Always rebind the full 3-slot-cbuffer/7-slot-SRV range (unused slots explicitly null,
         // see cbs'/srvs' own declaration comments above) -- no variant can see a stale binding
         // left by whatever differently-shaped draw call ran immediately before this one.
         context_->VSSetConstantBuffers(0, 3, cbs);
         context_->PSSetConstantBuffers(0, 3, cbs);
-        context_->PSSetShaderResources(0, 5, srvs);
+        context_->PSSetShaderResources(0, 7, srvs);
 
         if (ib != nullptr)
         {

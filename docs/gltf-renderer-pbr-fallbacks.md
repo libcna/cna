@@ -232,7 +232,7 @@ normal-incidence image looked correct.
 | Bgfx | `u_dielectricFresnel` | four shader dialects compile; OpenGL rigid/skinned pixel test |
 | Diligent | fourth PBR `float4`, `g_PbrDielectricFresnel` | Vulkan and OpenGL rigid/skinned pixel tests |
 | DirectX 9 | pixel constant `c13` | Microsoft `ps_3_0` compile/disassembly plus WineD3D diagnostic |
-| DirectX 11 / 12 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
+| DirectX 11 / 12 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208; textured specular inputs at bytes 400–495 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
 | EasyGL | `uDielectricFresnel` | OPENGLES2/3 analytic rigid/skinned pixel test |
 | LLGL | final `vec4` in the 92-float PBR block | Vulkan and OpenGL registrations plus shader compilation |
 | Magnum | `uDielectricFresnel` | generated GLSL compile and rigid/skinned pixel test |
@@ -249,8 +249,8 @@ authored extension factors. A grazing pair holds F0 at `.04` and changes only F9
 yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` separately inventories
 all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
-`specularColorTexture` are not part of this factor-only slice and remain the named `GLTF-344`
-limit.
+`specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4 and DirectX11/12
+now consume both; the other ten renderer bindings remain the named `GLTF-344` limit.
 
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 

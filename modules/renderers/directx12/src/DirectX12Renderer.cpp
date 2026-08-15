@@ -1697,18 +1697,17 @@ namespace CNA::Internal::Renderers::DirectX12
                 "DirectX12Renderer::DrawPrimitivesEx: AlphaTestEffect (alpha_test3d) only "
                 "supports stride 20 (VertexPositionTexture) or 24 "
                 "(VertexPositionColorTexture, plan_dx.md DX-136)");
-        // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
-        // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
-        // stride 68 (VertexPositionNormalTangentTextureSkinned), mirrors D3D11's own
-        // DrawPrimitivesExImpl exactly.
-        if (needsPbr && !params.skinned && stride != 48)
+        // plan_cnj.md CNB-58/GLTF-386 follow-up: PBR accepts the canonical single-UV layouts and
+        // their TEXCOORD_1 suffix variants, mirroring D3D11's DrawPrimitivesExImpl exactly.
+        if (needsPbr && !params.skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
-                "DirectX12Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 "
-                "(VertexPositionNormalTangentTexture)");
-        if (needsPbr && params.skinned && stride != 68)
+                "DirectX12Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 or 60 "
+                "(VertexPositionNormalTangentTexture with optional TEXCOORD_1)");
+        if (needsPbr && params.skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
                 "DirectX12Renderer::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
-                "stride 68 (VertexPositionNormalTangentTextureSkinned)");
+                "stride 68 or 76 (VertexPositionNormalTangentTextureSkinned with optional "
+                "TEXCOORD_1)");
 
         D3DShaderVariant variant;
         bool hasTexture;
@@ -1748,13 +1747,17 @@ namespace CNA::Internal::Renderers::DirectX12
         else if (needsPbr)
         {
             // Mirrors DirectX11Renderer::DrawPrimitivesExImpl's own needsPbr branch exactly.
-            variant = params.skinned ? D3DShaderVariant::PbrSkinned3d : D3DShaderVariant::Pbr3d;
+            variant = params.skinned
+                ? ((stride == 76) ? D3DShaderVariant::PbrSkinned3dDualUv
+                                  : D3DShaderVariant::PbrSkinned3d)
+                : ((stride == 60) ? D3DShaderVariant::Pbr3dDualUv
+                                  : D3DShaderVariant::Pbr3d);
             hasTexture = true;
             // PerDraw (b0, D3DPbrPerDrawConstants) [+ BoneBlock (b1) for the skinned variant] +
             // PbrLights (b1 unskinned / b2 skinned, D3DPbrLightConstants).
             numCbvs = params.skinned ? 3 : 2;
-            // t0 base color + t1 normal + t2 metallic-roughness + t3 emissive + t4 occlusion.
-            numSrvs = 5;
+            // Five core maps plus KHR_materials_specular strength/colour at t5/t6.
+            numSrvs = 7;
         }
         else if (needsSkinned)
         {
@@ -1837,11 +1840,10 @@ namespace CNA::Internal::Renderers::DirectX12
         D3D12_GPU_VIRTUAL_ADDRESS cbAddresses[3] = {0, 0, 0};
         // params.texture0/texture1 for the (up to 2) SRVs most variants bind -- dual_texture3d uses
         // the 2nd slot for a 2nd Texture2D; env_map3d uses it for a TextureCube instead
-        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 5
-        // (not 2) for needsPbr's own 5 texture slots (base color + normal + metallic-roughness +
-        // emissive + occlusion) -- every other variant only ever populates indices 0/1, mirrors
-        // DirectX11Renderer::DrawPrimitivesExImpl's own srvs[5] sizing.
-        const ITextureRenderer* srvTextures[5] = {params.texture0, nullptr, nullptr, nullptr, nullptr};
+        // (srvCubeTexture below), which is why it isn't part of this Texture2D-only array. Sized 7
+        // for PBR's five core maps plus KHR_materials_specular strength/colour at t5/t6.
+        const ITextureRenderer* srvTextures[7] = {
+            params.texture0, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
         const ITextureCubeRenderer* srvCubeTexture = nullptr; // only set by the needsEnvMap branch
 
         if (needsAlphaTest)
@@ -2014,6 +2016,17 @@ namespace CNA::Internal::Renderers::DirectX12
             perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
             std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
                         sizeof(perDraw.TextureTransformRows));
+            perDraw.TextureCoordinateSets[0] =
+                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu);
+            perDraw.SpecularFresnelInputs[0] = params.pbrDielectricF0Unclamped[0];
+            perDraw.SpecularFresnelInputs[1] = params.pbrDielectricF0Unclamped[1];
+            perDraw.SpecularFresnelInputs[2] = params.pbrDielectricF0Unclamped[2];
+            perDraw.SpecularFresnelInputs[3] = params.pbrSpecularFactor;
+            perDraw.SpecularMapFlags[0] =
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f;
+            std::memcpy(perDraw.SpecularTextureTransformRows,
+                        params.pbrSpecularTextureTransformRows,
+                        sizeof(perDraw.SpecularTextureTransformRows));
 
             D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];
@@ -2089,6 +2102,8 @@ namespace CNA::Internal::Renderers::DirectX12
             srvTextures[2] = params.pbrMetallicRoughnessMap ? params.pbrMetallicRoughnessMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[3] = params.pbrEmissiveMap ? params.pbrEmissiveMap : GetOrCreateDefaultWhiteTextureEXT();
             srvTextures[4] = params.pbrOcclusionMap ? params.pbrOcclusionMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[5] = params.pbrSpecularMap ? params.pbrSpecularMap : GetOrCreateDefaultWhiteTextureEXT();
+            srvTextures[6] = params.pbrSpecularColorMap ? params.pbrSpecularColorMap : GetOrCreateDefaultWhiteTextureEXT();
         }
         else if (needsSkinned)
         {
@@ -2294,9 +2309,8 @@ namespace CNA::Internal::Renderers::DirectX12
         // vkd3d-proton dev loop even though the CPU-side descriptor writes were independently
         // verified correct). Every texture's own SRV -- created once, at texture-construction time --
         // is bound directly, exactly like the original single-SRV path; no per-draw descriptor copy
-        // is needed for any variant, dual_texture3d included. Sized 5 (not 2), matching
-        // srvTextures[5]'s own sizing above for needsPbr's 5 texture slots.
-        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[5]{};
+        // is needed for any variant, dual_texture3d included. Sized 7 for the complete PBR range.
+        D3D12_GPU_DESCRIPTOR_HANDLE srvHandles[7]{};
         for (int i = 0; i < numSrvs; ++i)
         {
             // env_map3d's 2nd slot (t1) is a TextureCube, not a Texture2D -- srvCubeTexture is only

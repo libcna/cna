@@ -19,6 +19,10 @@ Texture2D    uEmissiveMap              : register(t3);
 SamplerState uEmissiveMapSampler       : register(s3);
 Texture2D    uOcclusionMap             : register(t4);
 SamplerState uOcclusionMapSampler      : register(s4);
+Texture2D    uSpecularMap              : register(t5);
+SamplerState uSpecularMapSampler       : register(s5);
+Texture2D    uSpecularColorMap         : register(t6);
+SamplerState uSpecularColorMapSampler  : register(s6);
 
 cbuffer PerDraw : register(b0)
 {
@@ -32,9 +36,10 @@ cbuffer PerDraw : register(b0)
     float4 PbrMapScales;
     float4 DielectricFresnel; // xyz = dielectric F0, w = dielectric F90
     float4 TextureTransformRows[10]; // two affine UV rows per PBR map
-#ifdef CNA_PBR_DUAL_UV
-    float4 TextureCoordinateSets; // x = five-bit per-map TEXCOORD_1 selector mask
-#endif
+    float4 TextureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
+    float4 SpecularFresnelInputs; // xyz = unclamped F0, w = specular factor
+    float4 SpecularMapFlags; // x = decode specular-colour sample from sRGB
+    float4 SpecularTextureTransformRows[4]; // two affine rows per specular map
 };
 
 cbuffer PbrLights : register(b1)
@@ -85,6 +90,13 @@ float2 CnaPbrTransformUv(float2 uv, int slot)
     float3 value = float3(uv, 1.0);
     return float2(dot(value, TextureTransformRows[slot * 2].xyz),
                   dot(value, TextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrSpecularTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, SpecularTextureTransformRows[slot * 2].xyz),
+                  dot(value, SpecularTextureTransformRows[slot * 2 + 1].xyz));
 }
 
 #ifdef CNA_PBR_DUAL_UV
@@ -144,8 +156,16 @@ float4 main(PSInput input) : SV_Target
     float metallic  = clamp(mr.b * AmbientMetallic.w, 0.0, 1.0);
 
     float3 V = normalize(EyePosWeights.xyz - input.WorldPos);
-    float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic);
-    float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w),
+    float specularWeight = SpecularFresnelInputs.w * uSpecularMap.Sample(
+        uSpecularMapSampler, CnaPbrSpecularTransformUv(CNA_PBR_UV(5), 0)).a;
+    float3 specularColorTex = uSpecularColorMap.Sample(
+        uSpecularColorMapSampler, CnaPbrSpecularTransformUv(CNA_PBR_UV(6), 1)).rgb;
+    specularColorTex = lerp(
+        specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x);
+    float3 dielectricF0 = min(SpecularFresnelInputs.xyz * specularColorTex, 1.0)
+        * specularWeight;
+    float3 F0 = lerp(dielectricF0, albedo, metallic);
+    float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight),
                       float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);

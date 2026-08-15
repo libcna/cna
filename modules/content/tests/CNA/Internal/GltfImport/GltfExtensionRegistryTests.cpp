@@ -396,10 +396,10 @@ TEST(GltfExtensionRegistry, FresnelExtensionsExposeOnlyTheRemainingTextureResidu
     ASSERT_NE(nullptr, specular);
     EXPECT_EQ(GltfExtensionSupportEXT::ImplementedWithNamedLimit, specular->support);
     EXPECT_FALSE(specular->claimed)
-        << "a required use may include either texture input CNA cannot import";
+        << "a required use may need either texture on a renderer whose binding is still pending";
 
     const std::string warning = warningFor("KHR_materials_specular");
-    ASSERT_FALSE(warning.empty()) << "the missing specular texture inputs were silent";
+    ASSERT_FALSE(warning.empty()) << "the partial renderer coverage was silent";
     EXPECT_NE(std::string::npos, warning.find("specularTexture"))
         << "the scalar specular texture residue is not named: " << warning;
     EXPECT_NE(std::string::npos, warning.find("specularColorTexture"))
