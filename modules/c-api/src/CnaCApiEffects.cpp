@@ -3423,6 +3423,12 @@ CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (effect->activeModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Effect is retained by a ModelMeshPart.");
+        }
         const CNA_Result result = GetRuntimeHandles().Release(effectHandle);
         return result == CNA_RESULT_SUCCESS
             ? CNA_RESULT_SUCCESS
@@ -3497,6 +3503,12 @@ CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
         if (const CNA_Result result = GetEffect(effectHandle, &effect);
             result != CNA_RESULT_SUCCESS) {
             return result;
+        }
+        if (effect->activeModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Effect is retained by a ModelMeshPart.");
         }
         effect->value->Dispose();
         return CNA_RESULT_SUCCESS;

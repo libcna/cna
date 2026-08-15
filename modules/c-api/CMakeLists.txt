@@ -458,6 +458,19 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_model_bone_smoke)
     add_test(NAME CApi_ModelBoneSmoke COMMAND cna_c_api_model_bone_smoke)
 
+    add_executable(cna_c_api_model_mesh_part_smoke
+        tests/pure_c/ModelMeshPartSmoke.c
+    )
+    set_target_properties(cna_c_api_model_mesh_part_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_model_mesh_part_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_model_mesh_part_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_model_mesh_part_smoke)
+    add_test(NAME CApi_ModelMeshPartSmoke COMMAND cna_c_api_model_mesh_part_smoke)
+
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c
     )

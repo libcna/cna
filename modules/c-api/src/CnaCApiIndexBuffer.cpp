@@ -331,6 +331,12 @@ CNA_Result cna_index_buffer_destroy(const CNA_IndexBufferHandle indexBufferHandl
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (buffer->activeModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The IndexBuffer is retained by a ModelMeshPart.");
+        }
         if (const CNA_Result result = GetRuntimeHandles().Release(indexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
             return Fail(

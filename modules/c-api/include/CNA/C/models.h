@@ -4,7 +4,10 @@
 #define CNA_C_MODELS_H
 
 #include "CNA/C/core.h"
+#include "CNA/C/effects.h"
+#include "CNA/C/index_resources.h"
 #include "CNA/C/math_values.h"
+#include "CNA/C/vertex_resources.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +18,15 @@ typedef CNA_Handle CNA_ModelBoneHandle;
 
 /** @brief Owned live view of a model-bone collection. */
 typedef CNA_Handle CNA_ModelBoneCollectionHandle;
+
+/** @brief Owned stable handle for a model mesh part. */
+typedef CNA_Handle CNA_ModelMeshPartHandle;
+
+/** @brief Owned stable snapshot or live view of model mesh parts. */
+typedef CNA_Handle CNA_ModelMeshPartCollectionHandle;
+
+/** @brief C-owned opaque tag value associated with a model mesh part. */
+typedef uint64_t CNA_ModelMeshPartTag;
 
 /**
  * @brief Creates an owned default model bone.
@@ -165,6 +177,171 @@ CNA_C_API CNA_Result cna_model_bone_collection_contains(
     CNA_ModelBoneCollectionHandle collection,
     CNA_ModelBoneHandle bone,
     CNA_Bool* out_contains);
+
+/**
+ * @brief Creates an owned empty model mesh part.
+ * @param out_part Receives the owned part handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_create_default(
+    CNA_ModelMeshPartHandle* out_part);
+
+/**
+ * @brief Creates an owned model mesh part from optional retained buffers and scalar state.
+ * @param vertex_buffer VertexBuffer handle or `CNA_INVALID_HANDLE`.
+ * @param index_buffer IndexBuffer handle or `CNA_INVALID_HANDLE`.
+ * @param num_vertices Native signed vertex count preserved verbatim.
+ * @param primitive_count Native signed primitive count preserved verbatim.
+ * @param start_index Native signed starting index preserved verbatim.
+ * @param vertex_offset Native signed vertex offset preserved verbatim.
+ * @param out_part Receives the owned part handle.
+ * @return A CNA result code; non-null resources must belong to one graphics device.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_create(
+    CNA_VertexBufferHandle vertex_buffer,
+    CNA_IndexBufferHandle index_buffer,
+    int32_t num_vertices,
+    int32_t primitive_count,
+    int32_t start_index,
+    int32_t vertex_offset,
+    CNA_ModelMeshPartHandle* out_part);
+
+/** @brief Releases an owned model-mesh-part handle. */
+CNA_C_API CNA_Result cna_model_mesh_part_destroy(CNA_ModelMeshPartHandle part);
+
+/** @brief Gets the signed model-mesh-part vertex count. */
+CNA_C_API CNA_Result cna_model_mesh_part_get_num_vertices(
+    CNA_ModelMeshPartHandle part,
+    int32_t* out_value);
+
+/** @brief Sets the signed model-mesh-part vertex count. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_num_vertices(
+    CNA_ModelMeshPartHandle part,
+    int32_t value);
+
+/** @brief Gets the signed model-mesh-part primitive count. */
+CNA_C_API CNA_Result cna_model_mesh_part_get_primitive_count(
+    CNA_ModelMeshPartHandle part,
+    int32_t* out_value);
+
+/** @brief Sets the signed model-mesh-part primitive count. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_primitive_count(
+    CNA_ModelMeshPartHandle part,
+    int32_t value);
+
+/** @brief Gets the signed model-mesh-part starting index. */
+CNA_C_API CNA_Result cna_model_mesh_part_get_start_index(
+    CNA_ModelMeshPartHandle part,
+    int32_t* out_value);
+
+/** @brief Sets the signed model-mesh-part starting index. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_start_index(
+    CNA_ModelMeshPartHandle part,
+    int32_t value);
+
+/** @brief Gets the signed model-mesh-part vertex offset. */
+CNA_C_API CNA_Result cna_model_mesh_part_get_vertex_offset(
+    CNA_ModelMeshPartHandle part,
+    int32_t* out_value);
+
+/** @brief Sets the signed model-mesh-part vertex offset. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_vertex_offset(
+    CNA_ModelMeshPartHandle part,
+    int32_t value);
+
+/**
+ * @brief Gets the retained material effect handle.
+ * @param part Model-mesh-part handle.
+ * @param out_has_effect Receives whether an effect is assigned.
+ * @param out_effect Receives the effect handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_effect(
+    CNA_ModelMeshPartHandle part,
+    CNA_Bool* out_has_effect,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Assigns a same-device Effect, or clears it with the invalid handle. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_effect(
+    CNA_ModelMeshPartHandle part,
+    CNA_EffectHandle effect);
+
+/**
+ * @brief Gets the retained vertex-buffer handle.
+ * @param part Model-mesh-part handle.
+ * @param out_has_buffer Receives whether a buffer is assigned.
+ * @param out_buffer Receives the buffer handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_vertex_buffer(
+    CNA_ModelMeshPartHandle part,
+    CNA_Bool* out_has_buffer,
+    CNA_VertexBufferHandle* out_buffer);
+
+/** @brief Assigns a same-device VertexBuffer, or clears it with the invalid handle. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_vertex_buffer(
+    CNA_ModelMeshPartHandle part,
+    CNA_VertexBufferHandle vertex_buffer);
+
+/**
+ * @brief Gets the retained index-buffer handle.
+ * @param part Model-mesh-part handle.
+ * @param out_has_buffer Receives whether a buffer is assigned.
+ * @param out_buffer Receives the buffer handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_index_buffer(
+    CNA_ModelMeshPartHandle part,
+    CNA_Bool* out_has_buffer,
+    CNA_IndexBufferHandle* out_buffer);
+
+/** @brief Assigns a same-device IndexBuffer, or clears it with the invalid handle. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_index_buffer(
+    CNA_ModelMeshPartHandle part,
+    CNA_IndexBufferHandle index_buffer);
+
+/** @brief Gets the C-owned opaque model-mesh-part tag. */
+CNA_C_API CNA_Result cna_model_mesh_part_get_tag(
+    CNA_ModelMeshPartHandle part,
+    CNA_ModelMeshPartTag* out_tag);
+
+/** @brief Sets the C-owned opaque model-mesh-part tag. */
+CNA_C_API CNA_Result cna_model_mesh_part_set_tag(
+    CNA_ModelMeshPartHandle part,
+    CNA_ModelMeshPartTag tag);
+
+/**
+ * @brief Creates an owned collection snapshot retaining the supplied parts.
+ * @param parts Caller-owned array of valid part handles, or null only for zero count.
+ * @param part_count Number of handles in @p parts.
+ * @param out_collection Receives the collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_collection_create(
+    const CNA_ModelMeshPartHandle* parts,
+    uint64_t part_count,
+    CNA_ModelMeshPartCollectionHandle* out_collection);
+
+/** @brief Releases an owned model-mesh-part collection handle. */
+CNA_C_API CNA_Result cna_model_mesh_part_collection_destroy(
+    CNA_ModelMeshPartCollectionHandle collection);
+
+/** @brief Gets the number of parts in a collection. */
+CNA_C_API CNA_Result cna_model_mesh_part_collection_get_count(
+    CNA_ModelMeshPartCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets an owned stable part view at an index.
+ * @param collection Model-mesh-part collection handle.
+ * @param index Zero-based part index.
+ * @param out_part Receives the owned part view.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_collection_get_at(
+    CNA_ModelMeshPartCollectionHandle collection,
+    uint64_t index,
+    CNA_ModelMeshPartHandle* out_part);
 
 #ifdef __cplusplus
 }

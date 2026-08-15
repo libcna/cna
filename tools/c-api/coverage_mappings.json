@@ -386,6 +386,16 @@
       "task": "CBIND-035E1"
     },
     {
+      "id": "model-mesh-part-and-collection-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelMeshPart(?:Collection)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_ModelMeshPartHandle` objects with exact signed scalar state, optional retained same-device Effect/VertexBuffer/IndexBuffer associations and a C-owned opaque 64-bit tag; owned `CNA_ModelMeshPartCollectionHandle` snapshots retain shared part objects and replace raw pointers and iterators with count/index access. Indexed handles alias the same mutable part, and the representation also supports future ModelMesh-owned live views",
+      "tests": "both constructors, signed scalar boundaries and mutation, optional effect/buffer getters and clearing, opaque tag round-trip, empty/two-part snapshots, shared mutation and lifetime after source-handle release, collection bounds/array overflow, resource retention blocking typed destroy and generic dispose, unsupported renderer behavior, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelMeshPartSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and the tag",
+      "status": "implemented",
+      "task": "CBIND-035E2"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

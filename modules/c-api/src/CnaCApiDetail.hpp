@@ -60,6 +60,8 @@ enum class ObjectKind : uint32_t {
     DirectionalLight = 31,
     ModelBone = 32,
     ModelBoneCollection = 33,
+    ModelMeshPart = 34,
+    ModelMeshPartCollection = 35,
     Test = UINT32_MAX
 };
 

@@ -614,6 +614,12 @@ CNA_Result cna_vertex_buffer_destroy(const CNA_VertexBufferHandle vertexBufferHa
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (buffer->activeModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The VertexBuffer is retained by a ModelMeshPart.");
+        }
         if (const CNA_Result result = GetRuntimeHandles().Release(vertexBufferHandle);
             result != CNA_RESULT_SUCCESS) {
             return Fail(

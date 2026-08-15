@@ -53,6 +53,7 @@ struct GraphicsResourceView final {
     CNA_Handle parentGame = CNA_INVALID_HANDLE;
     std::shared_ptr<Texture2DResource> texture;
     uint64_t* activeEffectReferenceCount = nullptr;
+    uint64_t* activeModelReferenceCount = nullptr;
 };
 
 class DisposingRegistration final {
@@ -168,6 +169,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(buffer->value);
         result.parentGame = buffer->parentGame;
+        result.activeModelReferenceCount = &buffer->activeModelReferenceCount;
     } else if (kind == ObjectKind::IndexBuffer) {
         std::shared_ptr<IndexBufferResource> buffer;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -177,6 +179,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(buffer->value);
         result.parentGame = buffer->parentGame;
+        result.activeModelReferenceCount = &buffer->activeModelReferenceCount;
     } else if (kind == ObjectKind::Effect) {
         std::shared_ptr<EffectResource> effect;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -186,6 +189,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(effect->value);
         result.parentGame = effect->parentGame;
+        result.activeModelReferenceCount = &effect->activeModelReferenceCount;
     } else {
         return InvalidResource(CNA_RESULT_INVALID_HANDLE);
     }
@@ -199,11 +203,13 @@ private:
          (resource.texture->activeBatchReferenceCount != 0U ||
           resource.texture->activeFontReferenceCount != 0U)) ||
         (resource.activeEffectReferenceCount != nullptr &&
-         *resource.activeEffectReferenceCount != 0U)) {
+         *resource.activeEffectReferenceCount != 0U) ||
+        (resource.activeModelReferenceCount != nullptr &&
+         *resource.activeModelReferenceCount != 0U)) {
         return Fail(
             CNA_RESULT_INVALID_STATE,
             CNA_ERROR_CATEGORY_STATE,
-            "The texture is retained by an active SpriteBatch, SpriteFont or EffectParameter.");
+            "The graphics resource is retained by an active C API owner.");
     }
     return CNA_RESULT_SUCCESS;
 }

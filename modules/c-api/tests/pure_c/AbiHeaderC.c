@@ -119,6 +119,10 @@ _Static_assert(CNA_SKINNED_PBR_EFFECT_MAX_BONES == UINT32_C(72),
 _Static_assert(sizeof(CNA_ModelBoneHandle) == 8U &&
                    sizeof(CNA_ModelBoneCollectionHandle) == 8U,
                "CNA model-bone handles must remain stable");
+_Static_assert(sizeof(CNA_ModelMeshPartHandle) == 8U &&
+                   sizeof(CNA_ModelMeshPartCollectionHandle) == 8U &&
+                   sizeof(CNA_ModelMeshPartTag) == 8U,
+               "CNA model-mesh-part handles and tag must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

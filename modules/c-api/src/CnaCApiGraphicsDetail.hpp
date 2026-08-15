@@ -25,6 +25,7 @@ struct EffectResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> value;
     CNA_Handle parentGame;
     std::shared_ptr<void> adapterState;
+    uint64_t activeModelReferenceCount = 0U;
 };
 
 struct Texture2DResource final {
@@ -57,12 +58,14 @@ struct VertexBufferResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> value;
     CNA_Handle parentGame;
     bool dynamic;
+    uint64_t activeModelReferenceCount = 0U;
 };
 
 struct IndexBufferResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer> value;
     CNA_Handle parentGame;
     bool dynamic;
+    uint64_t activeModelReferenceCount = 0U;
 };
 
 struct TextureResourceView final {
