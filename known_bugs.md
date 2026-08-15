@@ -36,7 +36,7 @@ iterations across two seeds; the SPIR-V emitter still validates with `assert()` 
 
 A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
 written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
-(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found thirty-eight distinct ways it crashed the
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found thirty-nine distinct ways it crashed the
 process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
 their own bounds check, register copies sized by a constant table rather than by the parsed
 storage, an unchecked shader-array selector, and a union member read without checking the object's

@@ -45,7 +45,7 @@ Delivered task groups:
   application and post-source-destruction clone use, which also builds as a standalone corpus
   replayer and mutation-campaign driver in any configuration, plus the deterministic in-build
   mutation corpus extended from construction only to that same full surface (`FX-051`);
-- thirty-eight upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
+- thirty-nine upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
   a dereferenced NULL preshader parse, a SPIR-V attribute fixup assert, register copies sized by
   the constant table rather than the parsed storage, an unbounded preshader operand count, two
   asserts on untrusted preshader tokens, an allocation sized before its own bounds check, and an
