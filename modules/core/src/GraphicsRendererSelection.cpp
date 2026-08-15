@@ -21,6 +21,12 @@
 #include <string>
 #include <vector>
 
+#ifdef __EMSCRIPTEN__
+// Defined in GraphicsRendererSelectionEmscripten.cpp, which is the only place emscripten/val.h is
+// included -- this translation unit stays free of the browser API.
+extern "C" const char* cna_read_module_preferred_renderer();
+#endif
+
 namespace CNA
 {
     namespace
@@ -117,6 +123,18 @@ namespace CNA
             state.environmentConsulted = true;
 
             const char* raw = std::getenv("CNA_GRAPHICS_RENDERER");
+
+#ifdef __EMSCRIPTEN__
+            // plan_runtimerenderer.md RTR-P10-23: a browser has no environment to set, so the page
+            // supplies the same choice through `Module.cnaPreferredRenderer`. It is consulted HERE,
+            // at the environment variable's precedence, rather than by calling SetPreferred() from
+            // JS glue -- a page property must not outrank an explicit SetPreferred() call in the
+            // program itself. An actual environment variable, if emscripten's shell provides one,
+            // still wins over the property.
+            if (raw == nullptr || *raw == '\0')
+                raw = cna_read_module_preferred_renderer();
+#endif
+
             if (raw == nullptr || *raw == '\0')
                 return;
 

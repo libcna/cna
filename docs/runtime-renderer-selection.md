@@ -341,6 +341,71 @@ and unrelated to renderer selection:
   diagnoses and GCC does not. Until it is fixed upstream, add
   `-DCMAKE_CXX_FLAGS="-Wno-error=unused-function"`.
 
+## Choosing the renderer from JavaScript
+
+A browser build is where runtime selection pays off most: one wasm bundle is downloaded and cached,
+and the page picks the renderer before the program starts, instead of shipping one bundle per
+renderer.
+
+Build the bundle with several renderers as usual:
+
+```bash
+emcmake cmake -S . -B cmake-build-wasm-multi -G Ninja \
+      -DCNA_GRAPHICS_RENDERER=WEBGL2 \
+      -DCNA_GRAPHICS_RENDERERS="WEBGL2;CANVAS;HTML_DOM;SVG_DOM"
+```
+
+Then have the page state its preference on the `Module` object, before the module starts:
+
+```html
+<script>
+  var Module = {
+    // Any public renderer identity, in the CNA_GRAPHICS_RENDERER spelling, case-insensitive.
+    cnaPreferredRenderer: "CANVAS",
+  };
+</script>
+<script src="cna_app.js"></script>
+```
+
+A page that wants to decide from feature detection can do so in the same place:
+
+```js
+var Module = {
+  cnaPreferredRenderer:
+    document.createElement("canvas").getContext("webgl2") ? "WEBGL2" : "CANVAS",
+};
+```
+
+There is also a direct export for pages that already drive the module themselves:
+
+```js
+Module.ccall("cna_set_preferred_renderer", "number", ["string"], ["SVG_DOM"]);  // 1 = accepted
+```
+
+### Where this sits in the resolution order
+
+`Module.cnaPreferredRenderer` is consulted at exactly the point, and with exactly the precedence, a
+native build consults the `CNA_GRAPHICS_RENDERER` environment variable:
+
+1. an explicit `GraphicsRendererSelection::SetPreferred()` call in the program
+2. `CNA_GRAPHICS_RENDERER` if the shell provides one, otherwise `Module.cnaPreferredRenderer`
+3. the compile-time default this bundle was built with
+
+The property is deliberately **not** applied by calling `SetPreferred()` from JS glue. Doing that
+would make a page property indistinguishable from an explicit call in the program and let it
+silently outrank one.
+
+### Failure behaviour
+
+`cna_set_preferred_renderer` returns 1 on success and 0 when the name is not a renderer identity,
+is not compiled into this bundle (with no fallback chain configured), or the selection has already
+latched — CNA logs the reason in each case. It never throws across the wasm boundary, because a
+browser has no useful place to catch that and aborting the module would be a worse answer than a
+page that can see it was refused.
+
+The same latch applies as everywhere else: once the first `GraphicsDevice` exists, the renderer
+cannot be changed, from JS or from C++.
+
 ## What a multi-renderer build costs
 
 Measured on 2026-08-15, Debug, GCC, on this project's own build trees. Sizes are of the `CnaTests`
