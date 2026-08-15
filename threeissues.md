@@ -16,8 +16,23 @@ converting the test corpus, and is appended at the end.
 `modules/renderers/easygl/include/CNA/Internal/Renderers/EasyGL/GlProfile.hpp` at
 `UsesEs2ApiGenerationLegacyEXT()`.
 
-**Status:** open. Suspected defect, **not confirmed** — confirming it requires running `WEBGL1` in a
-real browser, which this environment does not automate.
+**Status: FIXED on 2026-08-15.** The suspicion was correct on inspection; the fix is applied but
+**NOT verified at runtime** — confirming WebGL 1 behaviour requires a real browser, which this
+environment does not automate.
+
+By the time this was addressed, the 44 compile-time branches had become four runtime decisions, and
+all four excluded WEBGL1: `ReadbackFramebufferTarget()` (`GL_READ_FRAMEBUFFER` is ES 3.0),
+`RgbaTexImageInternalFormat()` (sized `RGBA8` is ES 3.0), the `glDrawElementsBaseVertex` fallback
+(ES 3.2) and the instanced-draw refusal (`glDrawElementsInstanced`/`glVertexAttribDivisor` are not
+in ES 2.0 core). Every one is an API-GENERATION limitation WebGL 1 shares, not a shading-language
+difference where the profiles could legitimately diverge. All four now use `UsesEs2ApiGeneration()`,
+which covers OpenGLES2 and WebGL1.
+
+`UsesEs2ApiGenerationLegacyEXT()` is kept, unused, with a note recording that every caller it ever
+had was wrong to use it -- so a new use without a stated reason is almost certainly this bug again.
+
+Gates after the change, all unchanged: OPENGLES3 6369, HEADLESS 6172, SOFTWARE 6253, 0 failures.
+Those exercise the ES 3.0 path only; the WEBGL1 path itself remains unverified here.
 
 ### What was found
 
@@ -215,7 +230,7 @@ kind**:
 
 | # | Issue | Confirmed? | Caused by renderer-selection work? | Fixed? |
 |---|---|---|---|---|
-| 1 | `WEBGL1` may take ES 3.0 paths | no — needs a browser | no | no, preserved verbatim and documented |
+| 1 | `WEBGL1` may take ES 3.0 paths | confirmed by inspection | no | **fixed**, runtime behaviour unverified |
 | 2 | `OPENGL33` glTF segfault | **no longer reproducible** (4 scenarios, 2026-08-15) | no | superseded: 4 display-dependent pixel failures instead |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | **fixed upstream**, `sharp-runtime` `bc8dbf41` |
 | 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |

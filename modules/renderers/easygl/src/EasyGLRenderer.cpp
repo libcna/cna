@@ -10,12 +10,17 @@ namespace CNA::Internal::Renderers::EasyGL
         // profile themselves, so a guard converts to a one-line condition with no plumbing through
         // the many free helpers this file is built from.
         //
-        // ProfileIsEs2ApiLegacy() reproduces `#if defined(CNA_GL_PROFILE_OPENGLES2)` EXACTLY,
-        // including that it excludes WEBGL1 -- see UsesEs2ApiGenerationLegacyEXT's own note for why
-        // that asymmetry is preserved rather than quietly corrected here.
+        // threeissues.md finding 1, FIXED: ProfileIsEs2ApiGeneration() covers OPENGLES2 AND WEBGL1.
+        //
+        // It used to reproduce `#if defined(CNA_GL_PROFILE_OPENGLES2)` exactly, excluding WEBGL1 --
+        // faithful to the compile-time guards, and wrong. Every remaining use guards an ES 2.0
+        // API-GENERATION limitation, not a shading-language difference where the two profiles could
+        // legitimately diverge, and WebGL 1 is an ES 2.0-class API with the same limitation in each
+        // case. Excluding it meant a WEBGL1 build took the ES 3.0 path and called entry points its
+        // context does not have.
         [[nodiscard]] inline bool ProfileIsDesktopCore()  { return IsDesktopCoreProfile(ActiveGlProfile()); }
         [[nodiscard]] inline bool ProfileUsesGlslEs100()  { return UsesGlslEs100(ActiveGlProfile()); }
-        [[nodiscard]] inline bool ProfileIsEs2ApiLegacy() { return UsesEs2ApiGenerationLegacyEXT(ActiveGlProfile()); }
+        [[nodiscard]] inline bool ProfileIsEs2ApiGeneration() { return UsesEs2ApiGeneration(ActiveGlProfile()); }
         [[nodiscard]] inline bool ProfileIs(GlProfile expected) { return ActiveGlProfile() == expected; }
     }
 }
@@ -674,7 +679,8 @@ if (ProfileIsDesktopCore())
     /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
     [[nodiscard]] inline ::easygl::FramebufferTarget ReadbackFramebufferTarget()
     {
-        return UsesEs2ApiGenerationLegacyEXT(ActiveGlProfile())
+        // GL_READ_FRAMEBUFFER is ES 3.0; WebGL 1, like ES 2.0, has only the combined target.
+        return UsesEs2ApiGeneration(ActiveGlProfile())
             ? ::easygl::FramebufferTarget::Framebuffer
             : ::easygl::FramebufferTarget::ReadFramebuffer;
     }
@@ -687,7 +693,8 @@ if (ProfileIsDesktopCore())
     /// plan_runtimerenderer.md P11: was a profile-selected constant, now a profile-selected value.
     [[nodiscard]] inline ::metagl::InternalFormat RgbaTexImageInternalFormat()
     {
-        return UsesEs2ApiGenerationLegacyEXT(ActiveGlProfile())
+        // The sized internal format RGBA8 is ES 3.0; WebGL 1, like ES 2.0, needs the unsized one.
+        return UsesEs2ApiGeneration(ActiveGlProfile())
             ? ::metagl::InternalFormat::Rgba
             : ::metagl::InternalFormat::Rgba8;
     }
@@ -700,7 +707,7 @@ if (ProfileIsDesktopCore())
                                                   ::metagl::FramebufferAttachment attachment,
                                                   ::easygl::Renderbuffer& rbo)
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         if (attachment == ::metagl::FramebufferAttachment::DepthStencil)
         {
@@ -1122,7 +1129,7 @@ if (ProfileIsEs2ApiLegacy())
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- completeness is instead handled by
         // Es2ApplyPendingSamplerToUnit's mip-term demotion, driven by this registration.
@@ -1183,7 +1190,7 @@ else
 
     EasyGLTextureCubeRenderer::~EasyGLTextureCubeRenderer()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GL reuses deleted names; drop the level registration before tex_'s destructor frees it.
         Es2UnregisterTexture(tex_.native_handle());
@@ -1230,7 +1237,7 @@ if (ProfileIsEs2ApiLegacy())
                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
                               tex_, level);
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there, so the explicit selection exists only for the ES 3.0 profiles.
@@ -1358,7 +1365,7 @@ if (!ProfileIsEs2ApiLegacy())
         texture->BindGL(unit);
         TraceBoundTextureUnit("bind-texture-3d", unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // ES 2.0 keeps sampling state on the texture object, so a texture bound AFTER the
         // GraphicsDevice applied this slot's SamplerState must receive that state now.
@@ -1395,7 +1402,7 @@ if (ProfileIsEs2ApiLegacy())
         if (!texture) return;
         texture->BindGL(unit);
         ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // See BindTexture just above -- same ES 2.0 texture-object sampling-state rule.
         Es2ApplyPendingSamplerToUnit(unit);
@@ -1417,7 +1424,7 @@ if (ProfileIsEs2ApiLegacy())
     EasyGLOcclusionQueryRenderer::EasyGLOcclusionQueryRenderer(::easygl::ResourceRegistry* registry)
         : registry_(registry)
     {
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no query objects (glGenQueries is ES 3.0), and
         // SupportsCapability(OcclusionQuery) reports false under that profile -- never creating
@@ -1466,7 +1473,7 @@ if (!ProfileIsEs2ApiLegacy())
 
     void EasyGLOcclusionQueryRenderer::recreate_gl_resource()
     {
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
         // See the constructor -- no GL query objects exist under the OPENGLES2 profile.
         query_.create();
@@ -1483,7 +1490,7 @@ if (!ProfileIsEs2ApiLegacy())
         texture.create();
         texture.set_image_2d(::easygl::TextureTarget::Texture2D, 0, width, height, data.pixels.data());
         AllocateDeclaredLevels();
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL, so Task 924's clamp cannot exist there --
         // completeness under mip-carrying filters is instead handled by
@@ -1527,7 +1534,7 @@ else
 
     EasyGLTextureRenderer::~EasyGLTextureRenderer()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GL reuses deleted names; drop the level registration before texture's destructor frees it.
         Es2UnregisterTexture(texture.native_handle());
@@ -1537,7 +1544,7 @@ if (ProfileIsEs2ApiLegacy())
 
     void EasyGLTextureRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // Context loss: the name dies with the old context (and the new one may re-issue it), so
         // the registration must go BEFORE the handle is zeroed; recreate_gl_resource re-registers.
@@ -1564,7 +1571,7 @@ if (ProfileIsEs2ApiLegacy())
         // chain has to be re-allocated here too or the texture comes back from a context loss
         // mipmap-incomplete and samples black under every mip-filtering ordinal.
         AllocateDeclaredLevels();
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // See the constructor: the fresh name replaces whatever release_gl_handle_only dropped.
         Es2RegisterTextureLevels(texture.native_handle(), mipLevels_);
@@ -1657,7 +1664,7 @@ else
     {
         TargetTrace("rt2d.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GL reuses deleted names; drop the level registration before colorTex_ is freed.
         Es2UnregisterTexture(colorTex_.native_handle());
@@ -1728,7 +1735,7 @@ if (ProfileIsEs2ApiLegacy())
 
     void EasyGLRenderTargetRenderer::CreateResources()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
         // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
@@ -1760,7 +1767,7 @@ if (ProfileIsEs2ApiLegacy())
                 levelH = std::max(1, levelH / 2);
             }
         }
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- the same completeness problem REMED-GFX-174
         // describes is handled by Es2ApplyPendingSamplerToUnit's mip-term demotion instead,
@@ -1950,7 +1957,7 @@ else
         }
 
 GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has only the combined GL_FRAMEBUFFER binding (ReadbackFramebufferTarget()), so
         // selecting a read source below also redirects draws; remember the current binding and
@@ -1978,7 +1985,7 @@ if (ProfileIsEs2ApiLegacy())
                     ::metagl::ColorAttachment::Color0),
                 ::easygl::TextureTarget::Texture2D, colorTex_, level);
         }
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there.
@@ -2001,7 +2008,7 @@ if (!ProfileIsEs2ApiLegacy())
             std::copy(bottom, bottom + rowBytes, top);
             std::copy(row.begin(), row.end(), bottom);
         }
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
                                     ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
@@ -2058,7 +2065,7 @@ else
 
     void EasyGLRenderTargetRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
         Es2UnregisterTexture(colorTex_.native_handle());
@@ -2094,7 +2101,7 @@ if (ProfileIsEs2ApiLegacy())
     {
         TargetTrace("cube.destroy", this, TraceNativeDetailEXT());
         DetachFromBindingEXT();
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GL reuses deleted names; drop the level registration before cubeTex_ is freed.
         Es2UnregisterTexture(cubeTex_.native_handle());
@@ -2138,7 +2145,7 @@ if (ProfileIsEs2ApiLegacy())
 
     void EasyGLRenderTargetCubeRenderer::CreateResources()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // See EasyGLRenderTargetRenderer::CreateResources -- GLES 2.0 has no multisample
         // renderbuffers/blit, so the requested preference degrades to single-sample.
@@ -2170,7 +2177,7 @@ if (ProfileIsEs2ApiLegacy())
                 levelSize = std::max(1, levelSize / 2);
             }
         }
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no GL_TEXTURE_MAX_LEVEL -- see EasyGLRenderTargetRenderer::CreateResources.
         Es2RegisterTextureLevels(cubeTex_.native_handle(), levelCount_);
@@ -2355,7 +2362,7 @@ else
         if (dataLength < w * h * 4) return false;
 
 GLint previousFramebuffer = 0;  // plan_runtimerenderer.md P11: hoisted -- read by a separate runtime-gated block below
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // See EasyGLRenderTargetRenderer::GetData -- the combined GL_FRAMEBUFFER binding must be
         // restored so a read here cannot redirect subsequent draws.
@@ -2368,7 +2375,7 @@ if (ProfileIsEs2ApiLegacy())
                               ::metagl::to_framebuffer_attachment(::metagl::ColorAttachment::Color0),
                               kCubeFaceTargets[face],
                               cubeTex_, level);
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no glReadBuffer; the bound framebuffer's single color attachment is the
         // implicit read source there.
@@ -2395,7 +2402,7 @@ if (!ProfileIsEs2ApiLegacy())
             }
         }
 
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         ::metagl::glBindFramebuffer(::metagl::FramebufferTarget::Framebuffer,
                                     ::metagl::FramebufferId{static_cast<GLuint>(previousFramebuffer)});
@@ -2409,7 +2416,7 @@ else
 
     void EasyGLRenderTargetCubeRenderer::release_gl_handle_only()
     {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // Context loss: unregister before the handle is zeroed; recreate_gl_resource re-registers.
         Es2UnregisterTexture(cubeTex_.native_handle());
@@ -2883,7 +2890,7 @@ if (ProfileUsesGlslEs100())
         profile_ = profile;
         ActiveGlProfile() = profile;
 
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
         // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
@@ -2949,7 +2956,7 @@ if (ProfileIsDesktopCore())
             GLint maxSamplesCap = 0;
             GLint maxDrawBuffers = 1;
             GLint maxColorAttachments = 1;
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
             // GLES 2.0 defines none of GL_MAX_SAMPLES / GL_MAX_DRAW_BUFFERS /
             // GL_MAX_COLOR_ATTACHMENTS (all ES 3.0) -- querying them on a strict ES 2.0 context
@@ -3109,7 +3116,7 @@ else
         {
             case CNA::GraphicsCapability::MultiSampleAntiAliasing:
             {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
                 // GLES 2.0 has no multisample renderbuffers/blit (both ES 3.0), and GL_MAX_SAMPLES
                 // itself is undefined there -- reported false regardless of what a generously
@@ -3132,7 +3139,7 @@ else
                 // present), so the previous `false` under-stated the implementation. The emulation
                 // draws line primitives and depends on no polygon-mode API, so it holds for every
                 // GL profile (OPENGLES3/OPENGL33/WEBGL1/WEBGL2) alike.
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
                 // ...with one ES 2.0 nuance: the re-expanded line indices are 32-bit, and
                 // GL_UNSIGNED_INT element indices are an extension there (core in ES 3.0), so the
@@ -3216,7 +3223,7 @@ else
         //    no GL calls made). Context is still valid here for proper cleanup.
         metagl::NotifyContextLost();
 
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // Textures outside the recovery registry (e.g. plain cube maps) leave stale entries in
         // the ES 2.0 level registry on context loss, and the fresh context may re-issue their GL
@@ -3299,7 +3306,7 @@ if (ProfileIsDesktopCore())
                 // Bind FBO 0 as the read source and select GL_BACK.
                 ::easygl::Framebuffer::unbind(::easygl::FramebufferTarget::ReadFramebuffer);
             }
-if (!ProfileIsEs2ApiLegacy())
+if (!ProfileIsEs2ApiGeneration())
 {
             // GLES 2.0 has no glReadBuffer at all -- there the default framebuffer's color buffer
             // is the one and only read source, so the explicit GL_BACK selection this comment
@@ -4088,7 +4095,7 @@ if (!ProfileIsEs2ApiLegacy())
         if (metagl::IsContextLost()) return;
         if (slot < 0 || slot >= kMaxSamplerSlots) return;
 
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 has no sampler objects (glGenSamplers/glBindSampler are ES 3.0) -- sampling
         // state lives on the texture object itself, the same shape FNA3D's pre-3.0 GL path used.
@@ -6711,7 +6718,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
             TraceBoundTextureUnit("stock3d-texture0", 0);
         }
 
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // ES 2.0 keeps sampling state on the texture objects -- re-apply each unit's recorded
         // SamplerState onto whatever this draw just bound above (GraphicsDevice applies sampler
@@ -6920,7 +6927,7 @@ if (ProfileIsEs2ApiLegacy())
             device.draw_elements(::easygl::PrimitiveType::Lines, lineIndexCount,
                                  ::easygl::DataType::UnsignedInt, nullptr);
         } else {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
             // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
             // pointer by baseVertex elements instead, draw, and restore (see the helper's doc).
@@ -7161,7 +7168,7 @@ else
             if (params.baseVertex == 0) {
                 device.draw_elements(ToEasyGl(primitive), index_count, idxTypeCustom, indexOffsetCustom);
             } else {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
                 // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled
                 // attribute pointer by baseVertex elements instead, draw, and restore.
@@ -7204,7 +7211,7 @@ else
         if (params.baseVertex == 0) {
             device.draw_elements(ToEasyGl(primitive), index_count, idxType2, indexOffset);
         } else {
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
             // GLES 2.0 has no glDrawElementsBaseVertex (ES 3.2) -- shift every enabled attribute
             // pointer by baseVertex elements instead, draw, and restore.
@@ -7233,7 +7240,7 @@ else
                                                           const GpuDrawParams& params)
     {
         if (metagl::IsContextLost()) return;
-if (ProfileIsEs2ApiLegacy())
+if (ProfileIsEs2ApiGeneration())
 {
         // GLES 2.0 core has no glDrawElementsInstanced/glVertexAttribDivisor, and this profile
         // deliberately claims no instancing extension either -- SupportsCapability(Instancing)

@@ -155,24 +155,20 @@ namespace CNA::Internal::Renderers::EasyGL
     }
 
     /**
-     * @brief Whether this profile's API generation is OpenGL ES 2.0.
+     * @brief OpenGLES2 only, EXCLUDING WebGL1 -- retained for callers that genuinely mean that.
      *
-     * Distinct from UsesGlslEs100() even though the two currently return the same answer, because
-     * they are different questions: one is about the shading language, the other about which GL
-     * entry points and enums exist (no GL_READ_FRAMEBUFFER, no GL_TEXTURE_MAX_LEVEL, no
-     * glReadBuffer, sampler state living on the texture object).
+     * threeissues.md finding 1: every caller in EasyGLRenderer.cpp used to use this, and every one
+     * of them was wrong to. They guard ES 2.0 API-generation limitations -- no GL_READ_FRAMEBUFFER,
+     * no sized RGBA8, no glDrawElementsBaseVertex, no glDrawElementsInstanced -- and WebGL 1 has
+     * every one of those limitations too, so a WEBGL1 build took the ES 3.0 path and called entry
+     * points its context does not have. They now use UsesEs2ApiGeneration().
      *
-     * NOTE, and the reason this predicate is separate: at 44 of the 61 sites this replaced, the
-     * original compile-time guard tested CNA_GL_PROFILE_OPENGLES2 *alone*, without WEBGL1 -- even
-     * though every one of those sites concerns an ES 2.0 API-generation limitation that WebGL 1
-     * shares. Only 11 sites named both. That asymmetry is preserved verbatim by this conversion
-     * (see UsesEs2ApiGenerationLegacyEXT) rather than silently "fixed", because changing WEBGL1's
-     * behaviour is a separate decision from making the profile a runtime value.
+     * This remains only for a caller that means "OpenGLES2 and not WebGL1" for a reason it can
+     * state. If a use appears without such a reason, it is almost certainly the same bug again.
      *
-     * @param profile The profile.
-     * @return true for OpenGLES2 and WebGL1.
-     */
-    [[nodiscard]] constexpr bool UsesEs2ApiGeneration(GlProfile profile)
+     * @param profile The profile to test.
+     * @return true only for OpenGLES2.
+     */[[nodiscard]] constexpr bool UsesEs2ApiGeneration(GlProfile profile)
     {
         return profile == GlProfile::OpenGLES2 || profile == GlProfile::WebGL1;
     }
