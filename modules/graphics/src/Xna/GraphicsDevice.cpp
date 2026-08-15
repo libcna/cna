@@ -2304,10 +2304,16 @@ namespace Microsoft::Xna::Framework::Graphics
 
 #if defined(CNA_RENDERER_OPENGL1) || defined(CNA_RENDERER_OPENGL2) || \
     defined(CNA_RENDERER_OPENGL4) || defined(CNA_RENDERER_OPENGLES1) || \
-    defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL)
+    defined(CNA_RENDERER_MAGNUM) || defined(CNA_RENDERER_SOKOL) || \
+    defined(CNA_RENDERER_FNA3D)
         // A desktop GLX visual fixes these attributes when the window is created, before the
         // renderer asks IPlatformGlContext for a context. Supplying them at this boundary also
         // keeps the equivalent EGL selection deterministic on ES hosts.
+        //
+        // FNA3D primes the same attributes itself inside FNA3D_PrepareWindowAttributes(), but the
+        // platform resets GL attributes immediately before SDL_CreateWindow, so that priming does
+        // not survive. Without this the FNA3D OpenGL driver presents into a visual with no stencil
+        // bits and every stencil test silently passes.
         description.openGlFramebuffer.depthBits = 24;
         description.openGlFramebuffer.stencilBits = 8;
         description.openGlFramebuffer.doubleBuffered = true;
