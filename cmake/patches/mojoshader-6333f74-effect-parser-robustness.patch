@@ -1101,7 +1101,7 @@ index 036f18d..ac9fe0f 100644
          }
      effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
 diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
-index 5d5999b..ec28b94 100644
+index 5d5999b..c38d454 100644
 --- a/profiles/mojoshader_profile_spirv.c
 +++ b/profiles/mojoshader_profile_spirv.c
 @@ -274,6 +274,12 @@ static uint32 spv_output_location(Context *ctx, uint32 id, uint32 loc)
@@ -1131,7 +1131,94 @@ index 5d5999b..ec28b94 100644
      push_output(ctx, &ctx->helpers);
      spv_emit(ctx, 4, SpvOpDecorate, id, SpvDecorationLocation, 0xDEADBEEF);
      pop_output(ctx);
-@@ -668,8 +681,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
+@@ -584,18 +597,35 @@ static uint32 spv_vectorbroadcast(Context *ctx, uint32 tid, uint32 value)
+     return result;
+ } // spv_vectorbroadcast
+ 
++/* The branch and loop stacks are driven by the shader's own control-flow instructions, so
++ * untrusted bytecode can overflow them with nesting or underflow them with an ELSE, ENDIF or
++ * ENDLOOP that never had a matching opener. Asserts caught neither in a release build. -CNA
++ */
+ static void spv_branch_push(Context *ctx, uint32 id_merge, uint32 patch_offset)
+ {
+-    assert(((size_t)ctx->branch_labels_stack_index) < STATICARRAYLEN(ctx->branch_labels_stack));
+-    int pos = ctx->branch_labels_stack_index++;
++    int pos;
++    if (((size_t) ctx->branch_labels_stack_index) >=
++        STATICARRAYLEN(ctx->branch_labels_stack))
++    {
++        fail(ctx, "Shader branch nesting is too deep.");
++        return;
++    } // if
++    pos = ctx->branch_labels_stack_index++;
+     ctx->branch_labels_stack[pos] = id_merge;
+     ctx->branch_labels_patch_stack[pos] = patch_offset;
+ } // spv_branch_push
+ 
+ static void spv_branch_get(Context *ctx, uint32* out_id_merge, uint32* out_patch_offset)
+ {
+-    assert(ctx->branch_labels_stack_index > 0);
+-    int pos = ctx->branch_labels_stack_index - 1;
++    int pos;
++    *out_id_merge = 0;
++    *out_patch_offset = 0;
++    if (ctx->branch_labels_stack_index <= 0)
++    {
++        fail(ctx, "Shader closes a branch that was never opened.");
++        return;
++    } // if
++    pos = ctx->branch_labels_stack_index - 1;
+     *out_id_merge = ctx->branch_labels_stack[pos];
+     *out_patch_offset = ctx->branch_labels_patch_stack[pos];
+ } // spv_branch_get
+@@ -603,27 +633,40 @@ static void spv_branch_get(Context *ctx, uint32* out_id_merge, uint32* out_patch
+ static void spv_branch_pop(Context *ctx, uint32* out_id_merge, uint32* out_patch_offset)
+ {
+     spv_branch_get(ctx, out_id_merge, out_patch_offset);
+-    ctx->branch_labels_stack_index--;
++    if (ctx->branch_labels_stack_index > 0)
++        ctx->branch_labels_stack_index--;
+ } // spv_branch_pop
+ 
+ static void spv_loop_push(Context *ctx, const SpirvLoopInfo *loop)
+ {
+-    assert(((size_t)ctx->spirv.loop_stack_idx) < STATICARRAYLEN(ctx->spirv.loop_stack));
+-    int pos = ctx->spirv.loop_stack_idx++;
++    int pos;
++    if (((size_t) ctx->spirv.loop_stack_idx) >= STATICARRAYLEN(ctx->spirv.loop_stack))
++    {
++        fail(ctx, "Shader loop nesting is too deep.");
++        return;
++    } // if
++    pos = ctx->spirv.loop_stack_idx++;
+     ctx->spirv.loop_stack[pos] = *loop;
+ } // spv_loop_push
+ 
+ static void spv_loop_get(Context *ctx, SpirvLoopInfo *loop)
+ {
+-    assert(ctx->spirv.loop_stack_idx > 0);
+-    int pos = ctx->spirv.loop_stack_idx - 1;
++    int pos;
++    if (ctx->spirv.loop_stack_idx <= 0)
++    {
++        memset(loop, '\0', sizeof (*loop));
++        fail(ctx, "Shader closes a loop that was never opened.");
++        return;
++    } // if
++    pos = ctx->spirv.loop_stack_idx - 1;
+     *loop = ctx->spirv.loop_stack[pos];
+ } // spv_loop_get
+ 
+ static void spv_loop_pop(Context *ctx, SpirvLoopInfo *loop)
+ {
+     spv_loop_get(ctx, loop);
+-    ctx->spirv.loop_stack_idx--;
++    if (ctx->spirv.loop_stack_idx > 0)
++        ctx->spirv.loop_stack_idx--;
+ } // spv_loop_pop
+ 
+ static uint32 spv_loop_get_aL(Context *ctx)
+@@ -668,8 +711,14 @@ static void spv_check_read_reg_id(Context *ctx, RegisterList *r)
  {
      if (r->spirv.iddecl == 0)
      {
@@ -1148,7 +1235,7 @@ index 5d5999b..ec28b94 100644
          switch (r->regtype)
          {
              case REG_TYPE_SAMPLER: // s# (only ps_1_1)
-@@ -790,7 +809,11 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
+@@ -790,7 +839,11 @@ static void spv_add_attrib_fixup(Context *ctx, RegisterList *r, unsigned int typ
      uint32* next_types;
      uint32* next_opcodes;
  
@@ -1161,7 +1248,7 @@ index 5d5999b..ec28b94 100644
      #define TYPE_LOAD_OFFSET ctx->spirv.patch_table.attrib_type_load_offsets[r->usage][r->index]
  
      next_types = (uint32*) Malloc(ctx, sizeof(uint32) * (TYPE_LOAD_OFFSET.num_loads + 1));
-@@ -821,9 +844,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+@@ -821,9 +874,17 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
  
      uint32 id_src = r->spirv.iddecl;
      SpirvResult result;
@@ -1179,7 +1266,7 @@ index 5d5999b..ec28b94 100644
          result.tid = spv_image_from_texturetype(ctx, (TextureType)sreg->index);
      } // if
      else if (regtype == REG_TYPE_CONSTBOOL)
-@@ -862,7 +893,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
+@@ -862,7 +923,13 @@ static SpirvResult spv_loadreg(Context *ctx, RegisterList *r)
          return result;
      } // if
  
@@ -1194,7 +1281,7 @@ index 5d5999b..ec28b94 100644
      result.id = spv_bumpid(ctx);
  
      push_output(ctx, &ctx->mainline);
-@@ -928,12 +965,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -928,12 +995,18 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
      if (no_swizzle(swizzle) && writemask_xyzw(writemask))
          return arg;
  
@@ -1219,7 +1306,7 @@ index 5d5999b..ec28b94 100644
  
      SpirvTypeIdx sti_arg = STI_VOID;
      for (i = STI_CORE_START_; i < STI_CORE_END_; i++)
-@@ -944,7 +987,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -944,7 +1017,11 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
              break;
          } // if
      } // for
@@ -1232,7 +1319,7 @@ index 5d5999b..ec28b94 100644
  
      // We should not leave any value undefined, as it may end up used (eg. dot
      // product), which will make everything relying on it's result undefined.
-@@ -969,9 +1016,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
+@@ -969,9 +1046,8 @@ SpirvResult spv_swizzle(Context *ctx, SpirvResult arg, const int swizzle, const
              break;
  
          default:
@@ -1244,7 +1331,7 @@ index 5d5999b..ec28b94 100644
      } // switch
  
      SpirvTypeIdx sti_result = spv_change_base_type_vec_dim(sti_arg, resdim);
-@@ -2867,7 +2913,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
+@@ -2867,7 +2943,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
  {
      SpirvResult result;
  
