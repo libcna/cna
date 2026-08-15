@@ -29,17 +29,21 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**The renderer implementation and post-implementation contract audit are delivered.** The local
-Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
-`-DCNA_GRAPHICS_RENDERER=TINYGL`; the public renderer identity count is **47**
-(`scripts/check_renderer_identities.py`). TINYGL-19 cross-platform closure is nearly complete:
-Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, and Windows/MSVC
-x86_64 now **configures, compiles and links completely** — all 596 build steps — after eleven fix
-cycles that each cleared a *different* error class rather than repeating one (build step
-37 → 55 → 91 → 154 → 168 → 257 → 329 → 571 → 596). The one remaining Windows problem is that the
-suites do not yet run there: they timed out with no output because the SDL DLLs were not beside
-the executables. That fix is pushed and awaiting its run. Not one blocker so far has been a TinyGL
-rendering-contract failure.
+**Complete.** The renderer, its post-implementation contract audit and its cross-platform
+verification are all delivered, and every task in the table below is DONE. The renderer has 14
+CTest suites and 113 checks under `-DCNA_GRAPHICS_RENDERER=TINYGL`, and **all three native hosts
+pass 14/14**: Linux/GCC x86_64, macOS/AppleClang arm64 and Windows/MSVC x86_64, in
+[run 31893559239](https://github.com/openeggbert/cna/actions/runs/31893559239) at CNA `a9017a01b`.
+The public renderer identity count is **47** (`scripts/check_renderer_identities.py`).
+
+Windows took twelve fix cycles, each clearing a *different* error class rather than repeating one
+(build step 37 → 55 → 91 → 154 → 168 → 257 → 329 → 571 → 596, then process startup). **Not one of
+them was a TinyGL rendering-contract failure** — every blocker was portability debt in the shared
+`sharp-runtime`, in upstream TinyGL's own build, or in CNA's build wiring, and every pixel
+expectation in all 113 checks held identically on all three hosts the first time each one ran.
+
+No further work is planned. Any new renderer feature needs its own explicit owner instruction,
+exactly like every other renderer's plan.
 
 ## Implemented
 
@@ -174,60 +178,59 @@ them are refused one step earlier.
 | `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus (5 suites, 9 checks) | **DONE** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
-| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in every run; Windows configures, compiles and links all 596 steps, and the suites' first run there is pending |
+| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **DONE** — all three hosts build, link and pass 14/14 in [run 31893559239](https://github.com/openeggbert/cna/actions/runs/31893559239) |
 
-## Continuation handoff (2026-08-15, written for a fresh context)
+## TINYGL-19 closure record (2026-08-15)
 
-The renderer, its audit and its capability work are **complete and unchanged by any of the work
-below**. Everything since is TINYGL-19: proving the same 14 suites build and pass on native
-Linux/GCC x86_64, macOS/AppleClang arm64 and Windows/MSVC x86_64. Nothing CI has exposed so far
-was a TinyGL rendering-contract failure — every single blocker was portability debt in the shared
-`sharp-runtime`, in upstream TinyGL's own build, or in CNA's build wiring.
+The renderer, its audit and its capability work were **complete before this phase and unchanged by
+any of it**. TINYGL-19 was solely about proving the same 14 suites build and pass on native
+Linux/GCC x86_64, macOS/AppleClang arm64 and Windows/MSVC x86_64. They do. What follows is kept
+because it is the evidence, and because the lessons transfer to the next renderer that has to cross
+the same three toolchains.
 
-### Where this stands right now
+### Final state
 
-Linux and macOS have passed 14/14 in every run all day. Windows now **configures, compiles and
-links completely** — all 596 build steps — after eleven fix cycles. The last remaining problem is
-that the tests do not yet *run* there.
-
-| Windows stage | State |
+| Host | Result |
 |---|---|
-| Configure | passes |
-| Compile `sharp-runtime` (~250 steps) | passes |
-| Compile upstream TinyGL C sources | passes |
-| Compile CNA (~300 steps) | passes |
-| Link all 15 test executables | passes |
-| **Run the 14 suites** | **all timed out at 30 s with no output; fix pushed, unverified** |
+| GCC, Ubuntu 24.04, x86_64 | 14/14 |
+| AppleClang, macOS 14, arm64 | 14/14 |
+| MSVC, windows-latest, x86_64 | 14/14 — all 596 build steps, then `100% tests passed out of 14` |
 
-The final failing evidence is run
-[31892934349](https://github.com/openeggbert/cna/actions/runs/31892934349): every suite
-`***Timeout 30.00 sec`, not one gtest banner printed. That is not a test failure — the process
-never reached `main()`. SDL3 is built as DLLs on Windows and installed to
-`.sdl-prebuilt-Windows-AMD64/install/bin`, the test executables link `SDL3::SDL3`, and Windows
-resolves DLLs from the executable's own directory with no RPATH, so the loader killed each process
-before entry and the runner sat on it until ctest timed it out. CNA commit `a9017a01b` copies
-those DLLs next to the executables at configure time; **its CI run is the thing to check first.**
+Green run: [31893559239](https://github.com/openeggbert/cna/actions/runs/31893559239) at CNA
+`a9017a01b`. The matrix is `.github/workflows/tinygl-cross-platform-ci.yml`; it builds fifteen test
+executables and runs `ctest -L TinyGL` on every host.
+
+The last Windows blocker was not a test failure at all. In run
+[31892934349](https://github.com/openeggbert/cna/actions/runs/31892934349) every suite reported
+`***Timeout 30.00 sec` with not one gtest banner printed, because the process never reached
+`main()`: SDL3 is built as DLLs on Windows and installed to `.sdl-prebuilt-Windows-AMD64/install/bin`,
+the test executables link `SDL3::SDL3`, and Windows resolves DLLs from the executable's own
+directory with no RPATH, so the loader failed each process before entry and the runner sat on it
+until ctest killed it. `a9017a01b` copies those DLLs into `CMAKE_BINARY_DIR` at configure time,
+where every test executable is written. The configure log of the green run says
+`-- CNA: copied 3 SDL runtime DLL(s) next to the test executables`, and the suites ran in 2.47 s.
+
+**Read a uniform timeout with no output as a startup failure, never as a slow test.** The two
+shapes are distinguishable at a glance and lead to completely different investigations.
 
 ### Repositories, heads and pins
 
-- CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
-  `a9017a01b` plus whatever commit carries this plan update.
-- SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`. The
-  user explicitly authorised direct pushes to `sharp-runtime/develop` for this work. The last
-  commit made for TINYGL-19 is `f23ded28c7b94a745cf82f8804b5b7104ca5780e`, **and that is what the
-  workflow pins** — deliberately, not because the pin is stale. A concurrent session has since
-  advanced `develop` to `7a46a538` with 316 files of unrelated XML/IO work (its test floor is
-  17,057 across 38 executables, not the 16,344 this task verified against). Windows is now past
-  sharp-runtime entirely, so advancing the pin would re-open ~250 build steps of brand-new,
-  MSVC-unverified code while this task is being closed. Do not advance it to pick up unrelated
-  work; if a further SharpRuntime fix does prove necessary, that content comes along with it and
-  has to be re-verified on all three platforms.
+- CNA: branch `next`, green at `a9017a01b`.
+- SharpRuntime: `openeggbert/sharp-runtime`, branch `develop`. The user explicitly authorised
+  direct pushes to that branch for this work. The last commit made for TINYGL-19 is
+  `f23ded28c7b94a745cf82f8804b5b7104ca5780e`, **and that is what the workflow pins** — deliberately,
+  not because the pin is stale. A concurrent session advanced `develop` past it on the same day with
+  316 files of unrelated XML/IO work (its test floor is 17,057 across 38 executables, not the 16,344
+  this task verified against). The pin is a verified triple: this exact SharpRuntime SHA, this
+  TinyGL SHA and this CNA tree are what passed on three hosts together. Advancing it to pick up
+  unrelated work replaces a proven combination with an unproven one; if a future SharpRuntime fix is
+  needed here, whatever else has landed comes with it and the whole matrix has to be re-verified.
 - `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
   SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`. Never replace either with a moving branch.
 - Local build directory `cmake-build-tinygl/` is configured and warm; local sharp-runtime builds
   use its `build/` directory with at most two jobs.
 
-### What TINYGL-19 has fixed, in order
+### What TINYGL-19 fixed, in order
 
 Each row is one CI cycle. SharpRuntime rows were verified locally (full build, then
 `scripts/run_component_tests.sh build`, 16,341→16,344 checks across 37 executables) before being
@@ -251,7 +254,7 @@ pushed to `develop` and pinned by full SHA.
 Matching CNA pin commits for the SharpRuntime rows: `1faefcd4b`, `3d5303410`, `9ad2194d9`,
 `5e4457e27`, `4dd97692c`, `b7a9cb532`.
 
-### Four lessons that will save the next context real time
+### Four lessons worth carrying to the next cross-platform renderer
 
 **1. Three local detectors replace most CI round-trips. Run them before every push.** None needs a
 build directory; all are `-fsyntax-only` with `-I` for each `modules/*/include` and
@@ -322,30 +325,18 @@ added to the link closure, add it to both `paths:` lists.
 - `workflow_dispatch` returns HTTP 403 — it needs repository-admin permission. Push a change under
   the watched paths to start the matrix.
 
-### Work remaining
+### Local evidence backing the closure
 
-1. **Check the run for CNA `a9017a01b`.** If the 14 suites now pass on Windows, TINYGL-19 is done
-   except for documentation; go to step 4.
-2. If they still fail, distinguish the two shapes before fixing anything: *no output plus a
-   uniform 30 s timeout* means the process never started (a DLL the loader cannot find — check
-   which, the SDL trio is handled but zlib comes from vcpkg), whereas *gtest output followed by a
-   comparison failure* is a genuine renderer or fixture difference and belongs in this plan as a
-   capability note, not a build fix.
-3. Repeat the cycle for any further failure: run the three detectors first, fix at the root, never
-   weaken a warning, never replace a pin with a branch, and verify locally on Linux before
-   pushing. If a SharpRuntime change is needed, build it with at most two jobs, run
-   `scripts/run_component_tests.sh build` to a clean full pass, push to `develop` and pin the new
-   full 40-character SHA.
-4. When all three jobs are green: set this Status and the TINYGL-19 row to **DONE**, and update
-   `docs/tinygl-renderer.md` — it still says "Verified on Linux x86_64 only", which must become
-   native Linux x86_64, macOS arm64 and Windows x86_64, with the final green run linked. Note
-   there that MSVC builds TinyGL single-threaded (already documented in the build section).
-5. The local evidence for the final report is **already collected** against SharpRuntime
-   `f23ded28` and does not need repeating unless CNA sources change again: 14/14 TinyGL suites
-   pass; the no-OpenMP pass (`cmake -S . -B cmake-build-tinygl
-   -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON`, rebuild, test, then reconfigure with `=OFF` to
-   restore) passes 14/14 with zero `GOMP_*`/`omp_*` references in `libtinygl-static.a`;
-   `python3 scripts/check_renderer_identities.py` reports 47 identities.
+Collected against SharpRuntime `f23ded28` and re-checked on the final tree:
+
+- `ctest --test-dir cmake-build-tinygl -L TinyGL` — 14/14 pass.
+- The no-OpenMP pass (`cmake -S . -B cmake-build-tinygl -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON`,
+  rebuild, test, then reconfigure with `=OFF` to restore) passes 14/14 with zero `GOMP_*`/`omp_*`
+  references in `libtinygl-static.a`.
+- `python3 scripts/check_renderer_identities.py` reports 47 identities.
+
+If CNA sources under this renderer change again, re-run the first and third; the OpenMP pass only
+needs repeating if the TinyGL integration itself changes.
 
 Keep the current capability boundary: "maximum" here means every XNA-facing operation the
 fixed-function TinyGL rasterizer can implement faithfully, plus deterministic rejection of
@@ -454,7 +445,11 @@ than overridden.
 
 ## Remaining phase
 
-`TINYGL-19` is the only active phase. Linux x86_64 and macOS arm64 are verified; Windows x86_64
-builds and links completely and needs its first passing test run, then the final documentation --
-follow the continuation handoff above, which is written to be picked up cold. Any new renderer feature after TINYGL-19 needs its own explicit owner instruction,
-exactly like every other renderer's plan.
+None. Every task from `TINYGL-0` through `TINYGL-22` is DONE, and `TINYGL-19` closed the last one
+by verifying native Linux x86_64, macOS arm64 and Windows x86_64. Any new renderer feature after
+this needs its own explicit owner instruction, exactly like every other renderer's plan.
+
+Two things to preserve if this plan is reopened: the pinned SharpRuntime and TinyGL SHAs in
+`.github/workflows/tinygl-cross-platform-ci.yml` are a verified triple with the CNA tree, not
+incidental version numbers; and the `paths:` lists in that workflow must keep naming every module
+the fifteen test targets link, or a change can merge behind a green tick that never ran.
