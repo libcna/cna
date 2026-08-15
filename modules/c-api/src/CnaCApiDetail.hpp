@@ -140,6 +140,7 @@ enum class ObjectKind : uint32_t {
     Compass = 94,
     Motion = 95,
     SystemTray = 96,
+    Camera = 97,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

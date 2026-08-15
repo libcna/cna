@@ -876,6 +876,268 @@ CNA_C_API CNA_Result cna_system_tray_click_entry_for_tests_ext(
  */
 CNA_C_API CNA_Result cna_system_tray_destroy(CNA_SystemTrayHandle tray);
 
+/* ---- Camera ---- */
+
+/** @brief Fixed-width identity of a camera's current state. */
+typedef uint32_t CNA_CameraState;
+
+/** @brief No camera support exists on this platform. */
+#define CNA_CAMERA_STATE_NOT_SUPPORTED UINT32_C(0)
+/** @brief The camera is not open. */
+#define CNA_CAMERA_STATE_CLOSED UINT32_C(1)
+/** @brief The camera is opening and not yet producing frames. */
+#define CNA_CAMERA_STATE_OPENING UINT32_C(2)
+/** @brief The user or platform refused access to the camera. */
+#define CNA_CAMERA_STATE_DENIED UINT32_C(3)
+/** @brief The camera is open and producing frames. */
+#define CNA_CAMERA_STATE_READY UINT32_C(4)
+/** @brief The camera was disconnected after being opened. */
+#define CNA_CAMERA_STATE_LOST UINT32_C(5)
+/** @brief Highest defined camera-state identity. */
+#define CNA_CAMERA_STATE_MAXIMUM CNA_CAMERA_STATE_LOST
+
+/** @brief Fixed-width identity of where a camera faces. */
+typedef uint32_t CNA_CameraPosition;
+
+/** @brief The camera's facing is not reported by the platform. */
+#define CNA_CAMERA_POSITION_UNKNOWN UINT32_C(0)
+/** @brief The camera faces the user. */
+#define CNA_CAMERA_POSITION_FRONT_FACING UINT32_C(1)
+/** @brief The camera faces away from the user. */
+#define CNA_CAMERA_POSITION_BACK_FACING UINT32_C(2)
+/** @brief Highest defined camera-position identity. */
+#define CNA_CAMERA_POSITION_MAXIMUM CNA_CAMERA_POSITION_BACK_FACING
+
+/**
+ * @brief Describes one camera the platform reports.
+ *
+ * The canonical descriptor's name lives outside this value and is read with
+ * `cna_camera_get_name_size_at_ext`/`cna_camera_copy_name_at_ext`, the same split the sensor and
+ * joystick descriptors use.
+ */
+typedef struct CNA_CameraDeviceInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One `CNA_CAMERA_POSITION_*` identity. */
+    CNA_CameraPosition position;
+} CNA_CameraDeviceInfo;
+
+/** @brief Owned handle to one camera. */
+typedef CNA_Handle CNA_CameraHandle;
+
+/**
+ * @brief Initializes a camera descriptor to the canonical default.
+ *
+ * @param out_info Receives a descriptor whose facing is unknown.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_camera_device_info_init(CNA_CameraDeviceInfo* out_info);
+
+/**
+ * @brief Reports whether this platform has any camera driver at all.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_supported Receives `CNA_TRUE` when a camera driver exists.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension
+ *         layer, or a documented argument/handle/thread failure.
+ *
+ * A driver is not a camera: this can answer `CNA_TRUE` on a machine with no camera attached, which
+ * is why the enumeration below is a separate question.
+ */
+CNA_C_API CNA_Result cna_camera_get_is_supported_ext(CNA_Handle game, CNA_Bool* out_supported);
+
+/**
+ * @brief Returns how many cameras the platform currently reports.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_count Receives the camera count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension
+ *         layer, or a documented argument/handle/thread failure.
+ *
+ * Each enumeration is a point-in-time snapshot taken by the call, so an index is only valid until
+ * the camera set changes.
+ */
+CNA_C_API CNA_Result cna_camera_get_count_ext(CNA_Handle game, uint64_t* out_count);
+
+/**
+ * @brief Returns one enumerated camera's descriptor.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based camera index below the reported count.
+ * @param out_info Receives the descriptor.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count,
+ *         `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension layer, or a documented
+ *         handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_camera_get_info_at_ext(
+    CNA_Handle game,
+    uint64_t index,
+    CNA_CameraDeviceInfo* out_info);
+
+/**
+ * @brief Returns the byte count of one enumerated camera's name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based camera index below the reported count.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count,
+ *         `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension layer, or a documented
+ *         handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_camera_get_name_size_at_ext(
+    CNA_Handle game,
+    uint64_t index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies one enumerated camera's name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based camera index below the reported count.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count,
+ *         `CNA_RESULT_NOT_SUPPORTED`, or a documented failure.
+ */
+CNA_C_API CNA_Result cna_camera_copy_name_at_ext(
+    CNA_Handle game,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Opens the platform's default camera.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_camera Receives an owned camera handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension
+ *         layer, or a documented argument/handle/thread/native failure.
+ *
+ * Creation succeeds even where no camera exists; the state reports which case it is. On platforms
+ * that ask the user for permission, opening may be what triggers that prompt.
+ */
+CNA_C_API CNA_Result cna_camera_create(CNA_Handle game, CNA_CameraHandle* out_camera);
+
+/**
+ * @brief Creates a camera backed by this ABI's own test backend.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_camera Receives an owned camera handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when this build has no device extension
+ *         layer, or a documented argument/handle/thread failure.
+ *
+ * The canonical class takes its backend as a constructor argument rather than through a switch, so
+ * this ABI mirrors that with a second creation route, exactly as the system tray does. The camera
+ * starts closed with no frame; `cna_camera_set_test_frame_ext` gives it one.
+ */
+CNA_C_API CNA_Result cna_camera_create_with_test_backend_ext(
+    CNA_Handle game,
+    CNA_CameraHandle* out_camera);
+
+/**
+ * @brief Returns the camera's current state.
+ *
+ * @param camera Owned camera handle.
+ * @param out_state Receives one `CNA_CAMERA_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_camera_get_state_ext(CNA_CameraHandle camera, CNA_CameraState* out_state);
+
+/**
+ * @brief Returns the width of the frames this camera produces.
+ *
+ * @param camera Owned camera handle.
+ * @param out_width Receives the width in pixels, or zero when no frame format is known yet.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_camera_get_frame_width_ext(CNA_CameraHandle camera, int32_t* out_width);
+
+/**
+ * @brief Returns the height of the frames this camera produces.
+ *
+ * @param camera Owned camera handle.
+ * @param out_height Receives the height in pixels, or zero when no frame format is known yet.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_camera_get_frame_height_ext(CNA_CameraHandle camera, int32_t* out_height);
+
+/**
+ * @brief Copies the next available frame into a caller-owned texture.
+ *
+ * @param camera Owned camera handle.
+ * @param texture Owned Color-format `Texture2D` handle whose dimensions must already equal the
+ *        camera's frame size.
+ * @param out_acquired Receives `CNA_TRUE` when a frame was copied.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The camera writes into a texture **the caller owns and keeps**, which is the canonical contract
+ * and the opposite of a video player's per-frame borrowed texture: nothing here is invalidated by
+ * the next call. Two canonical behaviors are preserved rather than corrected: having no frame ready
+ * is an ordinary `CNA_FALSE` rather than a failure, and **a texture whose size does not match the
+ * frame is refused the same way** — the canonical route neither resizes it nor reports why. Read the
+ * frame size first and size the texture to it.
+ */
+CNA_C_API CNA_Result cna_camera_try_acquire_frame_ext(
+    CNA_CameraHandle camera,
+    CNA_Handle texture,
+    CNA_Bool* out_acquired);
+
+/**
+ * @brief Sets the state this ABI's own camera backend reports.
+ *
+ * @param camera Owned camera handle created with the test backend.
+ * @param state One `CNA_CAMERA_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity,
+ *         `CNA_RESULT_INVALID_STATE` when the camera does not use the test backend, or a documented
+ *         handle/thread failure.
+ *
+ * No verification machine has a camera, so the refused, denied and lost states are only reachable
+ * this way.
+ */
+CNA_C_API CNA_Result cna_camera_set_test_state_ext(
+    CNA_CameraHandle camera,
+    CNA_CameraState state);
+
+/**
+ * @brief Publishes a frame through this ABI's own camera backend.
+ *
+ * @param camera Owned camera handle created with the test backend.
+ * @param width Frame width in pixels.
+ * @param height Frame height in pixels.
+ * @param pixels RGBA8 pixels, exactly @p width multiplied by @p height of them; null clears the
+ *        frame and closes the camera.
+ * @param pixel_count Number of pixels in @p pixels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a mismatched count or a negative
+ *         dimension, `CNA_RESULT_INVALID_STATE` when the camera does not use the test backend, or a
+ *         documented handle/thread failure.
+ *
+ * Publishing a frame also reports the camera as ready and fixes its frame size, which is what a real
+ * camera does when it starts producing. The frame stays available until it is replaced.
+ */
+CNA_C_API CNA_Result cna_camera_set_test_frame_ext(
+    CNA_CameraHandle camera,
+    int32_t width,
+    int32_t height,
+    const CNA_Color* pixels,
+    uint64_t pixel_count);
+
+/**
+ * @brief Releases a camera handle and closes the device.
+ *
+ * @param camera Owned camera handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_camera_destroy(CNA_CameraHandle camera);
+
 #ifdef __cplusplus
 }
 #endif

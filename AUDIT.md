@@ -73,8 +73,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CNA::Devices` service set — host power, system information, preferred locales, display metrics,
 > clipboard acceptance, URL launching, message boxes, file dialogs and the system tray — each
 > exported in both build states and reporting `NOT_SUPPORTED` where the extension layer is compiled
-> out. The
-> generated inventory currently records 5,016 implemented, 30 partial, 1,167 planned and 202
+> out, and `CBIND-037D4` closes the devices module with the camera: the driver probe, the camera
+> enumeration, frame acquisition into a caller-owned texture, and this ABI's own installable camera
+> backend. The
+> generated inventory currently records 5,040 implemented, 30 partial, 1,143 planned and 202
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

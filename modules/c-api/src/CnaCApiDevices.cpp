@@ -16,7 +16,12 @@
 #include <vector>
 
 #ifdef CNA_DEVICES
+#include "CNA/Devices/Camera.hpp"
+#include "CNA/Devices/CameraDeviceInfo.hpp"
+#include "CNA/Devices/CameraPosition.hpp"
+#include "CNA/Devices/CameraState.hpp"
 #include "CNA/Devices/Clipboard.hpp"
+#include "CNA/Devices/Detail/ICameraBackend.hpp"
 #include "CNA/Devices/Detail/IFileDialogBackend.hpp"
 #include "CNA/Devices/Detail/IMessageBoxBackend.hpp"
 #include "CNA/Devices/Detail/ITrayBackend.hpp"
@@ -32,7 +37,9 @@
 #include "CNA/Devices/SystemInfo.hpp"
 #include "CNA/Devices/SystemTray.hpp"
 #include "CNA/Devices/UrlLauncher.hpp"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
 #include <functional>
@@ -197,6 +204,10 @@ std::shared_ptr<VibrationTestState>& VibrationTestStorage()
 
 #ifdef CNA_DEVICES
 
+using CNA::Devices::Camera;
+using CNA::Devices::CameraDeviceInfo;
+using CNA::Devices::CameraPosition;
+using CNA::Devices::CameraState;
 using CNA::Devices::Clipboard;
 using CNA::Devices::DisplayInfo;
 using CNA::Devices::FileDialog;
@@ -550,6 +561,98 @@ void DeliverFileDialogResult(
     return CNA::C::Detail::GetGameWindow(gameHandle, outWindow);
 }
 
+// Nothing this ABI is verified on has a camera, and the canonical class takes its backend as a
+// constructor argument, so this is the only path to a frame.
+struct CameraTestState final {
+    std::mutex mutex;
+    CameraState state = CameraState::Closed;
+    int width = 0;
+    int height = 0;
+    std::vector<std::uint8_t> rgba;
+    bool hasFrame = false;
+};
+
+class TestCameraBackend final : public CNA::Devices::Detail::ICameraBackend {
+public:
+    explicit TestCameraBackend(std::shared_ptr<CameraTestState> state)
+        : state_(std::move(state))
+    {
+    }
+
+    [[nodiscard]] CameraState GetState() override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->state;
+    }
+
+    [[nodiscard]] int GetFrameWidth() const override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->width;
+    }
+
+    [[nodiscard]] int GetFrameHeight() const override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        return state_->height;
+    }
+
+    bool TryAcquireFrame(CNA::Devices::Detail::CameraFrame& outFrame) override
+    {
+        const std::lock_guard<std::mutex> lock(state_->mutex);
+        if (!state_->hasFrame) {
+            return false;
+        }
+        outFrame.Width = state_->width;
+        outFrame.Height = state_->height;
+        outFrame.RgbaPixels = state_->rgba;
+        return true;
+    }
+
+private:
+    std::shared_ptr<CameraTestState> state_;
+};
+
+struct CameraResource final {
+    std::unique_ptr<Camera> value;
+    std::shared_ptr<CameraTestState> testState;
+};
+
+[[nodiscard]] CNA_Result BorrowCamera(
+    const CNA_Handle handle,
+    std::shared_ptr<CameraResource>* const outCamera)
+{
+    const CNA_Result result =
+        CNA::C::Detail::GetRuntimeHandles().Get(handle, ObjectKind::Camera, outCamera);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The camera handle is invalid for this call.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowEnumeratedCamera(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CameraDeviceInfo* const outInfo)
+{
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::vector<CameraDeviceInfo> cameras = Camera::getAvailableCamerasProperty();
+    if (index >= static_cast<uint64_t>(cameras.size())) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The camera index is at or past the reported count.");
+    }
+    *outInfo = cameras[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
 #endif // CNA_DEVICES
 
 } // namespace
@@ -745,6 +848,21 @@ CNA_Result cna_vibrate_controller_get_test_log_ext(
             log.last_small_motor = state->lastSmallMotor;
         }
         *outLog = log;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_device_info_init(CNA_CameraDeviceInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr) {
+            return InvalidInput("The camera descriptor output is null.");
+        }
+        CNA_CameraDeviceInfo info = {};
+        info.struct_size = sizeof(CNA_CameraDeviceInfo);
+        info.struct_version = StructureVersion;
+        info.position = CNA_CAMERA_POSITION_UNKNOWN;
+        *outInfo = info;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1649,6 +1767,325 @@ CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
     });
 }
 
+CNA_Result cna_camera_get_is_supported_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The camera support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = Camera::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_count_ext(const CNA_Handle gameHandle, uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The camera count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(Camera::getAvailableCamerasProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr) {
+            return InvalidInput("The camera descriptor output is null.");
+        }
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA_CameraDeviceInfo mapped = {};
+        mapped.struct_size = sizeof(CNA_CameraDeviceInfo);
+        mapped.struct_version = StructureVersion;
+        mapped.position = static_cast<CNA_CameraPosition>(info.Position);
+        *outInfo = mapped;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The camera name size output is null.");
+        }
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = info.Name.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CameraDeviceInfo info;
+        if (const CNA_Result result = BorrowEnumeratedCamera(gameHandle, index, &info);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(info.Name, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_camera_create(const CNA_Handle gameHandle, CNA_CameraHandle* const outCamera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCamera == nullptr) {
+            return InvalidInput("The camera output is null.");
+        }
+        *outCamera = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<CameraResource>();
+        resource->value = std::make_unique<Camera>();
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Camera,
+            std::move(resource),
+            outCamera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle gameHandle,
+    CNA_CameraHandle* const outCamera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCamera == nullptr) {
+            return InvalidInput("The camera output is null.");
+        }
+        *outCamera = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<CameraResource>();
+        resource->testState = std::make_shared<CameraTestState>();
+        resource->value =
+            std::make_unique<Camera>(std::make_unique<TestCameraBackend>(resource->testState));
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Camera,
+            std::move(resource),
+            outCamera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_state_ext(
+    const CNA_CameraHandle camera,
+    CNA_CameraState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The camera state output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_CameraState>(resource->value->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_frame_width_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const outWidth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWidth == nullptr) {
+            return InvalidInput("The camera frame width output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWidth = static_cast<int32_t>(resource->value->getFrameWidthProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_get_frame_height_ext(
+    const CNA_CameraHandle camera,
+    int32_t* const outHeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeight == nullptr) {
+            return InvalidInput("The camera frame height output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeight = static_cast<int32_t>(resource->value->getFrameHeightProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle textureHandle,
+    CNA_Bool* const outAcquired)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAcquired == nullptr) {
+            return InvalidInput("The camera frame output is null.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+        if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAcquired = resource->value->TryAcquireFrame(*texture->value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (state > CNA_CAMERA_STATE_MAXIMUM) {
+            return InvalidInput("The camera state is not a defined identity.");
+        }
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!resource->testState) {
+            return NoTestBackend();
+        }
+        const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+        resource->testState->state = static_cast<CameraState>(state);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixelCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!resource->testState) {
+            return NoTestBackend();
+        }
+        if (pixels == nullptr) {
+            const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+            resource->testState->hasFrame = false;
+            resource->testState->rgba.clear();
+            resource->testState->width = 0;
+            resource->testState->height = 0;
+            resource->testState->state = CameraState::Closed;
+            return CNA_RESULT_SUCCESS;
+        }
+        if (width < 0 || height < 0) {
+            return InvalidInput("A camera frame dimension is negative.");
+        }
+        const uint64_t expected =
+            static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+        if (expected != pixelCount) {
+            return InvalidInput("The camera frame pixel count does not match its dimensions.");
+        }
+        std::vector<std::uint8_t> rgba;
+        rgba.reserve(static_cast<std::size_t>(pixelCount) * 4U);
+        for (uint64_t index = UINT64_C(0); index < pixelCount; ++index) {
+            rgba.push_back(pixels[index].r);
+            rgba.push_back(pixels[index].g);
+            rgba.push_back(pixels[index].b);
+            rgba.push_back(pixels[index].a);
+        }
+        const std::lock_guard<std::mutex> lock(resource->testState->mutex);
+        resource->testState->rgba = std::move(rgba);
+        resource->testState->width = static_cast<int>(width);
+        resource->testState->height = static_cast<int>(height);
+        resource->testState->hasFrame = true;
+        resource->testState->state = CameraState::Ready;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<CameraResource> resource;
+        if (const CNA_Result result = BorrowCamera(camera, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(camera);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The camera handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 #else // CNA_DEVICES
 
 CNA_Result cna_power_get_state_ext(const CNA_Handle game, CNA_PowerState* const outState)
@@ -2051,6 +2488,139 @@ CNA_Result cna_system_tray_click_entry_for_tests_ext(
 CNA_Result cna_system_tray_destroy(const CNA_SystemTrayHandle tray)
 {
     (void)tray;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_is_supported_ext(const CNA_Handle game, CNA_Bool* const outSupported)
+{
+    (void)game;
+    (void)outSupported;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_count_ext(const CNA_Handle game, uint64_t* const outCount)
+{
+    (void)game;
+    (void)outCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_info_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    CNA_CameraDeviceInfo* const outInfo)
+{
+    (void)game;
+    (void)index;
+    (void)outInfo;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_name_size_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_copy_name_at_ext(
+    const CNA_Handle game,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    (void)game;
+    (void)index;
+    (void)destination;
+    (void)capacity;
+    (void)outBytes;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_create(const CNA_Handle game, CNA_CameraHandle* const outCamera)
+{
+    (void)game;
+    if (outCamera != nullptr) {
+        *outCamera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_create_with_test_backend_ext(
+    const CNA_Handle game,
+    CNA_CameraHandle* const outCamera)
+{
+    (void)game;
+    if (outCamera != nullptr) {
+        *outCamera = CNA_INVALID_HANDLE;
+    }
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_state_ext(const CNA_CameraHandle camera, CNA_CameraState* const outState)
+{
+    (void)camera;
+    (void)outState;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_frame_width_ext(const CNA_CameraHandle camera, int32_t* const outWidth)
+{
+    (void)camera;
+    (void)outWidth;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_get_frame_height_ext(const CNA_CameraHandle camera, int32_t* const outHeight)
+{
+    (void)camera;
+    (void)outHeight;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_try_acquire_frame_ext(
+    const CNA_CameraHandle camera,
+    const CNA_Handle texture,
+    CNA_Bool* const outAcquired)
+{
+    (void)camera;
+    (void)texture;
+    (void)outAcquired;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_set_test_state_ext(
+    const CNA_CameraHandle camera,
+    const CNA_CameraState state)
+{
+    (void)camera;
+    (void)state;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_set_test_frame_ext(
+    const CNA_CameraHandle camera,
+    const int32_t width,
+    const int32_t height,
+    const CNA_Color* const pixels,
+    const uint64_t pixelCount)
+{
+    (void)camera;
+    (void)width;
+    (void)height;
+    (void)pixels;
+    (void)pixelCount;
+    return ExtensionUnavailable();
+}
+
+CNA_Result cna_camera_destroy(const CNA_CameraHandle camera)
+{
+    (void)camera;
     return ExtensionUnavailable();
 }
 

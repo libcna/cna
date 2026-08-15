@@ -414,7 +414,7 @@ the compiled-out contract. Both states must stay green.
 | CBIND-037D2a | 80 | Map the motion sensors, their failures and the test-support surface | ✅ | `Accelerometer` and `Gyroscope` are owned handles in `sensors.h`; `CnaCApiSensors.cpp` carries them, and the two exception types become one route rather than a type. The common base is a **class template**, so C repeats its contract per sensor instead of modeling a base — the reading-changed callback delivers the reading itself, because the event-argument wrapper adds nothing. Three canonical behaviors are reported, not smoothed: reading an unsupported sensor's value fails `INVALID_STATE` (the canonical property throws rather than defaulting), a **second disposal is refused** where every other disposable in this ABI is idempotent, and there is no disposal query at all because the canonical flag is protected — the disposed state is observed through the refusals. `SensorFailedException`'s error id reaches C exactly as the network join error does: recorded per thread by the barrier, read back with `cna_sensors_get_last_error_id_ext`. The **test-support surface is mapped deliberately** — no verification machine has motion sensors, so `set_supported_for_tests_ext` plus `inject_synthetic_update_ext` are what let a C consumer reach the supported path and the real dispatch chain; the injector takes platform units, so 9.80665 m/s² reads back as 1 g. Strict-C `SensorDeviceSmoke.c` covers both dispatch paths, the detaching registration, the double-start failure and its error id, the disposal hook firing once, and every post-disposal and stale-handle refusal; green in all four trees (60/60) and under ASan+UBSan with leak detection on. |
 | CBIND-037D2b | 46 | Complete the remaining sensors and the reading events | ✅ | `Compass` and `Motion` are owned handles on the shape `D2a` settled, and the three canonical event-argument types resolve three different ways, by payload: the reading wrapper is a class template holding one reading, so it is flattened into the callback; the calibration argument carries nothing, so it becomes a payload-free callback and a value-free type-name pair; and the legacy accelerometer argument carries three separate components rather than a vector, so it earns a real value, `CNA_AccelerometerReadingEventInfo`, and `cna_accelerometer_subscribe_reading_changed` — whose canonical firing order after the current-value handlers this ABI reports rather than reserves. Both sensors are **unsupported on every platform this ABI is verified on**, which is the device's real answer rather than a gap, so this ABI supplies its own installable backend (`cna_<sensor>_set_test_backend_ext` plus reading and calibration injection) where the canonical hook takes a C++ object C cannot write. Three canonical limits are reported rather than smoothed: the eleventh simultaneous instance is refused, a backend cannot be swapped while acquisition runs, and the motion sensor's north-referenced answer is **vacuously true** before a backend starts. Strict-C `SensorEventsSmoke.c` drives all of it; green in all four trees (61/61) and under ASan+UBSan with leak detection on. |
 | CBIND-037D3 | 69 | Complete VibrateController and the CNA system services | ✅ | `devices.h` and `CnaCApiDevices.cpp` carry two different things, and the header says which is which: vibration belongs to the always-present canonical layer, everything else is the `#ifdef CNA_DEVICES` extension, exported in both states and reporting `NOT_SUPPORTED` when compiled out, with `cna_devices_ext_is_available` as the probe. The clipboard question is answered: **both canonical types wrap one platform clipboard**, so the reads stay the input module's and only the acceptance flag the extension adds becomes a new route. Four services end in something no test can complete — a modal dialog, an asynchronous picker, a real tray, a motor nothing here has — so this ABI supplies the backend C cannot write for three of them and mirrors the tray's canonical second-constructor seam with a second creation route; `cna_url_launcher_open_ext` has no seam and is deliberately never called with a real URL, a gap recorded rather than papered over. Canonical behaviors preserved: vibration **bounds its duration but clamps its intensity**, a not-a-number strength becomes no vibration, a tray index past the last entry is ignored rather than refused, and a windowless session answers a zero scale and an empty safe area. Strict-C `DevicesSmoke.c` covers both build states; green in all four trees (62/62) and under ASan+UBSan with leak detection on. |
-| CBIND-037D4 | 24 | Complete the camera extension | ⬜ | Map `Camera`, `CameraState`, `CameraPosition` and `CameraDeviceInfo` under the same `CNA_DEVICES` rule. A camera produces frames, so decide whether they reuse the texture contract `CBIND-037C7` established or a raw byte transfer, and expect no capture hardware in any verification tree — the unavailable path is the one that will be exercised. |
+| CBIND-037D4 | 24 | Complete the camera extension | ✅ | The frame question is answered by the canonical signature: `TryAcquireFrame` fills a `Texture2D` **the caller owns and keeps**, so the C route takes an existing texture handle rather than lending one — deliberately not the borrowed per-frame texture `CBIND-037C7` settled for video, because nothing here is lent and nothing is invalidated by the next call. Two canonical behaviors are preserved rather than corrected: no frame ready is an ordinary `CNA_FALSE`, and **a texture whose size does not match the frame is refused the same way**, with no resize and no distinct reason. The driver probe and the camera enumeration stay separate questions, because a driver is not a camera. The canonical backend constructor becomes a second creation route, mirroring the system tray, and is the only way any verification tree reaches a frame or the refused state. **The real camera is never opened by a test** — on a machine that has one that switches on the user's webcam — a gap recorded rather than papered over, like the URL launcher's. `DevicesSmoke.c` covers both build states; green in all four trees (62/62) and under ASan+UBSan with leak detection on. **This closes the whole devices module.** |
 
 #### CBIND-037C media implementation slices
 
@@ -990,7 +990,11 @@ answering the clipboard question the plan left open: the two canonical types are
 clipboard, so only the acceptance flag is new. The slice also settles what to do with routes no test
 can complete: supply the backend where the canonical class has a seam, and record the one gap where
 it does not. The snapshot is now 5,016 implemented, 30 partial, 1,167 planned and 202 not
-applicable.
+applicable. CBIND-037D4 then **closes the devices module** with the camera, deciding that a frame
+lands in a texture the caller owns and keeps rather than in a lent one, because that is what the
+canonical signature says — and preserving the canonical refusal that a mismatched texture size looks
+exactly like no frame at all. The snapshot is now 5,040 implemented, 30 partial, 1,143 planned and
+202 not applicable, with `devices` and `devices-ext` fully mapped.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -999,24 +1003,26 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037D3` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037D4` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037D4`, the camera extension — **24 rows**: `Camera`, `CameraState`,
-  `CameraPosition` and `CameraDeviceInfo`, all under the same `CNA_DEVICES` rule. It is the **last**
-  devices row: `Microsoft::Devices::Sensors`, `Microsoft::Devices` and every other `CNA::Devices`
-  service are mapped.
+- **Next task:** `CBIND-037E`, the runtime module — **273 rows**: the remaining `Game`,
+  `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events,
+  the service container, and the drawable/updateable contracts. **The whole devices module is
+  closed**: `Microsoft::Devices`, `Microsoft::Devices::Sensors` and `CNA::Devices` have no planned
+  row left, as with `input`, `media`, `storage`, `content`, `net` and `core`.
 
-  Four things are already known and should not be rediscovered: `devices.h`, `CnaCApiDevices.cpp`
-  and `DevicesSmoke.c` exist and already carry the compiled-out pattern, the availability probe
-  `cna_devices_ext_is_available` and the both-build-states test shape, so the camera follows them
-  rather than inventing anything; `Camera` has a **backend constructor** exactly like `SystemTray`,
-  so the same second-creation-route seam applies and is the only way a machine with no capture
-  hardware reaches a frame; `Camera::TryAcquireFrame` fills a canonical `Texture2D&`, so the slice
-  must decide between the borrowed-texture contract `CBIND-037C7` settled for video frames and a raw
-  byte transfer — the video precedent is the one to weigh first; and no verification tree has a
-  camera, so the unsupported path is what actually runs.
+  Four things are already known and should not be rediscovered: the C API's game object is a
+  `Game` subclass in `CnaCApiRuntime.cpp`, so protected canonical surface is reachable from inside
+  it rather than needing a new seam — `CBIND-037D3` already added `GetGameWindow` there for the
+  display queries, and that is the pattern to extend; a game handle is **thread-affine and
+  callback-scoped in part**, so any new route must say which of the two it is; the component and
+  service collections are the first canonical *containers of caller-implemented objects* this ABI
+  has had to map, and C cannot implement an interface — decide early whether a component becomes a
+  callback set registered by the caller or is simply not mappable, and write the reason down; and
+  `GraphicsDeviceManager` overlaps surface `CBIND-034` already mapped through the graphics device,
+  so check for duplication before naming anything.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

@@ -158,3 +158,27 @@ deliberate gap in the evidence, recorded rather than papered over.
 Two more canonical behaviors are reported rather than corrected: a tray entry index past the last
 entry is **ignored** by the mutators and reads false instead of being refused, and a session with no
 native window answers a content scale of zero and an empty safe area rather than failing.
+
+## The camera
+
+A camera is an owned handle, and its two availability questions are deliberately separate: the probe
+answers whether the platform has a **camera driver** at all, and the enumeration answers how many
+cameras it currently reports. A driver is not a camera.
+
+A frame lands in a `Texture2D` **the caller owns and keeps**. That is the canonical contract, and it
+is deliberately not the video player's borrowed per-frame texture: nothing here is invalidated by the
+next call, because nothing here is lent. Two canonical behaviors are preserved rather than corrected —
+having no frame ready is an ordinary `CNA_FALSE` rather than a failure, and **a texture whose size
+does not match the frame is refused the same way**, with no resize and no way to tell the two cases
+apart. Read the frame size first and size the texture to it.
+
+The canonical class takes its backend as a constructor argument, so the test seam is a second
+creation route, exactly as the system tray's is:
+`cna_camera_create_with_test_backend_ext`, then `cna_camera_set_test_frame_ext` and
+`cna_camera_set_test_state_ext`. That is the only way to reach a frame, or the refused and lost
+states, on a machine with no camera.
+
+**`cna_camera_create` is never called by this ABI's own test suite.** On a machine that has a camera,
+opening it switches on the user's webcam and may prompt for permission — the same reason
+`cna_url_launcher_open_ext` is only ever exercised through its refusals. Both gaps are recorded here
+rather than papered over with a test that would misbehave on a developer's laptop.

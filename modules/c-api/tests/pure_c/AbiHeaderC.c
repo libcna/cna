@@ -1260,6 +1260,26 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_CameraState) == sizeof(uint32_t) &&
+                   CNA_CAMERA_STATE_NOT_SUPPORTED == UINT32_C(0) &&
+                   CNA_CAMERA_STATE_CLOSED == UINT32_C(1) &&
+                   CNA_CAMERA_STATE_OPENING == UINT32_C(2) &&
+                   CNA_CAMERA_STATE_DENIED == UINT32_C(3) &&
+                   CNA_CAMERA_STATE_READY == UINT32_C(4) &&
+                   CNA_CAMERA_STATE_LOST == UINT32_C(5) &&
+                   CNA_CAMERA_STATE_MAXIMUM == UINT32_C(5) &&
+                   sizeof(CNA_CameraPosition) == sizeof(uint32_t) &&
+                   CNA_CAMERA_POSITION_UNKNOWN == UINT32_C(0) &&
+                   CNA_CAMERA_POSITION_FRONT_FACING == UINT32_C(1) &&
+                   CNA_CAMERA_POSITION_BACK_FACING == UINT32_C(2) &&
+                   CNA_CAMERA_POSITION_MAXIMUM == UINT32_C(2),
+               "CNA camera identities must remain stable");
+
+_Static_assert(sizeof(CNA_CameraDeviceInfo) == 12U &&
+                   _Alignof(CNA_CameraDeviceInfo) == 4U &&
+                   offsetof(CNA_CameraDeviceInfo, position) == 8U,
+               "CNA_CameraDeviceInfo layout must remain stable");
+
 _Static_assert(sizeof(CNA_FileDialogFilter) == 40U &&
                    _Alignof(CNA_FileDialogFilter) == 8U &&
                    offsetof(CNA_FileDialogFilter, name) == 8U &&

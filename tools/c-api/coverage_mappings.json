@@ -4776,6 +4776,44 @@
       "tests": "`DevicesSmoke.c` builds a tray on the test backend, round-trips every entry state, asserts the entry added checked reports itself checked, proves the click handler runs and that an entry added without one is silent, covers the ignored out-of-range index on all five entry routes, the refused click past the last entry, and the released-handle refusals. Nothing reaches the host's own tray",
       "status": "implemented",
       "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-camera-identities",
+      "qualified_name_regex": "^CNA::Devices::(CameraState|CameraPosition)(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "fixed-width `CNA_CameraState` and `CNA_CameraPosition` with one macro per canonical value at its canonical ordinal, plus a `_MAXIMUM` for validation. All six states are exposed, including the refused and lost ones no verification machine can produce — an identity is not a claim that something produces it",
+      "tests": "`DevicesSmoke.c` pins every ordinal and both maxima, drives the refused state through the camera's test backend and refuses the first undefined one; the ordinals are also pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D4"
+    },
+    {
+      "id": "devices-camera-descriptor",
+      "qualified_name_regex": "^CNA::Devices::CameraDeviceInfo(::(Name|Position))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed `CNA_CameraDeviceInfo` value with `cna_camera_device_info_init` for the canonical default, carrying the facing identity, with the canonical name read through `cna_camera_get_name_size_at_ext`/`_copy_name_at_ext` — the same split the sensor and joystick descriptors use, for the same reason: a name is variable-length and a descriptor is not",
+      "tests": "`DevicesSmoke.c` asserts the canonical default and the null refusal in **both** build states, since a pure value operation does not depend on the extension layer, and reads the descriptor and name of every camera this host enumerates",
+      "status": "implemented",
+      "task": "CBIND-037D4"
+    },
+    {
+      "id": "devices-camera",
+      "qualified_name_regex": "^CNA::Devices::Camera(::(Camera|~Camera|getIsSupportedProperty|getAvailableCamerasProperty|getStateProperty|getFrameWidthProperty|getFrameHeightProperty|TryAcquireFrame))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_CameraHandle` with `cna_camera_create`, the state and frame-size queries, `cna_camera_try_acquire_frame_ext` and `cna_camera_destroy`, plus the index-addressed enumeration `cna_camera_get_count_ext`/`_get_info_at_ext` and the driver probe, which are **separate questions**: a driver is not a camera. A frame lands in a `Texture2D` **the caller owns and keeps**, which is the canonical contract and deliberately not the borrowed per-frame texture `CBIND-037C7` settled for video — nothing here is invalidated by the next call. Two canonical behaviors are preserved rather than corrected: having no frame ready is an ordinary `CNA_FALSE` rather than a failure, and **a texture whose size does not match the frame is refused the same way**, with no resize and no distinct reason. The canonical backend constructor becomes `cna_camera_create_with_test_backend_ext`, mirroring the system tray, with `_set_test_state_ext` and `_set_test_frame_ext` driving it",
+      "tests": "`DevicesSmoke.c` enumerates whatever this host reports and refuses the first index past the count, then runs the whole lifecycle on the test backend: closed with no frame, the refused state, a published frame reporting ready and fixing the frame size, the frame arriving in a matching texture and read back pixel-for-pixel, the size-mismatched texture answering false, the cleared frame closing the camera again, the mismatched-count and negative-dimension refusals, and the released-handle refusals. **The real camera is never opened by any test**: on a machine that has one, creating it would switch on the user's webcam",
+      "status": "implemented",
+      "task": "CBIND-037D4"
     }
   ]
 }

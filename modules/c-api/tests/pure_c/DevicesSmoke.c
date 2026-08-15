@@ -425,6 +425,136 @@ static int validate_system_tray(const CNA_Handle game)
         cna_system_tray_set_tooltip(tray, view("gone")) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* The real camera is deliberately never opened by this suite: on a machine that has one, creating it
+   switches on the user's webcam, which is not something a test may do. Everything below either only
+   enumerates or runs on this ABI's own backend. */
+static int validate_camera(const CNA_Handle game, const CNA_Handle graphics_device)
+{
+    CNA_CameraHandle camera = CNA_INVALID_HANDLE;
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    CNA_Handle mismatched = CNA_INVALID_HANDLE;
+    CNA_CameraDeviceInfo info;
+    CNA_CameraState state = UINT32_C(99);
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Color pixels[4];
+    CNA_Color read_back[4];
+    uint64_t count = UINT64_C(99);
+    uint64_t bytes = UINT64_C(9);
+    int32_t value = -1;
+    char text[256];
+
+    pixels[0].r = 10U; pixels[0].g = 20U; pixels[0].b = 30U; pixels[0].a = 255U;
+    pixels[1].r = 40U; pixels[1].g = 50U; pixels[1].b = 60U; pixels[1].a = 255U;
+    pixels[2].r = 70U; pixels[2].g = 80U; pixels[2].b = 90U; pixels[2].a = 255U;
+    pixels[3].r = 100U; pixels[3].g = 110U; pixels[3].b = 120U; pixels[3].a = 255U;
+
+    /* A driver is not a camera, so the probe and the enumeration are separate questions. */
+    if (cna_camera_get_is_supported_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE) ||
+        cna_camera_get_is_supported_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_get_count_ext(game, &count) != CNA_RESULT_SUCCESS ||
+        cna_camera_get_count_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    {
+        uint64_t index = UINT64_C(0);
+        for (index = UINT64_C(0); index < count; ++index) {
+            memset(text, 0, sizeof(text));
+            if (cna_camera_get_info_at_ext(game, index, &info) != CNA_RESULT_SUCCESS ||
+                info.position > CNA_CAMERA_POSITION_MAXIMUM ||
+                cna_camera_get_name_size_at_ext(game, index, &bytes) != CNA_RESULT_SUCCESS ||
+                bytes >= (uint64_t)sizeof(text) ||
+                cna_camera_copy_name_at_ext(
+                    game, index, text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_SUCCESS) {
+                return 0;
+            }
+        }
+    }
+    if (cna_camera_get_info_at_ext(game, count, &info) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_get_name_size_at_ext(game, count, &bytes) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_copy_name_at_ext(
+            game, count, text, (uint64_t)sizeof(text), &bytes) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* A camera on this ABI's own backend starts closed with no frame at all. */
+    if (cna_camera_create_with_test_backend_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_create_with_test_backend_ext(game, &camera) != CNA_RESULT_SUCCESS ||
+        camera == CNA_INVALID_HANDLE ||
+        cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_CAMERA_STATE_CLOSED ||
+        cna_camera_get_frame_width_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 0 ||
+        cna_camera_get_frame_height_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 0) {
+        return 0;
+    }
+    /* The refused and lost states exist and are only reachable through the backend here. */
+    if (cna_camera_set_test_state_ext(camera, CNA_CAMERA_STATE_DENIED) != CNA_RESULT_SUCCESS ||
+        cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_CAMERA_STATE_DENIED ||
+        cna_camera_set_test_state_ext(camera, CNA_CAMERA_STATE_MAXIMUM + UINT32_C(1)) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* A published frame reports the camera ready and fixes its frame size. */
+    if (cna_camera_set_test_frame_ext(camera, 2, 2, pixels, UINT64_C(3)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_set_test_frame_ext(camera, -1, 2, pixels, UINT64_C(4)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_camera_set_test_frame_ext(camera, 2, 2, pixels, UINT64_C(4)) != CNA_RESULT_SUCCESS ||
+        cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_CAMERA_STATE_READY ||
+        cna_camera_get_frame_width_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 2 ||
+        cna_camera_get_frame_height_ext(camera, &value) != CNA_RESULT_SUCCESS || value != 2) {
+        return 0;
+    }
+    {
+        const CNA_Texture2DCreateInfo matching = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 2U, 2U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        const CNA_Texture2DCreateInfo other = {
+            sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 4U, 4U, CNA_FALSE, {0U, 0U, 0U},
+            CNA_SURFACE_FORMAT_COLOR};
+        if (cna_texture2d_create(graphics_device, &matching, &texture) != CNA_RESULT_SUCCESS ||
+            cna_texture2d_create(graphics_device, &other, &mismatched) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    /* The frame lands in a texture the caller owns and keeps -- nothing here is invalidated by the
+       next call, unlike a video player's borrowed frame. */
+    if (cna_camera_try_acquire_frame_ext(camera, texture, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_texture2d_get_data_rgba8(texture, read_back, UINT64_C(4), &count) !=
+            CNA_RESULT_SUCCESS ||
+        count != UINT64_C(4) || read_back[0].r != 10U || read_back[3].b != 120U ||
+        read_back[3].a != 255U) {
+        return 0;
+    }
+    /* A texture whose size does not match the frame is refused exactly the way an absent frame is:
+       the canonical route neither resizes it nor says why. */
+    if (cna_camera_try_acquire_frame_ext(camera, mismatched, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_camera_try_acquire_frame_ext(camera, CNA_INVALID_HANDLE, &flag) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_camera_try_acquire_frame_ext(camera, texture, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* Clearing the frame closes the camera again, and having no frame is an ordinary false. */
+    if (cna_camera_set_test_frame_ext(camera, 0, 0, 0, UINT64_C(0)) != CNA_RESULT_SUCCESS ||
+        cna_camera_get_state_ext(camera, &state) != CNA_RESULT_SUCCESS ||
+        state != CNA_CAMERA_STATE_CLOSED ||
+        cna_camera_try_acquire_frame_ext(camera, texture, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_texture2d_destroy(mismatched) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_destroy(texture) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return cna_camera_destroy(camera) == CNA_RESULT_SUCCESS &&
+        cna_camera_destroy(camera) == CNA_RESULT_INVALID_HANDLE &&
+        cna_camera_get_state_ext(camera, &state) == CNA_RESULT_INVALID_HANDLE;
+}
+
 /* Compiled without the extension layer every route above still exists and reports the layer as
    missing, so a consumer links against one symbol set either way. */
 static int validate_unavailable(const CNA_Handle game)
@@ -437,6 +567,9 @@ static int validate_unavailable(const CNA_Handle game)
     int32_t value = 0;
     float scale = 0.0F;
     uint64_t count = UINT64_C(0);
+
+    CNA_CameraHandle camera = CNA_INVALID_HANDLE;
+    CNA_CameraDeviceInfo camera_info;
 
     return cna_power_get_state_ext(game, &power) == CNA_RESULT_NOT_SUPPORTED &&
         cna_power_get_battery_percent_ext(game, &value) == CNA_RESULT_NOT_SUPPORTED &&
@@ -464,7 +597,14 @@ static int validate_unavailable(const CNA_Handle game)
         cna_system_tray_create_with_test_backend_ext(game, view("CNA"), &tray) ==
             CNA_RESULT_NOT_SUPPORTED &&
         tray == CNA_INVALID_HANDLE &&
-        cna_system_tray_destroy(tray) == CNA_RESULT_NOT_SUPPORTED;
+        cna_system_tray_destroy(tray) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_camera_get_is_supported_ext(game, &flag) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_camera_get_count_ext(game, &count) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_camera_get_info_at_ext(game, UINT64_C(0), &camera_info) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_camera_get_name_size_at_ext(game, UINT64_C(0), &count) == CNA_RESULT_NOT_SUPPORTED &&
+        cna_camera_create_with_test_backend_ext(game, &camera) == CNA_RESULT_NOT_SUPPORTED &&
+        camera == CNA_INVALID_HANDLE &&
+        cna_camera_destroy(camera) == CNA_RESULT_NOT_SUPPORTED;
 }
 
 static int validate_identities(void)
@@ -475,7 +615,26 @@ static int validate_identities(void)
         CNA_POWER_STATE_MAXIMUM == CNA_POWER_STATE_CHARGED &&
         CNA_MESSAGE_BOX_TYPE_ERROR == UINT32_C(0) && CNA_MESSAGE_BOX_TYPE_WARNING == UINT32_C(1) &&
         CNA_MESSAGE_BOX_TYPE_INFORMATION == UINT32_C(2) &&
-        CNA_MESSAGE_BOX_TYPE_MAXIMUM == CNA_MESSAGE_BOX_TYPE_INFORMATION;
+        CNA_MESSAGE_BOX_TYPE_MAXIMUM == CNA_MESSAGE_BOX_TYPE_INFORMATION &&
+        CNA_CAMERA_STATE_NOT_SUPPORTED == UINT32_C(0) && CNA_CAMERA_STATE_CLOSED == UINT32_C(1) &&
+        CNA_CAMERA_STATE_OPENING == UINT32_C(2) && CNA_CAMERA_STATE_DENIED == UINT32_C(3) &&
+        CNA_CAMERA_STATE_READY == UINT32_C(4) && CNA_CAMERA_STATE_LOST == UINT32_C(5) &&
+        CNA_CAMERA_STATE_MAXIMUM == CNA_CAMERA_STATE_LOST &&
+        CNA_CAMERA_POSITION_UNKNOWN == UINT32_C(0) &&
+        CNA_CAMERA_POSITION_FRONT_FACING == UINT32_C(1) &&
+        CNA_CAMERA_POSITION_BACK_FACING == UINT32_C(2) &&
+        CNA_CAMERA_POSITION_MAXIMUM == CNA_CAMERA_POSITION_BACK_FACING;
+}
+
+/* The descriptor value answers in every build, like every other pure value operation in this ABI. */
+static int validate_camera_descriptor(void)
+{
+    CNA_CameraDeviceInfo info;
+    memset(&info, 9, sizeof(info));
+    return cna_camera_device_info_init(&info) == CNA_RESULT_SUCCESS &&
+        info.struct_size == (uint32_t)sizeof(info) && info.struct_version == UINT32_C(1) &&
+        info.position == CNA_CAMERA_POSITION_UNKNOWN &&
+        cna_camera_device_info_init(0) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
 static CNA_Result on_update(
@@ -487,7 +646,9 @@ static CNA_Result on_update(
     (void)out_error;
     DevicesSmokeState* const state = (DevicesSmokeState*)context;
     CNA_Bool available = UINT8_C(9);
-    if (game_time == 0 || !validate_identities() ||
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    if (game_time == 0 || !validate_identities() || !validate_camera_descriptor() ||
+        cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
         cna_devices_ext_is_available(&available) != CNA_RESULT_SUCCESS ||
         (available != CNA_TRUE && available != CNA_FALSE) ||
         cna_devices_ext_is_available(0) != CNA_RESULT_INVALID_ARGUMENT ||
@@ -497,7 +658,7 @@ static CNA_Result on_update(
     if (available == CNA_TRUE) {
         if (!validate_host_queries(game) || !validate_clipboard_and_url(game) ||
             !validate_message_box(game) || !validate_file_dialog(game) ||
-            !validate_system_tray(game)) {
+            !validate_system_tray(game) || !validate_camera(game, graphics_device)) {
             return CNA_RESULT_INVALID_STATE;
         }
     } else if (!validate_unavailable(game)) {

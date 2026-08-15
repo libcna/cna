@@ -753,7 +753,25 @@
 > The inventory is now 5,016 implemented, 30 partial, 1,167 planned and 202 N/A; all four trees green
 > at 62/62 — with the extension layer ON in `sdlrenderer`/`asan` and OFF in `headless`/`software`, so
 > both halves of every route are exercised — and ASan+UBSan with leak detection clean.
-> **Next: CBIND-037D4**, the 24-row camera slice, which closes the devices module.
+> CBIND-037D4 then closes the devices module with those 24 rows. The question the plan left open —
+> whether a camera frame reuses the borrowed per-frame texture `CBIND-037C7` settled for video, or
+> something else — is answered by the canonical signature itself: `TryAcquireFrame` fills a
+> `Texture2D&` **the caller already owns**, so the C route takes an existing texture handle and lends
+> nothing. Nothing here is invalidated by the next call, because nothing here is lent. Two canonical
+> behaviors are preserved rather than corrected: having no frame ready is an ordinary `CNA_FALSE`,
+> and **a texture whose size does not match the frame is refused in exactly the same way** — no
+> resize, no distinct reason, so a caller must read the frame size first. The driver probe and the
+> camera enumeration stay separate questions, because a driver is not a camera.
+>
+> The canonical class takes its backend as a constructor argument, so the seam is a second creation
+> route as the system tray's is, and it is the only way any verification tree reaches a frame or the
+> refused state. **`cna_camera_create` is never called by a test**: on a machine that has a camera,
+> opening it switches on the user's webcam — the same reason `cna_url_launcher_open_ext` is only
+> exercised through its refusals. Both gaps are recorded in `docs/c-api/DEVICES.md` rather than
+> papered over with a test that would misbehave on a developer's laptop. The inventory is now 5,040
+> implemented, 30 partial, 1,143 planned and 202 N/A, with the **whole devices module closed**; all
+> four trees green at 62/62, ASan+UBSan with leak detection clean.
+> **Next: CBIND-037E**, the 273-row runtime module.
 >
 > Discovered while reading the canonical source, not fixed here: `AccelerometerReadingEventArgs.hpp`'s
 > class comment says the type "is not raised by that implementation", but
