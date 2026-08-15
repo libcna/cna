@@ -4350,6 +4350,111 @@
       "tests": "Doxygen declaration inventory; no callable native operation exists",
       "status": "not-applicable",
       "task": "CBIND-037C7"
+    },
+    {
+      "id": "sensor-state",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::SensorState(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_SensorState` with one `CNA_SENSOR_STATE_*` macro per canonical value at its canonical ordinal, plus `CNA_SENSOR_STATE_MAXIMUM`. All six are exposed, including the two the canonical header records as currently unreachable — an identity is not a claim that something produces it, and hiding them would break the ordinals",
+      "tests": "the ordinals and the maximum are pinned by C and C++ ABI assertions; the identity is consumed by the sensor state queries",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-reading-interface",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::ISensorReading(::getTimestampProperty)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "not a type in C: the interface's single member is expressed as the `timestamp` field every reading value carries, so a C consumer gets the same guarantee — every reading says when it was taken — without an abstract base. The timestamp itself is `CNA_DateTimeOffset`, two 100-nanosecond tick counts (local time from 0001-01-01, plus the UTC offset), which is the canonical runtime type's own representation rather than a new one",
+      "tests": "`SensorValuesSmoke.c` reads the timestamp of every reading kind; the value's layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-reading-interface-destructor",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::ISensorReading::~ISensorReading$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "No C mapping: a virtual destructor exists so C++ can delete through the interface, and C has neither the interface nor a pointer to one — reading values are copied, not owned polymorphically",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-accelerometer-reading",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::AccelerometerReading(::(AccelerometerReading|getTimestampProperty|getAccelerationProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed `CNA_AccelerometerReading` value with `cna_accelerometer_reading_init` for the canonical default and `cna_accelerometer_reading_init_from_values` for the canonical multi-argument constructor — whose **argument order follows the canonical one**, not a tidied-up one — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name count/copy pair that takes no value, because the name belongs to the type. Equality is the acceleration **and** the timestamp together, and the canonical text carries only the acceleration. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on the acceleration and on the timestamp independently, checks that the text carries only the acceleration, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-gyroscope-reading",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::GyroscopeReading(::(GyroscopeReading|getTimestampProperty|getRotationRateProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed `CNA_GyroscopeReading` value with `cna_gyroscope_reading_init` for the canonical default and `cna_gyroscope_reading_init_from_values` for the canonical multi-argument constructor — whose **argument order follows the canonical one**, not a tidied-up one — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name count/copy pair that takes no value, because the name belongs to the type. The canonical constructor takes the rate before the timestamp, and the C route keeps that order rather than normalizing it against the accelerometer's. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on the rotation rate, checks that the text carries only the rate, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-attitude-reading",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::AttitudeReading(::(AttitudeReading|getTimestampProperty|getPitchProperty|getRollProperty|getYawProperty|getQuaternionProperty|getRotationMatrixProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed `CNA_AttitudeReading` value with `cna_attitude_reading_init` for the canonical default and `cna_attitude_reading_init_from_values` for the canonical multi-argument constructor — whose **argument order follows the canonical one**, not a tidied-up one — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name count/copy pair that takes no value, because the name belongs to the type. All three angles, the quaternion and the full rotation matrix are carried, and all of them participate in equality. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on a single rotation-matrix element — the field a shallower comparison would miss — and covers the buffer-too-small text case, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-compass-reading",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::CompassReading(::(CompassReading|getTimestampProperty|getHeadingAccuracyProperty|getMagneticHeadingProperty|getMagnetometerReadingProperty|getTrueHeadingProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed `CNA_CompassReading` value with `cna_compass_reading_init` for the canonical default and `cna_compass_reading_init_from_values` for the canonical multi-argument constructor — whose **argument order follows the canonical one**, not a tidied-up one — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name count/copy pair that takes no value, because the name belongs to the type. Both headings, the accuracy and the raw magnetometer vector are carried; the constructor's canonical argument order puts the true heading last, and the C route keeps it there. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on the true heading, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-motion-reading",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::MotionReading(::(MotionReading|getTimestampProperty|getAttitudeProperty|getDeviceAccelerationProperty|getDeviceRotationRateProperty|getGravityProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed `CNA_MotionReading` value with `cna_motion_reading_init` for the canonical default and `cna_motion_reading_init_from_values` for the canonical multi-argument constructor — whose **argument order follows the canonical one**, not a tidied-up one — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name count/copy pair that takes no value, because the name belongs to the type. The nested attitude is a `CNA_AttitudeReading` inside the value and is validated like any other versioned structure. **The canonical text is preserved rather than completed**: it names only the device acceleration and the gravity vector, omitting the attitude and rotation rate a reader might expect. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on a field of the nested attitude, refuses an invalid or null nested attitude, and asserts the text contains the acceleration and gravity but **not** the attitude, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D1"
     }
   ]
 }

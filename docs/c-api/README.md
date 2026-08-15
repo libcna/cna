@@ -147,6 +147,7 @@ contract is in [`STORAGE.md`](STORAGE.md); the networking values, packet buffers
 join-failure contract are in [`NET.md`](NET.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary; the
 media identities, songs, the library catalog and their ownership contract are in
-[`MEDIA.md`](MEDIA.md). The
+[`MEDIA.md`](MEDIA.md); the sensor timestamp, reading and device contract is in
+[`DEVICES.md`](DEVICES.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

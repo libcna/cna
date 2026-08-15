@@ -371,7 +371,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
 | CBIND-037B | 599 | Complete the input module | ✅ | `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration) are mapped. Decomposed into CBIND-037B1–B7 below; **closed by CBIND-037B7b**, after which the `input` module records 834 implemented, 0 partial, 0 planned and 27 not applicable. |
 | CBIND-037C | 325 | Complete the media module | ✅ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; **closed by CBIND-037C7**, after which the `media` module records 276 implemented, 0 partial, 0 planned and 52 not applicable. |
-| CBIND-037D | 289 | Complete the devices and devices-ext modules | ⬜ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). |
+| CBIND-037D | 289 | Complete the devices and devices-ext modules | 🟨 | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). Decomposed into CBIND-037D1–D4 below; the parent becomes complete only when all four rows and every `devices`/`devices-ext` inventory row are closed. |
 | CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
@@ -397,6 +397,23 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B7 | 92 | Complete the remaining input extensions | ✅ | Map the remaining `CNA::Input` joystick, sensor, device-enumeration, clipboard and power surfaces. The key-modifier, button-label, text-input-type and connection-state identities this row originally owned were borrowed into `CBIND-037B3`, `B4a` and `B4d`, which is why 92 rows remain rather than the 102 first partitioned. Split by concern into `CBIND-037B7a`–`B7b` below, because the joystick family is a device surface with its own values, snapshot and hot-plug events while the rest are small host-system queries. |
 | CBIND-037B7a | 54 | Complete the raw joystick family | ✅ | `input_joystick.h` and `CnaCApiInputJoystick.cpp` map `JoystickTypeEXT`, `JoystickHatPositionEXT`, `JoystickInfoEXT`, `JoystickCapabilitiesEXT`, `JoystickStateEXT` and the `Joysticks` facade. Like haptics this is a CNA-namespace surface, so the routes take no `_ext` suffix except the two hot-plug events and the test reset, which follow their canonical member names. **The one deliberate departure from the input families' fixed-POD rule is the snapshot**, and it is the decision the slice turns on: `JoystickStateEXT` carries four heterogeneous variable-length arrays with no canonical maximum — unlike the touch panel's fixed eight slots — so a fixed value would have to invent a capacity that silently truncates a real HOTAS setup, while four independent per-array queries would answer from four different instants. `cna_joysticks_capture_state` therefore captures once into an owned `CNA_JoystickStateHandle` (`ObjectKind` 69) and each array is read with its own count/copy pair against that one instant; trackball motion is relative, so capturing consumes it, which is another reason one capture must serve all four arrays. **The hat is an identity, not a bit set** — the plan's own guess said "probably a bit set", and the canonical header says the opposite: the platform's combinable up/down and left/right bits are enumerated as the nine reachable combinations, so `RIGHT_UP` is the ordinal 5 and composing these values is wrong. That is pinned by an ABI assertion and stated in the header. The haptics **closed-device-is-not-an-error** contract carries over unchanged: an unconnected identifier answers `cna_joysticks_get_capabilities` with the canonical disconnected defaults, a power percent of -1 meaning "unknown" rather than "empty", and two empty strings, and answers `cna_joysticks_capture_state` with four empty arrays — which is the path every verification tree actually exercises, and it is asserted rather than skipped. The device name and GUID stay outside the capability value for the same reason the haptic device name does, so `cna_joystick_capabilities_equals` takes both strings alongside both values and reproduces the canonical ten-field comparison exactly; `cna_joystick_info_equals` does the same with the descriptor name. Both static multicast fields become owned registrations (`ObjectKind` 70) with one shared release route, mirroring the text-input surface, plus raise routes that invoke the same public field the platform layer invokes — no `Internal` bridge crosses the ABI. The slice gets its own strict-C `JoystickSmoke.c` and `CApi_JoystickSmoke` target, matching its own adapter file. Green in all four trees (53/53) and under ASan+UBSan with leak detection on. |
 | CBIND-037B7b | 38 | Complete host sensors, device enumeration, clipboard and power | ✅ | `input_devices.h` and `CnaCApiInputDevices.cpp` map the last four `CNA::Input` extensions by reusing the shapes `CBIND-037B7a` settled rather than inventing new ones: the descriptor value with its name outside the POD and an `_equals` taking both names, the index-addressed enumeration, and the process-wide event registration (`ObjectKind` 71, one shared release route for all four events). Three decisions are worth recording. The two sensor reads follow the **availability-separate-from-the-answer** rule the gamepad sensors established, and go one step further: when the flag reports no sensor the reading output is **left exactly as the caller left it**, because that is what the canonical query does with its reference — the test proves it by pre-filling sentinel components and asserting they survive. `CNA_InputDeviceInfo` carries a **`uint64_t`** identifier where the sensor and joystick descriptors carry `uint32_t`, because a touch-device identifier is 64-bit natively; the test round-trips a value above the 32-bit range so a narrowing conversion could not pass unnoticed. And `cna_clipboard_set_text` **reports that the request was made, not that it succeeded**: the canonical setter returns nothing, so there is no platform outcome to forward and this ABI does not invent one — a headless session or a gesture-gated browser may ignore the write. The clipboard is process-external state the suite does not own, so its test captures the pre-existing content, asserts a *relationship* (if the write took effect, the read must return exactly those bytes; the presence flag must agree with a non-empty read in both directions), proves the empty and buffer-too-small cases only on a platform that actually stored the text, and restores the original content. One strict-C `InputDevicesSmoke.c` covers all four families, driving the three device enumerations through a single shared validator so the protocol is proven identically for mice, keyboards and touch devices. Green in all four trees (54/54) and under ASan+UBSan with leak detection on. **This closes parent `CBIND-037B7`, parent `CBIND-037B` and the whole `input` module**: 834 implemented, 27 not applicable, no partial and no planned row left. |
+
+#### CBIND-037D devices implementation slices
+
+The 289 `devices` and `devices-ext` rows split by what can be tested together: the reading values
+are pure PODs and need nothing, the sensor devices produce them and own the events and exception
+types, and the two `CNA::Devices` groups are independent system services. **The owner decision of
+2026-08-15 applies to this whole slice:** `cmake-build-binding-sdlrenderer` and
+`cmake-build-binding-asan` were reconfigured with `-DCNA_DEVICES=ON` so the `#ifdef CNA_DEVICES`
+half of `devices-ext` is genuinely exercised, while `headless` and `software` stay OFF and prove
+the compiled-out contract. Both states must stay green.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-037D1 | 70 | Establish sensor readings, timestamps and state | ✅ | `sensors.h` and `CnaCApiSensors.cpp` map `SensorState`, `ISensorReading` and all five reading types as fixed values. The slice settles the ABI's **second** point-in-time form: `CNA_DateTimeOffset` is two 100-nanosecond tick counts — local time from **0001-01-01** plus the UTC offset — because that is the canonical runtime type's own base, exactly as the picture date uses the Unix epoch because *its* canonical type does. The reading interface becomes the `timestamp` field every reading carries rather than an abstract type C cannot use, and its virtual destructor is the one `not-applicable` row. Three canonical behaviors are preserved rather than tidied: **each constructor keeps its own argument order** even though the five disagree (the accelerometer takes the timestamp first, the gyroscope the rate first, the compass the true heading last) — normalizing them would make the C API easier to remember and harder to check; equality pairs the values **with** the timestamp; and the text conversions carry only part of each reading, with the motion reading's omitting the attitude and rotation rate a reader would expect. All six state identities are exposed, including the two the canonical header records as currently unreachable, because an identity is not a claim that something produces it. `cna_c_api` gained its `cna_devices` link edge here. Strict-C `SensorValuesSmoke.c` needs no game at all; green in all four trees (59/59) and under ASan+UBSan with leak detection on. |
+| CBIND-037D2 | 126 | Complete the sensor devices, their events and failures | ⬜ | Map `SensorBase`, `Accelerometer`, `Gyroscope`, `Compass` and `Motion`, the reading event-argument types (including the `SensorReadingEventArgs<T>` template, whose four concrete instantiations are what the events actually deliver), `CalibrationEventArgs`, and the two sensor exception types. Expect the availability-separate-from-the-answer rule for `IsSupported`, the process-wide event-registration shape for the reading and calibration events, and a decision about how `SensorFailedException`'s error id reaches C — the network join-error precedent in `CnaCApiDetail.hpp` is the shape to copy. |
+| CBIND-037D3 | 69 | Complete VibrateController and the CNA system services | ⬜ | Map `VibrateController`, `Clipboard`, `PowerState`/`PowerInfo`, `Locale`/`LocaleInfo`, `DisplayInfo`, `SystemInfo`, `UrlLauncher`, `MessageBox`/`MessageBoxType`, `FileDialog`/`FileDialogFilter` and `SystemTray`. **Every `CNA::Devices` header is `#ifdef CNA_DEVICES`**, so each route needs the `CnaCApiGraphicsExt.cpp` shape: exported in both build states, reporting `NOT_SUPPORTED` when the extension layer is compiled out. Note the clipboard here is a *different* type from the input module's `CNA::Input::Clipboard`, which `CBIND-037B7b` already mapped — check whether they wrap the same platform state before naming the routes. |
+| CBIND-037D4 | 24 | Complete the camera extension | ⬜ | Map `Camera`, `CameraState`, `CameraPosition` and `CameraDeviceInfo` under the same `CNA_DEVICES` rule. A camera produces frames, so decide whether they reuse the texture contract `CBIND-037C7` established or a raw byte transfer, and expect no capture hardware in any verification tree — the unavailable path is the one that will be exercised. |
 
 #### CBIND-037C media implementation slices
 
@@ -549,8 +566,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037C7`):** 414 headers / 6,415 symbols —
-**4,775 implemented, 30 partial, 1,432 planned, 178 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037D1`):** 414 headers / 6,415 symbols —
+**4,844 implemented, 30 partial, 1,362 planned, 179 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -567,7 +584,7 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,432 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,362 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -575,7 +592,7 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
+| 1 | `CBIND-037D` devices and devices-ext | 219 (after `D1`) | sub-partitioned into `D1`–`D4`; `D1` is done, `D2` sensor devices is next. `sdlrenderer` and `asan` now build with `CNA_DEVICES=ON` |
 | 2 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
 | 3 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
 | 4 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
@@ -943,7 +960,13 @@ layer invalidates the borrowed handle on the next call to that player, so a stal
 deterministically — and three canonical behaviors are reported rather than corrected, two of them
 discovered by running the code: an undecodable file leaves the player stopped with its video
 cleared, and the URI factory does not parse URIs at all. The snapshot is now 4,775 implemented, 30
-partial, 1,432 planned and 178 not applicable, with six modules fully mapped.
+partial, 1,432 planned and 178 not applicable, with six modules fully mapped. CBIND-037D1 then
+opens the devices module with the sensor reading values, settling the ABI's second point-in-time
+form — ticks from 0001-01-01 plus a UTC offset, because that is the canonical runtime type's base —
+and preserving three canonical quirks rather than tidying them: each reading constructor keeps its
+own argument order, equality pairs values with the timestamp, and the text conversions carry only
+part of each reading. The snapshot is now 4,844 implemented, 30 partial, 1,362 planned and 179 not
+applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -956,24 +979,27 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037D`, the `devices` and `devices-ext` modules — **289 rows**, the first
-  slice outside media since the input module closed. Sub-partition it on arrival. The rows split
-  roughly into the `Microsoft::Devices::Sensors` family (accelerometer, gyroscope, compass,
-  motion, the sensor base and their reading values), `VibrateController`, and the `CNA::Devices`
-  extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and
-  system info).
+- **Next task:** `CBIND-037D2`, the sensor devices — **126 rows**: `SensorBase`, `Accelerometer`,
+  `Gyroscope`, `Compass`, `Motion`, the reading event-argument types, `CalibrationEventArgs` and the
+  two sensor exception types. `D1` is done, so `sensors.h`, `CnaCApiSensors.cpp` and
+  `SensorValuesSmoke.c` exist, `cna_c_api` links `cna_devices`, and every reading value the devices
+  produce is already mapped and tested.
 
-  **Read the next bullet before starting** — this slice is the one with a standing environment
-  decision, and it must be honored.
-- **`CBIND-037D` has an environment decision already made by the owner (2026-08-15):** the entire
-  `devices-ext` public surface is wrapped in `#ifdef CNA_DEVICES`, and that option is **OFF in all
-  four verification trees**, so 83 of that slice's rows would otherwise only ever be tested in
-  their compiled-out state. When `CBIND-037D` is reached, reconfigure
-  `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` with `-DCNA_DEVICES=ON`,
-  mirroring the existing `CNA_CNAEXT` split, and leave `headless` and `software` OFF so both states
-  are covered. Do **not** add a fifth build tree. The routes themselves stay exported in both
-  states, following the `CnaCApiGraphicsExt.cpp` precedent of an `#ifndef` fallback that reports
-  the feature as unavailable, so the ABI's symbol set never depends on a build option.
+  Three things are already known and should not be rediscovered: `SensorState` records that
+  `NoData` and `NoPermissions` are produced by **no** sensor class today, so those two identities
+  will stay untested by behavior; `SensorReadingEventArgs<T>` is a **template**, and only its four
+  concrete instantiations matter — flatten each event to the reading it carries rather than trying
+  to name the wrapper; and `SensorFailedException` carries an **error id** that has to reach C
+  somehow, for which the network join-error precedent in `CnaCApiDetail.hpp` (`LastError::joinError`
+  plus a query route) is the shape to copy.
+- **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
+  that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
+  tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been
+  **reconfigured with `-DCNA_DEVICES=ON`** and rebuilt; `headless` and `software` stay OFF, so both
+  states are covered, mirroring the existing `CNA_CNAEXT` split. No fifth build tree was added, and
+  all four trees are green in that configuration. The routes themselves must stay exported in both
+  states, following the `CnaCApiGraphicsExt.cpp` precedent of an `#ifndef` fallback that reports the
+  feature as unavailable, so the ABI's symbol set never depends on a build option.
 - Do not reopen a closed slice without a concrete demonstrated defect.
 - The four verification trees and the shared ccache are set up and warm; nothing needs configuring
   before the next slice. See *Environment and disk hygiene* below for what was cleaned up on
@@ -988,13 +1014,13 @@ order:
 
 | File | Role |
 |---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 54 today (`video.h`, `media_player.h`, `media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 55 today (`sensors.h`, `video.h`, `media_player.h`, `media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
-| `src/CnaCApi<Family>.cpp` | the adapter — 44 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
+| `src/CnaCApi<Family>.cpp` | the adapter — 45 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
 | `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 91**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (58 tests today). |
-| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 54 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (59 tests today). |
+| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 55 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
 | `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
 | `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
 | `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
@@ -1090,7 +1116,7 @@ unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap paral
 | `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
 | `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
 
-All four run the same 58 C API tests green. The sanitizer tree runs with
+All four run the same 59 C API tests green. The sanitizer tree runs with
 `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
 `detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
 `-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no

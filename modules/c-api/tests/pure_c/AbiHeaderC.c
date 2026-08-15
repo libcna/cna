@@ -1182,3 +1182,50 @@ _Static_assert(CNA_VISUALIZATION_DATA_SIZE == UINT32_C(256) &&
                    offsetof(CNA_VisualizationData, frequencies) == 8U &&
                    offsetof(CNA_VisualizationData, samples) == 1032U,
                "CNA_VisualizationData layout must remain stable");
+
+_Static_assert(sizeof(CNA_SensorState) == sizeof(uint32_t) &&
+                   CNA_SENSOR_STATE_NOT_SUPPORTED == UINT32_C(0) &&
+                   CNA_SENSOR_STATE_READY == UINT32_C(1) &&
+                   CNA_SENSOR_STATE_INITIALIZING == UINT32_C(2) &&
+                   CNA_SENSOR_STATE_NO_DATA == UINT32_C(3) &&
+                   CNA_SENSOR_STATE_NO_PERMISSIONS == UINT32_C(4) &&
+                   CNA_SENSOR_STATE_DISABLED == UINT32_C(5) &&
+                   CNA_SENSOR_STATE_MAXIMUM == UINT32_C(5),
+               "CNA sensor state identities must remain stable");
+
+/* Both members are 100-nanosecond ticks; the local time counts from 0001-01-01, not the Unix
+   epoch, because that is the canonical runtime type's own base. */
+_Static_assert(sizeof(CNA_DateTimeOffset) == 16U &&
+                   _Alignof(CNA_DateTimeOffset) == 8U &&
+                   offsetof(CNA_DateTimeOffset, offset_ticks) == 8U,
+               "CNA_DateTimeOffset layout must remain stable");
+
+_Static_assert(sizeof(CNA_AccelerometerReading) == 40U &&
+                   _Alignof(CNA_AccelerometerReading) == 8U &&
+                   offsetof(CNA_AccelerometerReading, timestamp) == 8U &&
+                   offsetof(CNA_AccelerometerReading, acceleration) == 24U &&
+                   sizeof(CNA_GyroscopeReading) == 40U &&
+                   offsetof(CNA_GyroscopeReading, rotation_rate) == 24U,
+               "CNA accelerometer and gyroscope reading layouts must remain stable");
+
+_Static_assert(sizeof(CNA_AttitudeReading) == 120U &&
+                   _Alignof(CNA_AttitudeReading) == 8U &&
+                   offsetof(CNA_AttitudeReading, timestamp) == 8U &&
+                   offsetof(CNA_AttitudeReading, pitch) == 24U &&
+                   offsetof(CNA_AttitudeReading, quaternion) == 36U &&
+                   offsetof(CNA_AttitudeReading, rotation_matrix) == 52U,
+               "CNA_AttitudeReading layout must remain stable");
+
+_Static_assert(sizeof(CNA_CompassReading) == 64U &&
+                   offsetof(CNA_CompassReading, heading_accuracy) == 24U &&
+                   offsetof(CNA_CompassReading, magnetic_heading) == 32U &&
+                   offsetof(CNA_CompassReading, true_heading) == 40U &&
+                   offsetof(CNA_CompassReading, magnetometer_reading) == 48U,
+               "CNA_CompassReading layout must remain stable");
+
+_Static_assert(sizeof(CNA_MotionReading) == 184U &&
+                   offsetof(CNA_MotionReading, attitude) == 24U &&
+                   offsetof(CNA_MotionReading, device_acceleration) == 144U &&
+                   offsetof(CNA_MotionReading, device_rotation_rate) == 156U &&
+                   offsetof(CNA_MotionReading, gravity) == 168U,
+               "CNA_MotionReading layout must remain stable");

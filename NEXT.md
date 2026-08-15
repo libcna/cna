@@ -654,6 +654,32 @@
 > `plan_binding.md`: flip `CNA_DEVICES=ON` in the `sdlrenderer` and `asan` trees so the
 > `#ifdef CNA_DEVICES` half of `devices-ext` is actually exercised.
 >
+> That reconfigure is **done**: both trees now build with `CNA_DEVICES=ON` and stayed green, while
+> `headless` and `software` keep it OFF so both states are covered. CBIND-037D1 then opens the
+> devices module with the sensor reading values, 70 rows, in `sensors.h` / `CnaCApiSensors.cpp` /
+> `SensorValuesSmoke.c` — a suite that needs no game at all, since every route is a pure value
+> operation.
+>
+> The slice settles the ABI's **second** point-in-time form. `CNA_DateTimeOffset` is two
+> 100-nanosecond tick counts — local time from **0001-01-01** plus the UTC offset — because that is
+> the canonical runtime type's own base, exactly as the picture date counts from the Unix epoch
+> because *its* canonical type does. Reporting each in its own canonical base, clearly documented,
+> beats inventing one shared epoch that matches neither.
+>
+> Three canonical quirks are preserved rather than tidied, and the first is a deliberate refusal to
+> improve the API: **each reading constructor keeps its own argument order** even though the five
+> disagree — the accelerometer takes the timestamp first, the gyroscope the rate first, the compass
+> the true heading last — because normalizing them would make the C API easier to remember and
+> harder to check against the canonical source. Equality pairs each reading's values **with** its
+> timestamp. And the text conversions carry only part of each reading; the motion reading's names
+> only the device acceleration and gravity, omitting the attitude and rotation rate a reader would
+> expect. The canonical reading *interface* becomes the `timestamp` field every reading carries,
+> since C cannot use an abstract base, and its virtual destructor is the slice's one N/A row. All
+> six sensor-state identities are exposed, including the two the canonical header records as
+> currently unreachable — an identity is not a claim that something produces it. The inventory is
+> now 4,844 implemented, 30 partial, 1,362 planned and 179 N/A; all four trees green at 59/59.
+> **Next: CBIND-037D2**, the 126-row sensor-device slice.
+>
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
 > TextureCube, input events and other families that later slices implemented. It belongs to

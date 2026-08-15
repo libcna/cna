@@ -835,3 +835,15 @@ static_assert(CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM == UINT32_C(2));
 static_assert(CNA_VISUALIZATION_DATA_SIZE == UINT32_C(256));
 static_assert(sizeof(CNA_VisualizationData) == 2056U);
 static_assert(offsetof(CNA_VisualizationData, samples) == 1032U);
+
+static_assert(sizeof(CNA_SensorState) == sizeof(uint32_t));
+static_assert(CNA_SENSOR_STATE_MAXIMUM == UINT32_C(5));
+static_assert(sizeof(CNA_DateTimeOffset) == 16U);
+static_assert(alignof(CNA_DateTimeOffset) == 8U);
+static_assert(sizeof(CNA_AccelerometerReading) == 40U);
+static_assert(sizeof(CNA_GyroscopeReading) == 40U);
+static_assert(sizeof(CNA_AttitudeReading) == 120U);
+static_assert(offsetof(CNA_AttitudeReading, rotation_matrix) == 52U);
+static_assert(sizeof(CNA_CompassReading) == 64U);
+static_assert(sizeof(CNA_MotionReading) == 184U);
+static_assert(offsetof(CNA_MotionReading, gravity) == 168U);

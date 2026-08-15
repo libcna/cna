@@ -62,8 +62,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > pictures, the picture-album tree, both collections and the library's picture and save routes, and
 > `CBIND-037C6` adds playback: every `MediaPlayer` static, both of its events and a view of the
 > process-wide media queue, and `CBIND-037C7` closes the whole media module with `Video` and
-> `VideoPlayer`. The
-> generated inventory currently records 4,775 implemented, 30 partial, 1,432 planned and 178
+> `VideoPlayer`, and `CBIND-037D1` opens the devices module with the sensor state identity, the
+> date-and-offset timestamp and all five sensor reading values. The
+> generated inventory currently records 4,844 implemented, 30 partial, 1,362 planned and 179
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and
