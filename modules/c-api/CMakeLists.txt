@@ -16,6 +16,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiColor.cpp
     src/CnaCApiContent.cpp
     src/CnaCApiContentReaders.cpp
+    src/CnaCApiCoreExt.cpp
     src/CnaCApiCurve.cpp
     src/CnaCApiDetail.cpp
     src/CnaCApiDisplay.cpp
@@ -73,7 +74,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content CNA_Net CNA_GamerServices)
+target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cna_storage cna_content CNA_Net CNA_GamerServices)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -165,6 +166,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_error_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_error_smoke)
     add_test(NAME CApi_ErrorSmoke COMMAND cna_c_api_error_smoke)
+
+    add_executable(cna_c_api_core_ext_smoke
+        tests/pure_c/CoreExtSmoke.c
+    )
+    set_target_properties(cna_c_api_core_ext_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_core_ext_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_core_ext_smoke)
+    add_test(NAME CApi_CoreExtSmoke COMMAND cna_c_api_core_ext_smoke)
 
     add_executable(cna_c_api_math_values_smoke
         tests/pure_c/MathValuesSmoke.c
@@ -854,6 +867,7 @@ if(CNA_BUILD_TESTS)
     target_include_directories(cna_c_api_handle_registry_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/modules/core/include
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
         ${PROJECT_SOURCE_DIR}/modules/content/include
@@ -876,16 +890,18 @@ if(CNA_BUILD_TESTS)
     target_include_directories(cna_c_api_boundary_detail_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/modules/core/include
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
         ${PROJECT_SOURCE_DIR}/modules/content/include
         ${PROJECT_SOURCE_DIR}/modules/net/include
         ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
     )
-    # The storage and network-join exceptions are the canonical types this test throws whose constructors are not
-    # header-only, so proving its conversion needs the storage module on the link line.
+    # The storage, network-join and CNA core exceptions are the canonical types this test throws whose constructors
+    # are not header-only, so proving their conversion needs those modules on the link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
         sharp_runtime_core_base
+        cna_core
         cna_storage
         CNA_Net
     )

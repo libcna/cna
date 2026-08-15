@@ -241,7 +241,7 @@ mechanical wrapper.
 | CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ✅ | `graphics_state.h`, `display.h`, `render_target.h` and `sprite_font.h` map every inventory row in this family: fixed identities and complete state PODs/presets/device round-trips, sampler slots and explicit-state SpriteBatch Begin; display/adapter/presentation values and safe native-handle/refresh limitations; owned 2D/cube targets with applied-property snapshots and atomic singular/MRT binding; copied glyph SpriteFonts retaining their source Texture2D. Strict-C HEADLESS and SDL_RENDERER tests cover ABI layouts, properties, UTF-8, ownership, stale/wrong-thread handles, real 2D binding and honest unavailable-backend paths. The inventory now records 814 implemented, 21 partial, 5,510 planned and 70 not applicable rows, with no planned CBIND-034 row. |
 | CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ✅ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. Work is decomposed into CBIND-035A–G below; the parent becomes complete only when all seven rows and every CBIND-035 inventory row are closed. |
 | CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ✅ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. Work is decomposed into CBIND-036A–E below; the parent becomes complete only when all five rows and every CBIND-036 inventory row are closed. **Closed by CBIND-036E5:** no planned `storage`, `content` or `net` inventory row remains, and the snapshot is 3,841 implemented, 30 partial, 2,428 planned and 116 not applicable. Sanitizer evidence matches the CBIND-035B–E bar: all 50 C API tests pass under a combined ASan+UBSan `SOFTWARE`/`CNAEXT` build (`cmake-build-binding-asan`) **with leak detection enabled**, so the storage, content and network slices report no leak, no invalid access and no undefined behavior. |
-| CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
+| CBIND-037 | Add collections, events, services, media and devices coverage | 🟨 | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. Work is decomposed into CBIND-037A–G below; the parent becomes complete only when all seven rows and every CBIND-037 inventory row are closed. |
 | CBIND-043 | Maintain a machine-checked coverage gate | ⬜ | A CI checker compares the public-header inventory to `COVERAGE.md` and fails if a public type/member/constant/event has no mapping/status. New C++ public API cannot land without its C API row and tests in the same change. |
 | CBIND-044 | Close the public API coverage matrix | ⬜ | Every row is implemented and tested, or carries an owner-approved native limitation with a callable C API that reports it. No unspecified omission remains. |
 
@@ -352,6 +352,26 @@ its receive and send paths dereference the session it belongs to.
 | CBIND-036E3 | 10 | Complete session event registrations | ✅ | One `cna_network_session_subscribe_*` route per event, each with a typed callback that receives the matching `CNA_*EventInfo` description, plus one shared `cna_network_session_unsubscribe`. A payload gamer is handed over as a handle that lives only for the duration of the callback, so a consumer can never retain a pointer into session-owned state. An instance registration holds a weak reference to its session, so releasing it after the session is gone is a no-op; `InviteAccepted` is static and its subscription belongs to the process. **Borrowed from CBIND-037:** the four `InviteAcceptedEventArgs` rows, mapped to `CNA_InviteAcceptedEventInfo`, because this slice maps the event that carries them. `NetSmoke.c` proves the canonical gamer-joined replay, real join/leave/start/end/host-change/session-end deliveries through the pump, and stale registration refusal; all three trees stay green (50/50). |
 | CBIND-036E4 | 17 | Complete session discovery, join and the fake-async pairs | ✅ | Every `Begin`/`End` pair collapses into one synchronous C route that still invokes the canonical completion delegate, because CNA completes the pair before `Begin` returns; the delegate receives only the caller's own context, and no `System::IAsyncResult` or `std::any` is exposed. The three asynchronous creations are deliberately not aliases of the synchronous ones — the canonical end step substitutes its own gamer limit instead of forwarding the caller's, and `NetSmoke.c` asserts that difference. Both `Find` overloads, both asynchronous searches, `Join`, `JoinInvited` and their asynchronous forms are mapped, and the canonical refusal of a local-only search type plus the invited path's fixed session type are preserved. All three trees stay green (50/50). |
 | CBIND-036E5 | 18 | Complete local network gamers | ✅ | `net_sessions.h` and `CnaCApiNetSessions.cpp` map `LocalNetworkGamer` over the same owned `CNA_NetworkGamerHandle`, because a local gamer *is* a network gamer; every route refuses a handle whose gamer is not local with `CNA_RESULT_INVALID_HANDLE` rather than reinterpreting it. The data-available and backing signed-in-gamer queries, all three `ReceiveData` overloads, all six `SendData` overloads including both `PacketWriter` forms, the canonical internal factory as `cna_local_network_gamer_create_ext` and the two CNAEXT queue routes are mapped; a payload crosses as a pointer plus a byte count and the sender comes back as a borrowed gamer view that keeps its session alive. Three canonical behaviors are preserved and asserted rather than tidied up: the offset receive consumes its packet **before** rejecting an out-of-range offset, the packet-reader receive always reports zero bytes even when it consumed a packet, and `EnableSendVoice`/`SendPartyInvites` are declared no-ops whose routes validate and succeed without pretending to do more. `NetSmoke.c` grew the local-gamer coverage and runs green in all three trees (50/50). This closes parent CBIND-036: the `net` module has no planned row left. |
+
+#### CBIND-037 remaining-module implementation slices
+
+The 2,428 rows CBIND-037 owns are partitioned once, by module — which here is also the dependency
+boundary, because each module is its own library, its own include tree and its own C header family.
+The order is by what each part needs to exist: `core` has no dependency at all and goes first; the
+leaf device and content families follow; `runtime` comes after them because `Game` composes the
+graphics, input and audio surfaces; and `gamer-services`, the largest, comes last because its guide
+and dispatcher surfaces sit on top of the runtime. A slice larger than roughly a hundred rows is
+sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
+| CBIND-037B | 599 | Complete the input module | ⬜ | Map `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration). |
+| CBIND-037C | 325 | Complete the media module | ⬜ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. |
+| CBIND-037D | 289 | Complete the devices and devices-ext modules | ⬜ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). |
+| CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
+| CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
+| CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
 
 #### CBIND-036B content implementation slices
 
@@ -679,17 +699,24 @@ behaviors — the offset receive consuming its packet before rejecting the offse
 receive always reporting zero, and the declared-no-op voice and party-invite calls — are preserved
 and asserted. The snapshot is now 3,841 implemented, 30 partial, 2,428 planned and 116 not
 applicable, with no planned `storage`, `content` or `net` row left; CBIND-037 owns everything that
-remains.
+remains and is partitioned into seven module-sized slices. CBIND-037A closes the first of them, the
+whole `core` module: one route per canonical logger static, the process-wide minimum level, the
+compile-time platform, desktop operating system, renderer identity and renderer name, and both
+backend classifications for any of the 46 public renderer identities. Two decisions are worth
+recording. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`,
+which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C
+rather than collapsing into a generic internal failure. And the canonical log levels keep their
+exact ordinals including the deliberate 100 for `EXPERIMENT`, so 6 is not an identity and is
+refused. The snapshot is now 3,912 implemented, 30 partial, 2,356 planned and 117 not applicable,
+with no planned `core` row left.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-036E5 is the final task completed in this handoff, and it closes
-  parent CBIND-036 (parent CBIND-035 was closed by CBIND-035G; CBIND-036A–D closed storage,
-  content, the network values and packets, and gamers/machines/event descriptions; CBIND-036E1–E4
-  closed discovered sessions, the session object, its events and discovery/join).
-- Next task: `CBIND-037` collections, events, services, media and devices — the 2,428 planned rows
-  that remain. Do not reopen closed CBIND-035 or CBIND-036 slices without a concrete demonstrated
-  defect.
+- Branch: `feature/binding`; CBIND-037A is the final task completed in this handoff. Parent
+  CBIND-036 closed with CBIND-036E5, and parent CBIND-035 with CBIND-035G.
+- Next task: `CBIND-037B` complete the input module (599 planned rows) — sub-partition it on
+  arrival, as CBIND-035 and CBIND-036 were. Do not reopen closed CBIND-035, CBIND-036 or
+  CBIND-037A slices without a concrete demonstrated defect.
 - Known unrelated breakage found while verifying: the aggregate `CnaTests` target globs
   `modules/*/tests/*.cpp`, which now picks up `modules/c-api/tests/cpp/AbiHeaderCpp.cpp` — a
   standalone C API ABI translation unit that is not a GTest unit and has no `CNA/C` include path
@@ -698,9 +725,9 @@ remains.
   unaffected.
 - Sanitizer baseline: `cmake-build-binding-asan` is a fourth, verification-only tree
   (`-DCNA_GRAPHICS_RENDERER=SOFTWARE -DCNA_CNAEXT=ON -DCNA_SANITIZE=address,undefined
-  -DCNA_BUILD_C_API=ON`). All 50 C API tests pass there with `ASAN_OPTIONS=detect_leaks=1`, which
+  -DCNA_BUILD_C_API=ON`). All 51 C API tests pass there with `ASAN_OPTIONS=detect_leaks=1`, which
   is stricter than the `detect_leaks=0` the earlier slices used. Build only `modules/c-api` in it.
-- Verification baseline: three trees each run the same 50 C API tests green — HEADLESS,
+- Verification baseline: three trees each run the same 51 C API tests green — HEADLESS,
   SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
   the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
   probe the capability or the actual result, so a new backend needs no test edits. The
@@ -708,8 +735,8 @@ remains.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-036E5: 414 headers / 6,415 symbols; 3,841 implemented, 30 partial,
-  2,428 planned and 116 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-037A: 414 headers / 6,415 symbols; 3,912 implemented, 30 partial,
+  2,356 planned and 117 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

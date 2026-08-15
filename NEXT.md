@@ -323,8 +323,26 @@
 > tests green **with leak detection enabled** — stricter than the `detect_leaks=0` the CBIND-035B–E
 > runs used. Nothing in the storage streams, the content readers or the network sessions leaks,
 > reads out of bounds or executes undefined behavior, including the borrowed-view counters and the
-> raw session pointer the C layer owns. CBIND-037 (collections, events, services, media and
-> devices) owns everything that remains.
+> raw session pointer the C layer owns.
+>
+> CBIND-037 owns everything that remains and is partitioned into seven module-sized slices, ordered
+> by what each part needs to exist. CBIND-037A closes the first of them, CNA's own `core` module:
+> one route per canonical logger static so C never depends on a defaulted argument, the process-wide
+> minimum level, the compile-time platform, desktop operating system, renderer identity and renderer
+> name, and both backend classifications — implementation technology and recommendation maturity —
+> for any of the 46 public renderer identities rather than only the compiled-in one. Names use the
+> project's count/copy pair instead of the canonical static-storage `std::string_view`, so no
+> pointer into CNA storage crosses the ABI.
+>
+> Two decisions are worth recording. `CNA::CNAException` gained a central boundary conversion to
+> `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of
+> `getCurrentDesktopOS()` observable in C instead of collapsing into a generic internal failure.
+> And the canonical log levels keep their exact ordinals, including the deliberate 100 for
+> `EXPERIMENT` — the C identities are not renumbered into a dense range, so 6 is not an identity and
+> is refused. `CNAEXT` itself is recorded as not-applicable: a documentation-only marker macro with
+> no callable behavior. The inventory is now 3,912 implemented, 30 partial, 2,356 planned and 117
+> N/A, with no planned `core` row left; all three trees are green at 51/51 and the sanitizer tree
+> agrees with leak detection on.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

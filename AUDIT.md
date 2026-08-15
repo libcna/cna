@@ -30,8 +30,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > surface a session needs to exist, `CBIND-036E3` adds the ten session event registrations and
 > `CBIND-036E4` adds discovery, join and the collapsed fake-async pairs, and `CBIND-036E5` adds the
 > local gamers that close parent `CBIND-036`: every receive and send overload, the borrowed sender
-> view and the two CNAEXT queue routes, leaving the whole `net` module mapped. The generated
-> inventory currently records 3,841 implemented, 30 partial, 2,428 planned and 116
+> view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
+> opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
+> the compile-time platform, desktop operating system, renderer identity and renderer name, and
+> both backend classifications for any of the 46 public renderer identities. The generated
+> inventory currently records 3,912 implemented, 30 partial, 2,356 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

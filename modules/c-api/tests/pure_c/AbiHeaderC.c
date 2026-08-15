@@ -863,3 +863,24 @@ _Static_assert(sizeof(CNA_NetworkSessionEventRegistrationHandle) == 8U &&
                    offsetof(CNA_InviteAcceptedEventInfo, is_current_session) == 16U &&
                    offsetof(CNA_InviteAcceptedEventInfo, reserved) == 17U,
                "CNA_InviteAcceptedEventInfo layout must remain stable");
+
+_Static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t) &&
+                   sizeof(CNA_LogCategory) == sizeof(uint32_t) &&
+                   sizeof(CNA_Platform) == sizeof(uint32_t) &&
+                   sizeof(CNA_DesktopOS) == sizeof(uint32_t) &&
+                   sizeof(CNA_GraphicsBackendCategory) == sizeof(uint32_t) &&
+                   sizeof(CNA_GraphicsBackendMaturity) == sizeof(uint32_t) &&
+                   CNA_LOG_LEVEL_FATAL == UINT32_C(0) &&
+                   CNA_LOG_LEVEL_TRACE == UINT32_C(5) &&
+                   CNA_LOG_LEVEL_EXPERIMENT == UINT32_C(100) &&
+                   CNA_LOG_CATEGORY_APPLICATION == UINT32_C(0) &&
+                   CNA_LOG_CATEGORY_GPU == UINT32_C(8) &&
+                   CNA_PLATFORM_DESKTOP == UINT32_C(0) &&
+                   CNA_PLATFORM_WEB == UINT32_C(3) &&
+                   CNA_DESKTOP_OS_WINDOWS == UINT32_C(0) &&
+                   CNA_DESKTOP_OS_OTHER == UINT32_C(3) &&
+                   CNA_GRAPHICS_BACKEND_CATEGORY_NATIVE == UINT32_C(0) &&
+                   CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC == UINT32_C(4) &&
+                   CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION == UINT32_C(0) &&
+                   CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4),
+               "CNA core-extension identities must remain stable");

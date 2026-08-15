@@ -215,5 +215,24 @@ int main()
         return 17;
     }
 
+    // A CNA-namespace failure -- the only canonical thrower today is getCurrentDesktopOS() off the
+    // desktop -- is a state failure, not a generic internal one.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw CNA::CNAException("Current platform is not desktop.");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "Current platform is not desktop.")) {
+        return 18;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw CNA::CNAException(std::string("core failure"));
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "core failure")) {
+        return 19;
+    }
+
     return 0;
 }

@@ -716,3 +716,16 @@ static_assert(alignof(CNA_InviteAcceptedEventInfo) == 8U);
 static_assert(offsetof(CNA_InviteAcceptedEventInfo, gamer) == 8U);
 static_assert(offsetof(CNA_InviteAcceptedEventInfo, is_current_session) == 16U);
 static_assert(offsetof(CNA_InviteAcceptedEventInfo, reserved) == 17U);
+
+static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t));
+static_assert(sizeof(CNA_LogCategory) == sizeof(uint32_t));
+static_assert(sizeof(CNA_Platform) == sizeof(uint32_t));
+static_assert(sizeof(CNA_DesktopOS) == sizeof(uint32_t));
+static_assert(sizeof(CNA_GraphicsBackendCategory) == sizeof(uint32_t));
+static_assert(sizeof(CNA_GraphicsBackendMaturity) == sizeof(uint32_t));
+static_assert(CNA_LOG_LEVEL_EXPERIMENT == UINT32_C(100));
+static_assert(CNA_LOG_CATEGORY_GPU == UINT32_C(8));
+static_assert(CNA_PLATFORM_WEB == UINT32_C(3));
+static_assert(CNA_DESKTOP_OS_OTHER == UINT32_C(3));
+static_assert(CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC == UINT32_C(4));
+static_assert(CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4));

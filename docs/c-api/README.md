@@ -103,7 +103,7 @@ gate.
 - Every public declaration receives a Doxygen block in its `.h` header.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
-`abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
+`abi.h`, `core.h`, `core_ext.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,

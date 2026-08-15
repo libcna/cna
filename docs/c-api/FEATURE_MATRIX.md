@@ -16,6 +16,7 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 |---|---|---|
 | ABI | Encoded ABI query through `cna_get_abi_version` | Experimental version `0.1.0`; no stability promise before the release gate |
 | Errors | Per-thread result, category and UTF-8 diagnostic count/copy | Diagnostics are replaced by the next failed ordinary call; programs branch on `CNA_Result` |
+| Core extensions | One route per canonical logger static, the process-wide minimum level, the compile-time platform and desktop operating system, the compile-time renderer identity and name, and both backend classifications for any of the 46 public renderer identities | Nothing here needs a runtime, a game or a device; the log threshold is process-wide static state a consumer should restore; the desktop query refuses on a non-desktop platform instead of returning a fallback; an identity is a name, not a capability claim |
 | Game | Create one active game, run one frame, run until exit, request exit, clear, set UTF-8 window title and destroy | Creation-thread only; run and destroy are non-reentrant; a second active C-owned game is refused |
 | Lifecycle | Load, update, draw, unload and exit callbacks with copied callback table, context and optional copied UTF-8 failure message | Callbacks are synchronous; a callback failure becomes `CNA_RESULT_CALLBACK` |
 | Timing | `CNA_GameTime` snapshots with total/elapsed 100-nanosecond ticks and running-slowly flag | Present only for update and draw callbacks |
@@ -205,7 +206,6 @@ thread.
 The following families are planned work, not implicitly supported and not permanent exclusions:
 
 - the remaining typed content asset routes;
-- networking session events, discovery, join and local gamers (`net_sessions.h`);
 - remaining audio (file/content loading, fire-and-forget, globals/3D, streaming, microphone and
   XACT), plus media and video;
 - remaining window, platform, service, event and runtime APIs;

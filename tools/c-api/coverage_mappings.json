@@ -2671,6 +2671,225 @@
       "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-036E4"
+    },
+    {
+      "id": "core-log-level",
+      "qualified_name_regex": "^CNA::LogLevel(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_LogLevel` and the `CNA_LOG_LEVEL_*` identities at the canonical ordinals. The canonical values are explicit and deliberately not contiguous \u2014 `EXPERIMENT` is 100, not 6 \u2014 and the C identities preserve that exactly rather than renumbering into a dense range",
+      "tests": "C and C++ ABI assertions freeze every ordinal including the 100 gap; `CoreExtSmoke.c` logs at all seven levels and asserts that 6 is refused as `CNA_RESULT_INVALID_ARGUMENT`, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-log-category",
+      "qualified_name_regex": "^CNA::LogCategory(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_LogCategory` and the `CNA_LOG_CATEGORY_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` logs through all nine categories and asserts that an out-of-range category is refused, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-logger",
+      "qualified_name_regex": "^CNA::Logger(?:::(?:Log|Fatal|Error|Warn|Info|Debug|Trace|Experiment|FatalIf|ErrorIf|WarnIf|InfoIf|DebugIf|TraceIf|ExperimentIf|SetMinimumLevel|GetMinimumLevel))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "one `cna_logger_*` route per canonical static, so C never depends on a defaulted argument: the general `cna_logger_log` takes level, message, category and condition explicitly, each severity route takes message and category, and each conditional route takes message and condition because the canonical `*If` overloads accept no category and always log under `APPLICATION`. A message crosses as a borrowed `CNA_StringView` and is copied into an owned string before the canonical `std::string_view` is formed, so no view outlives its call. `cna_logger_set_minimum_level` and `_get_minimum_level` map the threshold, which is process-wide static state in the canonical logger and is documented as such. The class itself is never instantiated \u2014 it is a static-only utility \u2014 so no handle exists",
+      "tests": "`CoreExtSmoke.c` calls every route, drives the threshold to `FATAL` and back, asserts the getter observes each set value, and covers a null message view, a null output and an unknown level or category as `CNA_RESULT_INVALID_ARGUMENT`; the threshold is restored because it is process-wide. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-platform",
+      "qualified_name_regex": "^CNA::Platform(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_Platform` and the `CNA_PLATFORM_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current platform and asserts it is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-platform-current",
+      "qualified_name_regex": "^CNA::getCurrentPlatform$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_platform_get_current`. The canonical query is a compile-time constant, so the C route needs no runtime, no device and no initialization",
+      "tests": "`CoreExtSmoke.c` asserts a valid identity and a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-desktop-os",
+      "qualified_name_regex": "^CNA::DesktopOS(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_DesktopOS` and the `CNA_DESKTOP_OS_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current operating system on a desktop build, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-desktop-os-current",
+      "qualified_name_regex": "^CNA::getCurrentDesktopOS$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_desktop_os_get_current`. The canonical function throws on a non-desktop platform rather than returning a fallback, and the firewall converts that `CNA::CNAException` to `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`; the refusal is preserved rather than replaced by an invented default",
+      "tests": "`CoreExtSmoke.c` branches on the platform the build actually targets \u2014 a desktop build asserts a valid identity, any other asserts the `CNA_RESULT_INVALID_STATE` refusal \u2014 plus a null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-category",
+      "qualified_name_regex": "^CNA::GraphicsBackendCategory(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GraphicsBackendCategory` and the `CNA_GRAPHICS_BACKEND_CATEGORY_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` classifies all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-category-name",
+      "qualified_name_regex": "^CNA::toStringView$",
+      "signature_regex": "^\\(GraphicsBackendCategory category\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_category_get_name_size` and `cna_graphics_backend_category_copy_name`. The canonical function returns a `std::string_view` at static storage; C gets the project\u2019s count/copy pair instead, so no pointer into CNA storage crosses the ABI",
+      "tests": "`CoreExtSmoke.c` round-trips all five names exactly, asserts the requirement is reported and nothing is written when the capacity is too small, and refuses an unknown category and a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-category-of",
+      "qualified_name_regex": "^CNA::getGraphicsBackendCategory$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_get_category`, which accepts any of the 46 public renderer identities and not only the compiled-in one, exactly as the canonical function does. An identity outside that set \u2014 including `CNA_GRAPHICS_RENDERER_UNKNOWN` \u2014 is refused rather than silently classified",
+      "tests": "`CoreExtSmoke.c` classifies all 46 identities, pins three fixed answers a consumer can rely on, and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-category-current",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsBackendCategory$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_get_current_category`",
+      "tests": "`CoreExtSmoke.c` asserts it agrees with classifying the compiled-in renderer identity, so the test needs no knowledge of which renderer this build selected, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-maturity",
+      "qualified_name_regex": "^CNA::GraphicsBackendMaturity(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GraphicsBackendMaturity` and the `CNA_GRAPHICS_BACKEND_MATURITY_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the maturity of all 46 public renderer identities and checks every answer is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-maturity-name",
+      "qualified_name_regex": "^CNA::toStringView$",
+      "signature_regex": "^\\(GraphicsBackendMaturity maturity\\)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_maturity_get_name_size` and `cna_graphics_backend_maturity_copy_name`, the same count/copy pair the category name uses, because the canonical overload also returns a static-storage `std::string_view`",
+      "tests": "`CoreExtSmoke.c` round-trips all five names exactly and refuses an unknown maturity and a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-maturity-of",
+      "qualified_name_regex": "^CNA::getGraphicsBackendMaturity$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_get_maturity`, which accepts any of the 46 public renderer identities and refuses anything else",
+      "tests": "`CoreExtSmoke.c` reads the maturity of all 46 identities and asserts the unknown-identity and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-backend-maturity-current",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsBackendMaturity$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_backend_get_current_maturity`",
+      "tests": "`CoreExtSmoke.c` asserts it agrees with reading the maturity of the compiled-in renderer identity, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-renderer-current-type",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsRendererType$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_renderer_get_current_type`, returning the same `CNA_GraphicsRendererType` identity `cna_graphics_device_get_info` reports but without needing a device or any graphics initialization, because the canonical query is a compile-time constant. An identity is not a capability claim and the C documentation says so",
+      "tests": "`CoreExtSmoke.c` asserts a known identity and a null-output refusal, and cross-checks it against the compiled-in category and maturity answers, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-renderer-current-name",
+      "qualified_name_regex": "^CNA::getCurrentGraphicsRendererName$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_graphics_renderer_get_current_name_size` and `cna_graphics_renderer_copy_current_name`. The canonical view points at a string literal; C gets the count/copy pair so no pointer into static CNA storage crosses the ABI. The text matches the `CNA_GRAPHICS_RENDERER` build option exactly",
+      "tests": "`CoreExtSmoke.c` round-trips the name, asserts the reported requirement matches the copied length, and covers the too-small capacity writing nothing plus a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-exception",
+      "qualified_name_regex": "^CNA::CNAException(?:::CNAException)?$",
+      "kinds": [
+        "class",
+        "constructor"
+      ],
+      "mapping": "the C exception firewall converts this canonical failure before it can cross the ABI: a CNA-namespace failure becomes `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`, and the message reaches the caller through the per-thread UTF-8 diagnostic. Both constructor forms produce the same conversion. No exception object, type name or C++ throw is exposed",
+      "tests": "both the C-string and `std::string` constructor conversions, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test; `CoreExtSmoke.c` observes the same conversion through `cna_desktop_os_get_current` on a non-desktop build",
+      "status": "implemented",
+      "task": "CBIND-037A"
+    },
+    {
+      "id": "core-cnaext-macro",
+      "qualified_name_regex": "^CNAEXT$",
+      "kinds": [
+        "macro"
+      ],
+      "mapping": "No C mapping: `CNAEXT` is a documentation-only marker that expands to nothing in a normal build and tags a declaration as a CNA extension rather than XNA 4.0. It names no callable behavior. The C API carries the same distinction in route names, where an `_ext` suffix marks a route with no canonical counterpart",
+      "tests": "Doxygen declaration inventory; the distinction it marks is covered by the `_ext`-suffixed routes across the C headers",
+      "status": "not-applicable",
+      "task": "CBIND-037A"
     }
   ]
 }

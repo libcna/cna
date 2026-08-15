@@ -16,6 +16,7 @@
 // generic internal ones. Catching either needs only the type's weakly emitted RTTI, not its
 // out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
 // translation unit that never throws one.
+#include "CNA/CNAException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
@@ -171,6 +172,8 @@ template<typename TCallable>
             Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
         SetLastJoinError(static_cast<uint32_t>(exception.getJoinErrorProperty()));
         return result;
+    } catch (const CNA::CNAException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const System::NotImplementedException& exception) {
