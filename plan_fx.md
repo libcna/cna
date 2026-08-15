@@ -119,10 +119,12 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
   still asserts on shader bytecode in places no campaign has reached;
 - additional renderers consuming `SamplerState.AddressW` (`FX-026` carried it through the shared
   contract and FNA3D consumes it; the rest keep the documented no-op default);
-- additional renderer implementations (`FX-061`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
-  (`FX-062`) and Vulkan (`FX-064`–`FX-065`). The shared contract they must pass now exists
-  (`FX-060`); until a backend passes it, its correct behavior is an explicit
-  `NotSupportedException`, never a silent stock-shader fallback.
+- additional renderer implementations (`FX-061`–`FX-070`), including EasyGL/OpenGL/OpenGL ES
+  (`FX-062`), Vulkan (`FX-064`–`FX-065`) and DirectX 9 (`FX-070`, structurally the smallest of them
+  because it consumes the effect's shader bytecode untranslated). Every renderer identity is now
+  classified as planned, assessed-feasible or unsupported-by-design in section 10.3 (`FX-067`). The
+  shared contract a backend must pass exists (`FX-060`); until it passes, that backend's correct
+  behavior is an explicit `NotSupportedException`, never a silent stock-shader fallback.
 
 ## 1. Executive conclusion
 
@@ -537,9 +539,10 @@ values everywhere except inside a structure.
 | FX-064 | Prototype direct MojoShader SPIR-V generation/linking for Vulkan | FX-030, FX-060 | Reflection, uniform binding, vertex linkage, and one multi-pass fixture work without glslang |
 | FX-065 | Complete and gate Vulkan after the prototype | FX-064 | Full shared suite and Vulkan validation layers pass |
 | FX-066 | Prototype and gate Metal support if the pinned profile meets CNA requirements | FX-030, FX-060 | Decision record plus full suite before enabling capability |
-| FX-067 | Assess DirectX 9, D3D12, LLGL, Diligent, Magnum, Sokol, Wicked, and other programmable renderers individually | FX-060 | Each backend gets an accepted implementation plan or documented unsupported rationale |
+| FX-067 | Assess DirectX 9, D3D12, LLGL, Diligent, Magnum, Sokol, Wicked, and other programmable renderers individually | FX-060 | **Done.** Section 10.3 classifies every one of the 46 renderer identities as planned, assessed-feasible or unsupported-by-design, from two measured facts: which profiles the pinned MojoShader actually compiles (GLSL in four dialects and SPIR-V portably; HLSL Windows-gated, Metal Apple-gated; ARB1/BYTECODE/D3D disabled) and which APIs it ships binding glue for (OpenGL, SDL_GPU, D3D11 -- and nothing else). The finding worth acting on is DirectX 9: a compiled XNA effect *is* D3D9 bytecode, and CNA's D3D9 renderer already feeds raw DWORD token blobs to `CreateVertexShader`/`CreatePixelShader`, so it needs the container parsed and no shader translated at all -- filed as `FX-070` |
 | FX-068 | Keep bgfx false until a reproducible bgfx-native shader packaging route is proven | FX-060 | Feasibility record covers shaderc format, reflection, pass states, and redistribution |
 | FX-069 | Publish the final cross-renderer support matrix and project-wide completion definition | FX-061, FX-062, FX-063, FX-065, FX-066, FX-067, FX-068 | Every renderer is tested-supported or intentionally unsupported; no silent fallback exists |
+| FX-070 | Implement and gate DirectX 9, which needs the effect container parsed but no shader translated | FX-060, FX-067 | Full shared suite passes on a Windows or DXVK-native configuration. Structurally the smallest backend in the project: MojoShader parses parameters, techniques, passes and states, and each pass's shader bytecode goes to Direct3D 9 untranslated with every MojoShader profile left disabled. Cannot be verified on this Linux development machine, so it ships behind the same capability gate as every other backend |
 
 ### Phase H - Optional future formats and tooling
 
@@ -635,7 +638,103 @@ suite and enabled `CompiledEffects`, or has an explicit documented unsupported r
 with that renderer's purpose. FNA3D support alone is a valuable production milestone, but must not
 be presented as universal CNA renderer support.
 
-### 10.3 Explicit non-goals for v1
+### 10.3 Per-renderer assessment (`FX-067`, 2026-08-15)
+
+Every renderer identity is classified below as **planned**, **assessed feasible**, or
+**unsupported by design**. No renderer is left implicit, and none silently falls back to a stock
+shader: a renderer that does not opt in through `SupportsCompiledEffects()` refuses a compiled
+`Effect` by name.
+
+Two facts from the pinned toolchain drive nearly every verdict, and both were measured rather than
+assumed.
+
+**What the pinned MojoShader can emit.** Its `CMakeLists.txt` disables `ARB1`, `ARB1_NV`,
+`BYTECODE` and `D3D`; enables `GLSL`, `GLSL120`, `GLSLES`, `GLSLES3`, `SPIRV` and `GLSPIRV`
+unconditionally; and gates `HLSL` behind Windows/DXVK and `METAL` behind Apple. So the portable
+outputs are GLSL in four dialects and SPIR-V; HLSL and Metal Shading Language exist only on the
+platform that needs them.
+
+**What it can bind for you.** Translation is not the whole job -- something has to attach the
+translated shader to a pipeline and route uniforms. MojoShader ships that glue for exactly three
+APIs: `mojoshader_opengl.c`, `mojoshader_sdlgpu.c` and `mojoshader_d3d11.c`. Everywhere else the
+renderer writes its own binding layer, which is the real cost driver and is why Vulkan and Metal
+have their own prototype tasks rather than being folded into a single "SPIR-V works" claim.
+
+#### Planned backends
+
+| Renderer | Route | Task |
+|---|---|---|
+| FNA3D | Done. MojoShader effect runtime inside FNA3D, GLSL or SPIR-V chosen by FNA3D's own driver | `FX-031`–`FX-038` |
+| SDL_GPU | SPIR-V profile plus the `mojoshader_sdlgpu.c` adapter -- the same pairing FNA3D's SDL_GPU driver already exercises in CNA's own test runs | `FX-061` |
+| EasyGL and the OpenGL/OpenGL ES family | GLSL/GLSLES/GLSLES3 profiles plus `mojoshader_opengl.c`. One implementation serves `OPENGLES2`, `OPENGLES3`, `OPENGL33`, `OPENGL4`, `WEBGL1` and `WEBGL2`, since EasyGL is their shared implementation | `FX-062` |
+| DirectX 11 | HLSL profile plus `mojoshader_d3d11.c`, Windows-only by the pin's own gating | `FX-063` |
+| Vulkan | SPIR-V profile, **no adapter** -- descriptor layout, uniform buffers and vertex linkage are CNA's to write, which is why it is split into a prototype and a completion task | `FX-064`, `FX-065` |
+| Metal | Metal profile emits MSL source and CNA's Metal renderer already builds pipelines from MSL through `newLibraryWithSource`, but there is no adapter and the profile only exists on Apple | `FX-066` |
+| bgfx | Held false until a reproducible bgfx-native shader packaging route is proven; bgfx consumes its own `shaderc` container rather than any MojoShader output | `FX-068` |
+
+#### DirectX 9 -- the case worth calling out
+
+`DIRECTX9` is the best structural fit of any renderer in the project, better than FNA3D's, and it
+needs no shader translation whatsoever.
+
+A compiled XNA effect *is* Direct3D 9 shader bytecode. CNA's DirectX 9 renderer already hands raw
+DWORD token blobs to `IDirect3DDevice9::CreateVertexShader` / `CreatePixelShader` and sets
+constants through `SetVertexShaderConstantF` / `SetPixelShaderConstantF`
+(`modules/renderers/directx9/src/D3D9EffectRenderer.cpp`). That is exactly the shape MojoShader
+hands back after parsing the effect container.
+
+So the work is: use MojoShader for the container only -- parameters, techniques, passes, render
+states, sampler states, and which shader object each pass selects -- and pass the shader bytecode
+through untranslated. Every profile stays disabled. This is a smaller job than any other backend
+here and should be scheduled ahead of the harder ones; it is filed as `FX-070`.
+
+The caveat is platform, not design: the renderer needs a live Direct3D 9 device, so it can only be
+gated on a Windows or DXVK-native configuration, and this project develops on Linux. The
+implementation is portable to write and cannot be verified here.
+
+#### Assessed feasible, not yet scheduled
+
+Each of these can consume a MojoShader output, but none has an adapter and each carries an open
+question that a prototype has to answer before a task is worth writing.
+
+| Renderer | What it consumes today | Open question |
+|---|---|---|
+| LLGL | GLSL compiled through glslang | LLGL's own reflection and binding model has to be reconciled with MojoShader's register-based uniform layout |
+| Diligent | `ShaderCreateInfo` with HLSL or GLSL source, converted internally | Which source language to feed given Diligent picks its native API at runtime -- the choice may have to vary per device |
+| Magnum | GLSL through `GL::Shader` at `Version::GL330` | Whether MojoShader's GLSL output satisfies core-profile 330 without the compatibility constructs its older dialects rely on |
+| Sokol | Backend-specific shader source or bytecode, normally produced offline by `sokol-shdc` | Sokol's uniform-block model is fixed at shader-creation time and does not obviously accommodate a register file assigned per pass |
+| WickedEngine | HLSL compiled to SPIR-V or DXIL | The HLSL profile is Windows/DXVK-gated in the pin, so a non-Windows route would need the pin's own build switches changed |
+| DirectX 12 | HLSL compiled at runtime through `D3DCompile` | MojoShader's HLSL profile targets a Shader Model 3 era dialect; whether `D3DCompile` accepts it at a model D3D12 will load is unverified |
+| DirectX 10 | Same family as D3D11 but with no MojoShader adapter | Whether the D3D11 adapter can be retargeted or whether the binding layer must be rewritten |
+
+#### Unsupported by design
+
+These renderers cannot execute Shader Model 2/3 programs at all. The rationale is a property of the
+target API, not a gap in CNA, so each keeps `SupportsCompiledEffects()` false permanently and
+refuses a compiled `Effect` explicitly.
+
+- **No programmable pipeline in the target API**: `DIRECTX1`, `DIRECTX2`, `DIRECTX3`, `DIRECTX5`,
+  `DIRECTX6`, `DIRECTX7` (fixed-function Direct3D), `GLIDE`, `GDI`, `OPENGL1`, `OPENGL2`,
+  `OPENGLES1`, `OPENVG`.
+- **Shader model too old**: `DIRECTX8` reaches Shader Model 1.x, which cannot express the SM2/3
+  programs an XNA 4.0 effect carries.
+- **2D raster and document APIs with no shader stage CNA can target**: `SDL_RENDERER`,
+  `DIRECT2D`, `CANVAS`, `HTML_DOM`, `SVG_DOM`, `SKIA`, `BLEND2D`, `SOFTWARE`, `FREEDIRECT`.
+- **Programmable, but not through anything MojoShader emits**: `PORTABLEGL`, whose shader stage is
+  a pair of C function pointers rather than a compiled program -- there is nothing for a translated
+  shader to become. `WEBGPU` consumes WGSL, which the pinned MojoShader does not emit; it is
+  reconsidered only if a SPIR-V route into wgpu-native is proven, and stays out of scope for v1.
+- **Not rendering backends**: `HEADLESS`, `STUB`.
+
+#### What this assessment does not claim
+
+A "feasible" verdict is a reading of two toolchains, not a prototype. Nothing above has been built,
+and the pattern from FNA3D is that the expensive part is never the translation -- it is the binding
+layer, the uniform routing and the state mapping, none of which a feasibility reading exercises.
+Each row becomes a task only after a spike proves its open question, and no renderer's capability
+flips to true before it passes the `FX-060` shared suite in full.
+
+### 10.4 Explicit non-goals for v1
 
 - compiling HLSL `.fx` source at runtime;
 - treating MonoGame MGFX as XNA/FNA Effect Framework bytecode;
