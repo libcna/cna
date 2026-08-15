@@ -10,6 +10,17 @@ Oracle repository: `openeggbert/cna-gltf-viewer` (`develop`), writable and exerc
 > working record.** The banner it opened with ("nothing in it was implemented") described the
 > planning session of 2026-08-11 only, and is preserved below for provenance.
 >
+> **Autonomy cutoff checkpoint (2026-08-15, weekly limit 3%):** work stopped exactly at the
+> user-requested threshold. `GLTF-344` has a deliberately **unclosed LLGL work-in-progress**:
+> seven LLGL texture/sampler bindings, pre-clamp specular inputs, colour decode, four independent
+> extension transform rows, the seven-bit UV selector, and rigid/skinned single/dual-UV shader
+> variants are implemented and the generated OpenGL/SPIR-V header is current. A fresh Debug LLGL
+> build compiled `cna_renderer_llgl` and `cna_test_llgl_pbreffect_handderived` successfully with
+> `--parallel 3`. The shared material-map and texture-slot pixel binaries are registered in CMake,
+> but were **not rebuilt or run under Xvfb before cutoff**; repository-wide policy/docs/registry
+> updates are likewise pending. Therefore LLGL is not counted among the completed texture
+> backends yet, and `GLTF-344` still correctly says four renderer bindings remain.
+>
 > Of 460 rows: **450 are closed (`✔` 274, `✅` 176)** and **5 remain `⬜`**. The other 5 carry a
 > deliberate partial marker — 1 `🔬` (investigation, no implementation owed) and 4 `✅/⬜`; there
 > is no `✅/🐛` residue, standalone `🐛`, or environment-blocked `⛔`. Every closed row carries its

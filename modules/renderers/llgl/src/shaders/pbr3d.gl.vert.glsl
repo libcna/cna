@@ -22,12 +22,17 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
-    vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
+    vec4 dielectricFresnel;    // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
+    vec4 specularState;        // x = seven-bit TEXCOORD_1 selector mask, y = decode specular colour
+    vec4 specularTextureTransformRows[4];
 };
 
 layout(location = 0) in vec3 position;
 layout(location = 2) in vec2 texCoord;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 7) in vec2 texCoord1;
+#endif
 layout(location = 3) in vec3 normal;
 layout(location = 6) in vec4 tangent;
 
@@ -37,6 +42,7 @@ layout(location = 2) out vec3  vTangent;
 layout(location = 3) out float vBitangentSign;
 layout(location = 4) out vec3  vWorldPos;
 layout(location = 5) out float vFogFactor;
+layout(location = 6) out vec2  vTexCoord1;
 
 float cnaDirectionHandedness(mat3 m)
 {
@@ -47,6 +53,11 @@ void main()
 {
     gl_Position = mvpMatrix * vec4(position, 1.0);
     vTexCoord   = texCoord;
+#ifdef CNA_PBR_DUAL_UV
+    vTexCoord1  = texCoord1;
+#else
+    vTexCoord1  = texCoord;
+#endif
 
     mat3 normalMatrix = transpose(inverse(mat3(worldMatrix)));
     vNormal        = normalize(normalMatrix * normal);

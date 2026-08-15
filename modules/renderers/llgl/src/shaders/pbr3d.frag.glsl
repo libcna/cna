@@ -24,8 +24,10 @@ layout(std140, binding = 1) uniform PbrParams
     vec4 fogColor;
     vec4 fogVector;
     vec4 alphaTest;
-    vec4 dielectricFresnel;    // xyz = dielectric F0, w = dielectric F90
+    vec4 dielectricFresnel;    // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
+    vec4 specularState;        // x = seven-bit TEXCOORD_1 selector mask, y = decode specular colour
+    vec4 specularTextureTransformRows[4];
 };
 
 layout(binding = 2) uniform texture2D colorMap;
@@ -38,6 +40,10 @@ layout(binding = 8) uniform texture2D emissiveMap;
 layout(binding = 9) uniform sampler emissiveMapSampler;
 layout(binding = 10) uniform texture2D occlusionMap;
 layout(binding = 11) uniform sampler occlusionMapSampler;
+layout(binding = 12) uniform texture2D specularMap;
+layout(binding = 13) uniform sampler specularMapSampler;
+layout(binding = 14) uniform texture2D specularColorMap;
+layout(binding = 15) uniform sampler specularColorMapSampler;
 
 layout(location = 0) in vec2  vTexCoord;
 layout(location = 1) in vec3  vNormal;
@@ -45,6 +51,7 @@ layout(location = 2) in vec3  vTangent;
 layout(location = 3) in float vBitangentSign;
 layout(location = 4) in vec3  vWorldPos;
 layout(location = 5) in float vFogFactor;
+layout(location = 6) in vec2  vTexCoord1;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -98,9 +105,22 @@ vec2 cnaPbrTransformUV(vec2 uv, int slot)
                 dot(value, textureTransformRows[slot * 2 + 1].xyz));
 }
 
+vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, specularTextureTransformRows[slot * 2].xyz),
+                dot(value, specularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+vec2 cnaPbrUv(int slot)
+{
+    float selector = mod(floor(specularState.x / exp2(float(slot))), 2.0);
+    return mix(vTexCoord, vTexCoord1, selector);
+}
+
 void main()
 {
-    vec4 baseColorTex = texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(vTexCoord, 0));
+    vec4 baseColorTex = texture(sampler2D(colorMap, samplerState), cnaPbrTransformUV(cnaPbrUv(0), 0));
     // Base colour factor and alpha are kept independent (not premultiplied) -- the PBR BRDF's
     // albedo and alpha are separate quantities per glTF's own baseColorFactor convention, unlike
     // most other CNA stock effects' DiffuseColor.
@@ -116,19 +136,27 @@ void main()
     vec3 T = normalize(vTangent - N * dot(N, vTangent));
     vec3 B = cross(N, T) * vBitangentSign;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(vTexCoord, 1)).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture(sampler2D(normalMap, normalMapSampler), cnaPbrTransformUV(cnaPbrUv(1), 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= roughnessWeightsPad.z;
     vec3 finalNormal = normalize(TBN * sampledNormal);
 
     // glTF packing: G=roughness, B=metallic. A 1x1 white default (both channels 1.0) leaves the
     // constant Metallic/RoughnessFactor unperturbed when no map is bound.
-    vec4 mr = texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(vTexCoord, 2));
+    vec4 mr = texture(sampler2D(metallicRoughnessMap, metallicRoughnessMapSampler), cnaPbrTransformUV(cnaPbrUv(2), 2));
     float roughness = clamp(mr.g * roughnessWeightsPad.x, 0.045, 1.0);
     float metallic  = clamp(mr.b * emissiveMetallic.w, 0.0, 1.0);
 
     vec3 V = safeNormalize(eyePositionWorldPad.xyz - vWorldPos);
-    vec3 F0 = mix(dielectricFresnel.xyz, albedo, metallic);
-    vec3 F90 = mix(vec3(dielectricFresnel.w), vec3(1.0), metallic);
+    float specularWeight = dielectricFresnel.w * texture(
+        sampler2D(specularMap, specularMapSampler),
+        cnaPbrSpecularTransformUV(cnaPbrUv(5), 0)).a;
+    vec3 specularColor = texture(
+        sampler2D(specularColorMap, specularColorMapSampler),
+        cnaPbrSpecularTransformUV(cnaPbrUv(6), 1)).rgb;
+    specularColor = mix(specularColor, cnaSrgbToLinear(specularColor), specularState.y);
+    vec3 dielectricF0 = min(dielectricFresnel.xyz * specularColor, vec3(1.0)) * specularWeight;
+    vec3 F0 = mix(dielectricF0, albedo, metallic);
+    vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic);
 
     // Direction fields point FROM the light, so negate for the "surface to light" vector PbrLight
     // expects.
@@ -138,10 +166,10 @@ void main()
     Lo += PbrLight(finalNormal, V, safeNormalize(-light2DirPad.xyz), light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
     // R channel, 1x1 white default = fully lit (no darkening) when no occlusion map is bound.
-    float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(vTexCoord, 4)).r;
+    float occlusionSample = texture(sampler2D(occlusionMap, occlusionMapSampler), cnaPbrTransformUV(cnaPbrUv(4), 4)).r;
     float occlusion = 1.0 + roughnessWeightsPad.w * (occlusionSample - 1.0);
     vec3 ambient = ambientColorPad.xyz * albedo * occlusion;
-    vec3 emissiveSample = texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(vTexCoord, 3)).rgb;
+    vec3 emissiveSample = texture(sampler2D(emissiveMap, emissiveMapSampler), cnaPbrTransformUV(cnaPbrUv(3), 3)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), eyePositionWorldPad.w);
     vec3 emissive = emissiveMetallic.xyz * emissiveSample;
 
