@@ -122,7 +122,7 @@ namespace CNA::Internal::Renderers::TinyGL
     };
 
     /**
-     * Renderer handle for a texture, backed by two real TinyGL texture objects
+     * Renderer handle for a texture, backed by three real TinyGL texture objects
      * (`glGenTextures`/`glTexImage2D`).
      *
      * Two upstream constraints shape this handle, both established by `TINYGL-0`:
@@ -131,7 +131,8 @@ namespace CNA::Internal::Renderers::TinyGL
      *    converted on upload, and TinyGL never sees an alpha channel. The ordinary texture keeps
      *    every texel visible for `BlendState::Opaque`; a second cutout texture writes texels below
      *    `kAlphaCutoutThreshold` as TinyGL's `TGL_NO_DRAW_COLOR` key (0xFF00FF). The renderer selects
-     *    that second object only for the two documented alpha-preset approximations.
+     *    that second object only for the two documented alpha-preset approximations. The third is
+     *    a grayscale source-alpha mask used by the separate BasicEffect specular pass.
      *  - Every texture is resampled to 256x256 inside `glTexImage2D` (`TGL_FEATURE_TEXTURE_DIM`),
      *    with nearest-neighbour and no interpolation. `GetWidth()`/`GetHeight()` keep reporting the
      *    size the game asked for, because that is what `Texture2D.Width`/`Height` must return; the
@@ -151,7 +152,7 @@ namespace CNA::Internal::Renderers::TinyGL
          * @param data Source RGBA8 image, top row first.
          */
         explicit TinyGLTextureRenderer(const ImageData& data);
-        /** @brief Deletes the underlying TinyGL texture object. */
+        /** @brief Deletes the underlying TinyGL texture objects. */
         ~TinyGLTextureRenderer() override;
 
         /** @brief Texture width in texels, as requested by the game. */
@@ -182,9 +183,19 @@ namespace CNA::Internal::Renderers::TinyGL
         /**
          * @brief CNAEXT. Selects the real TinyGL texture object for the installed blend mode.
          * @param cutout Whether low-alpha source texels must use TinyGL's discard key.
+         * @param alphaMultiplier Uniform alpha multiplier folded into the cutout threshold.
+         * @return The selected TinyGL texture name.
          */
         CNAEXT [[nodiscard]] unsigned int GLTextureHandle(bool cutout,
                                                           float alphaMultiplier = 1.0f) const;
+        /**
+         * @brief CNAEXT. Returns the grayscale source-alpha texture used to mask a specular pass.
+         * @return The TinyGL alpha-mask texture name.
+         */
+        CNAEXT [[nodiscard]] unsigned int GLAlphaMaskTextureHandleEXT() const
+        {
+            return glAlphaMaskTexture_;
+        }
         /** @brief CNAEXT. Whether any source texel was below the cutout threshold on the last upload. */
         CNAEXT [[nodiscard]] bool HasCutoutTexelsEXT() const { return hasCutoutTexels_; }
 
@@ -194,6 +205,7 @@ namespace CNA::Internal::Renderers::TinyGL
 
         unsigned int glOpaqueTexture_ = 0;
         unsigned int glCutoutTexture_ = 0;
+        unsigned int glAlphaMaskTexture_ = 0;
         int width_ = 0;
         int height_ = 0;
         mutable bool hasCutoutTexels_ = false;
@@ -331,8 +343,8 @@ namespace CNA::Internal::Renderers::TinyGL
      *  - 3D: the four built-in fixed-function vertex layouts: `VertexPositionColor` (stride 16),
      *    `VertexPositionTexture` (stride 20), `VertexPositionColorTexture` (stride 24) and
      *    `VertexPositionNormalTexture` (stride 32). `BasicEffect`'s `VertexColorEnabled`,
-     *    `DiffuseColor`, `Alpha` and `TextureEnabled` are honoured; lighting, fog, alpha test,
-     *    skinning, dual-texture,
+     *    `DiffuseColor`, `Alpha`, `TextureEnabled` and per-vertex lighting are honoured; fog,
+     *    alpha test, skinning, dual-texture,
      *    environment mapping, PBR, instancing and multi-stream input are **refused
      *    deterministically**, never approximated.
      *  - 2D: a real textured SpriteBatch quad path.
@@ -795,6 +807,18 @@ namespace CNA::Internal::Renderers::TinyGL
             float diffuse[4] = {1.0f, 1.0f, 1.0f, 1.0f};
             /// `GpuDrawParams::vertexColorEnabled`.
             bool vertexColorEnabled = true;
+            /// Whether BasicEffect's fixed-function per-vertex lighting is active.
+            bool lightingEnabled = false;
+            /// Whether any material/light specular product can contribute.
+            bool specularEnabled = false;
+            float ambient[3] = {0.0f, 0.0f, 0.0f};
+            float emissive[3] = {0.0f, 0.0f, 0.0f};
+            float eyePosition[3] = {0.0f, 0.0f, 0.0f};
+            float materialSpecular[3] = {1.0f, 1.0f, 1.0f};
+            float specularPower = 16.0f;
+            float lightDirections[3][3] = {};
+            float lightDiffuse[3][3] = {};
+            float lightSpecular[3][3] = {};
             /// Texture bound to unit 0, or null when this is the untextured colored route.
             const TinyGLTextureRenderer* texture = nullptr;
             /// The bound stream's own `VertexBufferBinding.VertexOffset`, in vertex elements.
@@ -828,6 +852,17 @@ namespace CNA::Internal::Renderers::TinyGL
         void UnbindVertexArrays(bool textured, bool normal);
         /// Installs world/view/projection through TinyGL's own matrix stack.
         void LoadDrawMatrices(const Matrix& world, const Matrix& view, const Matrix& projection);
+        /// Installs BasicEffect ambient/diffuse/emissive state and all three directional lights.
+        void ConfigureLighting(const FixedFunctionDrawState& state,
+                               const Matrix& world, const Matrix& view);
+        /// Computes XNA's per-vertex specular term into TinyGL-compatible float colors.
+        void PrepareSpecularColors(const TinyGLVertexBufferRenderer& vb,
+                                   const FixedFunctionDrawState& state,
+                                   const Matrix& world);
+        /// Installs the exact separate-specular pass state.
+        void BeginSpecularPass(const FixedFunctionDrawState& state);
+        /// Restores blend/depth state after the separate-specular pass.
+        void EndSpecularPass();
         /// Shared body of both non-indexed routes.
         void DrawCommon(const IVertexBufferRenderer& vb,
                         const Matrix& world, const Matrix& view, const Matrix& projection,

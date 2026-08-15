@@ -14,6 +14,7 @@
 // therefore runs BEFORE the corresponding TinyGL call, not after it.
 
 #include "CNA/Internal/Renderers/TinyGL/TinyGLRenderer.hpp"
+#include "Microsoft/Xna/Framework/Vector3.hpp"
 
 #include <GL/gl.h>
 extern "C" {
@@ -353,24 +354,27 @@ namespace CNA::Internal::Renderers::TinyGL
         if (data.pixels.size() >= expected && expected > 0)
             std::memcpy(shadowRgba_.data(), data.pixels.data(), expected);
 
-        GLuint names[2] = {};
-        glGenTextures(2, names);
+        GLuint names[3] = {};
+        glGenTextures(3, names);
         glOpaqueTexture_ = names[0];
         glCutoutTexture_ = names[1];
+        glAlphaMaskTexture_ = names[2];
         Upload();
     }
 
     TinyGLTextureRenderer::~TinyGLTextureRenderer()
     {
-        const GLuint names[2] = {glOpaqueTexture_, glCutoutTexture_};
-        glDeleteTextures(2, names);
+        const GLuint names[3] = {glOpaqueTexture_, glCutoutTexture_, glAlphaMaskTexture_};
+        glDeleteTextures(3, names);
         glOpaqueTexture_ = 0;
         glCutoutTexture_ = 0;
+        glAlphaMaskTexture_ = 0;
     }
 
     void TinyGLTextureRenderer::Upload()
     {
-        if (width_ <= 0 || height_ <= 0 || glOpaqueTexture_ == 0 || glCutoutTexture_ == 0) return;
+        if (width_ <= 0 || height_ <= 0 || glOpaqueTexture_ == 0 ||
+            glCutoutTexture_ == 0 || glAlphaMaskTexture_ == 0) return;
 
         // TINYGL-0 fact B: glTexImage2D accepts GL_RGB/GL_UNSIGNED_BYTE only. Keep ordinary RGB in
         // one object; UploadCutout() folds alpha into TinyGL's colour key in the second object.
@@ -403,6 +407,19 @@ namespace CNA::Internal::Renderers::TinyGL
         glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glOpaqueTexture_));
         glTexImage2D(GL_TEXTURE_2D, 0, 3, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE,
                      opaqueRgb.data());
+
+        std::vector<std::uint8_t> alphaMaskRgb(texelCount * 3u);
+        for (std::size_t i = 0; i < texelCount; ++i)
+        {
+            const std::uint8_t alpha = shadowRgba_[i * 4 + 3];
+            alphaMaskRgb[i * 3 + 0] = alpha;
+            alphaMaskRgb[i * 3 + 1] = alpha;
+            alphaMaskRgb[i * 3 + 2] = alpha;
+        }
+        glBindTexture(GL_TEXTURE_2D, static_cast<GLint>(glAlphaMaskTexture_));
+        glTexImage2D(GL_TEXTURE_2D, 0, 3, width_, height_, 0, GL_RGB, GL_UNSIGNED_BYTE,
+                     alphaMaskRgb.data());
+
         cutoutAlphaMultiplier_ = -1.0f;
         UploadCutout(1.0f);
     }
@@ -507,6 +524,11 @@ namespace CNA::Internal::Renderers::TinyGL
         /// True while the installed BlendState is one of the two XNA alpha presets, which this
         /// renderer executes as TinyGL's colour-key cutout rather than as a blend equation.
         bool alphaCutoutMode = false;
+        bool blendEnabled = false;
+        GLint blendSource = GL_ONE;
+        GLint blendDestination = GL_ZERO;
+        GLenum blendEquation = GL_FUNC_ADD;
+        bool depthWriteEnabled = true;
         /// Active XNA viewport, whose coordinates are top-left based just like TinyGL's rasterizer.
         /// SpriteBatch positions are local to this rectangle.
         int viewportX = 0;
@@ -520,6 +542,9 @@ namespace CNA::Internal::Renderers::TinyGL
         std::vector<float> scratchColors;
         std::vector<float> scratchNormals;
         std::vector<float> scratchTexCoords;
+        std::vector<float> scratchSpecularColors;
+        std::vector<PIXEL> scratchSpecularFramebuffer;
+        PIXEL* specularMainColor = nullptr;
     };
 
     TinyGLRenderer::TinyGLRenderer(int virtualWidth, int virtualHeight)
@@ -742,12 +767,14 @@ namespace CNA::Internal::Renderers::TinyGL
 
     void TinyGLRenderer::SetBlendEnabled(bool enabled)
     {
+        impl_->blendEnabled = enabled;
         if (enabled) glEnable(GL_BLEND);
         else glDisable(GL_BLEND);
     }
 
     void TinyGLRenderer::SetDepthWriteEnabled(bool enabled)
     {
+        impl_->depthWriteEnabled = enabled;
         glDepthMask(enabled ? 1 : 0);
     }
 
@@ -780,6 +807,7 @@ namespace CNA::Internal::Renderers::TinyGL
             // Blending itself stays off -- an approximation recorded in docs/tinygl-renderer.md,
             // not a claim of real alpha compositing.
             impl_->alphaCutoutMode = true;
+            impl_->blendEnabled = false;
             glDisable(GL_BLEND);
             return;
         }
@@ -798,17 +826,22 @@ namespace CNA::Internal::Renderers::TinyGL
         const GLint dest = ToTinyGLDestFactor(colorDstBlend);
         const GLenum equation = ToTinyGLBlendEquation(colorBlendFunc);
         impl_->alphaCutoutMode = false;
+        impl_->blendSource = source;
+        impl_->blendDestination = dest;
+        impl_->blendEquation = equation;
 
         // BlendState::Opaque -- (One, Zero) with Add -- is the identity, so blending is switched
         // off entirely rather than executed, matching every other CNA renderer's own fast path.
         if (source == GL_ONE && dest == GL_ZERO && equation == GL_FUNC_ADD)
         {
+            impl_->blendEnabled = false;
             glDisable(GL_BLEND);
             return;
         }
 
         glBlendFunc(source, dest);
         glBlendEquation(equation);
+        impl_->blendEnabled = true;
         glEnable(GL_BLEND);
     }
 
@@ -849,6 +882,7 @@ namespace CNA::Internal::Renderers::TinyGL
 
         if (depthEnable) glEnable(GL_DEPTH_TEST);
         else glDisable(GL_DEPTH_TEST);
+        impl_->depthWriteEnabled = depthWriteEnable;
         glDepthMask(depthWriteEnable ? 1 : 0);
     }
 
@@ -966,11 +1000,9 @@ namespace CNA::Internal::Renderers::TinyGL
         if (params.customEffectRequested || params.customEffectRenderer != nullptr)
             Unsupported("custom ShaderEffect draws are not supported" + where +
                         " -- TinyGL has no shader stage.");
-        if (params.lightingEnabled)
-            Unsupported("BasicEffect lighting is not supported" + where +
-                        " -- TinyGL's own glLight* pipeline lights per vertex from material state "
-                        "this renderer does not translate, so enabling it would render something "
-                        "other than what XNA specifies.");
+        if (params.lightingEnabled && params.preferPerPixelLighting)
+            Unsupported("BasicEffect.PreferPerPixelLighting is enabled" + where +
+                        " -- TinyGL's fixed-function pipeline evaluates lighting per vertex.");
         if (params.fogEnabled)
             Unsupported("fog is not supported" + where + ".");
         if (params.skinned)
@@ -1008,11 +1040,49 @@ namespace CNA::Internal::Renderers::TinyGL
         state.diffuse[2] = params.diffuseColor[2];
         state.diffuse[3] = params.diffuseColor[3];
         state.vertexColorEnabled = params.vertexColorEnabled;
+        state.lightingEnabled = params.lightingEnabled;
         state.vertexStart = params.vertexStart;
         state.startIndex = params.startIndex;
         state.baseVertex = params.baseVertex;
         if (params.vertexStreamCount == 1)
             state.streamVertexOffset = params.vertexStreams[0].vertexOffset;
+
+        if (state.lightingEnabled)
+        {
+            for (int component = 0; component < 3; ++component)
+            {
+                state.ambient[component] = params.ambientColor[component];
+                state.emissive[component] = params.emissiveColor[component];
+                state.eyePosition[component] = params.eyePositionWorld[component];
+                state.materialSpecular[component] = params.specularColor[component];
+                state.lightDirections[0][component] = params.light0Dir[component];
+                state.lightDirections[1][component] = params.light1Dir[component];
+                state.lightDirections[2][component] = params.light2Dir[component];
+                state.lightDiffuse[0][component] = params.light0Diffuse[component];
+                state.lightDiffuse[1][component] = params.light1Diffuse[component];
+                state.lightDiffuse[2][component] = params.light2Diffuse[component];
+                state.lightSpecular[0][component] = params.light0Specular[component];
+                state.lightSpecular[1][component] = params.light1Specular[component];
+                state.lightSpecular[2][component] = params.light2Specular[component];
+                for (int light = 0; light < 3; ++light)
+                {
+                    if (state.materialSpecular[component] *
+                            state.lightSpecular[light][component] != 0.0f)
+                        state.specularEnabled = true;
+                }
+            }
+            state.specularPower = params.specularPower;
+
+            if (state.specularEnabled &&
+                (impl_->blendEnabled || impl_->alphaCutoutMode))
+            {
+                Unsupported(
+                    "BasicEffect specular lighting cannot be combined" + where +
+                    " with the installed BlendState. TinyGL has no separate-specular color, so "
+                    "CNA uses an exact additive second pass; that is equivalent only for an "
+                    "opaque first pass.");
+            }
+        }
 
         if (params.textureEnabled)
         {
@@ -1056,6 +1126,11 @@ namespace CNA::Internal::Renderers::TinyGL
                 std::string("the ") + route +
                 " draw enables BasicEffect.TextureEnabled, but the bound vertex layout has no "
                 "TextureCoordinate element.");
+        if (state.lightingEnabled && !hasNormal)
+            Unsupported(
+                std::string("the ") + route +
+                " draw enables BasicEffect lighting, but the bound vertex layout has no Normal "
+                "element; use VertexPositionNormalTexture (stride 32).");
 
         // A stride does not determine element composition: a declaration that puts something else
         // in the same bytes is refused here, before any TinyGL call, rather than reinterpreted.
@@ -1244,6 +1319,187 @@ namespace CNA::Internal::Renderers::TinyGL
         glLoadMatrixf(columnMajor);
     }
 
+    void TinyGLRenderer::ConfigureLighting(const FixedFunctionDrawState& state,
+                                           const Matrix& world, const Matrix& view)
+    {
+        if (!state.lightingEnabled)
+        {
+            glDisable(GL_LIGHTING);
+            glDisable(GL_NORMALIZE);
+            glSetEnableSpecular(0);
+            return;
+        }
+
+        glDisable(GL_COLOR_MATERIAL);
+        glEnable(GL_NORMALIZE);
+        glSetEnableSpecular(0);
+        glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, 0);
+        glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, 0);
+
+        GLfloat material[4] = {
+            state.diffuse[0], state.diffuse[1], state.diffuse[2], state.diffuse[3]};
+        GLfloat emission[4] = {
+            state.emissive[0], state.emissive[1], state.emissive[2], 0.0f};
+        GLfloat noSpecular[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        GLfloat ambient[4] = {state.ambient[0], state.ambient[1], state.ambient[2], 1.0f};
+        glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT_AND_DIFFUSE, material);
+        glMaterialfv(GL_FRONT_AND_BACK, GL_EMISSION, emission);
+        glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, noSpecular);
+        glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambient);
+
+        // GpuDrawParams carries directions in world space. OpenGL transforms a light position at
+        // glLightfv call time, so install them under View alone, then restore World*View for the
+        // vertices. Passing -Direction converts XNA's ray direction into GL's surface-to-light
+        // vector.
+        float columnMajor[16];
+        view.ToColumnMajor(columnMajor);
+        glMatrixMode(GL_MODELVIEW);
+        glLoadMatrixf(columnMajor);
+
+        for (int light = 0; light < 3; ++light)
+        {
+            const GLint glLight = GL_LIGHT0 + light;
+            GLfloat lightAmbient[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+            GLfloat diffuse[4] = {
+                state.lightDiffuse[light][0], state.lightDiffuse[light][1],
+                state.lightDiffuse[light][2], 1.0f};
+            GLfloat position[4] = {
+                -state.lightDirections[light][0], -state.lightDirections[light][1],
+                -state.lightDirections[light][2], 0.0f};
+            glLightfv(glLight, GL_AMBIENT, lightAmbient);
+            glLightfv(glLight, GL_DIFFUSE, diffuse);
+            glLightfv(glLight, GL_SPECULAR, noSpecular);
+            glLightfv(glLight, GL_POSITION, position);
+            glEnable(glLight);
+        }
+
+        const Matrix modelView = world * view;
+        modelView.ToColumnMajor(columnMajor);
+        glLoadMatrixf(columnMajor);
+        glEnable(GL_LIGHTING);
+    }
+
+    void TinyGLRenderer::PrepareSpecularColors(const TinyGLVertexBufferRenderer& vb,
+                                               const FixedFunctionDrawState& state,
+                                               const Matrix& world)
+    {
+        using Microsoft::Xna::Framework::Vector3;
+
+        auto& colors = impl_->scratchSpecularColors;
+        const int vertexCount = vb.GetVertexCount();
+        colors.assign(static_cast<std::size_t>(vertexCount) * 4u, 0.0f);
+        if (!state.specularEnabled) return;
+
+        const Matrix normalMatrix = Matrix::Transpose(Matrix::Invert(world));
+        const Vector3 eyePosition(
+            state.eyePosition[0], state.eyePosition[1], state.eyePosition[2]);
+        const auto normalized = [](Vector3 value)
+        {
+            const float lengthSquared = value.X * value.X + value.Y * value.Y + value.Z * value.Z;
+            if (lengthSquared <= 0.0f) return Vector3::Zero;
+            return value * (1.0f / std::sqrt(lengthSquared));
+        };
+
+        const std::uint8_t* bytes = vb.Bytes();
+        const std::size_t stride = vb.StrideInBytes();
+        for (int vertex = 0; vertex < vertexCount; ++vertex)
+        {
+            const std::uint8_t* record = bytes + static_cast<std::size_t>(vertex) * stride;
+            float positionValues[3];
+            float normalValues[3];
+            std::memcpy(positionValues, record, sizeof(positionValues));
+            std::memcpy(normalValues, record + 12, sizeof(normalValues));
+
+            const Vector3 worldPosition = Vector3::Transform(
+                Vector3(positionValues[0], positionValues[1], positionValues[2]), world);
+            const Vector3 worldNormal = normalized(Vector3::TransformNormal(
+                Vector3(normalValues[0], normalValues[1], normalValues[2]), normalMatrix));
+            const Vector3 eyeVector = normalized(eyePosition - worldPosition);
+            float sum[3] = {0.0f, 0.0f, 0.0f};
+
+            for (int light = 0; light < 3; ++light)
+            {
+                const Vector3 direction(
+                    state.lightDirections[light][0], state.lightDirections[light][1],
+                    state.lightDirections[light][2]);
+                const float dotL = Vector3::Dot(-direction, worldNormal);
+                if (dotL < 0.0f) continue;
+                const Vector3 halfVector = normalized(eyeVector - direction);
+                const float dotH = std::max(Vector3::Dot(halfVector, worldNormal), 0.0f);
+                const float amount = std::pow(dotH, state.specularPower);
+                for (int component = 0; component < 3; ++component)
+                    sum[component] += amount * state.lightSpecular[light][component];
+            }
+
+            for (int component = 0; component < 3; ++component)
+            {
+                colors[static_cast<std::size_t>(vertex) * 4u +
+                       static_cast<std::size_t>(component)] =
+                    std::clamp(sum[component] * state.materialSpecular[component] *
+                               state.diffuse[3], 0.0f, 1.0f);
+            }
+            colors[static_cast<std::size_t>(vertex) * 4u + 3u] = 1.0f;
+        }
+    }
+
+    void TinyGLRenderer::BeginSpecularPass(const FixedFunctionDrawState& state)
+    {
+        glDisable(GL_LIGHTING);
+        glDisable(GL_NORMALIZE);
+        glEnableClientState(GL_COLOR_ARRAY);
+        glColorPointer(4, GL_FLOAT, 0, impl_->scratchSpecularColors.data());
+
+        if (state.texture != nullptr)
+        {
+            glBindTexture(GL_TEXTURE_2D,
+                          static_cast<GLint>(state.texture->GLAlphaMaskTextureHandleEXT()));
+            glEnable(GL_TEXTURE_2D);
+        }
+        else
+        {
+            glDisable(GL_TEXTURE_2D);
+        }
+
+        glDepthMask(0);
+        glDisable(GL_BLEND);
+
+        // Render the second pass into a zeroed color plane while sharing the live depth plane.
+        // TinyGL does not apply the top-left fill rule, so directly additive-rendering a triangle
+        // list would count shared edges twice. Overwrite into a scratch plane first, then add each
+        // framebuffer pixel exactly once in EndSpecularPass().
+        const std::size_t pixelCount =
+            static_cast<std::size_t>(impl_->zb->xsize) *
+            static_cast<std::size_t>(impl_->zb->ysize);
+        impl_->scratchSpecularFramebuffer.assign(pixelCount, 0);
+        impl_->specularMainColor = impl_->zb->pbuf;
+        impl_->zb->pbuf = impl_->scratchSpecularFramebuffer.data();
+    }
+
+    void TinyGLRenderer::EndSpecularPass()
+    {
+        PIXEL* mainColor = impl_->specularMainColor;
+        impl_->zb->pbuf = mainColor;
+        impl_->specularMainColor = nullptr;
+        for (std::size_t i = 0; i < impl_->scratchSpecularFramebuffer.size(); ++i)
+        {
+            const std::uint32_t source = impl_->scratchSpecularFramebuffer[i];
+            const std::uint32_t destination = mainColor[i];
+            const std::uint32_t red = std::min(
+                ((source >> 16) & 0xFFu) + ((destination >> 16) & 0xFFu), 0xFFu);
+            const std::uint32_t green = std::min(
+                ((source >> 8) & 0xFFu) + ((destination >> 8) & 0xFFu), 0xFFu);
+            const std::uint32_t blue = std::min(
+                (source & 0xFFu) + (destination & 0xFFu), 0xFFu);
+            mainColor[i] = static_cast<PIXEL>((red << 16) | (green << 8) | blue);
+        }
+
+        glBlendFunc(impl_->blendSource, impl_->blendDestination);
+        glBlendEquation(impl_->blendEquation);
+        if (impl_->blendEnabled) glEnable(GL_BLEND);
+        glDepthMask(impl_->depthWriteEnabled ? 1 : 0);
+        glDisableClientState(GL_COLOR_ARRAY);
+    }
+
     void TinyGLRenderer::DrawCommon(const IVertexBufferRenderer& vbBase,
                                     const Matrix& world, const Matrix& view,
                                     const Matrix& projection,
@@ -1272,8 +1528,21 @@ namespace CNA::Internal::Renderers::TinyGL
             referencedVertices[static_cast<std::size_t>(i)] =
                 static_cast<std::uint32_t>(firstElement + i);
         if (!BindVertexArrays(*vb, state, route, referencedVertices)) return;
+        if (state.specularEnabled) PrepareSpecularColors(*vb, state, world);
         LoadDrawMatrices(world, view, projection);
+        ConfigureLighting(state, world, view);
         glDrawArrays(mode, static_cast<GLint>(firstElement), vertexCount);
+        if (state.specularEnabled)
+        {
+            BeginSpecularPass(state);
+            // TinyGL caches a different transform when lighting is enabled. Reloading after the
+            // mode switch invalidates that cache so this unlit pass rebuilds World*View*Projection.
+            LoadDrawMatrices(world, view, projection);
+            glDrawArrays(mode, static_cast<GLint>(firstElement), vertexCount);
+            EndSpecularPass();
+        }
+        glDisable(GL_LIGHTING);
+        glDisable(GL_NORMALIZE);
         UnbindVertexArrays(state.texture != nullptr,
                            vb->StrideInBytes() == kPositionNormalTextureStride);
     }
@@ -1323,10 +1592,24 @@ namespace CNA::Internal::Renderers::TinyGL
         }
 
         if (!BindVertexArrays(*vb, state, route, elements)) return;
+        if (state.specularEnabled) PrepareSpecularColors(*vb, state, world);
         LoadDrawMatrices(world, view, projection);
+        ConfigureLighting(state, world, view);
         glBegin(mode);
         for (const std::uint32_t element : elements) glArrayElement(static_cast<GLint>(element));
         glEnd();
+        if (state.specularEnabled)
+        {
+            BeginSpecularPass(state);
+            LoadDrawMatrices(world, view, projection);
+            glBegin(mode);
+            for (const std::uint32_t element : elements)
+                glArrayElement(static_cast<GLint>(element));
+            glEnd();
+            EndSpecularPass();
+        }
+        glDisable(GL_LIGHTING);
+        glDisable(GL_NORMALIZE);
         UnbindVertexArrays(state.texture != nullptr,
                            vb->StrideInBytes() == kPositionNormalTextureStride);
     }

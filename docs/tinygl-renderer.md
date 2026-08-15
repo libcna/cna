@@ -43,11 +43,12 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | 3D `VertexPositionColor` (stride 16) | ✅ | `glDrawArrays`. |
 | 3D `VertexPositionTexture` (stride 20) | ✅ | UV plus `BasicEffect.DiffuseColor`, with no invented color channel. |
 | 3D `VertexPositionColorTexture` (stride 24) | ✅ | Texel × vertex colour, which is XNA's own modulate. |
-| 3D `VertexPositionNormalTexture` (stride 32) | ✅ | Normal and UV arrays are both bound; lighting is tracked separately below. |
+| 3D `VertexPositionNormalTexture` (stride 32) | ✅ | Normal and UV arrays are both bound. |
 | Point, line and triangle topologies | ✅ | `PointListEXT`, `LineList`, `LineStrip`, `TriangleList` and `TriangleStrip` are all exercised. |
 | Indexed draws | ✅ | Both 16-bit and 32-bit indices through `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
 | Draw offsets (`vertexStart`, `startIndex`, `baseVertex`, `VertexOffset`) | ✅ | |
 | `BasicEffect`: `VertexColorEnabled`, `DiffuseColor`, `Alpha`, `TextureEnabled` | ✅ | |
+| `BasicEffect` per-vertex lighting | ✅ | Three directional lights; ambient, diffuse and emissive through `glLight*`/`glMaterial*`; inverse-transpose normals; separate specular. |
 | `SpriteBatch` (source/dest rects, tint, rotation, origin, flips) | ✅ | Real viewport-local textured quads; origin uses source-rectangle texels. |
 | World/View/Projection | ✅ | TinyGL's own `GL_PROJECTION`/`GL_MODELVIEW` stacks. |
 | `CullMode` | ✅ | `glFrontFace(GL_CW)` + `glCullFace`. |
@@ -68,8 +69,9 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | Viewport depth range ≠ 0..1 | ❌ | No `glDepthRange`. |
 | Render targets (2D, cube, MRT) | ❌ | One framebuffer per context, no FBO concept. |
 | `TextureCube`, `Texture3D` | ❌ | No cube or volume texture type. |
-| Custom `Effect`, `SkinnedEffect`, PBR, per-pixel lighting | ❌ | No shader stage of any kind. |
-| `BasicEffect` lighting, fog, alpha test | ❌ | Not wired to TinyGL's own `glLight*` pipeline yet — `plan_tinygl.md` `TINYGL-16`. |
+| Custom `Effect`, `SkinnedEffect`, PBR, per-pixel lighting | ❌ | No shader stage of any kind; `PreferPerPixelLighting=true` is refused. |
+| `BasicEffect` fog, `AlphaTestEffect` | ❌ | TinyGL has no faithful implementation for either. |
+| Specular lighting with non-opaque blending | ❌ | The exact separate-specular pass is equivalent only after an opaque first pass. |
 | MSAA, anisotropic filtering, mip levels | ❌ | Mip creation/selection and non-default sample masks are refused. |
 | Instancing, multi-stream vertex input | ❌ | |
 | Occlusion queries | ❌ | |
@@ -108,6 +110,28 @@ refuses it instead of forwarding it.
 A `BlendState` whose RGB and alpha halves disagree is refused: TinyGL applies one factor pair to the
 whole pixel and has no alpha channel to apply the second pair to.
 
+## BasicEffect lighting
+
+Lighting is fixed-function and per vertex, matching XNA's default
+`PreferPerPixelLighting=false` path. `VertexPositionNormalTexture` supplies object-space normals;
+TinyGL applies the inverse-transpose modelview transform with normalization. CNA installs
+`AmbientLightColor`, material diffuse/emissive values and all three world-space directional lights
+through `glLight*`/`glMaterial*`, specifying the lights under `View` alone before restoring
+`World*View` for vertex submission.
+
+TinyGL cannot directly produce XNA's separate specular term: its local-viewer calculation is broken
+upstream, and its textured rasterizer multiplies the complete lit color by the texture, whereas XNA
+computes `texture * diffuse + specular`. CNA therefore computes XNA's exact per-vertex half-vector
+term and asks TinyGL to rasterize it in a second pass. A third texture object carries source alpha as
+grayscale, preserving XNA's `specular * outputAlpha` rule without modulating specular by texture RGB.
+The pass writes into a temporary color plane sharing the live depth plane, then CNA performs one
+saturated add per framebuffer pixel. The temporary plane is necessary because TinyGL lacks the
+top-left fill rule and would otherwise add the shared edge of adjacent triangles twice.
+
+This decomposition is equivalent for an opaque first pass. If specular can contribute while a
+non-opaque blend mode is installed, the draw is refused before submission. Likewise,
+`PreferPerPixelLighting=true` is refused because TinyGL has no fragment-lighting stage.
+
 ## The three recorded approximations
 
 These are accepted rather than refused because refusing them would refuse XNA's own defaults and
@@ -117,8 +141,9 @@ capability query.
 ### 1. Transparency is 1-bit
 
 TinyGL has no alpha, but it does have `TGL_NO_DRAW_COLOR` (`0xFF00FF`): its triangle rasterizer
-discards any textured fragment whose texel matches that key. CNA keeps two TinyGL objects per
-texture. The ordinary object preserves RGB for `BlendState::Opaque`; in the cutout object, source
+discards any textured fragment whose texel matches that key. CNA keeps separate ordinary and cutout
+TinyGL objects per texture, plus a grayscale alpha mask for the lighting specular pass. The ordinary
+object preserves RGB for `BlendState::Opaque`; in the cutout object, source
 alpha multiplied by uniform `BasicEffect.Alpha`, constant vertex alpha or SpriteBatch tint alpha is
 thresholded at `TinyGLTextureRenderer::kAlphaCutoutThreshold` (**128**) and low-alpha texels become
 the key. An untextured draw whose constant effective alpha is below the threshold is skipped. A
@@ -180,9 +205,9 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
 
-Eight suites, 91 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+Nine suites, 104 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
-`TinyGL_DrawRoutes` (6), plus `TinyGL_FixedLayouts` (4). All pass.
+`TinyGL_DrawRoutes` (6), `TinyGL_FixedLayouts` (4), plus `TinyGL_Lighting` (13). All pass.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

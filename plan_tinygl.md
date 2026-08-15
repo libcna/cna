@@ -29,8 +29,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 8 CTest suites, 91 checks,
-8/8 passing under
+**Delivered and green after the post-implementation contract audit.** 9 CTest suites, 104 checks,
+9/9 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -64,6 +64,12 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   texture interpolation from an affine substitute.
 - `BasicEffect`'s `VertexColorEnabled`, `DiffuseColor`, `Alpha` and `TextureEnabled`; packed vertex
   colour is multiplied by the forwarded diffuse/alpha material exactly once.
+- `BasicEffect` per-vertex lighting on `VertexPositionNormalTexture`: all three directional lights,
+  ambient, diffuse, emissive, inverse-transpose normal transforms and XNA-correct specular. The
+  ambient/diffuse/emissive term uses TinyGL's `glLight*`/`glMaterial*` pipeline. Specular uses an
+  exact second TinyGL raster pass into a scratch color plane, source-alpha masking for textured
+  draws, and one saturated framebuffer add per pixel; this avoids both upstream's broken local
+  viewer calculation and its lack of separate-specular color.
 - 2D: a real textured, viewport-local `SpriteBatch` quad path with source/destination rectangles,
   tint, rotation, source-texel origin and both flip flags.
 - World/View/Projection through TinyGL's own `GL_PROJECTION`/`GL_MODELVIEW` stacks (`glLoadMatrixf`).
@@ -71,13 +77,13 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   (`glEnable(GL_DEPTH_TEST)`/`glDepthMask`), cull mode (`glCullFace`/`glFrontFace`), fill mode
   (`glPolygonMode`), viewport (`glViewport`).
 - The draw-time `VertexDeclaration` fidelity guard
-  (`CNA::Internal::Graphics::RequireFaithfulVertexDeclaration`), so a declaration that puts
-  something other than Position+Colour(+UV) in the same stride is refused rather than reinterpreted.
+  (`CNA::Internal::Graphics::RequireFaithfulVertexDeclaration`), so a declaration that changes a
+  built-in Position/Colour/Normal/UV layout is refused rather than reinterpreted.
 
 ## Intentional TinyGL limitations
 
 Each is refused deterministically with `System::NotSupportedException`, never silently no-opped,
-and is covered by `TinyGL_Rejection` or the post-audit `TinyGL_Contract` suite:
+and is covered by `TinyGL_Rejection`, `TinyGL_Contract`, or `TinyGL_Lighting`:
 
 - **No stencil.** TinyGL's `ZBuffer` has a depth plane and a colour plane and nothing else.
   Enabling the stencil test and setting a non-zero `ReferenceStencil` are refused.
@@ -91,14 +97,14 @@ and is covered by `TinyGL_Rejection` or the post-audit `TinyGL_Contract` suite:
 - **No depth range.** There is no `glDepthRange`; a `Viewport` outside 0..1 is refused.
 - **No render targets, cube maps or 3D textures.** TinyGL owns exactly one framebuffer per context
   and has no framebuffer-object, cube or volume texture concept.
-- **No shaders of any kind**, so no custom `Effect`, no `SkinnedEffect`, no PBR, no per-pixel
-  lighting.
+- **No shaders of any kind**, so no custom `Effect`, no `SkinnedEffect`, no PBR, and no per-pixel
+  lighting. `BasicEffect.PreferPerPixelLighting=true` is refused.
 - **No MSAA, no anisotropy, no mip levels.** Mip-chain texture creation, non-default mip sampler
   controls and a non-default `MultiSampleMask` are refused.
 - **No instancing, no multi-stream vertex input.**
-- **Lighting is not wired up.** TinyGL has a real `glLight*` fixed-function pipeline, but CNA does
-  not translate XNA's lighting parameters onto it yet, so `lightingEnabled` is refused rather than
-  approximated. This is the most obvious future extension (see "Possible future phases").
+- **Specular plus non-opaque blending.** TinyGL has no separate-specular color. CNA's exact second
+  pass is equivalent to XNA only when the first pass is opaque, so a contributing specular term
+  combined with any other installed blend mode is refused.
 
 ## Recorded approximations
 
@@ -154,7 +160,7 @@ them are refused one step earlier.
 | `TINYGL-20` | Post-audit contract remediation: explicit effect identity, vertex-alpha cutout, depth-clear validation and transactional overflow-safe resize | **DONE** |
 | `TINYGL-21` | Make OpenMP optional: accelerated when found, complete single-threaded archive with no runtime dependency otherwise | **DONE** |
 | `TINYGL-22` | `TinyGL_DrawRoutes` (6 checks): every topology, 32-bit indices and analytical perspective-correct texture mapping proof | **DONE** |
-| `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
+| `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
 | `TINYGL-19` | Windows/macOS build verification (only Linux x86_64 has been run) | **OPEN** |
@@ -166,7 +172,7 @@ TinyGL's vertex-array API only *looks* like OpenGL's. Its arrays are `GLfloat*`;
 ignores its `type` argument entirely and always reads floats; and its stride counts **extra floats
 between records**, not bytes (`arrays.c`: `i = idx * (size + stride)`). An interleaved XNA record —
 three floats followed by a packed 4-byte colour — is not expressible in that API at all. The
-renderer therefore converts the bound buffer into three tightly packed float arrays and hands
+renderer therefore converts the bound buffer into tightly packed float arrays and hands
 TinyGL exactly the shape its API defines. Every transform, clip, cull, raster, texel fetch and
 blend after that point is still TinyGL's. This was found by running code, not by reading headers:
 the first implementation pointed TinyGL at the raw records with byte strides, compiled cleanly, and
@@ -262,12 +268,9 @@ than overridden.
 
 Each needs its own explicit owner instruction, exactly like every other renderer's plan.
 
-1. `TINYGL-16` — fixed-function lighting. The stride-32 `VertexPositionNormalTexture` prerequisite
-   is complete; TinyGL's `glLight*`/`glMaterial*` pipeline still needs a careful translation of
-   XNA's `BasicEffect` lighting parameters. `OPENGL1`'s own phase 4 is the obvious reference.
-2. `TINYGL-17` — golden-image reuse. `OPENGL1` reuses `examples/golden/`'s checked-in PNGs through
+1. `TINYGL-17` — golden-image reuse. `OPENGL1` reuses `examples/golden/`'s checked-in PNGs through
    the shared `PixelTestGame::CompareGoldenImage()` helper; the flat, edge-free scenes in that
    corpus are the ones a second fixed-function rasterizer can match. The 256×256 texture resample
    will exclude any scene whose sampled region depends on texel-exact minification.
-3. `TINYGL-19` — Windows and macOS verification. Nothing in the renderer is Linux-specific, but
+2. `TINYGL-19` — Windows and macOS verification. Nothing in the renderer is Linux-specific, but
    only Linux x86_64 has actually been built and run.
