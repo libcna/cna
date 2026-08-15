@@ -336,6 +336,16 @@
       "task": "CBIND-035D5"
     },
     {
+      "id": "basic-effect-directional-light-and-interfaces-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:BasicEffect|DirectionalLight|IEffectFog|IEffectLights|IEffectMatrices)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "mapping": "owned `CNA_EffectHandle` BasicEffect game children plus standalone or stable nested `CNA_DirectionalLightHandle` values; generic IEffectMatrices/IEffectFog/IEffectLights operations, exact three-light indexed views and default lighting; all BasicEffect transform, vertex-color, material, alpha, texture, fog and lighting properties; same-device retained Texture2D handles and clone-aware ownership. Renderer-only GpuDrawParams remain private and are consumed through Apply/draw paths",
+      "tests": "exact BasicEffect and DirectionalLight defaults, all matrix/fog/light/material/texture properties, three stable shared light aliases, default three-point lighting constants, generic interface success/refusal, same-type state clone and texture retention, nested-light lifetime after parent destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `BasicEffectSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D6"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

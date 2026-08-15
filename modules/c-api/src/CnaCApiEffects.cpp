@@ -15,7 +15,12 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
@@ -70,7 +75,12 @@ using Microsoft::Xna::Framework::Graphics::EffectPass;
 using Microsoft::Xna::Framework::Graphics::EffectPassCollection;
 using Microsoft::Xna::Framework::Graphics::EffectTechnique;
 using Microsoft::Xna::Framework::Graphics::EffectTechniqueCollection;
+using Microsoft::Xna::Framework::Graphics::BasicEffect;
+using Microsoft::Xna::Framework::Graphics::DirectionalLight;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::IEffectFog;
+using Microsoft::Xna::Framework::Graphics::IEffectLights;
+using Microsoft::Xna::Framework::Graphics::IEffectMatrices;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture;
@@ -234,9 +244,15 @@ struct TechniqueCollectionResource final {
     std::shared_ptr<TechniqueCollectionState> state;
 };
 
+struct DirectionalLightResource final {
+    std::shared_ptr<DirectionalLight> value;
+    std::shared_ptr<void> effectOwnership;
+};
+
 struct EffectLifetime final {
     EffectOwnership ownership;
     std::unordered_map<int, RetainedTextureSlot> shaderTextures;
+    RetainedTextureSlot basicTexture;
 };
 
 struct EffectState final {
@@ -248,6 +264,11 @@ struct EffectState final {
 [[nodiscard]] CNA_Result InvalidArgument(const char* const message)
 {
     return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+[[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
+{
+    return value == CNA_FALSE || value == CNA_TRUE;
 }
 
 [[nodiscard]] CNA_Result GetAnnotation(
@@ -847,6 +868,87 @@ template<typename TNative, typename TC, typename TConvert>
     }
     *outShader = shader;
     return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetBasicEffect(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outResource,
+    BasicEffect** const outBasic)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const basic = dynamic_cast<BasicEffect*>(effect->value.get());
+    if (basic == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The Effect handle does not refer to a BasicEffect.");
+    }
+    if (outResource != nullptr) {
+        *outResource = std::move(effect);
+    }
+    *outBasic = basic;
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TInterface>
+[[nodiscard]] CNA_Result GetEffectInterface(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outResource,
+    TInterface** const outInterface,
+    const char* const failureMessage)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const interfaceValue = dynamic_cast<TInterface*>(effect->value.get());
+    if (interfaceValue == nullptr) {
+        return Fail(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            failureMessage);
+    }
+    if (outResource != nullptr) {
+        *outResource = std::move(effect);
+    }
+    *outInterface = interfaceValue;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetDirectionalLight(
+    const CNA_DirectionalLightHandle handle,
+    std::shared_ptr<DirectionalLightResource>* const outLight)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::DirectionalLight, outLight);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The DirectionalLight handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateDirectionalLightHandle(
+    std::shared_ptr<DirectionalLight> value,
+    std::shared_ptr<void> effectOwnership,
+    CNA_DirectionalLightHandle* const outLight)
+{
+    const auto resource = std::make_shared<DirectionalLightResource>(
+        DirectionalLightResource{std::move(value), std::move(effectOwnership)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::DirectionalLight, resource, outLight);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned DirectionalLight handle could not be created.");
 }
 
 template<typename TGetter>
@@ -3177,7 +3279,27 @@ CNA_Result cna_effect_clone(
                 CNA_ERROR_CATEGORY_INTERNAL,
                 "The native Effect clone operation returned null.");
         }
-        return CreateEffectHandle(std::move(clone), effect->parentGame, outClone);
+        if (const CNA_Result result = CreateEffectHandle(
+                std::move(clone), effect->parentGame, outClone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const RetainedTextureSlot& sourceTexture =
+            GetEffectState(effect)->lifetime->basicTexture;
+        if (dynamic_cast<BasicEffect*>(effect->value.get()) != nullptr &&
+            sourceTexture.handle != CNA_INVALID_HANDLE) {
+            std::shared_ptr<EffectResource> clonedEffect;
+            if (const CNA_Result result = GetEffect(*outClone, &clonedEffect);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            GetEffectState(clonedEffect)->lifetime->basicTexture.Set(
+                sourceTexture.handle,
+                sourceTexture.value,
+                sourceTexture.owner,
+                sourceTexture.referenceCount);
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -3888,6 +4010,915 @@ CNA_Result cna_shader_effect_set_projection(
             return result;
         }
         shader->setProjectionProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_create(
+    CNA_DirectionalLightHandle* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return InvalidArgument("The DirectionalLight output handle is null.");
+        }
+        *outLight = CNA_INVALID_HANDLE;
+        return CreateDirectionalLightHandle(
+            std::make_shared<DirectionalLight>(), nullptr, outLight);
+    });
+}
+
+CNA_Result cna_directional_light_destroy(
+    const CNA_DirectionalLightHandle lightHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(lightHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned DirectionalLight handle could not be released.");
+    });
+}
+
+CNA_Result cna_directional_light_get_diffuse_color(
+    const CNA_DirectionalLightHandle lightHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DirectionalLight diffuse-color output is null.");
+        }
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(light->value->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_set_diffuse_color(
+    const CNA_DirectionalLightHandle lightHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        light->value->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_get_direction(
+    const CNA_DirectionalLightHandle lightHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DirectionalLight direction output is null.");
+        }
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(light->value->getDirectionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_set_direction(
+    const CNA_DirectionalLightHandle lightHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        light->value->setDirectionProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_get_specular_color(
+    const CNA_DirectionalLightHandle lightHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DirectionalLight specular-color output is null.");
+        }
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(light->value->getSpecularColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_set_specular_color(
+    const CNA_DirectionalLightHandle lightHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        light->value->setSpecularColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_get_enabled(
+    const CNA_DirectionalLightHandle lightHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DirectionalLight enabled output is null.");
+        }
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = light->value->getEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_directional_light_set_enabled(
+    const CNA_DirectionalLightHandle lightHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The DirectionalLight enabled value is not a CNA_Bool.");
+        }
+        std::shared_ptr<DirectionalLightResource> light;
+        if (const CNA_Result result = GetDirectionalLight(lightHandle, &light);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        light->value->setEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The BasicEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<BasicEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_effect_matrices_get_world(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect world-matrix output is null.");
+        }
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(matrices->getWorldProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_matrices_set_world(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        matrices->setWorldProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_matrices_get_view(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect view-matrix output is null.");
+        }
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(matrices->getViewProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_matrices_set_view(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        matrices->setViewProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_matrices_get_projection(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect projection-matrix output is null.");
+        }
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(matrices->getProjectionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_matrices_set_projection(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectMatrices* matrices = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &matrices,
+                "The Effect does not implement IEffectMatrices.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        matrices->setProjectionProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_get_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect fog-color output is null.");
+        }
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(fog->getFogColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_set_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        fog->setFogColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_get_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect fog-enabled output is null.");
+        }
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = fog->getFogEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_set_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The fog-enabled value is not a CNA_Bool.");
+        }
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        fog->setFogEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_get_start(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect fog-start output is null.");
+        }
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = fog->getFogStartProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_set_start(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        fog->setFogStartProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_get_end(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect fog-end output is null.");
+        }
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = fog->getFogEndProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_fog_set_end(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectFog* fog = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &fog, "The Effect does not implement IEffectFog.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        fog->setFogEndProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_lights_get_ambient_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect ambient-light output is null.");
+        }
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(lights->getAmbientLightColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_lights_set_ambient_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        lights->setAmbientLightColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_lights_get_directional_light(
+    const CNA_EffectHandle effectHandle,
+    const uint32_t index,
+    CNA_DirectionalLightHandle* const outLight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outLight == nullptr) {
+            return InvalidArgument("The effect directional-light output is null.");
+        }
+        *outLight = CNA_INVALID_HANDLE;
+        if (index > 2U) {
+            return InvalidArgument("The directional-light index is outside zero through two.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, &effect, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        DirectionalLight* light = nullptr;
+        if (index == 0U) {
+            light = &lights->getDirectionalLight0Property();
+        } else if (index == 1U) {
+            light = &lights->getDirectionalLight1Property();
+        } else {
+            light = &lights->getDirectionalLight2Property();
+        }
+        return CreateDirectionalLightHandle(
+            std::shared_ptr<DirectionalLight>(effect->value, light),
+            GetEffectState(effect)->lifetime,
+            outLight);
+    });
+}
+
+CNA_Result cna_effect_lights_get_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The effect lighting-enabled output is null.");
+        }
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = lights->getLightingEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_lights_set_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The lighting-enabled value is not a CNA_Bool.");
+        }
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        lights->setLightingEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_lights_enable_default(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        IEffectLights* lights = nullptr;
+        if (const CNA_Result result = GetEffectInterface(
+                effectHandle, nullptr, &lights,
+                "The Effect does not implement IEffectLights.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        lights->EnableDefaultLighting();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect vertex-color output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = basic->VertexColorEnabled ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The vertex-color value is not a CNA_Bool.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->VertexColorEnabled = value == CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_prefer_per_pixel_lighting(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect per-pixel-lighting output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = basic->getPreferPerPixelLightingProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_prefer_per_pixel_lighting(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The per-pixel-lighting value is not a CNA_Bool.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setPreferPerPixelLightingProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect diffuse-color output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(basic->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect emissive-color output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(basic->getEmissiveColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setEmissiveColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_specular_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect specular-color output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(basic->getSpecularColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_specular_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setSpecularColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_specular_power(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect specular-power output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = basic->getSpecularPowerProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_specular_power(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setSpecularPowerProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect alpha output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = basic->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_texture_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The BasicEffect texture-enabled output is null.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = basic->getTextureEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_texture_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The texture-enabled value is not a CNA_Bool.");
+        }
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, nullptr, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->setTextureEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("The BasicEffect texture outputs are null.");
+        }
+        *outHasTexture = CNA_FALSE;
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, &effect, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)basic;
+        const RetainedTextureSlot& texture =
+            GetEffectState(effect)->lifetime->basicTexture;
+        if (texture.handle != CNA_INVALID_HANDLE) {
+            *outHasTexture = CNA_TRUE;
+            *outTexture = texture.handle;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_basic_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        BasicEffect* basic = nullptr;
+        if (const CNA_Result result = GetBasicEffect(effectHandle, &effect, &basic);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        RetainedTextureSlot& retained =
+            GetEffectState(effect)->lifetime->basicTexture;
+        if (textureHandle == CNA_INVALID_HANDLE) {
+            basic->SetOwnedTexture(nullptr);
+            retained.Reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateEffectTextureOwner(
+                *effect, texture->parentGame);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        basic->SetOwnedTexture(texture->value);
+        retained.Set(
+            textureHandle,
+            std::static_pointer_cast<Texture>(texture->value),
+            texture,
+            &texture->activeEffectReferenceCount);
         return CNA_RESULT_SUCCESS;
     });
 }

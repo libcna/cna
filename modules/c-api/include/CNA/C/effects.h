@@ -49,6 +49,9 @@ typedef uint32_t CNA_EffectParameterType;
 /** @brief Owned handle for a graphics-device effect instance. */
 typedef CNA_Handle CNA_EffectHandle;
 
+/** @brief Owned standalone or stable effect-member view of a DirectionalLight. */
+typedef CNA_Handle CNA_DirectionalLightHandle;
+
 /** @brief Owned handle for an immutable effect annotation. */
 typedef CNA_Handle CNA_EffectAnnotationHandle;
 
@@ -1302,6 +1305,272 @@ CNA_C_API CNA_Result cna_shader_effect_get_projection(
 CNA_C_API CNA_Result cna_shader_effect_set_projection(
     CNA_EffectHandle effect,
     CNA_Matrix value);
+
+/** @brief Creates an owned default disabled DirectionalLight. */
+CNA_C_API CNA_Result cna_directional_light_create(
+    CNA_DirectionalLightHandle* out_light);
+
+/** @brief Destroys a standalone or nested DirectionalLight view handle. */
+CNA_C_API CNA_Result cna_directional_light_destroy(
+    CNA_DirectionalLightHandle light);
+
+/** @brief Gets a directional light's diffuse color. */
+CNA_C_API CNA_Result cna_directional_light_get_diffuse_color(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3* out_value);
+
+/** @brief Sets a directional light's diffuse color. */
+CNA_C_API CNA_Result cna_directional_light_set_diffuse_color(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3 value);
+
+/** @brief Gets the direction in which a directional light shines. */
+CNA_C_API CNA_Result cna_directional_light_get_direction(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the direction in which a directional light shines. */
+CNA_C_API CNA_Result cna_directional_light_set_direction(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3 value);
+
+/** @brief Gets a directional light's specular color. */
+CNA_C_API CNA_Result cna_directional_light_get_specular_color(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3* out_value);
+
+/** @brief Sets a directional light's specular color. */
+CNA_C_API CNA_Result cna_directional_light_set_specular_color(
+    CNA_DirectionalLightHandle light,
+    CNA_Vector3 value);
+
+/** @brief Gets whether a directional light is enabled. */
+CNA_C_API CNA_Result cna_directional_light_get_enabled(
+    CNA_DirectionalLightHandle light,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether a directional light is enabled. */
+CNA_C_API CNA_Result cna_directional_light_set_enabled(
+    CNA_DirectionalLightHandle light,
+    CNA_Bool value);
+
+/**
+ * @brief Creates an owned BasicEffect game child.
+ * @param graphics_device Borrowed graphics-device handle from an active game callback.
+ * @param out_effect Receives the owned BasicEffect handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_basic_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the world matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_get_world(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the world matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_set_world(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
+
+/** @brief Gets the view matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_get_view(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the view matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_set_view(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
+
+/** @brief Gets the projection matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_get_projection(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the projection matrix through the native IEffectMatrices contract. */
+CNA_C_API CNA_Result cna_effect_matrices_set_projection(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
+
+/** @brief Gets the fog color through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_get_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the fog color through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_set_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets whether fog is enabled through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_get_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether fog is enabled through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_set_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Gets the fog start distance through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_get_start(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the fog start distance through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_set_start(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the fog end distance through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_get_end(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the fog end distance through the native IEffectFog contract. */
+CNA_C_API CNA_Result cna_effect_fog_set_end(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the ambient color through the native IEffectLights contract. */
+CNA_C_API CNA_Result cna_effect_lights_get_ambient_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the ambient color through the native IEffectLights contract. */
+CNA_C_API CNA_Result cna_effect_lights_set_ambient_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/**
+ * @brief Gets one of the three stable directional-light member views.
+ * @param effect Effect implementing IEffectLights.
+ * @param index Light index in the inclusive range zero through two.
+ * @param out_light Receives an owned stable member-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_lights_get_directional_light(
+    CNA_EffectHandle effect,
+    uint32_t index,
+    CNA_DirectionalLightHandle* out_light);
+
+/** @brief Gets whether lighting is enabled through the native IEffectLights contract. */
+CNA_C_API CNA_Result cna_effect_lights_get_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether lighting is enabled through the native IEffectLights contract. */
+CNA_C_API CNA_Result cna_effect_lights_set_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Applies the native standard three-point lighting preset. */
+CNA_C_API CNA_Result cna_effect_lights_enable_default(
+    CNA_EffectHandle effect);
+
+/** @brief Gets whether BasicEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_basic_effect_get_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether BasicEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_basic_effect_set_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Gets whether BasicEffect prefers per-pixel lighting. */
+CNA_C_API CNA_Result cna_basic_effect_get_prefer_per_pixel_lighting(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether BasicEffect prefers per-pixel lighting. */
+CNA_C_API CNA_Result cna_basic_effect_set_prefer_per_pixel_lighting(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Gets the BasicEffect diffuse material color. */
+CNA_C_API CNA_Result cna_basic_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the BasicEffect diffuse material color. */
+CNA_C_API CNA_Result cna_basic_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the BasicEffect emissive material color. */
+CNA_C_API CNA_Result cna_basic_effect_get_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the BasicEffect emissive material color. */
+CNA_C_API CNA_Result cna_basic_effect_set_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the BasicEffect specular material color. */
+CNA_C_API CNA_Result cna_basic_effect_get_specular_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the BasicEffect specular material color. */
+CNA_C_API CNA_Result cna_basic_effect_set_specular_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the BasicEffect specular power. */
+CNA_C_API CNA_Result cna_basic_effect_get_specular_power(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the BasicEffect specular power. */
+CNA_C_API CNA_Result cna_basic_effect_set_specular_power(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the BasicEffect alpha value. */
+CNA_C_API CNA_Result cna_basic_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the BasicEffect alpha value. */
+CNA_C_API CNA_Result cna_basic_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets whether BasicEffect texture mapping is enabled. */
+CNA_C_API CNA_Result cna_basic_effect_get_texture_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether BasicEffect texture mapping is enabled. */
+CNA_C_API CNA_Result cna_basic_effect_set_texture_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/**
+ * @brief Gets the retained BasicEffect Texture2D handle.
+ * @param effect BasicEffect handle.
+ * @param out_has_texture Receives whether a texture is assigned.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_basic_effect_get_texture(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains a same-device Texture2D, or clears with the invalid handle.
+ * @param effect BasicEffect handle.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_basic_effect_set_texture(
+    CNA_EffectHandle effect,
+    CNA_Handle texture);
 
 #ifdef __cplusplus
 }

@@ -57,6 +57,7 @@ enum class ObjectKind : uint32_t {
     EffectTechnique = 28,
     EffectTechniqueCollection = 29,
     Effect = 30,
+    DirectionalLight = 31,
     Test = UINT32_MAX
 };
 

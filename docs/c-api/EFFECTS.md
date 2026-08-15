@@ -104,6 +104,26 @@ queries. Source creation remains successful when a backend has no custom-shader 
 inspect those queries instead of inferring compilation. Texture bindings require the same graphics
 device and retain the currently bound C resource per unit.
 
+## BasicEffect and reusable effect interfaces
+
+`cna_basic_effect_create` returns an ordinary `CNA_EffectHandle`, so the base lifecycle, clone,
+current-technique and GraphicsResource operations apply unchanged. Generic
+`cna_effect_matrices_*`, `cna_effect_fog_*` and `cna_effect_lights_*` functions dispatch through
+the native IEffectMatrices, IEffectFog and IEffectLights contracts. A valid effect that does not
+implement the requested interface returns `CNA_RESULT_NOT_SUPPORTED`.
+
+BasicEffect adds vertex-color and per-pixel-lighting flags; diffuse, emissive and specular colors;
+specular power; alpha; and texture-enabled/Texture2D state. Texture assignment calls the native
+owned-texture route, requires the same graphics device and retains the C texture handle. Clone
+copies both native state and C lifetime retention, so the texture cannot be destroyed until every
+assigning clone clears or releases it.
+
+`CNA_DirectionalLightHandle` owns either a standalone default light or a stable mutable view of one
+of an IEffectLights object's three members. Repeated views share mutations. Each nested view aliases
+the native member and transitively retains its parent effect and game ownership after the parent
+effect handle is destroyed. Default lighting delegates the native three-point preset and preserves
+its exact ambient, direction, diffuse, specular and enabled values.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -129,3 +149,9 @@ validation, exact type/source strings, every shader uniform and matrix operation
 consistency, texture dispatch/retention and descendant lifetime after parent-handle destruction.
 It also covers invalid, stale, wrong-kind and wrong-thread calls under HEADLESS and SDL_RENDERER
 and in a focused ASan+UBSan build; C17/C++23 assertions freeze `CNA_EffectHandle`.
+
+`BasicEffectSmoke.c` covers exact BasicEffect/DirectionalLight defaults, every generic interface
+and BasicEffect property operation, all three stable nested lights, the native default-lighting
+preset, same-type clone state, Texture2D retention and nested-light lifetime after parent-effect
+destruction. It runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan; invalid, stale,
+wrong-kind and wrong-thread cases are included and C17/C++23 assertions freeze the light handle.
