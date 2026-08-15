@@ -943,7 +943,7 @@ inconsistent, which is worse than the shape being slightly suboptimal.
 
 ```bash
 cd /rv/data/development/github.com/openeggbert/cnabinding
-export CCACHE_DIR=/media/robertvokac/claude/tmp/ccache
+export CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache
 B=/media/robertvokac/claude/tmp/cna/cmake-build-binding-headless
 
 # 1. what does this slice own?  (planned rows, by header)
@@ -982,7 +982,11 @@ A slice is not finished until step 4's delta matches, all four trees are green, 
 ### Verification (do all four before committing a slice)
 
 All four trees live under `/media/robertvokac/claude/tmp/cna/` (off the repo, on the scratch
-partition, with `CCACHE_DIR=/media/robertvokac/claude/tmp/ccache`). Build only `modules/c-api` in
+partition, sharing the project-wide `CCACHE_DIR=/media/robertvokac/claude/tmp/cna/ccache`).
+**Do not give the binding trees a cache of their own.** They were pointed at a separate
+`tmp/ccache` until 2026-08-15; it reached a 0.69% hit rate over 6,932 compilations because it
+started cold and never saw the CNA and sharp-runtime objects the shared cache already holds.
+It was deleted. Build only `modules/c-api` in
 each — `make -C <tree>/modules/c-api -j3` — never the default `all` target, which pulls in
 unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap parallelism at `-j3`.
 
