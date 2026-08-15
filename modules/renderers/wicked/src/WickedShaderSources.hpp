@@ -60,6 +60,7 @@ struct CnaConstants
     float4 pbrFactors;      // x=metallic, y=roughness, z=normal scale, w=occlusion strength
     float4 pbrSrgb;         // x=decode base, y=decode emissive, z=encode output
     float4 pbrDielectricFresnel; // xyz=dielectric F0, w=dielectric F90
+    float4 pbrTextureTransformRows[10]; // two affine UV rows per PBR map
 };
 
 ConstantBuffer<CnaConstants> cb : register(b0);
@@ -457,6 +458,13 @@ float3 CnaLinearToSrgb(float3 color)
     return lerp(low, high, step(float3(0.0031308f, 0.0031308f, 0.0031308f), color));
 }
 
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    const float3 value = float3(uv, 1.0f);
+    return float2(dot(value, cb.pbrTextureTransformRows[slot * 2].xyz),
+                  dot(value, cb.pbrTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
                 float3 F90, float roughness, float metallic)
 {
@@ -483,7 +491,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 float4 PbrPS(PbrVSOut input) : SV_Target
 {
-    const float4 baseColorTex = texture0.Sample(sampler0, input.uv);
+    const float4 baseColorTex = texture0.Sample(sampler0, CnaPbrTransformUv(input.uv, 0));
     const float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), cb.pbrSrgb.x);
     const float3 albedo = baseColor * cb.diffuse.rgb;
     const float alpha = baseColorTex.a * cb.diffuse.a;
@@ -492,11 +500,11 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     const float3 T = normalize(input.tangentWS - N * dot(N, input.tangentWS));
     const float3 B = cross(N, T) * input.bitangentSign;
     const float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = normalMap.Sample(sampler0, input.uv).rgb * 2.0f - 1.0f;
+    float3 sampledNormal = normalMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 1)).rgb * 2.0f - 1.0f;
     sampledNormal.xy *= cb.pbrFactors.z;
     const float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    const float4 mr = metallicRoughnessMap.Sample(sampler0, input.uv);
+    const float4 mr = metallicRoughnessMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 2));
     const float roughness = clamp(mr.g * cb.pbrFactors.y, 0.045f, 1.0f);
     const float metallic = saturate(mr.b * cb.pbrFactors.x);
 
@@ -515,10 +523,10 @@ float4 PbrPS(PbrVSOut input) : SV_Target
     Lo += PbrLight(finalNormal, V, normalize(-cb.lightDir2.xyz), cb.lightDiffuse2.rgb,
                    albedo, F0, F90, roughness, metallic);
 
-    const float occlusionSample = occlusionMap.Sample(sampler0, input.uv).r;
+    const float occlusionSample = occlusionMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 4)).r;
     const float occlusion = 1.0f + cb.pbrFactors.w * (occlusionSample - 1.0f);
     const float3 ambient = cb.ambient.rgb * albedo * occlusion;
-    const float3 emissiveRaw = emissiveMap.Sample(sampler0, input.uv).rgb;
+    const float3 emissiveRaw = emissiveMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 3)).rgb;
     const float3 emissiveSample = lerp(emissiveRaw, CnaSrgbToLinear(emissiveRaw), cb.pbrSrgb.y);
     const float3 emissive = cb.emissive.rgb * emissiveSample;
 

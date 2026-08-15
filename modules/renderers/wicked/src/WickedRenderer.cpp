@@ -3206,6 +3206,9 @@ namespace CNA::Internal::Renderers::Wicked
                 constants.pbrDielectricFresnel[1] = params->pbrDielectricF0[1];
                 constants.pbrDielectricFresnel[2] = params->pbrDielectricF0[2];
                 constants.pbrDielectricFresnel[3] = params->pbrDielectricF90;
+                std::memcpy(constants.pbrTextureTransformRows,
+                            params->pbrTextureTransformRows,
+                            sizeof(params->pbrTextureTransformRows));
             }
         }
         else

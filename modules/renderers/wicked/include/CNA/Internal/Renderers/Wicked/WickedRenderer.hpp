@@ -232,6 +232,7 @@ namespace CNA::Internal::Renderers::Wicked
         float pbrFactors[4] = {1.0f, 1.0f, 1.0f, 1.0f}; ///< metallic, roughness, normal scale, occlusion strength.
         float pbrSrgb[4] = {};           ///< decode base, decode emissive, encode PBR output.
         float pbrDielectricFresnel[4] = {}; ///< xyz=dielectric F0, w=dielectric F90.
+        float pbrTextureTransformRows[10][4] = {}; ///< Two affine UV rows per PBR map.
     };
 
     /**
