@@ -2861,18 +2861,27 @@ namespace CNA::Internal::Renderers::Vulkan
         const bool msaa = (sampleCount_ > VK_SAMPLE_COUNT_1_BIT);
         for (size_t i = 0; i < swapchainImageViews_.size(); ++i) {
             VkFramebufferCreateInfo ci{};
+            // Keep the attachment storage alive through vkCreateFramebuffer().  Declaring a
+            // separate `atts` array inside either branch leaves ci.pAttachments dangling as soon
+            // as that branch ends; optimized builds happened to retain the stack bytes often
+            // enough to hide the UB, while validation/lavapipe observed null and stack-address
+            // pseudo-handles here.
+            VkImageView atts[3] = {};
             ci.sType  = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             ci.width  = swapchainExtent_.width;
             ci.height = swapchainExtent_.height;
             ci.layers = 1;
             if (msaa) {
                 // att 0 = MSAA color, att 1 = resolve (swapchain), att 2 = MSAA depth
-                VkImageView atts[] = { msaaColorView_, swapchainImageViews_[i], depthImageView_ };
+                atts[0]            = msaaColorView_;
+                atts[1]            = swapchainImageViews_[i];
+                atts[2]            = depthImageView_;
                 ci.renderPass      = renderPassMsaa_;
                 ci.attachmentCount = 3;
                 ci.pAttachments    = atts;
             } else {
-                VkImageView atts[] = { swapchainImageViews_[i], depthImageView_ };
+                atts[0]            = swapchainImageViews_[i];
+                atts[1]            = depthImageView_;
                 ci.renderPass      = renderPass_;
                 ci.attachmentCount = 2;
                 ci.pAttachments    = atts;
@@ -4635,11 +4644,11 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // Shared fill for pbr3d.vert/frag.glsl's and pbr3d_skinned.vert/frag.glsl's identical
-    // PbrParams UBO layout (108 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
+    // PbrParams UBO layout (124 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
     // DiffuseColor (base color factor), and AmbientColor are NOT here -- they travel through the
     // 128-byte PC via FillExtPushConst instead (reused unchanged for PbrEffect/SkinnedPbrEffect,
     // same field semantics).
-    void VulkanRenderer::FillPbrUboData(float (&out)[108], const GpuDrawParams& p,
+    void VulkanRenderer::FillPbrUboData(float (&out)[124], const GpuDrawParams& p,
                                                 float weightsPerVertex)
     {
         out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.f;
@@ -4666,16 +4675,20 @@ namespace CNA::Internal::Renderers::Vulkan
         out[56] = p.pbrBaseColorTextureIsSrgb ? 1.f : 0.f;
         out[57] = p.pbrEmissiveTextureIsSrgb ? 1.f : 0.f;
         out[58] = p.pbrEncodeOutputToSrgb ? 1.f : 0.f;
-        out[59] = 0.f;
-        out[60] = p.pbrDielectricF0[0]; out[61] = p.pbrDielectricF0[1];
-        out[62] = p.pbrDielectricF0[2]; out[63] = p.pbrDielectricF90;
+        out[59] = p.pbrSpecularColorTextureIsSrgb ? 1.f : 0.f;
+        out[60] = p.pbrDielectricF0Unclamped[0]; out[61] = p.pbrDielectricF0Unclamped[1];
+        out[62] = p.pbrDielectricF0Unclamped[2]; out[63] = p.pbrSpecularFactor;
         for (int row = 0; row < 10; ++row)
             for (int component = 0; component < 4; ++component)
                 out[64 + row * 4 + component] = p.pbrTextureTransformRows[row][component];
-        // The dual-UV shaders consume the five low bits; the legacy stride-48/68 shaders retain
-        // their byte-identical 104-float block and simply never address this appended vec4.
-        out[104] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x1fu);
-        out[105] = 0.f; out[106] = 0.f; out[107] = 0.f;
+        for (int row = 0; row < 4; ++row)
+            for (int component = 0; component < 4; ++component)
+                out[104 + row * 4 + component] =
+                    p.pbrSpecularTextureTransformRows[row][component];
+        // The dual-UV shaders consume all seven low bits; legacy stride-48/68 shaders keep the
+        // same prefix and simply never address this appended selector vec4.
+        out[120] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x7fu);
+        out[121] = 0.f; out[122] = 0.f; out[123] = 0.f;
     }
 
     void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
@@ -6603,14 +6616,14 @@ namespace CNA::Internal::Renderers::Vulkan
     // Metallic-roughness BRDF ported unchanged from EasyGLRenderer::EnsurePbrProgram()/
     // EnsurePbrSkinnedProgram() (pbr3d.frag.glsl/pbr3d_skinned.frag.glsl's own PbrLight()); only
     // the resource-binding plumbing (dynamic UBO instead of individual GL uniform locations)
-    // differs, mirroring EnsureSkinnedResources()'s own sampler+dynamic-UBO shape but with 5
-    // samplers (baseColor, normalMap, metallicRoughnessMap, emissiveMap, occlusionMap) instead of 1.
+    // differs, mirroring EnsureSkinnedResources()'s own sampler+dynamic-UBO shape but with 7
+    // samplers (the five core maps plus specular strength and colour) instead of 1.
 
     void VulkanRenderer::EnsurePbrResources()
     {
         if (descriptorSetLayoutPbr_ != VK_NULL_HANDLE) return;
 
-        VkDescriptorSetLayoutBinding bindings[6]{};
+        VkDescriptorSetLayoutBinding bindings[8]{};
         for (uint32_t i = 0; i < 5; ++i) {
             bindings[i].binding         = i;
             bindings[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -6621,16 +6634,22 @@ namespace CNA::Internal::Renderers::Vulkan
         bindings[5].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         bindings[5].descriptorCount = 1;
         bindings[5].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        for (uint32_t i = 6; i < 8; ++i) {
+            bindings[i].binding         = i;
+            bindings[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
 
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        li.bindingCount = 6; li.pBindings = bindings;
+        li.bindingCount = 8; li.pBindings = bindings;
         if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutPbr_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorSetLayout (Pbr) failed");
 
         const uint32_t maxSets = 128u * MaxFramesInFlight;
         VkDescriptorPoolSize ps[2]{};
-        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 5 };
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 7 };
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets };
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -6664,7 +6683,8 @@ namespace CNA::Internal::Renderers::Vulkan
     VkDescriptorSet VulkanRenderer::GetOrCreatePbrDescSet(
         uint32_t frameIdx, VkImageView baseColor, VkImageView normalMap,
         VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion,
-        const VkSampler (&samplers)[5])
+        VkImageView specular, VkImageView specularColor,
+        const VkSampler (&samplers)[7])
     {
         EnsurePbrResources();
         if (baseColor          == VK_NULL_HANDLE) baseColor          = defaultWhiteView_;
@@ -6672,13 +6692,15 @@ namespace CNA::Internal::Renderers::Vulkan
         if (metallicRoughness  == VK_NULL_HANDLE) metallicRoughness  = defaultWhiteView_;
         if (emissive           == VK_NULL_HANDLE) emissive           = defaultWhiteView_;
         if (occlusion          == VK_NULL_HANDLE) occlusion          = defaultWhiteView_;
+        if (specular           == VK_NULL_HANDLE) specular           = defaultWhiteView_;
+        if (specularColor      == VK_NULL_HANDLE) specularColor      = defaultWhiteView_;
 
-        // FNV-1a-style combine of all 5 view handles into one cache key.
+        // FNV-1a-style combine of all 7 view handles into one cache key.
         uint64_t key = 1469598103934665603ull;
-        for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion })
+        for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                               specular, specularColor })
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
-        // REMED-GFX-169: fold all five slot samplers into the same FNV-1a chain, so two draws that
-        // share these five views but assign different SamplerStates get different descriptor sets.
+        // REMED-GFX-169: fold all seven slot samplers into the same FNV-1a chain.
         for (VkSampler sm : samplers)
             key = (key ^ reinterpret_cast<uint64_t>(sm)) * 1099511628211ull;
         auto& cache = pbrDescSets_[frameIdx];
@@ -6694,24 +6716,24 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
             return VK_NULL_HANDLE;
 
-        VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion };
-        VkDescriptorImageInfo imgInfo[5]{};
-        for (uint32_t i = 0; i < 5; ++i)
+        VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                 specular, specularColor };
+        VkDescriptorImageInfo imgInfo[7]{};
+        for (uint32_t i = 0; i < 7; ++i)
             imgInfo[i] = { samplers[i], views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        for (uint32_t i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 7; ++i)
             VkSamplerTraceEXT("desc.Pbr        hit=0 key=0x%llx set=0x%llx "
                               "binding=%u slot=%u view=0x%llx sampler=0x%llx",
                               static_cast<unsigned long long>(key), VkH(ds),
-                              i, i, VkH(views[i]), VkH(imgInfo[i].sampler));
+                              i < 5 ? i : i + 1, i, VkH(views[i]), VkH(imgInfo[i].sampler));
 
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = pbrUBO_[frameIdx];
         bufInfo.offset = 0;
-        // The shader reads through byte 431 (texture-coordinate selector + transform rows).
-        // The old 256-byte range made the existing 416-byte block formally out of bounds.
-        bufInfo.range  = sizeof(float) * 108;
+        // The shader reads through byte 495 (specular transforms plus texture-coordinate selector).
+        bufInfo.range  = sizeof(float) * 124;
 
-        VkWriteDescriptorSet writes[6]{};
+        VkWriteDescriptorSet writes[8]{};
         for (uint32_t i = 0; i < 5; ++i) {
             writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet          = ds;
@@ -6726,10 +6748,19 @@ namespace CNA::Internal::Renderers::Vulkan
         writes[5].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         writes[5].descriptorCount = 1;
         writes[5].pBufferInfo     = &bufInfo;
-        vkUpdateDescriptorSets(device_, 6, writes, 0, nullptr);
+        for (uint32_t i = 5; i < 7; ++i) {
+            writes[i + 1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i + 1].dstSet          = ds;
+            writes[i + 1].dstBinding      = i + 1;
+            writes[i + 1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i + 1].descriptorCount = 1;
+            writes[i + 1].pImageInfo      = &imgInfo[i];
+        }
+        vkUpdateDescriptorSets(device_, 8, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
-        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive, occlusion } };
+        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive,
+                                               occlusion, specular, specularColor } };
         return ds;
     }
 
@@ -6861,10 +6892,9 @@ namespace CNA::Internal::Renderers::Vulkan
     {
         if (descriptorSetLayoutPbrSkinned_ != VK_NULL_HANDLE) return;
 
-        // binding 0-4: 5 samplers (fragment); binding 5: bone palette dynamic UBO (vertex,
-        // same shape as descriptorSetLayoutSkinned_'s own BoneBlock); binding 6: PbrParams
-        // dynamic UBO (vertex+fragment).
-        VkDescriptorSetLayoutBinding bindings[7]{};
+        // Bindings 0-4: core samplers; binding 5: bone palette dynamic UBO; binding 6: PbrParams
+        // dynamic UBO; bindings 7-8: specular strength and colour samplers.
+        VkDescriptorSetLayoutBinding bindings[9]{};
         for (uint32_t i = 0; i < 5; ++i) {
             bindings[i].binding         = i;
             bindings[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -6879,16 +6909,22 @@ namespace CNA::Internal::Renderers::Vulkan
         bindings[6].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         bindings[6].descriptorCount = 1;
         bindings[6].stageFlags      = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+        for (uint32_t i = 7; i < 9; ++i) {
+            bindings[i].binding         = i;
+            bindings[i].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            bindings[i].descriptorCount = 1;
+            bindings[i].stageFlags      = VK_SHADER_STAGE_FRAGMENT_BIT;
+        }
 
         VkDescriptorSetLayoutCreateInfo li{};
         li.sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        li.bindingCount = 7; li.pBindings = bindings;
+        li.bindingCount = 9; li.pBindings = bindings;
         if (vkCreateDescriptorSetLayout(device_, &li, nullptr, &descriptorSetLayoutPbrSkinned_) != VK_SUCCESS)
             throw std::runtime_error("vkCreateDescriptorSetLayout (PbrSkinned) failed");
 
         const uint32_t maxSets = 128u * MaxFramesInFlight;
         VkDescriptorPoolSize ps[2]{};
-        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 5 };
+        ps[0] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxSets * 7 };
         ps[1] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, maxSets * 2 }; // BoneBlock + PbrParams
         VkDescriptorPoolCreateInfo pi{};
         pi.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -6931,7 +6967,8 @@ namespace CNA::Internal::Renderers::Vulkan
     VkDescriptorSet VulkanRenderer::GetOrCreatePbrSkinnedDescSet(
         uint32_t frameIdx, VkImageView baseColor, VkImageView normalMap,
         VkImageView metallicRoughness, VkImageView emissive, VkImageView occlusion,
-        const VkSampler (&samplers)[5])
+        VkImageView specular, VkImageView specularColor,
+        const VkSampler (&samplers)[7])
     {
         EnsurePbrSkinnedResources();
         if (baseColor          == VK_NULL_HANDLE) baseColor          = defaultWhiteView_;
@@ -6939,12 +6976,14 @@ namespace CNA::Internal::Renderers::Vulkan
         if (metallicRoughness  == VK_NULL_HANDLE) metallicRoughness  = defaultWhiteView_;
         if (emissive           == VK_NULL_HANDLE) emissive           = defaultWhiteView_;
         if (occlusion          == VK_NULL_HANDLE) occlusion          = defaultWhiteView_;
+        if (specular           == VK_NULL_HANDLE) specular           = defaultWhiteView_;
+        if (specularColor      == VK_NULL_HANDLE) specularColor      = defaultWhiteView_;
 
         uint64_t key = 1469598103934665603ull;
-        for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion })
+        for (VkImageView v : { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                               specular, specularColor })
             key = (key ^ reinterpret_cast<uint64_t>(v)) * 1099511628211ull;
-        // REMED-GFX-169: fold all five slot samplers into the same FNV-1a chain, so two draws that
-        // share these five views but assign different SamplerStates get different descriptor sets.
+        // REMED-GFX-169: fold all seven slot samplers into the same FNV-1a chain.
         for (VkSampler sm : samplers)
             key = (key ^ reinterpret_cast<uint64_t>(sm)) * 1099511628211ull;
         auto& cache = pbrSkinnedDescSets_[frameIdx];
@@ -6960,15 +6999,16 @@ namespace CNA::Internal::Renderers::Vulkan
         if (vkAllocateDescriptorSets(device_, &ai, &ds) != VK_SUCCESS)
             return VK_NULL_HANDLE;
 
-        VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion };
-        VkDescriptorImageInfo imgInfo[5]{};
-        for (uint32_t i = 0; i < 5; ++i)
+        VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                 specular, specularColor };
+        VkDescriptorImageInfo imgInfo[7]{};
+        for (uint32_t i = 0; i < 7; ++i)
             imgInfo[i] = { samplers[i], views[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        for (uint32_t i = 0; i < 5; ++i)
+        for (uint32_t i = 0; i < 7; ++i)
             VkSamplerTraceEXT("desc.PbrSkinned hit=0 key=0x%llx set=0x%llx "
                               "binding=%u slot=%u view=0x%llx sampler=0x%llx",
                               static_cast<unsigned long long>(key), VkH(ds),
-                              i, i, VkH(views[i]), VkH(imgInfo[i].sampler));
+                              i < 5 ? i : i + 2, i, VkH(views[i]), VkH(imgInfo[i].sampler));
 
         VkDescriptorBufferInfo boneBufInfo{};
         boneBufInfo.buffer = pbrSkinnedBoneUBO_[frameIdx];
@@ -6978,9 +7018,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo paramsBufInfo{};
         paramsBufInfo.buffer = pbrSkinnedUBO_[frameIdx];
         paramsBufInfo.offset = 0;
-        paramsBufInfo.range  = sizeof(float) * 108;
+        paramsBufInfo.range  = sizeof(float) * 124;
 
-        VkWriteDescriptorSet writes[7]{};
+        VkWriteDescriptorSet writes[9]{};
         for (uint32_t i = 0; i < 5; ++i) {
             writes[i].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writes[i].dstSet          = ds;
@@ -7001,10 +7041,19 @@ namespace CNA::Internal::Renderers::Vulkan
         writes[6].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
         writes[6].descriptorCount = 1;
         writes[6].pBufferInfo     = &paramsBufInfo;
-        vkUpdateDescriptorSets(device_, 7, writes, 0, nullptr);
+        for (uint32_t i = 5; i < 7; ++i) {
+            writes[i + 2].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writes[i + 2].dstSet          = ds;
+            writes[i + 2].dstBinding      = i + 2;
+            writes[i + 2].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            writes[i + 2].descriptorCount = 1;
+            writes[i + 2].pImageInfo      = &imgInfo[i];
+        }
+        vkUpdateDescriptorSets(device_, 9, writes, 0, nullptr);
 
         // REMED-GFX-076: record the sampled views so this entry is evicted+freed when any dies.
-        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive, occlusion } };
+        cache[key] = EffectDescSetEntry{ ds, { baseColor, normalMap, metallicRoughness, emissive,
+                                               occlusion, specular, specularColor } };
         return ds;
     }
 
@@ -9830,13 +9879,18 @@ namespace CNA::Internal::Renderers::Vulkan
             const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
             const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
             const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
             EnsureDefaultFlatNormalTexture();
             VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
             VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(
+                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
                                                         PbrSlotSamplersRawEXT().s);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
@@ -9848,13 +9902,18 @@ namespace CNA::Internal::Renderers::Vulkan
             const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
             const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
             const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
             EnsureDefaultFlatNormalTexture();
             VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
             VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+            d.pbrDescSet = GetOrCreatePbrDescSet(
+                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
                                                  PbrSlotSamplersRawEXT().s);
             FillPbrUboData(d.pbrUboData, params, 0.0f);
         } else if (needsSkinned) {
@@ -10085,13 +10144,18 @@ namespace CNA::Internal::Renderers::Vulkan
             const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
             const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
             const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
             EnsureDefaultFlatNormalTexture();
             VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
             VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+            d.pbrDescSet = GetOrCreatePbrSkinnedDescSet(
+                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
                                                         PbrSlotSamplersRawEXT().s);
             const int count = std::min(params.boneCount, 72);
             d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16);
@@ -10103,13 +10167,18 @@ namespace CNA::Internal::Renderers::Vulkan
             const auto* vsMR   = dynamic_cast<const IVulkanSamplable*>(params.pbrMetallicRoughnessMap);
             const auto* vsEmis = dynamic_cast<const IVulkanSamplable*>(params.pbrEmissiveMap);
             const auto* vsOcc  = dynamic_cast<const IVulkanSamplable*>(params.pbrOcclusionMap);
+            const auto* vsSpec = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularMap);
+            const auto* vsSpecColor = dynamic_cast<const IVulkanSamplable*>(params.pbrSpecularColorMap);
             EnsureDefaultFlatNormalTexture();
             VkImageView vBase = vsBase ? vsBase->GetVkImageView() : defaultWhiteView_;
             VkImageView vNorm = vsNorm ? vsNorm->GetVkImageView() : defaultFlatNormalView_;
             VkImageView vMR   = vsMR   ? vsMR->GetVkImageView()   : defaultWhiteView_;
             VkImageView vEmis = vsEmis ? vsEmis->GetVkImageView() : defaultWhiteView_;
             VkImageView vOcc  = vsOcc  ? vsOcc->GetVkImageView()  : defaultWhiteView_;
-            d.pbrDescSet = GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+            VkImageView vSpec = vsSpec ? vsSpec->GetVkImageView() : defaultWhiteView_;
+            VkImageView vSpecColor = vsSpecColor ? vsSpecColor->GetVkImageView() : defaultWhiteView_;
+            d.pbrDescSet = GetOrCreatePbrDescSet(
+                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
                                                  PbrSlotSamplersRawEXT().s);
             FillPbrUboData(d.pbrUboData, params, 0.0f);
         } else if (needsSkinned) {

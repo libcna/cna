@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
-// plan_gltf.md GLTF-373/379: discriminating real-pixel proof of all five PBR texture bindings,
-// both PBR map scalars, and glTF MASK coverage staying inside rigid and skinned PBR programs.
+// plan_gltf.md GLTF-344/373/379: discriminating real-pixel proof of all seven PBR texture
+// bindings, both PBR map scalars, and glTF MASK coverage staying inside rigid and skinned PBR
+// programs.
 //
 // Output sRGB transfer stays disabled so exact linear-UNORM oracle values remain portable. Five
 // solid one-pixel sentinels make a slot swap observable: red base colour, green metallic-roughness
@@ -233,6 +234,57 @@ namespace
         drawAndExpect("MASK discards alpha below cutoff", belowCutoff, Color(0, 255, 0, 255));
         drawAndExpect("MASK keeps alpha above cutoff", aboveCutoff, Color(255, 0, 0, 255));
     }
+
+    template <typename Effect>
+    void RunSpecularTextureCases(CNA::Examples::PixelTestGame& test,
+                                 GraphicsDevice& device,
+                                 Effect& effect,
+                                 Texture2D& white,
+                                 Texture2D& zeroStrength,
+                                 Texture2D& redSpecularColor,
+                                 int sampleX,
+                                 int sampleY,
+                                 const char* prefix)
+    {
+        const auto drawAndExpect = [&](const char* caseName, const Color& expected)
+        {
+            device.Clear(Color(0, 255, 0, 255));
+            effect.Apply();
+            device.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+            const std::string label = std::string(prefix) + " " + caseName;
+            test.ExpectPixel(label.c_str(), Rectangle(sampleX, sampleY, 1, 1), expected, 2);
+        };
+
+        effect.setAlphaModeEXTProperty(AlphaModeEXT::Opaque);
+        effect.setTextureProperty(&white);
+        effect.setNormalMapProperty(nullptr);
+        effect.setMetallicRoughnessMapProperty(nullptr);
+        effect.setEmissiveMapProperty(nullptr);
+        effect.setOcclusionMapProperty(nullptr);
+        effect.setEmissiveFactorProperty(Vector3::Zero);
+        effect.setAmbientLightColorProperty(Vector3::Zero);
+        effect.setMetallicFactorProperty(0.0f);
+        effect.setRoughnessFactorProperty(1.0f);
+        effect.setIorEXTProperty(3.0f); // dielectric F0 = 0.25: a strong slot discriminator
+        effect.setSpecularFactorEXTProperty(1.0f);
+        effect.setSpecularColorFactorEXTProperty(Vector3::One);
+        effect.DirectionalLight0.setEnabledProperty(true);
+        effect.DirectionalLight0.setDirectionProperty(Vector3(0.0f, 0.0f, -1.0f));
+        effect.DirectionalLight0.setDiffuseColorProperty(Vector3::One);
+
+        // Alpha=0 makes both F0 and F90 zero.  At N=V=L with roughness=1 this leaves exactly
+        // white/pi diffuse (~81), versus ~66 with the white strength fallback and F0=.25.
+        effect.setSpecularMapEXTProperty(&zeroStrength);
+        effect.setSpecularColorMapEXTProperty(nullptr);
+        drawAndExpect("specular-strength map alpha -> slot 5", Color(81, 81, 81, 255));
+
+        // Restore strength=1 and tint only the dielectric F0 red.  Red stays ~66 while G/B lose
+        // no diffuse energy to Fresnel and rise to ~81, proving the colour texture is sampled from
+        // its own slot rather than aliased to the scalar texture.
+        effect.setSpecularMapEXTProperty(&white);
+        effect.setSpecularColorMapEXTProperty(&redSpecularColor);
+        drawAndExpect("specular-colour map RGB -> slot 6", Color(66, 81, 81, 255));
+    }
 }
 
 class PbrTextureSlotMappingTest final : public CNA::Examples::PixelTestGame
@@ -255,6 +307,8 @@ protected:
         Texture2D blueEmissive = texture({0, 0, 255, 255});
         Texture2D occlusion = texture({64, 128, 192, 255});
         Texture2D normal = texture({255, 128, 191, 255});
+        Texture2D zeroSpecularStrength = texture({255, 255, 255, 0});
+        Texture2D redSpecularColor = texture({255, 0, 0, 255});
 
         device.SetDepthTestEnabled(false);
         device.setBlendStateProperty(BlendState::Opaque);
@@ -272,6 +326,8 @@ protected:
                           sampleX, sampleY, "PbrEffect");
         RunAlphaMaskCases(*this, device, rigidEffect, redBelowCutoff, redBaseColor,
                           sampleX, sampleY, "PbrEffect");
+        RunSpecularTextureCases(*this, device, rigidEffect, white, zeroSpecularStrength,
+                                redSpecularColor, sampleX, sampleY, "PbrEffect");
 
         const std::vector<SkinnedPbrVertex> skinned = SkinnedQuad();
         VertexBuffer skinnedBuffer(device, static_cast<int>(skinned.size()));
@@ -288,6 +344,8 @@ protected:
                           sampleX, sampleY, "SkinnedPbrEffect");
         RunAlphaMaskCases(*this, device, skinnedEffect, redBelowCutoff, redBaseColor,
                           sampleX, sampleY, "SkinnedPbrEffect");
+        RunSpecularTextureCases(*this, device, skinnedEffect, white, zeroSpecularStrength,
+                                redSpecularColor, sampleX, sampleY, "SkinnedPbrEffect");
 
         device.SetVertexBuffer(nullptr);
     }

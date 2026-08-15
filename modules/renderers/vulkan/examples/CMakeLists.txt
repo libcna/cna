@@ -1111,9 +1111,9 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
         cna_register_renderer_test(NAME Vulkan_SkinnedPbrEffect_Golden COMMAND cna_test_vulkan_skinnedpbreffect_golden
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}" ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
-        # plan_gltf.md GLTF-373: all five PBR texture bindings, with deliberately distinct
-        # base/MR/emissive/occlusion/normal texels and both rigid and skinned draw paths. The
-        # shared source uses only public renderer-agnostic XNA/CNA APIs.
+        # plan_gltf.md GLTF-344/373: all seven PBR texture bindings, with deliberately distinct
+        # base/MR/emissive/occlusion/normal/specular-strength/specular-colour texels and both rigid
+        # and skinned draw paths. The shared source uses only public renderer-agnostic XNA/CNA APIs.
         cna_vulkan_test(cna_test_vulkan_pbr_texture_slots
                         ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
         cna_register_renderer_test(NAME Vulkan_Pbr_TextureSlots COMMAND cna_test_vulkan_pbr_texture_slots

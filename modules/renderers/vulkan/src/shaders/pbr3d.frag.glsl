@@ -2,9 +2,8 @@
 
 // PbrEffect fragment shader — the glTF 2.0 metallic-roughness BRDF (GGX distribution + Smith-
 // Schlick-GGX visibility + Schlick Fresnel), mirroring
-// EasyGLRenderer::EnsurePbrProgram()'s fragment stage exactly. 4 additional texture units
-// beyond base color: normal map, metallic-roughness map (G=roughness, B=metallic, glTF packing),
-// emissive map, occlusion map.
+// EasyGLRenderer::EnsurePbrProgram()'s fragment stage exactly. Six additional texture units
+// beyond base color: the four core auxiliary maps plus specular strength and colour.
 
 layout(location = 0) in vec3  vNormal;
 layout(location = 1) in vec3  vTangent;
@@ -23,6 +22,8 @@ layout(set = 0, binding = 1) uniform sampler2D uNormalMap;
 layout(set = 0, binding = 2) uniform sampler2D uMetallicRoughnessMap;
 layout(set = 0, binding = 3) uniform sampler2D uEmissiveMap;
 layout(set = 0, binding = 4) uniform sampler2D uOcclusionMap;
+layout(set = 0, binding = 6) uniform sampler2D uSpecularMap;
+layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap;
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -47,11 +48,12 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector
     vec4 alphaTest;
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
-    vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
-    vec4 dielectricFresnel;     // xyz = dielectric F0, w = dielectric F90
+    vec4 srgbFlags;             // x=decode base, y=decode emissive, z=encode output, w=decode spec colour
+    vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10]; // two affine rows per PBR texture slot
+    vec4 specularTextureTransformRows[4];
 #ifdef CNA_PBR_DUAL_UV
-    vec4 textureCoordinateSets; // x = five-bit per-map TEXCOORD_1 selector mask
+    vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
 #endif
 } pbr;
 
@@ -94,6 +96,12 @@ vec2 CnaPbrTransformUV(vec2 uv, int slot) {
                 dot(value, pbr.textureTransformRows[slot * 2 + 1].xyz));
 }
 
+vec2 CnaPbrSpecularTransformUV(vec2 uv, int slot) {
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, pbr.specularTextureTransformRows[slot * 2].xyz),
+                dot(value, pbr.specularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
 #ifdef CNA_PBR_DUAL_UV
 vec2 CnaPbrUV(int slot) {
     int mask = int(pbr.textureCoordinateSets.x + 0.5);
@@ -124,8 +132,16 @@ void main() {
     float roughness = clamp(mr.g * pbr.emissive_roughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * pbr.eyePos_metallic.w, 0.0, 1.0);
     vec3 V = normalize(pbr.eyePos_metallic.xyz - vWorldPos);
-    vec3 F0 = mix(pbr.dielectricFresnel.xyz, albedo, metallic);
-    vec3 F90 = mix(vec3(pbr.dielectricFresnel.w), vec3(1.0), metallic);
+    float specularWeight = pbr.specularFresnelInputs.w
+        * texture(uSpecularMap, CnaPbrSpecularTransformUV(CNA_PBR_UV(5), 0)).a;
+    vec3 specularColorTex = texture(
+        uSpecularColorMap, CnaPbrSpecularTransformUV(CNA_PBR_UV(6), 1)).rgb;
+    specularColorTex = mix(
+        specularColorTex, CnaSrgbToLinear(specularColorTex), pbr.srgbFlags.w);
+    vec3 dielectricF0 = min(
+        pbr.specularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;
+    vec3 F0 = mix(dielectricF0, albedo, metallic);
+    vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic);
     vec3 Lo = vec3(0.0);
     Lo += PbrLight(finalNormal, V, normalize(-pc.light0Dir), pc.light0Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-pbr.light1Dir_pad.xyz), pbr.light1Diffuse_pad.xyz, albedo, F0, F90, roughness, metallic);

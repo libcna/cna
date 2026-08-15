@@ -224,7 +224,7 @@ with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the gra
 always one. The core defaults are algebraically identical to the former constants. The repository-
 wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
 test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
-`KHR_materials_specular` is implemented with a named limit and remains unclaimed because seven PBR
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed because six PBR
 renderers still need bindings for its two optional textures.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
@@ -236,8 +236,8 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL2, OpenGL4, DirectX9/11/12, Magnum and SDL GPU sample them, and the remaining seven renderer
-bindings stay explicitly open.
+OpenGL2, OpenGL4, DirectX9/11/12, Magnum, SDL GPU and Vulkan sample them, and the remaining six
+renderer bindings stay explicitly open.
 
 ---
 

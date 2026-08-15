@@ -1,7 +1,8 @@
 # glTF PBR texture bindings and fallbacks across renderers
 
-Every `PbrEffect`/`SkinnedPbrEffect` material has the same five logical resources, in this order:
-base colour, normal, metallic-roughness, emissive and occlusion. “The same order” does not mean
+Every `PbrEffect`/`SkinnedPbrEffect` material has the same five core logical resources, in this
+order: base colour, normal, metallic-roughness, emissive and occlusion. `KHR_materials_specular`
+adds independent strength and colour resources after those five. “The same order” does not mean
 every native API has the same binding numbers. `GltfRendererPbrFallbackPolicy` locks the complete
 CPU-field → native binding → shader declaration chain for each implementation, including both
 rigid and skinned fragment variants where a renderer stores them separately.
@@ -33,8 +34,9 @@ Vulkan rigid/skinned shader files independently; the two inline EasyGL/WebGPU va
 contain their complete declaration set.
 
 `EasyGL_Pbr_TextureSlots` and `Vulkan_Pbr_TextureSlots` add independent real-pixel evidence. Their
-texture-slot portion runs ten cases each (five maps × rigid/skinned) with semantic sentinel texels: red base colour, green
-metallic-roughness (`G=1`, `B=0`), blue emissive, channel-asymmetric occlusion and a tilted normal.
+texture-slot portion runs fourteen cases each (seven maps × rigid/skinned) with semantic sentinel
+texels: red base colour, green metallic-roughness (`G=1`, `B=0`), blue emissive,
+channel-asymmetric occlusion, a tilted normal, zero-alpha specular strength and red specular colour.
 The linearly rendered expected bytes are analytically stated in the test; a swap cannot pass by
 showing merely that “some texture” was sampled. `EasyGL_Pbr_MaterialMaps` additionally covers
 output transfer and supplies a second scalar-semantics oracle at the same binding boundary.
@@ -250,7 +252,7 @@ yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` sepa
 all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
 `specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4, DirectX9/11/12,
-Magnum and SDL GPU now consume both; the other seven renderer bindings remain the named `GLTF-344`
+Magnum, SDL GPU and Vulkan now consume both; the other six renderer bindings remain the named `GLTF-344`
 limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
 Magnum's shared rigid/skinned GLSL binds white units 5/6, and both its six-check analytic Fresnel
@@ -258,6 +260,11 @@ witness and existing six-check metallic-roughness PBR test pass on llvmpipe unde
 SDL GPU's shared rigid/skinned GLSL binds the two white fallbacks at bindings 5/6 with independent
 imported sampler state, transforms and colour decode. Its regenerated 12,656-byte SPIR-V fragment,
 both three-pixel PBR programs and the seven-check Fresnel/factor oracle pass under Xvfb.
+Vulkan's rigid layout binds the five core maps at 0–4, its 496-byte PBR block at 5 and the two
+extension maps at 6/7; skinned inserts the bone block at 5 and moves the PBR block and extension
+maps to 6–8. Four rigid/skinned single/dual-UV shader pairs carry a seven-bit selector and separate
+extension transforms. Validation-clean lavapipe runs pass the 22-check texture executable, both
+8-check golden programs and the seven-check Fresnel/factor oracle under Xvfb.
 
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 

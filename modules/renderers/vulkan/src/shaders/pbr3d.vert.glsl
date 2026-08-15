@@ -52,11 +52,12 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 fogVector;             // REMED-GFX-010: FNA fog vector (xyz + w)
     vec4 alphaTest;             // reference, tolerance, pass weight, fail weight
     vec4 pbrMapScales;          // x = normal scale, y = occlusion strength
-    vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
-    vec4 dielectricFresnel;     // xyz = dielectric F0, w = dielectric F90
+    vec4 srgbFlags;             // x=decode base, y=decode emissive, z=encode output, w=decode spec colour
+    vec4 specularFresnelInputs; // xyz = unclamped dielectric F0, w = specular factor
     vec4 textureTransformRows[10];
+    vec4 specularTextureTransformRows[4];
 #ifdef CNA_PBR_DUAL_UV
-    vec4 textureCoordinateSets; // x = five-bit per-map TEXCOORD_1 selector mask
+    vec4 textureCoordinateSets; // x = seven-bit per-map TEXCOORD_1 selector mask
 #endif
 } pbr;
 

@@ -424,9 +424,11 @@ namespace
               layout(set = 2, binding = 5) uniform sampler2D uSpecularMap;
               layout(set = 2, binding = 6) uniform sampler2D uSpecularColorMap;)"}}},
         {"vulkan", "descriptor set 0 bindings 0,1,2,3,4",
-         {{R"(VkImageView views[5] = { baseColor, normalMap, metallicRoughness, emissive, occlusion })",
+         {{R"(VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion,
+                                      specular, specularColor })",
            R"(writes[i].dstBinding = i)",
-           R"(GetOrCreatePbrDescSet(currentFrame_, vBase, vNorm, vMR, vEmis, vOcc,
+           R"(GetOrCreatePbrDescSet(
+                currentFrame_, vBase, vNorm, vMR, vEmis, vOcc, vSpec, vSpecColor,
                                     PbrSlotSamplersRawEXT().s))",
            R"(layout(set = 0, binding = 0) uniform sampler2D uTexture;
               layout(set = 0, binding = 1) uniform sampler2D uNormalMap;
@@ -844,8 +846,8 @@ namespace
          "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"vulkan",
-         "vec3 F0 = mix(pbr.dielectricFresnel.xyz, albedo, metallic)",
-         "vec3 F90 = mix(vec3(pbr.dielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 2},
         {"webgpu",
          "let f0 = mix(pf.dielectricFresnel.xyz, albedo, metallic)",
@@ -1967,6 +1969,38 @@ TEST(GltfRendererPbrFallbackPolicy, SdlGpuSamplesBothKhrMaterialsSpecularTexture
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "vulkan");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "float pbrUboData[124]",
+             "out[60] = p.pbrDielectricF0Unclamped[0]",
+             "out[63] = p.pbrSpecularFactor",
+             "p.pbrSpecularColorTextureIsSrgb ? 1.f : 0.f",
+             "p.pbrSpecularTextureTransformRows[row][component]",
+             "p.pbrTextureCoordinateSetMask & 0x7fu",
+             "params.pbrSpecularMap",
+             "params.pbrSpecularColorMap",
+             "VkImageView views[7] = { baseColor, normalMap, metallicRoughness, emissive, occlusion, specular, specularColor }",
+             "slotSamplers_[4], slotSamplers_[5], slotSamplers_[6]",
+             "layout(set = 0, binding = 6) uniform sampler2D uSpecularMap",
+             "layout(set = 0, binding = 7) uniform sampler2D uSpecularColorMap",
+             "layout(set = 0, binding = 7) uniform sampler2D uSpecularMap",
+             "layout(set = 0, binding = 8) uniform sampler2D uSpecularColorMap",
+             "texture(uSpecularMap, CnaPbrSpecularTransformUV(CNA_PBR_UV(5), 0)).a",
+             "uSpecularColorMap, CnaPbrSpecularTransformUV(CNA_PBR_UV(6), 1)).rgb",
+             "mix(specularColorTex, CnaSrgbToLinear(specularColorTex), pbr.srgbFlags.w)",
+             "pbr.specularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight",
+             "mix(vec3(specularWeight), vec3(1.0), metallic)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing Vulkan specular binding evidence: " << evidence;
+    }
+}
+
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChannels)
 {
     const std::filesystem::path renderers =
@@ -2004,7 +2038,7 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
     // GLTF-385's production-viewer retake exposed that Vulkan had advertised PBR support while
     // hard-coding stride 48/68 and sampling every map from UV0. Keep the entire repaired chain
     // together: real draw stride -> distinct pipeline/cache variants -> appended UV1 attributes
-    // -> transported per-map selector -> all five shader samples. The shader source occurs twice
+    // -> transported per-map selector -> all seven shader samples. The shader source occurs twice
     // because rigid and skinned PBR intentionally share the same contract.
     const std::string vulkan = RendererSlotText(renderers, "vulkan");
     for (const char* evidence : {
@@ -2014,12 +2048,12 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
              "stride != 68 && stride != 76",
              "attrs[4] = { 4, 0, VK_FORMAT_R32G32_SFLOAT, 48 }",
              "attrs[6] = { 6, 0, VK_FORMAT_R32G32_SFLOAT, 68 }",
-             "out[104] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x1fu)"})
+             "out[120] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x7fu)"})
     {
         EXPECT_NE(std::string::npos, vulkan.find(Normalize(evidence)))
             << "Vulkan dual-UV PBR path is missing: " << evidence;
     }
-    for (std::size_t slot = 0; slot < 5; ++slot)
+    for (std::size_t slot = 0; slot < 7; ++slot)
     {
         const std::string sample = "CNA_PBR_UV(" + std::to_string(slot) + ")";
         EXPECT_EQ(2u, CountOccurrences(vulkan, Normalize(sample)))
