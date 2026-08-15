@@ -40,12 +40,38 @@ if [ "${1:-}" = "--multi" ]; then
     fi
 fi
 
+# plan_runtimerenderer.md RTR-P2-8: two tiers, because checking every renderer on every change is
+# not affordable -- each one is a separate configure and build, and this project treats repeated
+# clean rebuilds as real SSD wear.
+#
+#   --tier routine   the renderers that need NO third-party checkout: run these often
+#   --tier full      every family that owns a GraphicsSmoke target: run these occasionally
+#
+# No flag keeps the historical four-renderer set, so existing callers are unaffected.
+#
+# A family whose dependency is missing is REPORTED as unavailable, never silently counted as a
+# pass. That distinction is the point of the gate: "7 of 9 ran, 2 could not be built here" is a
+# result, "all green" over a set that quietly shrank is not.
 RENDERERS=(OPENGLES3 VULKAN BGFX SDL_RENDERER)
+if [ "${1:-}" = "--tier" ]; then
+    case "${2:-}" in
+        routine) RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1) ;;
+        full)    RENDERERS=(OPENGLES3 SDL_RENDERER OPENGLES1 VULKAN LLGL MAGNUM DILIGENT BGFX WEBGPU) ;;
+        *) echo "usage: $0 [--tier routine|full] | [--multi \"R;R;...\"]" >&2; exit 2 ;;
+    esac
+    shift 2
+fi
+
 declare -A RENDERER_DIRS=(
     [OPENGLES3]="cmake-build-debug"
     [VULKAN]="cmake-build-vulkan"
     [BGFX]="cmake-build-bgfx"
     [SDL_RENDERER]="cmake-build-sdl"
+    [OPENGLES1]="cmake-build-opengles1"
+    [LLGL]="cmake-build-llgl"
+    [MAGNUM]="cmake-build-magnum"
+    [DILIGENT]="cmake-build-diligent"
+    [WEBGPU]="cmake-build-webgpu"
 )
 declare -A RESULTS
 
