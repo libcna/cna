@@ -1289,6 +1289,14 @@ namespace CNA::Internal::Renderers::SdlGpu
             IGraphicsRenderer::UnregisterForWindow(window_);
             registeredForWindow_ = false;
         }
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        // plan_fx.md FX-061: released before the device it was created against.
+        if (mojoShaderContext_ != nullptr)
+        {
+            MOJOSHADER_sdlDestroyContext(mojoShaderContext_);
+            mojoShaderContext_ = nullptr;
+        }
+#endif
         // Drops every queued command, and with it every SdlGpuSampledTextureEXT::keepAlive a
         // command still holds (REMED-GFX-152). This must happen HERE, while the renderer and its
         // device are both fully alive: a resource whose last reference was one of those commands

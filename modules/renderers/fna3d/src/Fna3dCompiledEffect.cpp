@@ -105,6 +105,13 @@ namespace CNA::Internal::Renderers::Fna3d
         try
         {
             MojoShaderEffect::ValidateNativeEffect(effectData_, "create");
+            // The shared validation knows nothing of FNA3D's own handle, so the half
+            // of the original check that was FNA3D-specific stays here.
+            if (effect_ == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: FNA3D returned no native effect handle.");
+            }
             description_ = MojoShaderEffect::BuildDescription(effectData_);
             samplerTextureParameters_ =
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
@@ -130,6 +137,13 @@ namespace CNA::Internal::Renderers::Fna3d
         try
         {
             MojoShaderEffect::ValidateNativeEffect(effectData_, "clone");
+            // The shared validation knows nothing of FNA3D's own handle, so the half
+            // of the original check that was FNA3D-specific stays here.
+            if (effect_ == nullptr)
+            {
+                throw std::runtime_error(
+                    "FNA3D compiled effect: FNA3D returned no native effect handle.");
+            }
             description_ = MojoShaderEffect::BuildDescription(effectData_);
             samplerTextureParameters_ =
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);

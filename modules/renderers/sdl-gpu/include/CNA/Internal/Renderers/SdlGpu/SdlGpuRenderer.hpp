@@ -2,6 +2,10 @@
 #pragma once
 
 #include "CNA/CNAHelper.hpp"
+
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+#include "mojoshader.h"
+#endif
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -1491,6 +1495,30 @@ namespace CNA::Internal::Renderers::SdlGpu
         /** @brief Releases the window from the `SDL_GPUDevice` and destroys the device. */
         ~SdlGpuRenderer() override;
 
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        /**
+         * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-061).
+         *
+         * `SupportsCompiledEffects()` deliberately still reports false, so the public `Effect`
+         * path never reaches this. It is reachable directly, which is how the runtime is tested
+         * while the compiled-effect draw route is still missing.
+         * @param effectCode Compiled effect bytes.
+         * @param effectCodeBytes Number of bytes at @p effectCode.
+         * @return The runtime, or null if MojoShader has no context for this device.
+         */
+        std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
+            const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.
+         *
+         * MojoShader allows one context per SDL_GPU device, so it is owned here rather than by
+         * each effect.
+         * @return The context, or null if it could not be created.
+         */
+        CNAEXT [[nodiscard]] MOJOSHADER_sdlContext* GetMojoShaderContextEXT();
+#endif
+
         SdlGpuRenderer(const SdlGpuRenderer&) = delete;
         SdlGpuRenderer& operator=(const SdlGpuRenderer&) = delete;
 
@@ -2204,6 +2232,10 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_Window* window_ = nullptr;
         SDL_GPUDevice* device_ = nullptr;
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        // One MojoShader context per SDL_GPU device, created on first compiled effect.
+        MOJOSHADER_sdlContext* mojoShaderContext_ = nullptr;
+#endif
         SdlGpuTestHooksEXT testHooks_{};
         bool testFailureInjected_ = false;
         bool registeredForWindow_ = false;

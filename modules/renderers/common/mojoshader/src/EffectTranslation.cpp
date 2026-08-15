@@ -424,6 +424,11 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
 
     }
 
+    bool CanSafelyDeleteNativeEffect(const MOJOSHADER_effect* effectData)
+    {
+        return effectData != nullptr && effectData->ctx.f != nullptr;
+    }
+
     void ValidateNativeEffect(const MOJOSHADER_effect* effectData, const char* operation)
     {
         if (effectData == nullptr)

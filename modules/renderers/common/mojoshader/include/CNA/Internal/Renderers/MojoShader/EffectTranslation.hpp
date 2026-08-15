@@ -42,6 +42,20 @@ namespace CNA::Internal::Renderers::MojoShaderEffect
     void ValidateNativeEffect(const MOJOSHADER_effect* effectData, const char* operation);
 
     /**
+     * @brief Answers whether MOJOSHADER_deleteEffect may be called on a parse result.
+     *
+     * Several parse failures are reported as static sentinel objects rather than allocations --
+     * out of memory, no backend, unexpected end of file, not an effect. The pinned
+     * MOJOSHADER_deleteEffect guards against only one of them, and walking any of the others as
+     * if it owned heap storage crashes. A normally allocated parse tree always carries a resolved
+     * free callback, which is what distinguishes it.
+     *
+     * @param effectData Parse result, or null.
+     * @return True if the parse result owns storage that must be released.
+     */
+    [[nodiscard]] bool CanSafelyDeleteNativeEffect(const MOJOSHADER_effect* effectData);
+
+    /**
      * @brief Builds the renderer-neutral reflection the public Effect object graph is made from.
      *
      * @param effectData Parsed effect, already validated.
