@@ -1,5 +1,5 @@
 diff --git a/mojoshader.c b/mojoshader.c
-index 486d7e0..500b322 100644
+index 486d7e0..6f7ddb7 100644
 --- a/mojoshader.c
 +++ b/mojoshader.c
 @@ -2259,7 +2259,12 @@ static int parse_ctab_typeinfo(Context *ctx, const uint8 *start,
@@ -16,7 +16,23 @@ index 486d7e0..500b322 100644
      for (i = 0; i < member_count; i++)
      {
          MOJOSHADER_symbolStructMember *mbr = &info->members[i];
-@@ -2625,21 +2630,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2450,7 +2455,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+ #else
+     uint32 i;
+ 
+-    assert(ctx->have_preshader == 0);  // !!! FIXME: can you have more than one?
++    // How many preshaders a shader declares is content, and upstream's own question above is
++    // still open -- but a second one would overwrite the first and leak it, so refuse rather
++    // than assert on untrusted bytecode. -CNA
++    if (ctx->have_preshader)
++    {
++        fail(ctx, "Shader declares more than one preshader.");
++        return;
++    } // if
+     ctx->have_preshader = 1;
+ 
+     // !!! FIXME: I don't know what specific versions signify, but we need to
+@@ -2625,21 +2637,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
      // The FXLC block has the actual instructions...
      uint32 opcode_count = SWAP32(fxlc.tokens[1]);
  
@@ -48,7 +64,7 @@ index 486d7e0..500b322 100644
      MOJOSHADER_preshaderInstruction *inst = preshader->instructions;
      while (opcode_count--)
      {
-@@ -2686,6 +2694,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2686,6 +2701,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
  
          uint32 operand_count = SWAP32(fxlc.tokens[1]) + 1;  // +1 for dest.
  
@@ -63,7 +79,7 @@ index 486d7e0..500b322 100644
          inst->opcode = opcode;
          inst->element_count = (unsigned int) (opcodetok & 0xFF);
          inst->operand_count = (unsigned int) operand_count;
-@@ -2726,7 +2742,13 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2726,7 +2749,13 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                      {
                          const uint32 base = sym->register_index * 4;
                          const uint32 count = sym->register_count * 4;
@@ -78,7 +94,7 @@ index 486d7e0..500b322 100644
                          if ( (base <= item) && ((base + count) > item) )
                              break;
                      } // for
-@@ -2738,13 +2760,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2738,13 +2767,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                      operand->type = MOJOSHADER_PRESHADEROPERAND_INPUT;
                      if (numarrays > 0)
                      {
@@ -105,7 +121,7 @@ index 486d7e0..500b322 100644
                          for (i = 0; i < numarrays; i++)
                          {
                              const uint32 jmp = SWAP32(fxlc.tokens[4]);
-@@ -2782,14 +2816,26 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2782,14 +2823,26 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                  case 7:
                  {
                      operand->type = MOJOSHADER_PRESHADEROPERAND_TEMP;
