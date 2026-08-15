@@ -1,3 +1,13 @@
+# plan_runtimerenderer.md RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
+# compiled, or its libraries exposed to the test executable, test LIST MEMBERSHIP
+# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In single-renderer mode the
+# list holds one entry and the two are identical; in a multi-renderer build a renderer's tests must
+# be kept whenever that renderer is compiled in, not only when it happens to be the default --
+# otherwise a multi build silently drops the suites of every non-default renderer it contains.
+#
+# The CROSSCOMPILING_EMULATOR chain further down is deliberately NOT converted: a target carries one
+# emulator property, so it can only ever describe one renderer, and the default is the honest choice.
+
 if(CNA_BUILD_TESTS)
     # Task DEVPERF-001: fail fast with an actionable message rather than
     # CMake's own generic "add_subdirectory given source ... which is not an
@@ -133,7 +143,7 @@ if(CNA_BUILD_TESTS)
     # a renderer-local test directory otherwise breaks every other renderer's CnaTests configure.
     # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
     # (cmake/Tests/WickedTests.cmake) build them standalone as well.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
+    if(NOT "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
     endif()
 
@@ -142,7 +152,7 @@ if(CNA_BUILD_TESTS)
     # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
     # renderer target). Excluded from every other renderer's corpus by the same convention as the
     # Wicked directory above; under MAGNUM the corpus keeps it.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
+    if(NOT "MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
     endif()
 
@@ -151,7 +161,7 @@ if(CNA_BUILD_TESTS)
     # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
     # target). Excluded from every other renderer's corpus by the same convention as the Wicked
     # and Magnum directories above; under FNA3D the corpus keeps them.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
+    if(NOT "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
@@ -210,7 +220,7 @@ if(CNA_BUILD_TESTS)
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
+    if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
 
@@ -218,14 +228,14 @@ if(CNA_BUILD_TESTS)
     # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
     # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
     # to this test executable only, and only in the Magnum configuration.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
+    if("MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
     # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
     # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
     # renderer target (same discipline as WebGPU just above), so expose them here too.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
+    if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
         cna_link_diligent(CnaTests)
     endif()
 
@@ -368,7 +378,7 @@ if(CNA_BUILD_TESTS)
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx10.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
+        elseif("DIRECT2D" IN_LIST CNA_RENDERER_IDENTITIES)
             # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
             # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
             # do not create a device, so skip the unrelated DXVK renderer-log gate.

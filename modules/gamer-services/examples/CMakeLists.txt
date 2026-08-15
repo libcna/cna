@@ -1,24 +1,26 @@
-# plan_runtimerenderer.md RTR-P9-14: renderer gates here test LIST MEMBERSHIP
-# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In
-# single-renderer mode the list has one entry and the two are identical; in a
-# multi-renderer build a target is buildable when its renderer is compiled in at
-# all, not only when it happens to be the default.
-# GamerServices-subsystem examples (module-local registration; the target definitions
-# moved here verbatim from cmake/Examples.cmake when examples moved into their owning
-# physical modules).
+# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# wrong once:
 #
-# The whole fleet keeps its historical outer gate: these demos were registered inside
-# Examples.cmake's EasyGL-profile/VULKAN block (windowed HUD demos were only ever built
-# with a GL-family public renderer or VULKAN), and this campaign preserves that
-# registration semantics exactly rather than redesigning it.
+#   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
+#     build DEFAULTS to, must test equality with CNA_GRAPHICS_RENDERER. Membership is wrong there: a
+#     multi-renderer build defaulting to SOFTWARE but containing OPENGLES3 would build a demo that
+#     needs 3D and then throw "3D not supported" at runtime -- a build that succeeds and a program
+#     that cannot work.
+#   * A gate deciding whether a RESOURCE is available -- a runtime library to copy, a renderer's own
+#     device-free test sources -- may test membership, because the user really can select that
+#     renderer at runtime in a multi build.
+#
+# In single-renderer mode the two are identical, which is exactly why the distinction is easy to
+# miss.
+
 
 # Example/demo executables historically live at the build root; keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
-if(CNA_BUILD_EXAMPLES AND ("OPENGLES2" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES
-        OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES
-        OR "WEBGL1" IN_LIST CNA_RENDERER_IDENTITIES OR "WEBGL2" IN_LIST CNA_RENDERER_IDENTITIES
-        OR "VULKAN" IN_LIST CNA_RENDERER_IDENTITIES))
+if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
     # Task 11.11 (Phase 11b): real windowed proof that AvatarRenderer's real-rendering
     # extension (Phase 10) draws Phase 11a's procedurally-generated, non-synthetic avatar
     # content (tools/avatar_builder/ + tools/avatar_asset_pipeline/convert_avatar.py,

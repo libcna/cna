@@ -1,11 +1,18 @@
-# plan_runtimerenderer.md RTR-P9-14: renderer gates here test LIST MEMBERSHIP
-# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In
-# single-renderer mode the list has one entry and the two are identical; in a
-# multi-renderer build a target is buildable when its renderer is compiled in at
-# all, not only when it happens to be the default.
-# CNAEXT graphics-extension examples (module-local registration; the target definitions
-# moved here verbatim from cmake/Examples.cmake when examples moved into their owning
-# physical modules).
+# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# wrong once:
+#
+#   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
+#     build DEFAULTS to, must test equality with CNA_GRAPHICS_RENDERER. Membership is wrong there: a
+#     multi-renderer build defaulting to SOFTWARE but containing OPENGLES3 would build a demo that
+#     needs 3D and then throw "3D not supported" at runtime -- a build that succeeds and a program
+#     that cannot work.
+#   * A gate deciding whether a RESOURCE is available -- a runtime library to copy, a renderer's own
+#     device-free test sources -- may test membership, because the user really can select that
+#     renderer at runtime in a multi build.
+#
+# In single-renderer mode the two are identical, which is exactly why the distinction is easy to
+# miss.
+
 
 # Example/demo executables historically live at the build root; keep them there.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
@@ -26,7 +33,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT)
 endif()
 
 # ---- DepthEffect manual verification demo (renders + screenshots each colour-depth mode) -----
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND ("OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES) AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_depth_effect_demo depth_effect_demo_test.cpp)
     # The shared example-support headers ("common/ScreenshotEXT.hpp", ...) live with the
     # graphics module's examples.
@@ -49,7 +56,7 @@ if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND ("OPENGLES3" IN_LIST CNA_RENDERER_IDENT
 endif()
 
 # ---- CRTEffect manual verification demo (renders + screenshots each CRT parameter set) --------
-if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND ("OPENGLES3" IN_LIST CNA_RENDERER_IDENTITIES OR "OPENGL33" IN_LIST CNA_RENDERER_IDENTITIES) AND NOT EMSCRIPTEN AND NOT ANDROID)
+if(CNA_BUILD_EXAMPLES AND CNA_CNAEXT AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33") AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_crt_effect_demo crt_effect_demo_test.cpp)
     target_include_directories(cna_crt_effect_demo PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
     target_compile_definitions(cna_crt_effect_demo PRIVATE

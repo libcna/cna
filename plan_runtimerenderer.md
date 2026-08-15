@@ -740,6 +740,23 @@ it is worth doing is not tidiness: a compile-time gate can only describe ONE ren
 multi-renderer build a test meaning "this is how SOFTWARE behaves" does not run at all when SOFTWARE
 is compiled in but is not the default — and reports nothing, not even a skip.
 
+**The membership-versus-default rule, learned by getting it wrong.** A first pass converted every
+renderer gate in the example CMakeLists to list membership. That is right for some gates and wrong
+for others, and single-renderer mode cannot tell them apart because there the two are identical:
+
+- A gate deciding whether a **target exists**, where that target runs against whatever renderer the
+  build *defaults* to, must stay equality with `CNA_GRAPHICS_RENDERER`. Under membership a
+  multi-renderer build defaulting to `SOFTWARE` but containing `OPENGLES3` would build
+  `cna_house3d_demo` and then throw "3D not supported" at runtime — a build that succeeds and a
+  program that cannot work. The `WEBGL1` min/max-version gate was worse: a bundle containing both
+  WebGL profiles would have been pinned to WebGL 1, re-introducing the mirror image of a bug
+  `plan_glbackends.md` GLB-36 had already fixed once.
+- A gate deciding whether a **resource is available** — a runtime library to copy next to a demo, a
+  renderer's own device-free test sources, a renderer's libraries on the test executable — may use
+  membership, because in a multi build the user really can select that renderer at runtime.
+
+Both kinds now carry that rule as a comment where they live.
+
 **The classification is conservative, deliberately.** It marks a whole file header-dependent as soon
 as it includes any renderer-family header, even when that include is itself `#ifdef`-guarded and
 only some of the file's tests need it — `PointListPrimitiveTests.cpp` is exactly that shape, mixing
@@ -772,13 +789,13 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-12 | ✅ | Audit the 557 `modules/graphics/examples` sites. Examples differ from tests: many are renderer-specific *demonstrations* and should stay compile-time. Publish the split. |
 | RTR-P9-13 | ⬜ | Convert the genuinely renderer-agnostic examples to runtime gating. |
 | RTR-P9-14 | ✅ | The 86 CMake conditions gating example/test targets on `CNA_GRAPHICS_RENDERER` become list-membership checks (`IF <X> IN_LIST CNA_GRAPHICS_RENDERERS`). |
-| RTR-P9-15 | ⬜ | `modules/renderers/easygl/examples/CMakeLists.txt` — 17 conditions, the densest single file. |
+| RTR-P9-15 | ✅ | `modules/renderers/easygl/examples/CMakeLists.txt` — 17 conditions, the densest single file. |
 | RTR-P9-16 | ✅ | `modules/graphics/examples/CMakeLists.txt` — 10 conditions. |
 | RTR-P9-17 | ✅ | `modules/net/examples` (4), `modules/gamer-services/examples` (4), `modules/graphics-ext/examples` (3). |
-| RTR-P9-18 | ⬜ | Remaining single-condition example CMakeLists across ~20 renderer families. |
-| RTR-P9-19 | ⬜ | `cmake/UnitTests.cmake` (19 references) — list-aware. |
-| RTR-P9-20 | ⬜ | `cmake/Harnesses.cmake` (4 references) — list-aware. |
-| RTR-P9-21 | ⬜ | `cmake/Tests/ModuleProbes.cmake` and `cmake/Tests/WickedTests.cmake` — list-aware. |
+| RTR-P9-18 | ✅ | Remaining single-condition example CMakeLists across ~20 renderer families. |
+| RTR-P9-19 | ✅ | `cmake/UnitTests.cmake` (19 references) — list-aware. |
+| RTR-P9-20 | ✅ | `cmake/Harnesses.cmake` (4 references) — list-aware. |
+| RTR-P9-21 | ✅ | `cmake/Tests/ModuleProbes.cmake` and `cmake/Tests/WickedTests.cmake` — list-aware. |
 | RTR-P9-22 | ⬜ | `scripts/run-all-renderer-smoke-tests.sh` — teach it the multi mode (build once, run N times with different `CNA_GRAPHICS_RENDERER` values). This is where multi builds actually pay for themselves in CI time. |
 | RTR-P9-23 | ✅ | New suite: for every pair in a multi build, assert both renderers produce their own documented `SupportsCapability()` answers from the same binary. |
 | RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
