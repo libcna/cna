@@ -879,14 +879,15 @@ every value non-default so an omitted field cannot accidentally agree through de
 the L6 half of `GLTF-244`.
 
 The L7 half is now equally directory-driven on two independent shader implementations. EasyGL's
-complete 145-asset two-process oracle includes all 14 material fixtures. The narrower Vulkan runner
+and Vulkan's complete 145-asset two-process oracles include all 14 material fixtures. The focused Vulkan runner
 `scripts/gltf-l7-vulkan-materials.py` discovers the same 14 `mat-*` inputs, launches the production
 viewer twice per asset on an explicitly selected lavapipe ICD, rejects a clear capture and requires
 exact RGBA equality both between processes and against `tests/gltf-l7/vulkan-materials/`. All 14
-pass with 23,729 foreground pixels apiece. The zero-delta policy, executable/input/output hashes
-and explicit non-whole-corpus scope are in `docs/gltf-l7-vulkan-materials-report.json`; the checkout-only
+pass with 23,729 foreground pixels apiece. Its zero-delta policy, executable/input/output hashes
+and original focused scope remain in `docs/gltf-l7-vulkan-materials-report.json`; the checkout-only
 `GltfFixtureCorpus.VulkanMaterialL7ReportIsCompleteExactAndReproducible` guard keeps that boundary,
 the 14 source/golden hashes and the runner's two-process/exact-comparison clauses from drifting.
+The full Vulkan matrix and its separate integrity guard are described in §5.4.
 
 `GltfPbrBrdf` is the renderer-independent analytic half of the shader contract (`GLTF-235`,
 `GLTF-343`, `GLTF-344`). It pins GGX distribution, direct-light Smith-Schlick geometry, Schlick
@@ -1095,7 +1096,34 @@ EasyGL unlit-origin NaN, owned by `GLTF-411` and fixed in `a88b14220`. The two p
 exceptions and all eight expected safe rejections have one named owner each. Reported/deferred
 features remain owned by their numerical diagnostics rather than being reclassified from pixels.
 
-### 5.4 Pinned reference-renderer subset (`GLTF-411`)
+### 5.4 Whole-corpus Vulkan L7 oracle (`GLTF-385` / `GLTF-390` / `GLTF-391`)
+
+The same `scripts/gltf-l7-corpus.py` protocol now has an independently measured Vulkan policy. It
+runs the production viewer twice for every canonical asset with
+`VK_DRIVER_FILES=/usr/share/vulkan/icd.d/lvp_icd.json`, records the concrete llvmpipe/lavapipe
+device identity, and compares only against renderer-owned `tests/gltf-l7/vulkan/` goldens. The
+result is 137 byte-identical 512×512 PNG pairs at exact RGB/alpha tolerance 0 and eight
+byte-identical non-zero safe rejections. Policy and exception reasons live in
+`tests/gltf-l7/vulkan-policy.json`; complete input, viewer, executable and PNG hashes live in
+`docs/gltf-l7-vulkan-corpus-report.json`.
+
+The first full campaign was deliberately reviewed before its images were accepted, and found a
+real renderer-owned defect. `uv1-material` arrived at the Vulkan boundary with the correct
+60-byte PBR vertex declaration and five-bit per-map selector, but the native pipeline still bound
+stride 48 and every fragment sample used UV0. That corrupted one triangle and left only 19,468
+foreground pixels. Vulkan now keys separate 48/60 and 68/76 PBR pipelines, binds UV1 at byte 48 or
+68, and compiles dedicated dual-UV rigid/skinned SPIR-V variants which consume the selector. The
+legacy single-UV shader blobs remain bit-identical. Two independent corrected captures render the
+complete 45,644-pixel numbered quad and agree byte-for-byte; the subsequent 145-asset campaign has
+zero active divergence.
+
+`GltfFixtureCorpus.VulkanCorpusL7ReportIsCompleteExactAndReproducible` makes the evidence portable
+to an ordinary no-display test: it re-hashes all 145 canonical sources and all 137 PNGs, requires
+the golden directory to equal the captured disposition set exactly, and locks the two-process,
+single-device and zero-tolerance policy. The focused 14-material Vulkan runner remains useful as a
+fast subsystem gate; its narrower report is not used to inflate the whole-corpus claim.
+
+### 5.5 Pinned reference-renderer subset (`GLTF-411`)
 
 The supplementary reference comparison is now executed over 13 generated assets: JSON and GLB,
 ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
@@ -1134,7 +1162,7 @@ an external renderer or browser to CNA's CI/runtime dependency graph. This 13-as
 the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 
-### 5.5 Final viewer retake matrix (`GLTF-429`)
+### 5.6 Final viewer retake matrix (`GLTF-429`)
 
 The release retake is the exact 14-row Gate C matrix from `plan_gltf.md` §30.3, executed by
 `scripts/gltf-viewer-retake.py`. Row 12 has separate sparse-attribute and sparse-index cases, so a
