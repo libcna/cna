@@ -7,23 +7,36 @@ compile-time selection remains the default and recommended mode. Design, decisio
 task breakdown: `plan_runtimerenderer.md`. User-facing documentation:
 `docs/runtime-renderer-selection.md`.
 
-**Verified build sets** (all with the full `CnaTests` suite; 235 of the plan's 295 tasks done,
-6 partial):
+**Verified build sets** (all with the full `CnaTests` suite; 251 of the plan's 295 tasks done,
+8 partial):
 
 | Set | Result |
 |---|---|
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | 6385 passed, 0 failed |
-| `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | 6385 passed, 0 failed — nine renderers, four independent GL families |
-| `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | 6269 passed, 0 failed |
-| `HEADLESS;SOFTWARE;STUB` | 6188 passed, 0 failed (the CI reference set) |
-| `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | 16 failures, identical by name to a single-renderer `SDL_RENDERER` build's — pre-existing, none from this feature |
-| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` / `SDL_RENDERER` | unchanged: 6369 / 6172 / 6253 passed |
+| `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | 6385 passed — nine renderers, four independent GL families |
+| `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | 6385 passed — three EasyGL GL profiles at once (phase P11) |
+| `OPENGLES3;OPENGLES1;OPENVG;BLEND2D;SOFTWARE;HEADLESS` | 17/17 dispatch tests |
+| `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | one wasm bundle, selection works inside it |
+| `HEADLESS;SOFTWARE;STUB` | 6188 passed (the CI reference set) |
+| `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | 6269 passed |
+| Individually verified alongside `OPENGLES3` | `SOKOL`, `MAGNUM`, `LLGL`, `DILIGENT`, `SKIA`, `WICKED` |
+| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` | unchanged: 6369 / 6172 / 6253 |
+
+Some renderers need their own environment, which is their own pre-existing requirement rather than
+anything to do with selection: `LLGL`, `DILIGENT` and `WICKED` need `SDL_VIDEODRIVER=x11`, `WICKED`
+additionally needs `libdxcompiler.so` in the working directory, and `OPENGLES1` needs an
+ES 1.1-capable Mesa (`scripts/opengles1-test-env.sh`).
 
 **Four latent bugs were found only by building combinations**, not by review — each invisible until
 a second renderer was present: `sdl-renderer`'s class/namespace name collision, `opengl4`'s stray
 forward declaration shadowing the real `GraphicsRendererCreateArgs`, EasyGL's descriptor taking its
 identity from the build default, and `CNA_RENDERER_DEFINE` (which rides `cna_build_flags INTERFACE`
 into every module) holding the *last* identity's macro rather than the default's.
+
+**Three issues that are NOT from this campaign** are recorded separately in `threeissues.md`: a
+suspected `WEBGL1` defect (it appears to take OpenGL ES 3.0 paths its context lacks), an `OPENGL33`
+segfault in a glTF test confirmed pre-existing, and the Emscripten build being blocked by two
+problems in the sibling `sharp-runtime` repository.
 
 **What remains** (phase numbers refer to `plan_runtimerenderer.md`):
 

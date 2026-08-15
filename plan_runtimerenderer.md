@@ -886,12 +886,12 @@ glTF path, not in renderer selection.
 | P7 Identity reporting | 11 | 0 | 11 |
 | P8 First multi set | 12 | 0 | 12 |
 | P9 Test/example corpus | 9 | 0 | 27 |
-| P10 Wider multi sets | 6 | 0 | 25 |
-| P11 EasyGL runtime profile | 0 | 0 | 12 |
+| P10 Wider multi sets | 15 | 1 | 25 |
+| P11 EasyGL runtime profile | 7 | 1 | 12 |
 | P12 Documentation and gates | 12 | 0 | 15 |
-| **Total** | **235** | **6** | **295** |
+| **Total** | **251** | **8** | **295** |
 
-Status as of 2026-08-15. ✅ = implemented **and** verified against its stated acceptance criteria;
+Status as of 2026-08-15 (second pass). ✅ = implemented **and** verified against its stated acceptance criteria;
 🟨 = implemented but not verifiable in this environment (a Windows/macOS/Emscripten target, or a
 third-party dependency not present).
 
