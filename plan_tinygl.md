@@ -29,10 +29,14 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 14 CTest suites, 113 checks,
-14/14 passing under
-`-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
-(`scripts/check_renderer_identities.py`).
+**The renderer implementation and post-implementation contract audit are delivered.** The local
+Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
+`-DCNA_GRAPHICS_RENDERER=TINYGL`; the public renderer identity count is **47**
+(`scripts/check_renderer_identities.py`). TINYGL-19 cross-platform closure is still in progress:
+GitHub Actions run [31883910426](https://github.com/openeggbert/cna/actions/runs/31883910426)
+passes all 14/14 suites on Linux/GCC x86_64 and macOS/AppleClang arm64, while Windows/MSVC x86_64
+configures successfully but is currently blocked by a warnings-as-errors portability issue in the
+pinned `sharp-runtime`, before CNA or the TinyGL tests are compiled.
 
 ## Implemented
 
@@ -167,7 +171,92 @@ them are refused one step earlier.
 | `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus (5 suites, 9 checks) | **DONE** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
-| `TINYGL-19` | Windows/macOS build verification (only Linux x86_64 has been run) | **OPEN** |
+| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in run 31883910426; Windows reaches the build and then stops in `sharp-runtime` `TimeSpan.cpp` on MSVC C4996 |
+
+## Continuation handoff (2026-08-15)
+
+The renderer audit and feature work are complete. The remaining work is to finish the Windows leg
+of TINYGL-19, then record the final three-platform evidence. Cross-platform CI has so far exposed
+portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract failure.
+
+### Repositories and pushed heads
+
+- CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
+  `2b8b568803baf0045a7a9e79d882c981b0b9992c` (`origin/next`).
+- SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`, pushed
+  head `74a8fe5ad32c60af3365f4ee40d6afd31229866f`. The user explicitly authorized direct pushes to
+  `sharp-runtime/develop` for this work.
+- `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
+  SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`; do not replace either pin with a moving branch.
+- Both worktrees were clean at this handoff before this plan update.
+
+### Completed TinyGL audit and capability work
+
+- `d5fdb2354` — TINYGL-20: explicit effect identity, vertex-alpha cutout, depth-clear validation and
+  transactional overflow-safe resize.
+- `433b7b667` — TINYGL-21: optional OpenMP with a complete single-threaded fallback.
+- `c21eb51e2` — TINYGL-22: all topology/draw routes, 32-bit indices and analytical
+  perspective-correct texture mapping coverage.
+- `f8497971d`, `75d7538a7`, `6c163c437` — fixed-function layouts, complete supported BasicEffect
+  lighting and five shared golden-image suites.
+- Local TinyGL result: 14/14 suites, 113 checks, no skips. Golden-image subset: 5/5 suites and nine
+  checks. Renderer identity validator: 47 identities.
+
+### Completed cross-platform infrastructure and SharpRuntime fixes
+
+- CNA commits `2addbf912`, `37fccdec6`, `a51771dfd`, `d14aa68bd` and `a21d48f38` add the native
+  GCC/AppleClang/MSVC matrix, propagate Ninja into vendored builds, locate the MSVC SDL package,
+  watch SDL bootstrap changes and provision Windows zlib.
+- CNA commits `951b42f3c`, `d4ae8398b`, `fec882983` and `2b8b56880` advance the workflow's immutable
+  SharpRuntime pin after verified portability fixes.
+- SharpRuntime commits `3c5d74cb`, `7cf5d1e5`, `ca82a055`, `52c0e103` and `74a8fe5a` fix macOS
+  process-environment access, safe MSVC environment reads, portable floating-point bit casts,
+  unreachable conversion returns and Windows environment API macro collisions.
+- Every listed SharpRuntime change was built locally with at most two jobs and followed by
+  `scripts/run_component_tests.sh build`: 16,341/16,341 checks passed across 37 executables before
+  it was pushed to `develop`.
+
+### Latest CI evidence and exact blocker
+
+Run [31883910426](https://github.com/openeggbert/cna/actions/runs/31883910426) was triggered by CNA
+commit `2b8b56880`:
+
+- Linux/GCC x86_64 job `95010287108`: configure and build pass; 14/14 TinyGL tests pass.
+- macOS/AppleClang arm64 job `95010287118`: configure and build pass; 14/14 TinyGL tests pass.
+- Windows/MSVC x86_64 job `95010287020`: configure passes; build stops at step 37/596 in
+  `sharp-runtime/modules/core/src/System/TimeSpan.cpp`. Lines 494 and 497 call `sscanf`; MSVC emits
+  C4996, and SharpRuntime correctly treats `/W4` warnings as errors with `/WX`. No TinyGL test is
+  reached in this job.
+
+The Node.js 20 action-deprecation annotation and the macOS Homebrew untrusted-tap message are
+non-blocking runner warnings; both successful platform jobs prove they are unrelated to TINYGL-19.
+Manual `workflow_dispatch` attempts returned HTTP 403 because that operation needs repository-admin
+permission. A pushed change to the watched workflow/source paths starts the matrix normally.
+
+### Work remaining
+
+1. Fix the two MSVC `sscanf` C4996 diagnostics in SharpRuntime `TimeSpan.cpp` without weakening
+   `/WX`, without globally disabling secure-CRT diagnostics, and without changing .NET parsing
+   behavior. Add or extend focused tests if the implementation changes observable behavior.
+2. In SharpRuntime, build with at most two jobs, run the relevant focused tests, then run the full
+   build and `scripts/run_component_tests.sh build`. Require zero warnings and all 16,341+ checks.
+   Commit only the relevant files and push the completed fix to `develop`.
+3. Pin the new full 40-character SharpRuntime commit SHA in
+   `.github/workflows/tinygl-cross-platform-ci.yml`, validate the YAML, commit it as TINYGL-19 and
+   push CNA `next`. Watch the automatically triggered matrix.
+4. If MSVC exposes the next SharpRuntime portability error, repeat the same focused-fix, full-test,
+   push and immutable-pin cycle. Do not hide warnings or replace the pin with `develop`.
+5. When all three jobs build and pass 14/14, update this Status and the TINYGL-19 task to **DONE**,
+   and update `docs/tinygl-renderer.md` so it records native Linux x86_64, macOS arm64 and Windows
+   x86_64 verification instead of a Linux-only limitation. Link the final green Actions run.
+6. Before the final documentation commit, locally rebuild target `CNA`, run all 14 TinyGL suites,
+   run a no-OpenMP build/test pass, and run `python3 scripts/check_renderer_identities.py`. Report
+   changed files, no new stubs or dependencies, intentional TinyGL limitations, and all results.
+
+Keep the current capability boundary: "maximum" here means every XNA-facing operation that the
+fixed-function TinyGL rasterizer can implement faithfully, plus deterministic rejection of
+unsupported stencil, shader, render-target, general-alpha and related paths. Do not claim parity
+with shader-capable GPU backends and do not turn documented refusals into silent approximations.
 
 ## Design decisions
 
@@ -268,9 +357,9 @@ Upstream compiles with `-march=native` when not cross-compiling, so the archive 
 build host. That is upstream's own choice and CNA builds TinyGL per machine; it is stated rather
 than overridden.
 
-## Possible future phases
+## Remaining phase
 
-Each needs its own explicit owner instruction, exactly like every other renderer's plan.
-
-1. `TINYGL-19` — Windows and macOS verification. Nothing in the renderer is Linux-specific, but
-   only Linux x86_64 has actually been built and run.
+`TINYGL-19` is the only active phase. Linux x86_64 and macOS arm64 are verified; finish the
+Windows x86_64 portability loop and final documentation exactly as recorded in the continuation
+handoff above. Any new renderer feature after TINYGL-19 needs its own explicit owner instruction,
+exactly like every other renderer's plan.
