@@ -235,8 +235,8 @@ multiply. L3, direct L6 and `.cnj` parity compare those values against the fixtu
 output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core and `(2,9,43)` for the
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
-shader paths are compiler-verified. Section 1.4b now transports both texture inputs and EasyGL is
-the first backend to sample them; the remaining renderer bindings stay explicitly open.
+shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
+OpenGL2 and OpenGL4 sample them, and the remaining renderer bindings stay explicitly open.
 
 ---
 

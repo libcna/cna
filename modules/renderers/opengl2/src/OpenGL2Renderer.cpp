@@ -2330,15 +2330,18 @@ namespace CNA::Internal::Renderers::OpenGL2
             "varying vec2 vTex;varying float vFogFactor;varying vec3 vWorldPos;"
             "uniform sampler2D uTex;uniform sampler2D uNormalMap;uniform sampler2D uMetallicRoughnessMap;"
             "uniform sampler2D uEmissiveMap;uniform sampler2D uOcclusionMap;"
+            "uniform sampler2D uSpecularMap;uniform sampler2D uSpecularColorMap;"
             "uniform vec4 uDiffuse;uniform vec3 uAmbientColor;uniform vec3 uEmissiveColor;"
             "uniform float uMetallicFactor;uniform float uRoughnessFactor;"
             "uniform float uNormalScale;uniform float uOcclusionStrength;"
             "uniform vec3 uLight0Dir;uniform vec3 uLight0Diffuse;"
             "uniform vec3 uLight1Dir;uniform vec3 uLight1Diffuse;"
             "uniform vec3 uLight2Dir;uniform vec3 uLight2Diffuse;"
-            "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;uniform vec3 uSrgb;"
+            "uniform vec3 uEyePosition;uniform vec4 uAlphaTest;uniform vec3 uFogColor;uniform vec4 uSrgb;"
             "uniform vec4 uDielectricFresnel;"
+            "uniform vec4 uSpecularFresnelInputs;"
             "uniform vec4 uTextureTransformRows[10];"
+            "uniform vec4 uSpecularTextureTransformRows[4];"
             "vec3 cnaSrgbToLinear(vec3 c){vec3 lo=c/12.92;vec3 hi=pow((c+0.055)/1.055,vec3(2.4));"
             "return mix(lo,hi,step(vec3(0.04045),c));}"
             "vec3 cnaLinearToSrgb(vec3 c){vec3 lo=c*12.92;"
@@ -2362,6 +2365,9 @@ namespace CNA::Internal::Renderers::OpenGL2
             "vec2 cnaPbrTransformUV(vec2 uv,int slot){vec3 value=vec3(uv,1.0);"
             "return vec2(dot(value,uTextureTransformRows[slot*2].xyz),"
             "dot(value,uTextureTransformRows[slot*2+1].xyz));}"
+            "vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){vec3 value=vec3(uv,1.0);"
+            "return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),"
+            "dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));}"
             "void main(){"
             "vec4 baseColorTex=texture2D(uTex,cnaPbrTransformUV(vTex,0));"
             "vec3 baseColor=mix(baseColorTex.rgb,cnaSrgbToLinear(baseColorTex.rgb),vec3(uSrgb.x));"
@@ -2378,8 +2384,12 @@ namespace CNA::Internal::Renderers::OpenGL2
             "float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);"
             "float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);"
             "vec3 V=normalize(uEyePosition-vWorldPos);"
-            "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);"
-            "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);"
+            "float specularWeight=uSpecularFresnelInputs.w*texture2D(uSpecularMap,cnaPbrSpecularTransformUV(vTex,0)).a;"
+            "vec3 specularColorTex=texture2D(uSpecularColorMap,cnaPbrSpecularTransformUV(vTex,1)).rgb;"
+            "specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),vec3(uSrgb.w));"
+            "vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;"
+            "vec3 F0=mix(dielectricF0,albedo,metallic);"
+            "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);"
             "vec3 Lo=vec3(0.0);"
             "Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);"
             "Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);"
@@ -3244,15 +3254,22 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glUniform1f(glGetUniformLocation(program, "uRoughnessFactor"), params->pbrRoughnessFactor);
                 glUniform1f(glGetUniformLocation(program, "uNormalScale"), params->pbrNormalScale);
                 glUniform1f(glGetUniformLocation(program, "uOcclusionStrength"), params->pbrOcclusionStrength);
-                glUniform3f(glGetUniformLocation(program, "uSrgb"),
+                glUniform4f(glGetUniformLocation(program, "uSrgb"),
                             params->pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                             params->pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
-                            params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f);
+                            params->pbrEncodeOutputToSrgb ? 1.0f : 0.0f,
+                            params->pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
                 glUniform4f(glGetUniformLocation(program, "uDielectricFresnel"),
                             params->pbrDielectricF0[0], params->pbrDielectricF0[1],
                             params->pbrDielectricF0[2], params->pbrDielectricF90);
+                glUniform4f(glGetUniformLocation(program, "uSpecularFresnelInputs"),
+                            params->pbrDielectricF0Unclamped[0],
+                            params->pbrDielectricF0Unclamped[1],
+                            params->pbrDielectricF0Unclamped[2], params->pbrSpecularFactor);
                 glUniform4fv(glGetUniformLocation(program, "uTextureTransformRows[0]"), 10,
                              &params->pbrTextureTransformRows[0][0]);
+                glUniform4fv(glGetUniformLocation(program, "uSpecularTextureTransformRows[0]"), 4,
+                             &params->pbrSpecularTextureTransformRows[0][0]);
             }
         }
 
@@ -3392,6 +3409,18 @@ namespace CNA::Internal::Renderers::OpenGL2
             else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
             applySampler(4);
             glUniform1i(glGetUniformLocation(program, "uOcclusionMap"), 4);
+
+            glActiveTexture(GL_TEXTURE5);
+            if (params->pbrSpecularMap) params->pbrSpecularMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(5);
+            glUniform1i(glGetUniformLocation(program, "uSpecularMap"), 5);
+
+            glActiveTexture(GL_TEXTURE6);
+            if (params->pbrSpecularColorMap) params->pbrSpecularColorMap->BindGL();
+            else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_);
+            applySampler(6);
+            glUniform1i(glGetUniformLocation(program, "uSpecularColorMap"), 6);
 
             glActiveTexture(GL_TEXTURE0);
         }

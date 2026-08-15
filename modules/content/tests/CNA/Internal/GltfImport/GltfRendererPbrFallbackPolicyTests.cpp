@@ -803,12 +803,12 @@ namespace
          "float3 F90 = mix(float3(pu.dielectricFresnel.w), float3(1.0), metallic)",
          "float3 F = F0 + (F90-F0) *", 1},
         {"opengl2",
-         "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic)",
-         "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic)",
+         "vec3 F0=mix(dielectricF0,albedo,metallic)",
+         "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)",
          "vec3 F=F0+(F90-F0)*", 1},
         {"opengl4",
-         "vec3 F0 = mix(uDielectricFresnel.xyz, albedo, metallic)",
-         "vec3 F90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 F0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 F90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"sdl-gpu",
          "vec3 F0 = mix(pbrp.dielectricFresnel.xyz, albedo, metallic)",
@@ -1722,6 +1722,58 @@ TEST(GltfRendererPbrFallbackPolicy, EasyGLSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_GE(CountOccurrences(source, Normalize(shaderEvidence)), 2u)
             << "both rigid and skinned EasyGL PBR shaders must contain: " << shaderEvidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, OpenGLRenderersSampleBothKhrMaterialsSpecularTextures)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    const std::string gl2 = RendererSlotText(renderers, "opengl2");
+    const std::string gl4 = RendererSlotText(renderers, "opengl4");
+    ASSERT_FALSE(gl2.empty());
+    ASSERT_FALSE(gl4.empty());
+
+    for (const auto& [source, evidence] : {
+             std::pair<const std::string*, const char*>{
+                 &gl2,
+                 "if (params->pbrSpecularMap) params->pbrSpecularMap->BindGL(); "
+                 "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_)"},
+             std::pair<const std::string*, const char*>{
+                 &gl2,
+                 "if (params->pbrSpecularColorMap) params->pbrSpecularColorMap->BindGL(); "
+                 "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture2D_)"},
+             std::pair<const std::string*, const char*>{
+                 &gl4,
+                 "if (params.pbrSpecularMap) params.pbrSpecularMap->BindGL(); "
+                 "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)"},
+             std::pair<const std::string*, const char*>{
+                 &gl4,
+                 "if (params.pbrSpecularColorMap) params.pbrSpecularColorMap->BindGL(); "
+                 "else glBindTexture(GL_TEXTURE_2D, defaultWhiteTexture_)"}})
+    {
+        EXPECT_NE(std::string::npos, source->find(Normalize(evidence)))
+            << "missing OpenGL specular identity fallback: " << evidence;
+    }
+
+    for (const std::string* source : {&gl2, &gl4})
+    {
+        for (const char* evidence : {
+                 "pbrDielectricF0Unclamped[0]",
+                 "pbrSpecularFactor",
+                 "pbrSpecularTextureTransformRows",
+                 "pbrSpecularColorTextureIsSrgb",
+                 "uSpecularMap",
+                 "uSpecularColorMap",
+                 "uSpecularTextureTransformRows"})
+        {
+            EXPECT_NE(std::string::npos, source->find(evidence))
+                << "missing OpenGL specular state: " << evidence;
+        }
+        EXPECT_NE(std::string::npos, source->find(Normalize(
+            "min(uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight")));
+        EXPECT_NE(std::string::npos, source->find(Normalize(
+            "mix(vec3(specularWeight), vec3(1.0), metallic)")));
     }
 }
 
