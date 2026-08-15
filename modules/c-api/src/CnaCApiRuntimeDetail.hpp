@@ -26,6 +26,10 @@ struct BorrowedGraphicsDevice final {
     CNA_Handle handle,
     std::shared_ptr<BorrowedGraphicsDevice>* outGraphicsDevice);
 
+[[nodiscard]] CNA_Result BorrowGameGraphicsDevice(
+    CNA_Handle game,
+    CNA_Handle* outGraphicsDevice);
+
 void AddOwnedGraphicsResource() noexcept;
 
 void RemoveOwnedGraphicsResource() noexcept;

@@ -3,6 +3,7 @@
 #include <CNA/C/abi.h>
 #include <CNA/C/core.h>
 #include <CNA/C/graphics.h>
+#include <CNA/C/graphics_resource.h>
 #include <CNA/C/cna.h>
 
 #include <stddef.h>
@@ -13,6 +14,10 @@ _Static_assert(sizeof(CNA_Result) == sizeof(uint32_t),
                "CNA_Result must have a fixed-width representation");
 _Static_assert(sizeof(CNA_Handle) == sizeof(uint64_t),
                "CNA_Handle must have a fixed-width representation");
+_Static_assert(sizeof(CNA_GraphicsResourceTag) == sizeof(uint64_t),
+               "CNA_GraphicsResourceTag must have a fixed-width representation");
+_Static_assert(sizeof(CNA_GraphicsResourceEventRegistrationHandle) == sizeof(uint64_t),
+               "CNA graphics-resource registration handles must remain stable");
 _Static_assert(sizeof(CNA_ErrorCategory) == sizeof(uint32_t),
                "CNA_ErrorCategory must have a fixed-width representation");
 _Static_assert(sizeof(CNA_GameTime) == 24U,

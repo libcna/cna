@@ -999,6 +999,16 @@
       "tests": "default and parameterized construction, direct getters/fields, negative/null validation and C/C++ ABI size/alignment/offset assertions in strict-C `VertexResourceSmoke.c`",
       "status": "implemented",
       "task": "CBIND-035C2"
+    },
+    {
+      "id": "graphics-resource-common-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/GraphicsResource\\.hpp$",
+      "kinds": ["class", "event", "destructor", "method", "constructor", "operator", "field"],
+      "mapping": "generic validated graphics-resource handle operations for callback-scoped device identity, disposal state/event/lifetime, exact UTF-8 Name/ToString count-copy and a fixed 64-bit C-owned opaque tag; protected construction/copy/move and storage remain encapsulated by concrete owned resource handles",
+      "tests": "every generic entry point, standalone and device-owned resources, disposal callbacks, repeated/typed destruction, UTF-8/capacity atomicity, C tag reset, wrong-kind/stale/wrong-thread handles and callback-scoped device expiry in strict-C `GraphicsResourceSmoke.c`, registry unit tests and C/C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-035C3"
     }
   ]
 }

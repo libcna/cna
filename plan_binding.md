@@ -245,7 +245,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
 | CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
-| CBIND-035C | Add texture, buffer and vertex-resource coverage | 🟨 | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. Decomposed into CBIND-035C1–C7; C1–C2 are complete. |
+| CBIND-035C | Add texture, buffer and vertex-resource coverage | 🟨 | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. Decomposed into CBIND-035C1–C7; C1–C3 are complete. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
@@ -273,7 +273,7 @@ function counts.
 |---|---:|---|---|---|
 | CBIND-035C1 | 104 | Complete built-in vertex values | ✅ | `vertex_values.h` maps the seven built-in `VertexPosition*` structures, all remaining `VertexElement` operations and `IVertexType` declaration routes through seven fixed POD layouts, a stable type tag and generic default/equality/hash/string/stride/element-copy operations. Parameterized constructors remain aggregate initialization. Strict C17 tests cover every operation/type, exact native strings and canonical GPU declarations; C/C++ assertions freeze identities, sizes and offsets under HEADLESS and SDL_RENDERER plus ASan+UBSan. |
 | CBIND-035C2 | 14 | Complete vertex declarations and bindings | ✅ | `vertex_resources.h` owns standalone declarations through generation/type/thread-validated handles and maps empty, computed-stride and explicit-stride construction, exact type names, stride and atomic element copies without exposing native vectors. `CNA_VertexBufferBinding` is a fixed 16-byte descriptor: a zero aggregate is the default and its initializer validates a nonzero future buffer token plus nonnegative offset/frequency; actual token kind/generation remains a required consumption-time check in C6/F. Strict-C tests cover every route, invalid elements/ranges, capacity, wrong-kind/stale/wrong-thread handles and lifetime under both backends and ASan+UBSan; C/C++ assertions freeze both handle and descriptor layouts. |
-| CBIND-035C3 | 21 | Complete the GraphicsResource common contract | ⬜ | Map name/device/disposal/lifetime behavior shared by graphics resources through validated handles and explicit type-safe routes. |
+| CBIND-035C3 | 21 | Complete the GraphicsResource common contract | ✅ | `graphics_resource.h` maps the complete base contract for Texture2D, RenderTarget2D, RenderTargetCube and VertexDeclaration handles: callback-scoped owning-device identity, disposal state and idempotent disposal, exact validated UTF-8 Name/ToString count-copy, a fixed C-owned 64-bit opaque tag and synchronous Disposing subscriptions with owned registration handles. Native `System::Object* Tag` and protected base construction/copy/move remain encapsulated. Strict-C tests cover every route across standalone and device-owned resources, generic/typed disposal, post-destroy unsubscription, capacity/encoding failures and wrong-kind/stale/wrong-thread handles under both backends plus ASan+UBSan; registry tests prove tag reset and C/C++ assertions freeze both public scalar handles. |
 | CBIND-035C4 | 134 | Complete Texture and Texture2D | ⬜ | Extend the existing owned Texture2D slice to all constructors/properties/transfers/stream routes and inherited Texture behavior with checked byte/range descriptors. |
 | CBIND-035C5 | 40 | Complete Texture3D and TextureCube | ⬜ | Add owned 3D/cube textures, complete region/mip/face transfers and explicit backend capability failures. |
 | CBIND-035C6 | 57 | Complete vertex buffers | ⬜ | Add static/dynamic vertex buffers, declaration association and complete byte/value SetData/GetData variants with ownership and thread validation. |
@@ -384,8 +384,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1` are ✅;
-parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C2` through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1`–`CBIND-035C3` are ✅;
+parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C4` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -419,4 +419,8 @@ vertex-value, VertexElement-operation and IVertexType rows through fixed PODs an
 operations; the snapshot is now 2,039 implemented, 21 partial, 4,285 planned and 70 not applicable,
 with CBIND-035C2 vertex declarations and bindings next. CBIND-035C2 then maps its 14 rows through
 owned declaration handles and a fixed binding descriptor; the snapshot is 2,053 implemented,
-21 partial, 4,271 planned and 70 not applicable, with CBIND-035C3 GraphicsResource next.
+21 partial, 4,271 planned and 70 not applicable. CBIND-035C3 maps the 21-row common
+GraphicsResource contract through generic validated handles, exact UTF-8 names/strings, C-owned
+tag tokens, callback-scoped device identity and explicit disposal subscriptions; the snapshot is
+now 2,074 implemented, 21 partial, 4,250 planned and 70 not applicable, with CBIND-035C4 Texture
+and Texture2D next.

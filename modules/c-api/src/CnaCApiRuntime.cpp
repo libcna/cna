@@ -328,6 +328,17 @@ CNA_Result GetBorrowedGraphicsDevice(
         "The callback-scoped graphics-device handle is invalid for this call.");
 }
 
+CNA_Result BorrowGameGraphicsDevice(
+    const CNA_Handle gameHandle,
+    CNA_Handle* const outGraphicsDevice)
+{
+    std::shared_ptr<CGame> game;
+    if (const CNA_Result result = GetGame(gameHandle, &game); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    return game->BorrowGraphicsDevice(outGraphicsDevice);
+}
+
 void AddOwnedGraphicsResource() noexcept
 {
     RuntimeState& state = GetRuntimeState();

@@ -1,6 +1,6 @@
 # NEXT.md
 
-## C BINDING / C ABI — VERTEX DECLARATIONS COMPLETE THROUGH CBIND-035C2 (2026-08-15)
+## C BINDING / C ABI — GRAPHICS RESOURCE CONTRACT COMPLETE THROUGH CBIND-035C3 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
@@ -130,7 +130,13 @@
 > rows through standalone owned declaration handles, copied arrays and a fixed 16-byte binding
 > descriptor. Empty/computed/explicit construction, exact type names, atomic copies and
 > wrong-kind/stale/wrong-thread lifetime behavior are strict-C tested. The inventory is now 2,053
-> implemented, 21 partial, 4,271 planned and 70 N/A. CBIND-035C3 GraphicsResource is next.
+> implemented, 21 partial, 4,271 planned and 70 N/A. CBIND-035C3 then maps all 21
+> GraphicsResource rows through generic validated operations for callback-scoped device identity,
+> disposal state/events, exact UTF-8 Name/ToString and a C-owned opaque tag. Standalone and
+> device-owned resources, generic and typed destruction, event lifetime, UTF-8/capacity failures,
+> stale/wrong-kind/wrong-thread handles and registry tag reset are covered. The inventory is now
+> 2,074 implemented, 21 partial, 4,250 planned and 70 N/A. CBIND-035C4 Texture and Texture2D is
+> next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

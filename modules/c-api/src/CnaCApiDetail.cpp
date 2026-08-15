@@ -219,6 +219,7 @@ CNA_Result HandleRegistry::Create(
         slot.kind = kind;
         slot.object = std::move(object);
         slot.creationThread = std::this_thread::get_id();
+        slot.userTag = 0U;
         *outHandle = MakeHandle(index, slot.generation);
         return CNA_RESULT_SUCCESS;
     }
@@ -231,7 +232,8 @@ CNA_Result HandleRegistry::Create(
         .generation = 1,
         .kind = kind,
         .object = std::move(object),
-        .creationThread = std::this_thread::get_id()
+        .creationThread = std::this_thread::get_id(),
+        .userTag = 0U
     });
     *outHandle = MakeHandle(static_cast<uint32_t>(slots_.size() - 1U), 1U);
     return CNA_RESULT_SUCCESS;
@@ -256,6 +258,43 @@ CNA_Result HandleRegistry::GetKind(
     return CNA_RESULT_SUCCESS;
 }
 
+CNA_Result HandleRegistry::GetUserTag(
+    const CNA_Handle handle,
+    uint64_t* const outTag) const
+{
+    if (outTag == nullptr) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    std::lock_guard lock(mutex_);
+    Slot* slot = nullptr;
+    const CNA_Result result = FindSlotLocked(handle, &slot);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (slot->creationThread != std::this_thread::get_id()) {
+        return CNA_RESULT_THREAD;
+    }
+    *outTag = slot->userTag;
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result HandleRegistry::SetUserTag(
+    const CNA_Handle handle,
+    const uint64_t tag)
+{
+    std::lock_guard lock(mutex_);
+    Slot* slot = nullptr;
+    const CNA_Result result = FindSlotLocked(handle, &slot);
+    if (result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (slot->creationThread != std::this_thread::get_id()) {
+        return CNA_RESULT_THREAD;
+    }
+    slot->userTag = tag;
+    return CNA_RESULT_SUCCESS;
+}
+
 CNA_Result HandleRegistry::Release(const CNA_Handle handle)
 {
     std::shared_ptr<void> releasedObject;
@@ -273,6 +312,7 @@ CNA_Result HandleRegistry::Release(const CNA_Handle handle)
         releasedObject = std::move(slot->object);
         slot->kind = ObjectKind::Unknown;
         slot->creationThread = {};
+        slot->userTag = 0U;
         slot->generation = NextGeneration(slot->generation);
     }
     return CNA_RESULT_SUCCESS;

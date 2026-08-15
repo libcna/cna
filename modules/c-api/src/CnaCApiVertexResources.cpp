@@ -296,6 +296,7 @@ CNA_Result cna_vertex_declaration_destroy(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        declaration->Dispose();
         const CNA_Result result = GetRuntimeHandles().Release(declarationHandle);
         if (result == CNA_RESULT_SUCCESS) {
             return CNA_RESULT_SUCCESS;

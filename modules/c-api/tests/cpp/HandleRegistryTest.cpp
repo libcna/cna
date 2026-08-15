@@ -18,17 +18,26 @@ int main()
     }
 
     CNA::C::Detail::ObjectKind kind = CNA::C::Detail::ObjectKind::Unknown;
+    uint64_t tag = UINT64_MAX;
     if (registry.GetKind(firstHandle, &kind) != CNA_RESULT_SUCCESS ||
-        kind != CNA::C::Detail::ObjectKind::Test) {
+        kind != CNA::C::Detail::ObjectKind::Test ||
+        registry.GetUserTag(firstHandle, &tag) != CNA_RESULT_SUCCESS || tag != 0U ||
+        registry.SetUserTag(firstHandle, UINT64_C(0xfedcba9876543210)) !=
+            CNA_RESULT_SUCCESS ||
+        registry.GetUserTag(firstHandle, &tag) != CNA_RESULT_SUCCESS ||
+        tag != UINT64_C(0xfedcba9876543210)) {
         return 2;
     }
 
     CNA_Result offThreadResult = CNA_RESULT_SUCCESS;
-    std::thread otherThread([&registry, firstHandle, &offThreadResult]() {
+    CNA_Result offThreadTagResult = CNA_RESULT_SUCCESS;
+    std::thread otherThread([&registry, firstHandle, &offThreadResult, &offThreadTagResult]() {
+        uint64_t otherTag = 0U;
+        offThreadTagResult = registry.GetUserTag(firstHandle, &otherTag);
         offThreadResult = registry.Release(firstHandle);
     });
     otherThread.join();
-    if (offThreadResult != CNA_RESULT_THREAD) {
+    if (offThreadResult != CNA_RESULT_THREAD || offThreadTagResult != CNA_RESULT_THREAD) {
         return 3;
     }
 
@@ -43,7 +52,9 @@ int main()
             std::make_shared<int>(11),
             &secondHandle) != CNA_RESULT_SUCCESS ||
         secondHandle == firstHandle ||
-        registry.GetKind(firstHandle, &kind) != CNA_RESULT_INVALID_HANDLE) {
+        registry.GetKind(firstHandle, &kind) != CNA_RESULT_INVALID_HANDLE ||
+        registry.GetUserTag(firstHandle, &tag) != CNA_RESULT_INVALID_HANDLE ||
+        registry.GetUserTag(secondHandle, &tag) != CNA_RESULT_SUCCESS || tag != 0U) {
         return 5;
     }
 

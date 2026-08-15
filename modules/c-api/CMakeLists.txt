@@ -19,6 +19,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiDetail.cpp
     src/CnaCApiDisplay.cpp
     src/CnaCApiGraphics.cpp
+    src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
     src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
@@ -272,6 +273,24 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_vertex_resource_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_vertex_resource_smoke)
     add_test(NAME CApi_VertexResourceSmoke COMMAND cna_c_api_vertex_resource_smoke)
+
+    add_executable(cna_c_api_graphics_resource_smoke
+        tests/pure_c/GraphicsResourceSmoke.c
+    )
+    set_target_properties(cna_c_api_graphics_resource_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_graphics_resource_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_graphics_resource_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_resource_smoke)
+    add_test(NAME CApi_GraphicsResourceSmoke COMMAND cna_c_api_graphics_resource_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_GraphicsResourceSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_lifecycle_smoke
         tests/pure_c/LifecycleSmoke.c

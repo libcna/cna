@@ -12,7 +12,8 @@ Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray
 operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
 complete PackedVector conversion/equality plus Color operations/named values, all seven built-in
 vertex POD values with equality/hash/text and canonical declaration queries, owned standalone
-vertex declarations and fixed vertex-buffer binding descriptors, core draw/buffer/vertex
+vertex declarations and fixed vertex-buffer binding descriptors, the common graphics-resource
+name/tag/device/disposal/event contract, core draw/buffer/vertex
 identities, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
@@ -79,7 +80,7 @@ gate.
 
 The exact modules and headers are defined in the implementation plan. The current header split is
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
-`sprite_font.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
+`sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `input.h`, `content.h` and `audio.h`;
 later family headers follow as coverage requires.
 

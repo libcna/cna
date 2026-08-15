@@ -20,6 +20,7 @@ fallible calls return `CNA_Result`; no C++ or Sharp Runtime type or exception cr
 | Lifecycle | Load, update, draw, unload and exit callbacks with copied callback table, context and optional copied UTF-8 failure message | Callbacks are synchronous; a callback failure becomes `CNA_RESULT_CALLBACK` |
 | Timing | `CNA_GameTime` snapshots with total/elapsed 100-nanosecond ticks and running-slowly flag | Present only for update and draw callbacks |
 | Graphics discovery | Borrow callback-scoped device; query renderer identity/name, maximum 2D texture dimension and 13 capability flags | Device handle expires when the callback returns; renderer selection remains compile-time |
+| Graphics resources | Generic device/disposed queries, exact UTF-8 Name/ToString count-copy, C-owned 64-bit tag, explicit disposal and synchronous disposing subscription for supported resource handles | Supports Texture2D, RenderTarget2D, RenderTargetCube and VertexDeclaration; tags do not expose native `System::Object*`; creation-thread only |
 | Graphics states | Complete BlendState, DepthStencilState, RasterizerState and SamplerState POD descriptors; native presets; device get/set; 16 pixel and vertex sampler slots | Applying an otherwise valid state may fail when the compiled backend cannot represent it; Effect and transform-matrix SpriteBatch variants remain planned |
 | Display and presentation | DisplayMode initialization/equality; adapter metadata, UTF-8 strings, modes, preferences, profile/format queries; PresentationParameters init/clone/bounds/device round-trip | Adapter indices are point-in-time; native monitor/window handles are deliberately not disclosed; active-device adapter refresh returns `NOT_SUPPORTED` |
 | Backbuffer | Query logical width, height and format; count/query then copy the complete RGBA8 backbuffer | Draw-time use; HEADLESS honestly returns `CNA_RESULT_NOT_SUPPORTED`; no region or non-Color readback |
@@ -64,6 +65,7 @@ time. The initial slice currently has this automated evidence:
 | SpriteFont glyph/properties/UTF-8 measurement and source-texture lifetime | Tested | Tested | Renderer-independent layout/measurement over a game-owned texture |
 | Built-in vertex values, strings and packed GPU declarations | Tested | Tested | Renderer-independent copied POD and declaration operations |
 | Owned vertex declarations and binding descriptors | Tested | Tested | Renderer-independent copied arrays and standalone handle lifetime |
+| Common graphics-resource name/tag/device/disposal/event contract | Tested | Tested | Generic contract is renderer-independent; device identity is callback-scoped |
 | Observable SpriteBatch pixels | No raster backbuffer | Exact uploaded red/green/blue texels and clear pixel tested | No initial C evidence |
 | Full RGBA8 backbuffer readback | `CNA_RESULT_NOT_SUPPORTED`, destination unchanged | Tested before presentation | Depends on the selected native backend; not yet C-tested |
 
@@ -78,6 +80,7 @@ appropriate C evidence before this table claims support.
 | Game | Owned handle; destroy exactly once on its creation thread |
 | Callback game | Borrowed for the active callback; callback code must not destroy it |
 | Graphics device | Borrowed from the callback game and invalid immediately after that callback |
+| Graphics-resource event registration | Owned handle; callback/context remain caller-owned until unsubscription; may be unsubscribed after resource destruction |
 | Texture2D | Owned child that survives callbacks; destroy before its game |
 | SpriteBatch | Owned child that survives callbacks; destroy before its game |
 | Submitted texture | Retained by an active batch until successful `End` or batch destruction; destruction while retained is refused |

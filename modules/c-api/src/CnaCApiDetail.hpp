@@ -131,6 +131,10 @@ public:
 
     CNA_Result GetKind(CNA_Handle handle, ObjectKind* outKind) const;
 
+    CNA_Result GetUserTag(CNA_Handle handle, uint64_t* outTag) const;
+
+    CNA_Result SetUserTag(CNA_Handle handle, uint64_t tag);
+
     template<typename TObject>
     CNA_Result Get(
         const CNA_Handle handle,
@@ -166,6 +170,7 @@ private:
         ObjectKind kind = ObjectKind::Unknown;
         std::shared_ptr<void> object;
         std::thread::id creationThread;
+        uint64_t userTag = 0U;
     };
 
     [[nodiscard]] CNA_Result FindSlotLocked(CNA_Handle handle, Slot** outSlot) const;

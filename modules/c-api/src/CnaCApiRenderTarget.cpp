@@ -35,6 +35,7 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResource;
+using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using Microsoft::Xna::Framework::Graphics::CubeMapFace;
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
@@ -46,11 +47,6 @@ using Microsoft::Xna::Framework::Graphics::RenderTargetUsage;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-struct RenderTargetCubeResource final {
-    std::shared_ptr<RenderTargetCube> value;
-    CNA_Handle parentGame;
-};
 
 std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> activeBindings;
 

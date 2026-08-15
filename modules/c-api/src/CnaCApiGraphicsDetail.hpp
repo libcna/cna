@@ -9,6 +9,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+class RenderTargetCube;
 class Texture2D;
 }
 
@@ -19,6 +20,11 @@ struct Texture2DResource final {
     CNA_Handle parentGame;
     uint64_t activeBatchReferenceCount;
     uint64_t activeFontReferenceCount;
+};
+
+struct RenderTargetCubeResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::RenderTargetCube> value;
+    CNA_Handle parentGame;
 };
 
 [[nodiscard]] CNA_Result CreateOwnedTexture2D(

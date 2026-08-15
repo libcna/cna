@@ -1,4 +1,4 @@
-# C Graphics States, Display Values, Render Targets and Sprite Fonts
+# C Graphics Resources, States, Display Values, Render Targets and Sprite Fonts
 
 ## Scope
 
@@ -6,10 +6,33 @@ The CBIND-034 surface is declared by `graphics_state.h`, `display.h`, `render_ta
 `sprite_font.h`, all included by `CNA/C/cna.h`. It maps the complete public CNA families for
 graphics state values, sampler collections, display modes/adapters, presentation parameters,
 render targets and SpriteFont without exposing a C++ object, collection or renderer pointer.
+CBIND-035C3 adds the shared `GraphicsResource` contract in `graphics_resource.h` for every
+currently supported resource handle.
 
 All extensible inputs and outputs begin with `struct_size` and `struct_version`. Version one
 callers initialize both fields before a query; preset/value initializers fill the complete output.
 Fixed-width identities and layouts are frozen by both C17 and C++23 compile-time assertions.
+
+## Common graphics-resource contract
+
+Texture2D, RenderTarget2D, RenderTargetCube and VertexDeclaration handles support the generic
+`cna_graphics_resource_*` operations. A wrong-kind or stale handle is rejected before the native
+object is touched. Standalone declarations report an invalid graphics-device handle; game-owned
+resources return the same borrowed device handle only during an active lifecycle callback. The
+borrow expires with that callback.
+
+Names are validated length-delimited UTF-8. Count/copy operations return exact bytes without an
+implicit terminator and never write a partial result. `ToString` returns the name when nonempty and
+the native fully qualified type name otherwise. The C tag is a fixed 64-bit opaque token stored in
+the validated handle registry; it deliberately does not expose or mutate the native
+`System::Object* Tag`, and it resets when a handle slot is released and reused.
+
+Explicit disposal keeps the C handle alive so callers may query `is_disposed`; repeated disposal
+is a successful no-op. Typed destroy operations dispose before releasing their handle. A disposing
+subscription owns a separate registration handle and invokes its caller-owned function/context
+synchronously before native disposal state changes. Unsubscription remains valid after the
+resource itself is destroyed. Resource operations and subscriptions retain the creation-thread
+rule.
 
 ## Graphics state values
 
@@ -71,8 +94,9 @@ returns `CNA_RESULT_INVALID_ARGUMENT`.
 
 ## Verified configurations
 
-`GraphicsSurfaceSmoke.c` is strict C17 and runs unchanged against HEADLESS and SDL_RENDERER with
-SDL dummy video. It covers state presets and device round trips, SpriteBatch state application,
+`GraphicsSurfaceSmoke.c` and `GraphicsResourceSmoke.c` are strict C17 and run unchanged against
+HEADLESS and SDL_RENDERER with SDL dummy video. They cover common names, tags, device identity,
+disposal events and lifetime, state presets and device round trips, SpriteBatch state application,
 display/adapter/presentation snapshots, Texture2D/SpriteFont retention, render-target creation and
 binding/refusal, stale handles, parent ordering and wrong-thread access. HEADLESS is the explicit
 unsupported-storage control; SDL_RENDERER exercises real 2D target storage where available.
