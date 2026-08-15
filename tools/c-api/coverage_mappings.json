@@ -416,6 +416,16 @@
       "task": "CBIND-035E4"
     },
     {
+      "id": "morph-target-extension-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/MorphTargetEXT\\.hpp$",
+      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias", "function"],
+      "mapping": "deep-copied fixed `CNA_MorphWeightKeyframeEXTDescriptor`, `CNA_MorphWeightTrackEXTDescriptor`, `CNA_MorphTargetDeltaEXTDescriptor` values plus an owned validated `CNA_MorphTargetDataEXTHandle`; count/copy access replaces nested vectors, standalone track evaluation and data blending use atomic caller buffers, and retained ModelMeshPart attachment exposes native SetMorphWeightsEXT without leaking System::Object pointers",
+      "tests": "descriptor ABI, complete field copies, type identity, mutable weights/track, LINEAR/STEP/CUBICSPLINE evaluation and clamp, additive position blend, normalized normals, untouched vertex attributes, capacity atomicity, malformed shape/flag/time/count rejection, retained part attachment, upload success or native capability refusal, and stale/wrong-kind/wrong-thread paths in strict-C `MorphTargetSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035E5"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

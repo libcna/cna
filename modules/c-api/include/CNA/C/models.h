@@ -46,6 +46,71 @@ typedef CNA_Handle CNA_ModelHandle;
 /** @brief C-owned opaque tag value associated with a model. */
 typedef uint64_t CNA_ModelTag;
 
+/** @brief Owned stable handle for CNA morph-target data. */
+typedef CNA_Handle CNA_MorphTargetDataEXTHandle;
+
+/** @brief Borrowed float arrays describing one morph-weight keyframe. */
+typedef struct CNA_MorphWeightKeyframeEXTDescriptor {
+    /** @brief Finite keyframe time in seconds representable by a native TimeSpan. */
+    double time_seconds;
+    /** @brief Weight values borrowed for the call. */
+    const float* weights;
+    /** @brief Number of weight values. */
+    uint64_t weight_count;
+    /** @brief Optional incoming tangent values borrowed for the call. */
+    const float* in_tangents;
+    /** @brief Number of incoming tangent values. */
+    uint64_t in_tangent_count;
+    /** @brief Optional outgoing tangent values borrowed for the call. */
+    const float* out_tangents;
+    /** @brief Number of outgoing tangent values. */
+    uint64_t out_tangent_count;
+} CNA_MorphWeightKeyframeEXTDescriptor;
+
+/** @brief Borrowed keyframe array and interpolation flags describing a morph-weight track. */
+typedef struct CNA_MorphWeightTrackEXTDescriptor {
+    /** @brief Keyframes borrowed for the call. */
+    const CNA_MorphWeightKeyframeEXTDescriptor* keyframes;
+    /** @brief Number of keyframes. */
+    uint64_t keyframe_count;
+    /** @brief Whether evaluation holds the lower keyframe value. */
+    CNA_Bool step_interpolation;
+    /** @brief Whether evaluation uses available Hermite tangents. */
+    CNA_Bool cubic_spline;
+} CNA_MorphWeightTrackEXTDescriptor;
+
+/** @brief Borrowed position and optional normal delta arrays for one morph target. */
+typedef struct CNA_MorphTargetDeltaEXTDescriptor {
+    /** @brief Position deltas borrowed for the call. */
+    const CNA_Vector3* position_deltas;
+    /** @brief Number of position deltas. */
+    uint64_t position_delta_count;
+    /** @brief Optional normal deltas borrowed for the call. */
+    const CNA_Vector3* normal_deltas;
+    /** @brief Number of normal deltas. */
+    uint64_t normal_delta_count;
+} CNA_MorphTargetDeltaEXTDescriptor;
+
+/** @brief Complete copied construction state for morph-target data. */
+typedef struct CNA_MorphTargetDataEXTDescriptor {
+    /** @brief Base-pose vertex bytes borrowed for the call. */
+    const uint8_t* base_vertex_bytes;
+    /** @brief Number of base-pose bytes. */
+    uint64_t base_vertex_byte_count;
+    /** @brief Byte stride of one base-pose vertex. */
+    int32_t stride;
+    /** @brief Morph-target delta descriptors borrowed for the call. */
+    const CNA_MorphTargetDeltaEXTDescriptor* targets;
+    /** @brief Number of morph targets. */
+    uint64_t target_count;
+    /** @brief Current weights borrowed for the call. */
+    const float* weights;
+    /** @brief Number of current weights. */
+    uint64_t weight_count;
+    /** @brief Optional animation track copied by the call. */
+    CNA_MorphWeightTrackEXTDescriptor weight_track;
+} CNA_MorphTargetDataEXTDescriptor;
+
 /**
  * @brief Releases caller state retained as a model-owned resource bundle.
  * @param context Opaque caller context supplied during registration.
@@ -830,6 +895,252 @@ CNA_C_API CNA_Result cna_model_draw(
     CNA_Matrix world,
     CNA_Matrix view,
     CNA_Matrix projection);
+
+/**
+ * @brief Creates owned morph-target data by deeply copying a fixed C descriptor.
+ * @param descriptor Complete borrowed source descriptor.
+ * @param out_data Receives the owned data handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_create(
+    const CNA_MorphTargetDataEXTDescriptor* descriptor,
+    CNA_MorphTargetDataEXTHandle* out_data);
+
+/**
+ * @brief Releases an owned morph-target-data handle.
+ * @param data Morph-target-data handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_destroy(
+    CNA_MorphTargetDataEXTHandle data);
+
+/** @brief Gets the exact UTF-8 byte count of the native morph-target-data type name. */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_type_name_byte_count(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the native morph-target-data type name without a terminator.
+ * @param data Morph-target-data handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_type_name(
+    CNA_MorphTargetDataEXTHandle data,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the current morph-target base-vertex stride. */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_stride(
+    CNA_MorphTargetDataEXTHandle data,
+    int32_t* out_stride);
+
+/** @brief Gets the exact base-pose vertex byte count. */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_base_vertex_byte_count(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies all base-pose vertex bytes atomically.
+ * @param data Morph-target-data handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
+    CNA_MorphTargetDataEXTHandle data,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the current number of morph targets. */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_target_count(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t* out_target_count);
+
+/**
+ * @brief Copies one target's position deltas atomically.
+ * @param data Morph-target-data handle.
+ * @param target_index Zero-based target index.
+ * @param destination Destination values, or null only for zero capacity.
+ * @param capacity Destination capacity in vectors.
+ * @param out_delta_count Receives the required vector count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_position_deltas(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t target_index,
+    CNA_Vector3* destination,
+    uint64_t capacity,
+    uint64_t* out_delta_count);
+
+/**
+ * @brief Copies one target's optional normal deltas atomically.
+ * @param data Morph-target-data handle.
+ * @param target_index Zero-based target index.
+ * @param destination Destination values, or null only for zero capacity.
+ * @param capacity Destination capacity in vectors.
+ * @param out_delta_count Receives the required vector count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_normal_deltas(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t target_index,
+    CNA_Vector3* destination,
+    uint64_t capacity,
+    uint64_t* out_delta_count);
+
+/**
+ * @brief Replaces the current weights with a copied caller array.
+ * @param data Morph-target-data handle.
+ * @param weights Weight values, or null only for zero count.
+ * @param weight_count Number of weights; must equal the target count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_set_weights(
+    CNA_MorphTargetDataEXTHandle data,
+    const float* weights,
+    uint64_t weight_count);
+
+/**
+ * @brief Copies current morph-target weights atomically.
+ * @param data Morph-target-data handle.
+ * @param destination Destination values, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_weight_count Receives the required float count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_weights(
+    CNA_MorphTargetDataEXTHandle data,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_weight_count);
+
+/**
+ * @brief Replaces the optional animation track by deeply copying a fixed descriptor.
+ * @param data Morph-target-data handle.
+ * @param track Borrowed track descriptor.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_set_weight_track(
+    CNA_MorphTargetDataEXTHandle data,
+    const CNA_MorphWeightTrackEXTDescriptor* track);
+
+/**
+ * @brief Gets the track key count and interpolation flags.
+ * @param data Morph-target-data handle.
+ * @param out_keyframe_count Receives the keyframe count.
+ * @param out_step_interpolation Receives the STEP flag.
+ * @param out_cubic_spline Receives the CUBICSPLINE flag.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_get_weight_track_info(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t* out_keyframe_count,
+    CNA_Bool* out_step_interpolation,
+    CNA_Bool* out_cubic_spline);
+
+/**
+ * @brief Copies one stored keyframe's time, weights and tangents atomically per output array.
+ * @param data Morph-target-data handle.
+ * @param keyframe_index Zero-based keyframe index.
+ * @param out_time_seconds Receives the keyframe time in seconds.
+ * @param weights Destination weights, or null only for zero capacity.
+ * @param weight_capacity Weight destination capacity.
+ * @param out_weight_count Receives the required weight count.
+ * @param in_tangents Destination incoming tangents, or null only for zero capacity.
+ * @param in_tangent_capacity Incoming-tangent destination capacity.
+ * @param out_in_tangent_count Receives the required incoming-tangent count.
+ * @param out_tangents Destination outgoing tangents, or null only for zero capacity.
+ * @param out_tangent_capacity Outgoing-tangent destination capacity.
+ * @param out_out_tangent_count Receives the required outgoing-tangent count.
+ * @return A CNA result code; insufficient capacity performs no writes.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_copy_weight_keyframe(
+    CNA_MorphTargetDataEXTHandle data,
+    uint64_t keyframe_index,
+    double* out_time_seconds,
+    float* weights,
+    uint64_t weight_capacity,
+    uint64_t* out_weight_count,
+    float* in_tangents,
+    uint64_t in_tangent_capacity,
+    uint64_t* out_in_tangent_count,
+    float* out_tangents,
+    uint64_t out_tangent_capacity,
+    uint64_t* out_out_tangent_count);
+
+/**
+ * @brief Blends the data's base pose and deltas into caller-owned bytes.
+ * @param data Morph-target-data handle.
+ * @param weights Weight values, or null only for zero count.
+ * @param weight_count Number of weights; must equal the target count.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_morph_target_data_ext_blend(
+    CNA_MorphTargetDataEXTHandle data,
+    const float* weights,
+    uint64_t weight_count,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Evaluates a borrowed morph-weight track into caller-owned floats.
+ * @param track Borrowed track descriptor copied before evaluation.
+ * @param time_seconds Finite evaluation time in seconds.
+ * @param destination Destination weights, or null only for zero capacity.
+ * @param capacity Destination capacity in floats.
+ * @param out_weight_count Receives the required float count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_morph_weight_track_ext_evaluate(
+    const CNA_MorphWeightTrackEXTDescriptor* track,
+    double time_seconds,
+    float* destination,
+    uint64_t capacity,
+    uint64_t* out_weight_count);
+
+/**
+ * @brief Attaches retained morph-target data to a model mesh part, or clears it.
+ * @param part Model-mesh-part handle.
+ * @param data Morph-target-data handle, or `CNA_INVALID_HANDLE` to clear it.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_set_morph_target_data_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_MorphTargetDataEXTHandle data);
+
+/**
+ * @brief Gets an owned alias of morph-target data attached to a model mesh part.
+ * @param part Model-mesh-part handle.
+ * @param out_has_data Receives whether data is attached.
+ * @param out_data Receives an owned alias, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_get_morph_target_data_ext(
+    CNA_ModelMeshPartHandle part,
+    CNA_Bool* out_has_data,
+    CNA_MorphTargetDataEXTHandle* out_data);
+
+/**
+ * @brief Re-blends and uploads a model mesh part using its attached morph-target data.
+ * @param part Model-mesh-part handle with attached data and a vertex buffer.
+ * @param weights Weight values, or null only for zero count.
+ * @param weight_count Number of weights; must equal the target count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_mesh_part_set_morph_weights_ext(
+    CNA_ModelMeshPartHandle part,
+    const float* weights,
+    uint64_t weight_count);
 
 #ifdef __cplusplus
 }

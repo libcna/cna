@@ -15,9 +15,11 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
+#include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -48,6 +50,13 @@ using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
 using Microsoft::Xna::Framework::Graphics::Model;
+using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
+using Microsoft::Xna::Framework::Graphics::MorphWeightKeyframeEXT;
+using Microsoft::Xna::Framework::Graphics::MorphWeightTrackEXT;
+
+struct MorphDataResource final {
+    std::shared_ptr<MorphTargetDataEXT> value;
+};
 
 struct BoneNode final {
     std::shared_ptr<ModelBone> value;
@@ -123,7 +132,16 @@ struct PartResource final {
     PartRetainedSlot vertexBuffer;
     PartRetainedSlot indexBuffer;
     CNA_ModelMeshPartTag tag = 0U;
+    std::shared_ptr<MorphDataResource> morphData;
     MeshResource* parentMesh = nullptr;
+
+    ~PartResource()
+    {
+        value->setTagProperty(nullptr);
+        if (detachedValue != nullptr) {
+            detachedValue->setTagProperty(nullptr);
+        }
+    }
 };
 
 struct PartCollectionResource final {
@@ -509,6 +527,203 @@ MeshResource::~MeshResource()
             "The owned Model handle could not be created.");
 }
 
+[[nodiscard]] CNA_Result GetMorphData(
+    const CNA_MorphTargetDataEXTHandle handle,
+    std::shared_ptr<MorphDataResource>* const outData)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::MorphTargetDataEXT, outData);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The MorphTargetDataEXT handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateMorphDataHandle(
+    std::shared_ptr<MorphDataResource> data,
+    CNA_MorphTargetDataEXTHandle* const outData)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::MorphTargetDataEXT, std::move(data), outData);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned MorphTargetDataEXT handle could not be created.");
+}
+
+template<typename T>
+[[nodiscard]] CNA_Result CopyInputArray(
+    const T* const source,
+    const uint64_t count,
+    std::vector<T>* const destination,
+    const char* const message)
+{
+    std::size_t byteCount = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            source, count, sizeof(T), &byteCount);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(result, ErrorCategoryForResult(result), message);
+    }
+    static_cast<void>(byteCount);
+    destination->clear();
+    if (count != 0U) {
+        destination->assign(source, source + static_cast<std::size_t>(count));
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] Microsoft::Xna::Framework::Vector3 ToNativeVector3(
+    const CNA_Vector3 value) noexcept
+{
+    return {value.x, value.y, value.z};
+}
+
+[[nodiscard]] CNA_Vector3 ToCVector3(
+    const Microsoft::Xna::Framework::Vector3 value) noexcept
+{
+    return {value.X, value.Y, value.Z};
+}
+
+[[nodiscard]] CNA_Result CopyTrackDescriptor(
+    const CNA_MorphWeightTrackEXTDescriptor& descriptor,
+    const std::size_t requiredWeightCount,
+    const bool enforceRequiredWeightCount,
+    MorphWeightTrackEXT* const outTrack)
+{
+    if ((descriptor.step_interpolation != CNA_FALSE &&
+         descriptor.step_interpolation != CNA_TRUE) ||
+        (descriptor.cubic_spline != CNA_FALSE &&
+         descriptor.cubic_spline != CNA_TRUE)) {
+        return InvalidArgument("Morph track interpolation flags must be CNA_TRUE or CNA_FALSE.");
+    }
+    std::size_t keyframeBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor.keyframes, descriptor.keyframe_count,
+            sizeof(CNA_MorphWeightKeyframeEXTDescriptor), &keyframeBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The MorphWeightTrackEXT keyframe array is invalid or too large.");
+    }
+    static_cast<void>(keyframeBytes);
+
+    MorphWeightTrackEXT copied;
+    copied.StepInterpolation = descriptor.step_interpolation == CNA_TRUE;
+    copied.CubicSpline = descriptor.cubic_spline == CNA_TRUE;
+    copied.Keys.reserve(static_cast<std::size_t>(descriptor.keyframe_count));
+    std::size_t trackWeightCount = requiredWeightCount;
+    bool hasTrackWeightCount = enforceRequiredWeightCount;
+    double previousTime = 0.0;
+    for (uint64_t index = 0U; index < descriptor.keyframe_count; ++index) {
+        const CNA_MorphWeightKeyframeEXTDescriptor& key = descriptor.keyframes[index];
+        constexpr double MaxTimeSpanSeconds = 922337203685.0;
+        if (!std::isfinite(key.time_seconds) ||
+            key.time_seconds < -MaxTimeSpanSeconds ||
+            key.time_seconds > MaxTimeSpanSeconds) {
+            return InvalidArgument("Morph track keyframe times must fit a finite TimeSpan.");
+        }
+        if (index != 0U && key.time_seconds < previousTime) {
+            return InvalidArgument("Morph track keyframe times must be in ascending order.");
+        }
+        previousTime = key.time_seconds;
+        if (!hasTrackWeightCount) {
+            if (key.weight_count > static_cast<uint64_t>(
+                    std::numeric_limits<std::size_t>::max())) {
+                return Fail(
+                    CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                    "The MorphWeightTrackEXT weight count is too large.");
+            }
+            trackWeightCount = static_cast<std::size_t>(key.weight_count);
+            hasTrackWeightCount = true;
+        }
+        if (key.weight_count != trackWeightCount ||
+            (key.in_tangent_count != 0U &&
+             key.in_tangent_count != key.weight_count) ||
+            (key.out_tangent_count != 0U &&
+             key.out_tangent_count != key.weight_count)) {
+            return InvalidArgument(
+                "Morph track weights and non-empty tangents must have consistent counts.");
+        }
+        MorphWeightKeyframeEXT copiedKey;
+        copiedKey.Time = System::TimeSpan::FromSeconds(key.time_seconds);
+        if (const CNA_Result result = CopyInputArray(
+                key.weights, key.weight_count, &copiedKey.Weights,
+                "The MorphWeightKeyframeEXT weight array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = CopyInputArray(
+                key.in_tangents, key.in_tangent_count, &copiedKey.InTangent,
+                "The MorphWeightKeyframeEXT incoming tangent array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = CopyInputArray(
+                key.out_tangents, key.out_tangent_count, &copiedKey.OutTangent,
+                "The MorphWeightKeyframeEXT outgoing tangent array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        copied.Keys.push_back(std::move(copiedKey));
+    }
+    *outTrack = std::move(copied);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidateMorphShape(
+    const MorphTargetDataEXT& data,
+    const std::vector<float>& weights)
+{
+    if (data.Stride != 32 && data.Stride != 52 && data.Stride != 56) {
+        return InvalidArgument("Morph target stride must be 32, 52, or 56 bytes.");
+    }
+    if (data.BaseVertexBytes.size() % static_cast<std::size_t>(data.Stride) != 0U) {
+        return InvalidArgument("Morph target base bytes must contain complete vertices.");
+    }
+    if (data.PositionDeltas.size() != data.NormalDeltas.size() ||
+        weights.size() != data.PositionDeltas.size()) {
+        return InvalidArgument("Morph target arrays and weights must have matching target counts.");
+    }
+    const std::size_t vertexCount =
+        data.BaseVertexBytes.size() / static_cast<std::size_t>(data.Stride);
+    for (std::size_t target = 0U; target < data.PositionDeltas.size(); ++target) {
+        if (data.PositionDeltas[target].size() != vertexCount ||
+            (!data.NormalDeltas[target].empty() &&
+             data.NormalDeltas[target].size() != vertexCount)) {
+            return InvalidArgument(
+                "Every morph target must cover all vertices; normal deltas may be empty.");
+        }
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TNative, typename TC, typename TConvert>
+[[nodiscard]] CNA_Result CopyOutputValues(
+    const std::vector<TNative>& source,
+    TC* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount,
+    TConvert&& convert,
+    const char* const invalidMessage,
+    const char* const smallMessage)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument(invalidMessage);
+    }
+    *outCount = static_cast<uint64_t>(source.size());
+    if (capacity < source.size()) {
+        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, smallMessage);
+    }
+    for (std::size_t index = 0U; index < source.size(); ++index) {
+        destination[index] = convert(source[index]);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 [[nodiscard]] auto FindMeshEffect(
     MeshResource& mesh,
     const CNA_EffectHandle handle)
@@ -849,6 +1064,9 @@ void AddMeshEffect(
             part->value->getStartIndexProperty(),
             part->value->getVertexOffsetProperty());
         detached->setEffectProperty(part->value->getEffectProperty());
+        if (part->morphData != nullptr) {
+            detached->setTagProperty(part->morphData->value.get());
+        }
         nativeParts.push_back(part->value.get());
         detachedParts.push_back(std::move(detached));
         parts.push_back(std::move(part));
@@ -996,6 +1214,95 @@ void AddMeshEffect(
         }
     }
     return CreateModelHandle(std::move(model), outModel);
+}
+
+[[nodiscard]] CNA_Result CopyMorphDataDescriptor(
+    const CNA_MorphTargetDataEXTDescriptor& descriptor,
+    MorphTargetDataEXT* const outData)
+{
+    MorphTargetDataEXT copied;
+    copied.Stride = descriptor.stride;
+    if (const CNA_Result result = CopyInputArray(
+            descriptor.base_vertex_bytes, descriptor.base_vertex_byte_count,
+            &copied.BaseVertexBytes,
+            "The MorphTargetDataEXT base-vertex array is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::size_t targetBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor.targets, descriptor.target_count,
+            sizeof(CNA_MorphTargetDeltaEXTDescriptor), &targetBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The MorphTargetDataEXT target array is invalid or too large.");
+    }
+    static_cast<void>(targetBytes);
+    if (descriptor.target_count > copied.PositionDeltas.max_size()) {
+        return Fail(
+            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+            "The MorphTargetDataEXT target count is too large.");
+    }
+    copied.PositionDeltas.reserve(static_cast<std::size_t>(descriptor.target_count));
+    copied.NormalDeltas.reserve(static_cast<std::size_t>(descriptor.target_count));
+    for (uint64_t target = 0U; target < descriptor.target_count; ++target) {
+        const CNA_MorphTargetDeltaEXTDescriptor& input = descriptor.targets[target];
+        std::size_t ignoredBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                input.position_deltas, input.position_delta_count,
+                sizeof(CNA_Vector3), &ignoredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "A MorphTargetDataEXT position-delta array is invalid or too large.");
+        }
+        if (const CNA_Result result = CheckedElementByteCount(
+                input.normal_deltas, input.normal_delta_count,
+                sizeof(CNA_Vector3), &ignoredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "A MorphTargetDataEXT normal-delta array is invalid or too large.");
+        }
+        std::vector<Microsoft::Xna::Framework::Vector3> positions;
+        std::vector<Microsoft::Xna::Framework::Vector3> normals;
+        positions.reserve(static_cast<std::size_t>(input.position_delta_count));
+        normals.reserve(static_cast<std::size_t>(input.normal_delta_count));
+        for (uint64_t index = 0U; index < input.position_delta_count; ++index) {
+            positions.push_back(ToNativeVector3(input.position_deltas[index]));
+        }
+        for (uint64_t index = 0U; index < input.normal_delta_count; ++index) {
+            normals.push_back(ToNativeVector3(input.normal_deltas[index]));
+        }
+        copied.PositionDeltas.push_back(std::move(positions));
+        copied.NormalDeltas.push_back(std::move(normals));
+    }
+    if (const CNA_Result result = CopyInputArray(
+            descriptor.weights, descriptor.weight_count, &copied.Weights,
+            "The MorphTargetDataEXT weight array is invalid or too large.");
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (descriptor.target_count > static_cast<uint64_t>(
+            std::numeric_limits<std::size_t>::max())) {
+        return Fail(
+            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+            "The MorphTargetDataEXT target count is too large.");
+    }
+    if (const CNA_Result result = CopyTrackDescriptor(
+            descriptor.weight_track,
+            static_cast<std::size_t>(descriptor.target_count), true,
+            &copied.WeightTrack);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateMorphShape(copied, copied.Weights);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outData = std::move(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -2729,6 +3036,563 @@ CNA_Result cna_model_draw(
         }
         model->value->Draw(
             ToNative(world), ToNative(view), ToNative(projection));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_create(
+    const CNA_MorphTargetDataEXTDescriptor* const descriptor,
+    CNA_MorphTargetDataEXTHandle* const outData)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (descriptor == nullptr || outData == nullptr) {
+            return InvalidArgument("The MorphTargetDataEXT descriptor or output is null.");
+        }
+        *outData = CNA_INVALID_HANDLE;
+        MorphTargetDataEXT copied;
+        if (const CNA_Result result = CopyMorphDataDescriptor(*descriptor, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<MorphDataResource>();
+        resource->value = std::make_shared<MorphTargetDataEXT>(std::move(copied));
+        return CreateMorphDataHandle(std::move(resource), outData);
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_destroy(
+    const CNA_MorphTargetDataEXTHandle dataHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(dataHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned MorphTargetDataEXT handle could not be released.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_type_name_byte_count(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The MorphTargetDataEXT type-name count output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(data->value->GetTypeName().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_type_name(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The MorphTargetDataEXT type-name output is invalid.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::string& name = data->value->GetTypeName();
+        *outByteCount = static_cast<uint64_t>(name.size());
+        if (capacity < name.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the MorphTargetDataEXT type name.");
+        }
+        if (!name.empty()) {
+            std::memcpy(destination, name.data(), name.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_stride(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    int32_t* const outStride)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outStride == nullptr) {
+            return InvalidArgument("The MorphTargetDataEXT stride output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outStride = data->value->Stride;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_base_vertex_byte_count(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The MorphTargetDataEXT base-byte count output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_base_vertex_bytes(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The MorphTargetDataEXT base-byte output is invalid.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto& bytes = data->value->BaseVertexBytes;
+        *outByteCount = static_cast<uint64_t>(bytes.size());
+        if (capacity < bytes.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all MorphTargetDataEXT base bytes.");
+        }
+        if (!bytes.empty()) {
+            std::memcpy(destination, bytes.data(), bytes.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_target_count(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint64_t* const outTargetCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTargetCount == nullptr) {
+            return InvalidArgument("The MorphTargetDataEXT target-count output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTargetCount = static_cast<uint64_t>(data->value->PositionDeltas.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_position_deltas(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t targetIndex,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const outDeltaCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (targetIndex >= data->value->PositionDeltas.size()) {
+            return InvalidArgument("The MorphTargetDataEXT target index is outside the valid range.");
+        }
+        return CopyOutputValues(
+            data->value->PositionDeltas[static_cast<std::size_t>(targetIndex)],
+            destination, capacity, outDeltaCount, ToCVector3,
+            "The MorphTargetDataEXT position-delta output is invalid.",
+            "The destination cannot hold all morph position deltas.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_normal_deltas(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t targetIndex,
+    CNA_Vector3* const destination,
+    const uint64_t capacity,
+    uint64_t* const outDeltaCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (targetIndex >= data->value->NormalDeltas.size()) {
+            return InvalidArgument("The MorphTargetDataEXT target index is outside the valid range.");
+        }
+        return CopyOutputValues(
+            data->value->NormalDeltas[static_cast<std::size_t>(targetIndex)],
+            destination, capacity, outDeltaCount, ToCVector3,
+            "The MorphTargetDataEXT normal-delta output is invalid.",
+            "The destination cannot hold all morph normal deltas.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_weights(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const float* const weights,
+    const uint64_t weightCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::vector<float> copied;
+        if (const CNA_Result result = CopyInputArray(
+                weights, weightCount, &copied,
+                "The MorphTargetDataEXT weight array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (copied.size() != data->value->PositionDeltas.size()) {
+            return InvalidArgument("The MorphTargetDataEXT weight count must equal its target count.");
+        }
+        data->value->Weights = std::move(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_weights(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const outWeightCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->Weights, destination, capacity, outWeightCount,
+            [](const float value) noexcept { return value; },
+            "The MorphTargetDataEXT weight output is invalid.",
+            "The destination cannot hold all morph weights.");
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_set_weight_track(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const CNA_MorphWeightTrackEXTDescriptor* const track)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (track == nullptr) {
+            return InvalidArgument("The MorphWeightTrackEXT descriptor is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        MorphWeightTrackEXT copied;
+        if (const CNA_Result result = CopyTrackDescriptor(
+                *track, data->value->PositionDeltas.size(), true, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        data->value->WeightTrack = std::move(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_get_weight_track_info(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    uint64_t* const outKeyframeCount,
+    CNA_Bool* const outStepInterpolation,
+    CNA_Bool* const outCubicSpline)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outKeyframeCount == nullptr || outStepInterpolation == nullptr ||
+            outCubicSpline == nullptr) {
+            return InvalidArgument("A MorphWeightTrackEXT info output is null.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outKeyframeCount = static_cast<uint64_t>(data->value->WeightTrack.Keys.size());
+        *outStepInterpolation = data->value->WeightTrack.StepInterpolation
+            ? CNA_TRUE : CNA_FALSE;
+        *outCubicSpline = data->value->WeightTrack.CubicSpline
+            ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_copy_weight_keyframe(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const uint64_t keyframeIndex,
+    double* const outTimeSeconds,
+    float* const weights,
+    const uint64_t weightCapacity,
+    uint64_t* const outWeightCount,
+    float* const inTangents,
+    const uint64_t inTangentCapacity,
+    uint64_t* const outInTangentCount,
+    float* const outTangents,
+    const uint64_t outTangentCapacity,
+    uint64_t* const outOutTangentCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTimeSeconds == nullptr || outWeightCount == nullptr ||
+            outInTangentCount == nullptr || outOutTangentCount == nullptr ||
+            (weights == nullptr && weightCapacity != 0U) ||
+            (inTangents == nullptr && inTangentCapacity != 0U) ||
+            (outTangents == nullptr && outTangentCapacity != 0U)) {
+            return InvalidArgument("A MorphWeightKeyframeEXT output is invalid.");
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (keyframeIndex >= data->value->WeightTrack.Keys.size()) {
+            return InvalidArgument("The MorphWeightKeyframeEXT index is outside the valid range.");
+        }
+        const MorphWeightKeyframeEXT& key =
+            data->value->WeightTrack.Keys[static_cast<std::size_t>(keyframeIndex)];
+        *outWeightCount = static_cast<uint64_t>(key.Weights.size());
+        *outInTangentCount = static_cast<uint64_t>(key.InTangent.size());
+        *outOutTangentCount = static_cast<uint64_t>(key.OutTangent.size());
+        if (weightCapacity < key.Weights.size() ||
+            inTangentCapacity < key.InTangent.size() ||
+            outTangentCapacity < key.OutTangent.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "A destination cannot hold the complete MorphWeightKeyframeEXT.");
+        }
+        *outTimeSeconds = key.Time.getTotalSecondsProperty();
+        if (!key.Weights.empty()) {
+            std::copy(key.Weights.begin(), key.Weights.end(), weights);
+        }
+        if (!key.InTangent.empty()) {
+            std::copy(key.InTangent.begin(), key.InTangent.end(), inTangents);
+        }
+        if (!key.OutTangent.empty()) {
+            std::copy(key.OutTangent.begin(), key.OutTangent.end(), outTangents);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_target_data_ext_blend(
+    const CNA_MorphTargetDataEXTHandle dataHandle,
+    const float* const weights,
+    const uint64_t weightCount,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The MorphTargetDataEXT blend output is invalid.");
+        }
+        std::vector<float> copiedWeights;
+        if (const CNA_Result result = CopyInputArray(
+                weights, weightCount, &copiedWeights,
+                "The morph blend weight array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateMorphShape(*data->value, copiedWeights);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(data->value->BaseVertexBytes.size());
+        if (capacity < data->value->BaseVertexBytes.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all blended morph bytes.");
+        }
+        const std::vector<std::uint8_t> blended =
+            Microsoft::Xna::Framework::Graphics::BlendMorphTargetsEXT(
+                *data->value, copiedWeights);
+        if (!blended.empty()) {
+            std::memcpy(destination, blended.data(), blended.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_morph_weight_track_ext_evaluate(
+    const CNA_MorphWeightTrackEXTDescriptor* const track,
+    const double timeSeconds,
+    float* const destination,
+    const uint64_t capacity,
+    uint64_t* const outWeightCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (track == nullptr || outWeightCount == nullptr ||
+            (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The MorphWeightTrackEXT evaluation input or output is invalid.");
+        }
+        if (!std::isfinite(timeSeconds)) {
+            return InvalidArgument("The morph evaluation time must be finite.");
+        }
+        MorphWeightTrackEXT copied;
+        if (const CNA_Result result = CopyTrackDescriptor(
+                *track, 0U, false, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<float> evaluated =
+            Microsoft::Xna::Framework::Graphics::EvaluateMorphWeightsEXT(
+                copied, timeSeconds);
+        *outWeightCount = static_cast<uint64_t>(evaluated.size());
+        if (capacity < evaluated.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all evaluated morph weights.");
+        }
+        if (!evaluated.empty()) {
+            std::copy(evaluated.begin(), evaluated.end(), destination);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_morph_target_data_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    const CNA_MorphTargetDataEXTHandle dataHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (dataHandle == CNA_INVALID_HANDLE) {
+            part->value->setTagProperty(nullptr);
+            if (part->detachedValue != nullptr) {
+                part->detachedValue->setTagProperty(nullptr);
+            }
+            part->morphData.reset();
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<MorphDataResource> data;
+        if (const CNA_Result result = GetMorphData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        part->morphData = std::move(data);
+        part->value->setTagProperty(part->morphData->value.get());
+        if (part->detachedValue != nullptr) {
+            part->detachedValue->setTagProperty(part->morphData->value.get());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_get_morph_target_data_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    CNA_Bool* const outHasData,
+    CNA_MorphTargetDataEXTHandle* const outData)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasData == nullptr || outData == nullptr) {
+            return InvalidArgument("A ModelMeshPart morph-data output is null.");
+        }
+        *outHasData = CNA_FALSE;
+        *outData = CNA_INVALID_HANDLE;
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (part->morphData == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = CreateMorphDataHandle(part->morphData, outData);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasData = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_mesh_part_set_morph_weights_ext(
+    const CNA_ModelMeshPartHandle partHandle,
+    const float* const weights,
+    const uint64_t weightCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::vector<float> copiedWeights;
+        if (const CNA_Result result = CopyInputArray(
+                weights, weightCount, &copiedWeights,
+                "The ModelMeshPart morph weight array is invalid or too large.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<PartResource> part;
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (part->morphData == nullptr ||
+            part->value->getTagProperty() != part->morphData->value.get()) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+                "The ModelMeshPart has no attached MorphTargetDataEXT.");
+        }
+        if (part->value->getVertexBufferProperty() == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+                "The ModelMeshPart has no vertex buffer for morph upload.");
+        }
+        if (const CNA_Result result = ValidateMorphShape(
+                *part->morphData->value, copiedWeights);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::size_t vertexCount = part->morphData->value->BaseVertexBytes.size() /
+            static_cast<std::size_t>(part->morphData->value->Stride);
+        const int bufferVertexCount =
+            part->value->getVertexBufferProperty()->getVertexCountProperty();
+        if (bufferVertexCount < 0 ||
+            vertexCount > static_cast<std::size_t>(bufferVertexCount)) {
+            return InvalidArgument(
+                "The ModelMeshPart vertex buffer cannot hold all morphed vertices.");
+        }
+        Microsoft::Xna::Framework::Graphics::SetMorphWeightsEXT(
+            *part->value, copiedWeights);
         return CNA_RESULT_SUCCESS;
     });
 }

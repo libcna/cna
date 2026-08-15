@@ -99,3 +99,29 @@ model targets a renderer without 3D support.
 `ModelSmoke.c` covers all constructors and properties, nullable root/parents, retained collections,
 owned-context releases, all transform routes and capacity failures, transitive lifetime, renderer
 draw behavior and thread/handle errors under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+
+## Morph-target extensions
+
+Morph keyframes, tracks and per-target deltas cross the ABI as fixed descriptors containing only
+borrowed pointer/count pairs, seconds, and fixed-width booleans. Every create, track-set and
+evaluation call validates all nested arrays and immediately deep-copies them before native code
+runs. The descriptors therefore expose no `std::vector`, `System::TimeSpan` or C++ object layout.
+
+`CNA_MorphTargetDataEXTHandle` owns copied base vertex bytes, a documented 32/52/56-byte stride,
+rectangular per-target position deltas, optional rectangular normal deltas, current weights and an
+optional animation track. Count/copy operations provide atomic access to every nested field. The C
+boundary rejects mismatched target/weight/vertex counts, incomplete vertices, inconsistent
+keyframe vectors, invalid flags and descending keyframe times before the native blend/evaluation
+algorithms can index malformed storage.
+
+`cna_morph_target_data_ext_blend` delegates additive position and renormalized-normal blending to
+the native implementation and copies the complete byte result only when capacity is sufficient.
+Standalone track evaluation preserves endpoint clamping, LINEAR interpolation, true STEP hold and
+CUBICSPLINE Hermite tangents. A model mesh part can retain attached morph data through explicit
+set/get operations; this safely occupies its native object tag while the unrelated opaque C tag
+remains a separate sidecar. Re-upload requires an attached VertexBuffer with sufficient capacity.
+
+`MorphTargetSmoke.c` covers descriptor ABI and deep copying, all fields, mutable weights/tracks,
+LINEAR/STEP/Hermite evaluation, blend math, normal normalization, untouched UV bytes, output
+atomicity, malformed inputs, part attachment/upload, transitive lifetime and invalid, stale,
+wrong-kind and wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan.

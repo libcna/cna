@@ -130,6 +130,16 @@ _Static_assert(sizeof(CNA_ModelMeshHandle) == 8U &&
                "CNA model-mesh handles, collections and tag must remain stable");
 _Static_assert(sizeof(CNA_ModelHandle) == 8U && sizeof(CNA_ModelTag) == 8U,
                "CNA model handle and tag must remain stable");
+_Static_assert(sizeof(CNA_MorphTargetDataEXTHandle) == 8U,
+               "CNA morph-target-data handle size changed");
+_Static_assert(sizeof(CNA_MorphWeightKeyframeEXTDescriptor) == 56U,
+               "CNA morph keyframe descriptor size changed");
+_Static_assert(sizeof(CNA_MorphWeightTrackEXTDescriptor) == 24U,
+               "CNA morph track descriptor size changed");
+_Static_assert(sizeof(CNA_MorphTargetDeltaEXTDescriptor) == 32U,
+               "CNA morph delta descriptor size changed");
+_Static_assert(sizeof(CNA_MorphTargetDataEXTDescriptor) == 80U,
+               "CNA morph data descriptor size changed");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
