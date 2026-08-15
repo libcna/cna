@@ -626,6 +626,51 @@ TEST(Fna3dCompiledEffectTest, CompilerProducedFixtureAppliesItsStatesAndSamplers
     EXPECT_EQ(blend.getColorBlendFunctionProperty(), BlendFunction::Add);
 }
 
+// plan_fx.md FX-051: inputs that once crashed the process, kept so they cannot again. Each was
+// written by the coverage-guided fuzzer when it found a defect in the pinned MojoShader; the fixes
+// live in a patch applied to a specific revision, so these are what notice if a future pin bump
+// stops carrying them.
+TEST(Fna3dCompiledEffectTest, CrashCorpusIsRejectedWithoutCrashing)
+{
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    const std::filesystem::path corpus = std::filesystem::path(__FILE__).parent_path() /
+        "../../../../../../../../tests/fixtures/compiled-effects/crash-corpus";
+    ASSERT_TRUE(std::filesystem::is_directory(corpus)) << "crash corpus is missing";
+
+    int replayed = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(corpus))
+    {
+        if (entry.path().extension() != ".fxb") continue;
+        SCOPED_TRACE(entry.path().filename().string());
+        std::ifstream input(entry.path(), std::ios::binary);
+        ASSERT_TRUE(input.is_open());
+        const std::vector<SharpRuntime::bytecs> bytes(
+            (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        ASSERT_FALSE(bytes.empty());
+
+        try
+        {
+            Effect effect(device, bytes);
+            // Constructing is allowed; what must not happen is a crash, here or in anything the
+            // rest of the surface does with the parse tree.
+            ExerciseCompiledEffectSurface(effect);
+        }
+        catch (const std::bad_alloc&)
+        {
+            ADD_FAILURE() << "allocation bomb escaped the compiled-effect limits";
+        }
+        catch (const std::exception&)
+        {
+            // Rejecting these is the contract.
+        }
+        ++replayed;
+    }
+    EXPECT_GT(replayed, 0) << "the crash corpus directory contains no .fxb inputs";
+}
+
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
     GraphicsDevice device;

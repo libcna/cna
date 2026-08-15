@@ -77,6 +77,15 @@ AFL++ picks the same entry point up through `afl-clang-lto`'s libFuzzer compatib
 `-DCMAKE_C_COMPILER=afl-clang-lto -DCMAKE_CXX_COMPILER=afl-clang-lto++` instead and drive it with
 `afl-fuzz -i fx-corpus -o findings -- ./cna_compiled_effect_fuzzer`.
 
+## Crash corpus
+
+`tests/fixtures/compiled-effects/crash-corpus/` keeps every input that once crashed the process,
+renamed after the defect it pins, with a README recording which is which.
+`Fna3dCompiledEffectTest.CrashCorpusIsRejectedWithoutCrashing` replays them on every build.
+
+They matter most when the FNA3D or MojoShader pin moves. The fixes live in a patch CNA applies to
+one specific revision; these are what notice if a bump stops carrying them.
+
 ## Seed corpus
 
 The seeds are the six provenance-tracked stock binaries in `modules/renderers/fna3d/effects/`
