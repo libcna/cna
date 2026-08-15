@@ -88,7 +88,9 @@ using CNA::C::Detail::CreateStandaloneTexture2D;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetOwnedTexture2D;
+using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::Texture2DResource;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -663,16 +665,16 @@ CNA_Result cna_texture_get_info(
             outInfo->struct_version != StructureVersion) {
             return InvalidArgument("The texture info output structure is invalid.");
         }
-        std::shared_ptr<Texture2DResource> texture;
-        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        TextureResourceView texture;
+        if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
         *outInfo = CNA_TextureInfo{
             sizeof(CNA_TextureInfo),
             StructureVersion,
-            static_cast<uint32_t>(texture->value->getLevelCountProperty()),
-            static_cast<CNA_SurfaceFormat>(texture->value->getFormatProperty())};
+            static_cast<uint32_t>(texture.value->getLevelCountProperty()),
+            static_cast<CNA_SurfaceFormat>(texture.value->getFormatProperty())};
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035C4 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035C5 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -275,7 +275,7 @@ function counts.
 | CBIND-035C2 | 14 | Complete vertex declarations and bindings | ✅ | `vertex_resources.h` owns standalone declarations through generation/type/thread-validated handles and maps empty, computed-stride and explicit-stride construction, exact type names, stride and atomic element copies without exposing native vectors. `CNA_VertexBufferBinding` is a fixed 16-byte descriptor: a zero aggregate is the default and its initializer validates a nonzero future buffer token plus nonnegative offset/frequency; actual token kind/generation remains a required consumption-time check in C6/F. Strict-C tests cover every route, invalid elements/ranges, capacity, wrong-kind/stale/wrong-thread handles and lifetime under both backends and ASan+UBSan; C/C++ assertions freeze both handle and descriptor layouts. |
 | CBIND-035C3 | 21 | Complete the GraphicsResource common contract | ✅ | `graphics_resource.h` maps the complete base contract for Texture2D, RenderTarget2D, RenderTargetCube and VertexDeclaration handles: callback-scoped owning-device identity, disposal state and idempotent disposal, exact validated UTF-8 Name/ToString count-copy, a fixed C-owned 64-bit opaque tag and synchronous Disposing subscriptions with owned registration handles. Native `System::Object* Tag` and protected base construction/copy/move remain encapsulated. Strict-C tests cover every route across standalone and device-owned resources, generic/typed disposal, post-destroy unsubscription, capacity/encoding failures and wrong-kind/stale/wrong-thread handles under both backends plus ASan+UBSan; registry tests prove tag reset and C/C++ assertions freeze both public scalar handles. |
 | CBIND-035C4 | 134 | Complete Texture and Texture2D | ✅ | `texture.h` completes all 134 previously unfinished rows plus the two inherited partial Texture properties through standalone/game-owned default, device, file, RGBA8, CPU-only and encoded-memory factories; common/2D/storage snapshots; all 18 native typed full/mip/rectangle transfer representations; the direct raw-RGBA8 `SetDataRGBA` route; format/block/alignment validation; exact type text; and PNG/JPEG count-copy/file routes. Streams and native renderer/weak pointers stay behind the ABI. Strict-C tests cover every route, all 27 formats, dispatch/rejection for every transfer identity, image/file round-trips, lifecycle and atomic failure cases under HEADLESS and SDL_RENDERER; HEADLESS proves mip upload, SDL maps its native mip-upload limit to `NOT_SUPPORTED`, and ASan+UBSan is clean. |
-| CBIND-035C5 | 40 | Complete Texture3D and TextureCube | ⬜ | Add owned 3D/cube textures, complete region/mip/face transfers and explicit backend capability failures. |
+| CBIND-035C5 | 40 | Complete Texture3D and TextureCube | ✅ | `texture_volume.h` maps all 40 rows through owned game-child handles, versioned 3D/cube snapshots and full mip/box or six-face/rectangle Color transfer descriptors, including raw Texture3D bytes, exact type text, copied-memory DDS decoding, common Texture/GraphicsResource operations and RenderTargetCube inheritance. Native streams and renderer pointers stay private. The strict-C suite covers all faces, regions, capacity atomicity, lifecycle and invalid/stale/wrong-kind/wrong-thread paths under HEADLESS and SDL_RENDERER; both backends truthfully reject Texture3D creation and cube storage, while ASan+UBSan is clean. |
 | CBIND-035C6 | 57 | Complete vertex buffers | ⬜ | Add static/dynamic vertex buffers, declaration association and complete byte/value SetData/GetData variants with ownership and thread validation. |
 | CBIND-035C7 | 32 | Complete index buffers | ⬜ | Add static/dynamic index buffers and complete 16/32-bit SetData/GetData variants with ownership and thread validation, closing CBIND-035C. |
 
@@ -384,8 +384,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1`–`CBIND-035C4` are ✅;
-parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C5` through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1`–`CBIND-035C5` are ✅;
+parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C6` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -425,5 +425,7 @@ tag tokens, callback-scoped device identity and explicit disposal subscriptions;
 now 2,074 implemented, 21 partial, 4,250 planned and 70 not applicable. CBIND-035C4 completes the
 134 previously unfinished Texture/Texture2D rows and upgrades the two inherited partial Texture
 properties through the generic typed transfer, image-memory/file and storage-safe handle contract;
-the snapshot is now 2,210 implemented, 19 partial, 4,116 planned and 70 not applicable, with
-CBIND-035C5 Texture3D and TextureCube next.
+the snapshot is now 2,210 implemented, 19 partial, 4,116 planned and 70 not applicable.
+CBIND-035C5 then maps all 40 Texture3D/TextureCube rows through owned handles, explicit
+volume/face/mip/region transfer descriptors and copied DDS input; the snapshot is now 2,250
+implemented, 19 partial, 4,076 planned and 70 not applicable, with CBIND-035C6 vertex buffers next.

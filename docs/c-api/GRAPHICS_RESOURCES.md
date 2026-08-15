@@ -11,6 +11,8 @@ currently supported resource handle.
 
 The completed Texture/Texture2D construction, typed-transfer and encoded-image contract is
 documented separately in [`TEXTURES.md`](TEXTURES.md).
+The Texture3D/TextureCube handle and region-transfer contract is documented in
+[`TEXTURE_VOLUMES.md`](TEXTURE_VOLUMES.md).
 
 All extensible inputs and outputs begin with `struct_size` and `struct_version`. Version one
 callers initialize both fields before a query; preset/value initializers fill the complete output.
@@ -18,8 +20,8 @@ Fixed-width identities and layouts are frozen by both C17 and C++23 compile-time
 
 ## Common graphics-resource contract
 
-Texture2D, RenderTarget2D, RenderTargetCube and VertexDeclaration handles support the generic
-`cna_graphics_resource_*` operations. A wrong-kind or stale handle is rejected before the native
+Texture2D, Texture3D, TextureCube, RenderTarget2D, RenderTargetCube and VertexDeclaration handles
+support the generic `cna_graphics_resource_*` operations. A wrong-kind or stale handle is rejected before the native
 object is touched. Standalone declarations report an invalid graphics-device handle; game-owned
 resources return the same borrowed device handle only during an active lifecycle callback. The
 borrow expires with that callback.
@@ -69,7 +71,8 @@ active because CNA's current device retains an adapter pointer that refresh woul
 RenderTarget2D and RenderTargetCube use owned game-child handles. Creation records requested color,
 depth, multisample and usage values; the info query returns native applied properties. A
 RenderTarget2D handle is also accepted by the existing Texture2D info/data/SpriteBatch routes,
-matching native inheritance. A cube handle is not a Texture2D.
+matching native inheritance. A cube handle is not a Texture2D; it is accepted by the TextureCube
+routes.
 
 The active binding array is replaced atomically only after every handle, parent game, subresource,
 dimension and applied sample count passes validation and CNA accepts the native transition. Count

@@ -123,7 +123,7 @@ typedef struct CNA_Texture2DStorageInfo {
 /**
  * @brief Gets common format and mip-level information from a supported texture handle.
  *
- * @param texture Texture2D or RenderTarget2D handle; later texture kinds extend this route.
+ * @param texture Texture2D, Texture3D, TextureCube or matching render-target handle.
  * @param out_info Caller-initialized versioned output structure.
  * @return A CNA result code.
  */

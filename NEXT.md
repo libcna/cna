@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — TEXTURE2D CONTRACT COMPLETE THROUGH CBIND-035C4 (2026-08-15)
+## C BINDING / C ABI — VOLUME/CUBE TEXTURES COMPLETE THROUGH CBIND-035C5 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035B` and
-> `CBIND-035C1`–`035C4` are complete:
+> `CBIND-035C1`–`035C5` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -142,7 +142,12 @@
 > common/2D/storage properties and PNG/JPEG memory/file routes are strict-C tested under HEADLESS
 > and SDL_RENDERER; SDL's native mip-upload limitation is an explicit `NOT_SUPPORTED` result and
 > the focused ASan+UBSan run is clean. The inventory is now 2,210 implemented, 19 partial, 4,116
-> planned and 70 N/A. CBIND-035C5 Texture3D and TextureCube is next.
+> planned and 70 N/A. CBIND-035C5 then maps all 40 Texture3D/TextureCube rows through owned
+> handles, versioned dimension/region descriptors, complete Color box/face/mip transfer, raw
+> Texture3D upload and copied-memory DDS decode. HEADLESS and SDL_RENDERER prove exact capability
+> refusal, six-face validation, common Texture/GraphicsResource behavior and lifecycle. The
+> inventory is now 2,250 implemented, 19 partial, 4,076 planned and 70 N/A. CBIND-035C6 vertex
+> buffers is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

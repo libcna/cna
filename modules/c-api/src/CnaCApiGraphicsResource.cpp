@@ -8,6 +8,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "System/EventArgs.hpp"
 
@@ -29,9 +31,13 @@ using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
+using CNA::C::Detail::Texture3DResource;
+using CNA::C::Detail::TextureCubeResource;
 using Microsoft::Xna::Framework::Graphics::GraphicsResource;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::Texture3D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 
 struct GraphicsResourceView final {
@@ -105,6 +111,24 @@ private:
         result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
         result.parentGame = texture->parentGame;
         result.texture = std::move(texture);
+    } else if (kind == ObjectKind::Texture3D) {
+        std::shared_ptr<Texture3DResource> texture;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::Texture3D, &texture);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
+        result.parentGame = texture->parentGame;
+    } else if (kind == ObjectKind::TextureCube) {
+        std::shared_ptr<TextureCubeResource> texture;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::TextureCube, &texture);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
+        result.parentGame = texture->parentGame;
     } else if (kind == ObjectKind::RenderTargetCube) {
         std::shared_ptr<RenderTargetCubeResource> target;
         const CNA_Result getResult = GetRuntimeHandles().Get(

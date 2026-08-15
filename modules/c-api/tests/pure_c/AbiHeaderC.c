@@ -210,6 +210,22 @@ _Static_assert(sizeof(CNA_RenderTargetInfo) == 44U,
                "CNA_RenderTargetInfo layout must remain stable");
 _Static_assert(sizeof(CNA_RenderTargetBinding) == 24U,
                "CNA_RenderTargetBinding layout must remain stable");
+_Static_assert(sizeof(CNA_Texture3DCreateInfo) == 32U,
+               "CNA_Texture3DCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Texture3DInfo) == 32U,
+               "CNA_Texture3DInfo layout must remain stable");
+_Static_assert(sizeof(CNA_Texture3DTransfer) == 56U &&
+                   offsetof(CNA_Texture3DTransfer, start_index) == 40U &&
+                   offsetof(CNA_Texture3DTransfer, element_count) == 48U,
+               "CNA_Texture3DTransfer layout must remain stable");
+_Static_assert(sizeof(CNA_TextureCubeCreateInfo) == 24U,
+               "CNA_TextureCubeCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_TextureCubeInfo) == 24U,
+               "CNA_TextureCubeInfo layout must remain stable");
+_Static_assert(sizeof(CNA_TextureCubeTransfer) == 56U &&
+                   offsetof(CNA_TextureCubeTransfer, rectangle) == 20U &&
+                   offsetof(CNA_TextureCubeTransfer, start_index) == 40U,
+               "CNA_TextureCubeTransfer layout must remain stable");
 _Static_assert(sizeof(CNA_Char16) == sizeof(uint16_t),
                "CNA_Char16 must have a fixed-width representation");
 _Static_assert(sizeof(CNA_SpriteFontGlyph) == 56U,

@@ -42,6 +42,8 @@ enum class ObjectKind : uint32_t {
     CurveKeyCollection = 13,
     Curve = 14,
     VertexDeclaration = 15,
+    Texture3D = 16,
+    TextureCube = 17,
     Test = UINT32_MAX
 };
 

@@ -31,6 +31,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
     src/CnaCApiTexture.cpp
+    src/CnaCApiTextureVolume.cpp
     src/CnaCApiVectors.cpp
     src/CnaCApiVertexResources.cpp
     src/CnaCApiVertexValues.cpp
@@ -307,6 +308,24 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_TextureSmoke COMMAND cna_c_api_texture_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_TextureSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_texture_volume_smoke
+        tests/pure_c/TextureVolumeSmoke.c
+    )
+    set_target_properties(cna_c_api_texture_volume_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_texture_volume_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_texture_volume_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_texture_volume_smoke)
+    add_test(NAME CApi_TextureVolumeSmoke COMMAND cna_c_api_texture_volume_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_TextureVolumeSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()

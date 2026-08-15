@@ -257,6 +257,16 @@
       "task": "CBIND-035C4"
     },
     {
+      "id": "texture3d-and-texturecube-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Texture(?:3D|Cube)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field"],
+      "mapping": "owned game-child `CNA_Handle` resources; versioned 3D/cube create, property and full/mip/box/face/rectangle Color transfer descriptors; direct Texture3D raw-byte SetDataPointerEXT route; exact native type-name count/copy; generic Texture/GraphicsResource operations; RenderTargetCube inheritance; and copied-memory DDS cube decoding. Native renderer pointers, protected construction, copy/move storage and Sharp Runtime streams remain behind the adapter; missing storage returns an explicit atomic NOT_SUPPORTED result",
+      "tests": "all six cube faces, full/rectangle/mip transfers and validation, Texture3D capability refusal, DDS memory decoding refusal, common Texture and GraphicsResource state, RenderTargetCube inheritance, disposal/parent order and invalid/stale/wrong-kind/wrong-thread handles in strict-C `TextureVolumeSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035C5"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],
