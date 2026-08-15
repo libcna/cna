@@ -21,7 +21,9 @@ name/tag/device/disposal/event contract, core draw/buffer/vertex
 identities, effect parameter class/type and value/texture identities, immutable annotation
 metadata/collections, mutable parameters with all scalar/array/string/texture overloads and stable
 nested collection views, owned techniques/passes with stable collection aliases, non-pointer
-identities, annotation/pass nesting and canonical Apply dispatch, plus
+identities, annotation/pass nesting and canonical Apply dispatch, owned base/material/source-shader/
+stock-sprite effects with cloning, current collections, exact source/type strings, shader uniforms,
+textures and world/view/projection matrices, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability

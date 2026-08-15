@@ -7,12 +7,17 @@
 
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectMaterial.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -33,12 +38,18 @@ using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetOwnedTexture3D;
 using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::BorrowGameGraphicsDevice;
+using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TextureResourceView;
 using CNA::C::Detail::TextureCubeResourceView;
@@ -49,6 +60,8 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotation;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotationCollection;
+using Microsoft::Xna::Framework::Graphics::Effect;
+using Microsoft::Xna::Framework::Graphics::EffectMaterial;
 using Microsoft::Xna::Framework::Graphics::EffectParameter;
 using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
 using Microsoft::Xna::Framework::Graphics::EffectParameterCollection;
@@ -57,12 +70,54 @@ using Microsoft::Xna::Framework::Graphics::EffectPass;
 using Microsoft::Xna::Framework::Graphics::EffectPassCollection;
 using Microsoft::Xna::Framework::Graphics::EffectTechnique;
 using Microsoft::Xna::Framework::Graphics::EffectTechniqueCollection;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
+
+class EffectOwnership final {
+public:
+    EffectOwnership()
+    {
+        AddOwnedGraphicsResource();
+    }
+
+    EffectOwnership(const EffectOwnership&) = delete;
+    EffectOwnership& operator=(const EffectOwnership&) = delete;
+
+    ~EffectOwnership()
+    {
+        RemoveOwnedGraphicsResource();
+    }
+};
+
+class CApiEffect final : public Effect {
+public:
+    explicit CApiEffect(GraphicsDevice& device)
+        : Effect(device)
+    {
+    }
+
+    CApiEffect(GraphicsDevice& device, const std::vector<SharpRuntime::bytecs>& effectCode)
+        : Effect(device, effectCode)
+    {
+    }
+
+    [[nodiscard]] Effect* Clone() override
+    {
+        return new CApiEffect(getGraphicsDeviceInternal());
+    }
+
+protected:
+    void OnApply() override
+    {
+    }
+};
 
 struct AnnotationResource final {
     std::shared_ptr<EffectAnnotation> value;
@@ -124,11 +179,13 @@ struct ParameterState final {
     RetainedTextureSlot textureCube;
     std::shared_ptr<ParameterCollectionState> elements;
     std::shared_ptr<ParameterCollectionState> members;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct ParameterCollectionState final {
     std::shared_ptr<EffectParameterCollection> value;
     std::unordered_map<EffectParameter*, std::shared_ptr<ParameterState>> elementStates;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct ParameterResource final {
@@ -143,21 +200,25 @@ struct ParameterCollectionResource final {
 struct PassCollectionState final {
     std::shared_ptr<EffectPassCollection> value;
     Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct TechniqueState final {
     std::shared_ptr<PassCollectionState> passes;
     Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct TechniqueCollectionState final {
     std::shared_ptr<EffectTechniqueCollection> value;
     Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
     std::unordered_map<EffectTechnique*, std::shared_ptr<TechniqueState>> elementStates;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct PassResource final {
     std::shared_ptr<EffectPass> value;
+    std::shared_ptr<void> effectOwnership;
 };
 
 struct PassCollectionResource final {
@@ -171,6 +232,17 @@ struct TechniqueResource final {
 
 struct TechniqueCollectionResource final {
     std::shared_ptr<TechniqueCollectionState> state;
+};
+
+struct EffectLifetime final {
+    EffectOwnership ownership;
+    std::unordered_map<int, RetainedTextureSlot> shaderTextures;
+};
+
+struct EffectState final {
+    std::shared_ptr<EffectLifetime> lifetime;
+    std::shared_ptr<ParameterCollectionState> parameters;
+    std::shared_ptr<TechniqueCollectionState> techniques;
 };
 
 [[nodiscard]] CNA_Result InvalidArgument(const char* const message)
@@ -429,6 +501,7 @@ template<typename TCallable>
     auto [iterator, inserted] = collection->elementStates.try_emplace(parameter);
     if (inserted || iterator->second == nullptr) {
         iterator->second = std::make_shared<ParameterState>();
+        iterator->second->effectOwnership = collection->effectOwnership;
     }
     return iterator->second;
 }
@@ -595,9 +668,11 @@ template<typename TNative, typename TC, typename TConvert>
 
 [[nodiscard]] CNA_Result CreatePassHandle(
     std::shared_ptr<EffectPass> value,
+    std::shared_ptr<void> effectOwnership,
     CNA_EffectPassHandle* const outPass)
 {
-    const auto resource = std::make_shared<PassResource>(PassResource{std::move(value)});
+    const auto resource = std::make_shared<PassResource>(
+        PassResource{std::move(value), std::move(effectOwnership)});
     const CNA_Result result = GetRuntimeHandles().Create(
         ObjectKind::EffectPass, resource, outPass);
     if (result == CNA_RESULT_SUCCESS) {
@@ -683,6 +758,7 @@ template<typename TNative, typename TC, typename TConvert>
     if (inserted || iterator->second == nullptr) {
         iterator->second = std::make_shared<TechniqueState>();
         iterator->second->owner = collection->owner;
+        iterator->second->effectOwnership = collection->effectOwnership;
     }
     return iterator->second;
 }
@@ -696,6 +772,156 @@ template<typename TNative, typename TC, typename TConvert>
         std::shared_ptr<EffectTechnique>(collection->value, technique),
         GetTechniqueElementState(collection, technique),
         outTechnique);
+}
+
+[[nodiscard]] CNA_Result GetEffect(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outEffect)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::Effect, outEffect);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The Effect handle is invalid for this call.");
+}
+
+[[nodiscard]] std::shared_ptr<EffectState> GetEffectState(
+    const std::shared_ptr<EffectResource>& effect)
+{
+    return std::static_pointer_cast<EffectState>(effect->adapterState);
+}
+
+[[nodiscard]] CNA_Result CreateEffectHandle(
+    std::shared_ptr<Effect> value,
+    const CNA_Handle parentGame,
+    CNA_EffectHandle* const outEffect)
+{
+    auto state = std::make_shared<EffectState>();
+    state->lifetime = std::make_shared<EffectLifetime>();
+
+    state->parameters = std::make_shared<ParameterCollectionState>();
+    state->parameters->value = std::shared_ptr<EffectParameterCollection>(
+        value, &value->getParametersProperty());
+    state->parameters->effectOwnership = state->lifetime;
+
+    state->techniques = std::make_shared<TechniqueCollectionState>();
+    state->techniques->value = std::shared_ptr<EffectTechniqueCollection>(
+        value, &value->getTechniquesProperty());
+    state->techniques->owner = value.get();
+    state->techniques->effectOwnership = state->lifetime;
+
+    const auto resource = std::make_shared<EffectResource>(
+        EffectResource{std::move(value), parentGame, state});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::Effect, resource, outEffect);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned Effect handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result GetShaderEffect(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outResource,
+    ShaderEffect** const outShader)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const shader = dynamic_cast<ShaderEffect*>(effect->value.get());
+    if (shader == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The Effect handle does not refer to a ShaderEffect.");
+    }
+    if (outResource != nullptr) {
+        *outResource = std::move(effect);
+    }
+    *outShader = shader;
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TGetter>
+[[nodiscard]] CNA_Result GetEffectStringByteCount(
+    const CNA_EffectHandle handle,
+    uint64_t* const outByteCount,
+    TGetter&& getter)
+{
+    if (outByteCount == nullptr) {
+        return InvalidArgument("The Effect string byte-count output is null.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outByteCount = static_cast<uint64_t>(
+        std::forward<TGetter>(getter)(*effect->value).size());
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TGetter>
+[[nodiscard]] CNA_Result CopyEffectString(
+    const CNA_EffectHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount,
+    TGetter&& getter)
+{
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The Effect string output buffer is invalid.");
+    }
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const std::string& text = std::forward<TGetter>(getter)(*effect->value);
+    *outByteCount = static_cast<uint64_t>(text.size());
+    if (capacity < text.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination cannot hold the complete Effect string.");
+    }
+    if (!text.empty()) {
+        std::memcpy(destination, text.data(), text.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyUniformName(
+    const CNA_StringView name,
+    std::string* const outName)
+{
+    const CNA_Result result = CopyStringView(name, true, outName);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The shader uniform name is not valid UTF-8 text.");
+}
+
+[[nodiscard]] CNA_Result ValidateEffectTextureOwner(
+    const EffectResource& effect,
+    const CNA_Handle textureParentGame)
+{
+    if (textureParentGame == effect.parentGame) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        CNA_RESULT_INVALID_ARGUMENT,
+        CNA_ERROR_CATEGORY_ARGUMENT,
+        "The Effect and texture belong to different graphics devices.");
 }
 
 } // namespace
@@ -1347,6 +1573,7 @@ CNA_Result cna_effect_parameter_get_elements(
             auto state = std::make_shared<ParameterCollectionState>();
             state->value = std::shared_ptr<EffectParameterCollection>(
                 parameter->value, &parameter->value->getElementsProperty());
+            state->effectOwnership = parameter->state->effectOwnership;
             parameter->state->elements = std::move(state);
         }
         return CreateParameterCollectionHandle(parameter->state->elements, outCollection);
@@ -1371,6 +1598,7 @@ CNA_Result cna_effect_parameter_get_structure_members(
             auto state = std::make_shared<ParameterCollectionState>();
             state->value = std::shared_ptr<EffectParameterCollection>(
                 parameter->value, &parameter->value->getStructureMembersProperty());
+            state->effectOwnership = parameter->state->effectOwnership;
             parameter->state->members = std::move(state);
         }
         return CreateParameterCollectionHandle(parameter->state->members, outCollection);
@@ -2217,6 +2445,7 @@ CNA_Result cna_effect_pass_create(
         }
         return CreatePassHandle(
             std::make_shared<EffectPass>(nullptr, std::move(copiedName), techniqueIdentity),
+            nullptr,
             outPass);
     });
 }
@@ -2379,7 +2608,9 @@ CNA_Result cna_effect_pass_collection_add_create(
         EffectPass* const pass = &(*collection->state->value)[
             collection->state->value->getCountProperty() - 1];
         return CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+            std::shared_ptr<EffectPass>(collection->state->value, pass),
+            collection->state->effectOwnership,
+            outPass);
     });
 }
 
@@ -2406,7 +2637,9 @@ CNA_Result cna_effect_pass_collection_get_at(
         }
         EffectPass* const pass = &(*collection->state->value)[static_cast<int>(index)];
         return CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+            std::shared_ptr<EffectPass>(collection->state->value, pass),
+            collection->state->effectOwnership,
+            outPass);
     });
 }
 
@@ -2438,7 +2671,9 @@ CNA_Result cna_effect_pass_collection_find(
             return CNA_RESULT_SUCCESS;
         }
         const CNA_Result result = CreatePassHandle(
-            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+            std::shared_ptr<EffectPass>(collection->state->value, pass),
+            collection->state->effectOwnership,
+            outPass);
         if (result == CNA_RESULT_SUCCESS) {
             *outFound = CNA_TRUE;
         }
@@ -2571,6 +2806,7 @@ CNA_Result cna_effect_technique_get_passes(
             state->value = std::shared_ptr<EffectPassCollection>(
                 technique->value, &technique->value->getPassesProperty());
             state->owner = technique->state->owner;
+            state->effectOwnership = technique->state->effectOwnership;
             technique->state->passes = std::move(state);
         }
         return CreatePassCollectionHandle(technique->state->passes, outCollection);
@@ -2760,5 +2996,898 @@ CNA_Result cna_effect_technique_collection_find(
             *outFound = CNA_TRUE;
         }
         return result;
+    });
+}
+
+CNA_Result cna_effect_create_empty(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The Effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<CApiEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_effect_create_compiled(
+    const CNA_Handle graphicsDeviceHandle,
+    const uint8_t* const effectCode,
+    const uint64_t effectCodeCount,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The compiled Effect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::size_t byteCount = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                effectCode, effectCodeCount, sizeof(uint8_t), &byteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The compiled Effect bytecode buffer is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> code(byteCount);
+        if (byteCount != 0U) {
+            std::memcpy(code.data(), effectCode, byteCount);
+        }
+        return CreateEffectHandle(
+            std::make_shared<CApiEffect>(*graphicsDevice->value, code),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_shader_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_StringView vertexSource,
+    const CNA_StringView fragmentSource,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The ShaderEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::string vertex;
+        std::string fragment;
+        if (const CNA_Result result = CopyStringView(vertexSource, true, &vertex);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The ShaderEffect vertex source is not valid UTF-8 text.");
+        }
+        if (const CNA_Result result = CopyStringView(fragmentSource, true, &fragment);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The ShaderEffect fragment source is not valid UTF-8 text.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<ShaderEffect>(
+                *graphicsDevice->value, std::move(vertex), std::move(fragment)),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_effect_material_create(
+    const CNA_EffectHandle cloneSourceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The EffectMaterial output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> source;
+        if (const CNA_Result result = GetEffect(cloneSourceHandle, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<EffectMaterial>(*source->value),
+            source->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_sprite_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The SpriteEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<SpriteEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_effect_destroy(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(effectHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned Effect handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_clone(
+    const CNA_EffectHandle effectHandle,
+    CNA_EffectHandle* const outClone)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outClone == nullptr) {
+            return InvalidArgument("The Effect clone output handle is null.");
+        }
+        *outClone = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<Effect> clone(effect->value->Clone());
+        if (clone == nullptr) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The native Effect clone operation returned null.");
+        }
+        return CreateEffectHandle(std::move(clone), effect->parentGame, outClone);
+    });
+}
+
+CNA_Result cna_effect_dispose(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        effect->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_apply(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        effect->value->Apply();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_get_parameters(
+    const CNA_EffectHandle effectHandle,
+    CNA_EffectParameterCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The Effect parameter-collection output is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateParameterCollectionHandle(
+            GetEffectState(effect)->parameters, outCollection);
+    });
+}
+
+CNA_Result cna_effect_get_techniques(
+    const CNA_EffectHandle effectHandle,
+    CNA_EffectTechniqueCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The Effect technique-collection output is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTechniqueCollectionHandle(
+            GetEffectState(effect)->techniques, outCollection);
+    });
+}
+
+CNA_Result cna_effect_get_current_technique(
+    const CNA_EffectHandle effectHandle,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The Effect current-technique output is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        EffectTechnique* const technique =
+            effect->value->getCurrentTechniqueProperty();
+        if (technique == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return CreateTechniqueElementHandle(
+            GetEffectState(effect)->techniques, technique, outTechnique);
+    });
+}
+
+CNA_Result cna_effect_set_current_technique(
+    const CNA_EffectHandle effectHandle,
+    const CNA_EffectTechniqueHandle techniqueHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (techniqueHandle == CNA_INVALID_HANDLE) {
+            effect->value->setCurrentTechniqueProperty(nullptr);
+            return CNA_RESULT_SUCCESS;
+        }
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (technique->state->owner != effect->value.get()) {
+            return InvalidArgument(
+                "The selected technique does not belong to this Effect.");
+        }
+        effect->value->setCurrentTechniqueProperty(technique->value.get());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_get_graphics_device(
+    const CNA_EffectHandle effectHandle,
+    CNA_Handle* const outGraphicsDevice)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGraphicsDevice == nullptr) {
+            return InvalidArgument("The Effect graphics-device output is null.");
+        }
+        *outGraphicsDevice = CNA_INVALID_HANDLE;
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA_Handle borrowed = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = BorrowGameGraphicsDevice(
+                effect->parentGame, &borrowed);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        const CNA_Result lookupResult = GetRuntimeHandles().Get(
+            borrowed, ObjectKind::GraphicsDevice, &graphicsDevice);
+        if (lookupResult != CNA_RESULT_SUCCESS ||
+            graphicsDevice->value != &effect->value->getGraphicsDeviceInternal()) {
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The Effect and borrowed graphics-device owners disagree.");
+        }
+        *outGraphicsDevice = borrowed;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_get_type_name_byte_count(
+    const CNA_EffectHandle effectHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetEffectStringByteCount(
+            effectHandle, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetTypeName(); });
+    });
+}
+
+CNA_Result cna_effect_copy_type_name(
+    const CNA_EffectHandle effectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyEffectString(
+            effectHandle, destination, capacity, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetTypeName(); });
+    });
+}
+
+CNA_Result cna_effect_get_vertex_source_byte_count(
+    const CNA_EffectHandle effectHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetEffectStringByteCount(
+            effectHandle, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); });
+    });
+}
+
+CNA_Result cna_effect_copy_vertex_source(
+    const CNA_EffectHandle effectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyEffectString(
+            effectHandle, destination, capacity, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetVertexSource(); });
+    });
+}
+
+CNA_Result cna_effect_get_fragment_source_byte_count(
+    const CNA_EffectHandle effectHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return GetEffectStringByteCount(
+            effectHandle, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); });
+    });
+}
+
+CNA_Result cna_effect_copy_fragment_source(
+    const CNA_EffectHandle effectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CopyEffectString(
+            effectHandle, destination, capacity, outByteCount,
+            [](Effect& effect) -> const std::string& { return effect.GetFragmentSource(); });
+    });
+}
+
+CNA_Result cna_effect_has_renderer(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasRenderer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasRenderer == nullptr) {
+            return InvalidArgument("The Effect renderer-state output is null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasRenderer = effect->value->GetEffectRendererPtr() != nullptr
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_is_exact_stock_sprite_effect(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outIsExact)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsExact == nullptr) {
+            return InvalidArgument("The stock SpriteEffect identity output is null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        if (const CNA_Result result = GetEffect(effectHandle, &effect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outIsExact = effect->value->IsExactStockSpriteEffectEXT()
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_is_valid(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outIsValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIsValid == nullptr) {
+            return InvalidArgument("The ShaderEffect validity output is null.");
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outIsValid = shader->IsEffectValid() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_has_renderer(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasRenderer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasRenderer == nullptr) {
+            return InvalidArgument("The ShaderEffect renderer-state output is null.");
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasRenderer = shader->HasRenderer() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_matrix(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const float matrix[16] = {
+            value.m11, value.m12, value.m13, value.m14,
+            value.m21, value.m22, value.m23, value.m24,
+            value.m31, value.m32, value.m33, value.m34,
+            value.m41, value.m42, value.m43, value.m44};
+        shader->SetUniformMat4(copiedName.c_str(), matrix);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector4(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const CNA_Vector4 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformVec4(copiedName.c_str(), value.x, value.y, value.z, value.w);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector3(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformVec3(copiedName.c_str(), value.x, value.y, value.z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector2(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const CNA_Vector2 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformVec2(copiedName.c_str(), value.x, value.y);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_float(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformFloat(copiedName.c_str(), value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_int32(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformInt(copiedName.c_str(), value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_float_array(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const float* const values,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t byteCount = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                values, count, sizeof(float), &byteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The shader float-uniform array is invalid.");
+        }
+        int nativeCount = 0;
+        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetUniformFloatArray(copiedName.c_str(), values, nativeCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_uniform_vector2_array(
+    const CNA_EffectHandle effectHandle,
+    const CNA_StringView name,
+    const CNA_Vector2* const values,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t byteCount = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                values, count, sizeof(CNA_Vector2), &byteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The shader vec2-uniform array is invalid.");
+        }
+        int nativeCount = 0;
+        if (const CNA_Result result = RequestedCountToInt(count, &nativeCount);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyUniformName(name, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<float> copiedValues;
+        copiedValues.reserve(static_cast<std::size_t>(count) * 2U);
+        for (uint64_t index = 0U; index < count; ++index) {
+            copiedValues.push_back(values[index].x);
+            copiedValues.push_back(values[index].y);
+        }
+        shader->SetUniformVec2Array(
+            copiedName.c_str(), copiedValues.data(), nativeCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture2d(
+    const CNA_EffectHandle effectHandle,
+    const int32_t unit,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (unit < 0) {
+            return InvalidArgument("The ShaderEffect texture unit is negative.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+        if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateEffectTextureOwner(
+                *effect, texture->parentGame);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetTexture(unit, *texture->value);
+        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+            textureHandle,
+            std::static_pointer_cast<Texture>(texture->value),
+            texture,
+            &texture->activeEffectReferenceCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture_cube(
+    const CNA_EffectHandle effectHandle,
+    const int32_t unit,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (unit < 0) {
+            return InvalidArgument("The ShaderEffect texture unit is negative.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextureCubeResourceView texture;
+        if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateEffectTextureOwner(
+                *effect, texture.parentGame);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetTexture(unit, *texture.value);
+        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+            textureHandle,
+            std::static_pointer_cast<Texture>(texture.value),
+            std::move(texture.retentionOwner),
+            texture.activeEffectReferenceCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_texture3d(
+    const CNA_EffectHandle effectHandle,
+    const int32_t unit,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (unit < 0) {
+            return InvalidArgument("The ShaderEffect texture unit is negative.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, &effect, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<CNA::C::Detail::Texture3DResource> texture;
+        if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateEffectTextureOwner(
+                *effect, texture->parentGame);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->SetTexture(unit, *texture->value);
+        GetEffectState(effect)->lifetime->shaderTextures[unit].Set(
+            textureHandle,
+            std::static_pointer_cast<Texture>(texture->value),
+            texture,
+            &texture->activeEffectReferenceCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_get_world(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ShaderEffect world-matrix output is null.");
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(shader->getWorldProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_world(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->setWorldProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_get_view(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ShaderEffect view-matrix output is null.");
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(shader->getViewProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_view(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->setViewProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_get_projection(
+    const CNA_EffectHandle effectHandle,
+    CNA_Matrix* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ShaderEffect projection-matrix output is null.");
+        }
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(shader->getProjectionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_shader_effect_set_projection(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ShaderEffect* shader = nullptr;
+        if (const CNA_Result result = GetShaderEffect(effectHandle, nullptr, &shader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        shader->setProjectionProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
     });
 }

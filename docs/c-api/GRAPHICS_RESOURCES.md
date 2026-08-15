@@ -13,6 +13,8 @@ The completed Texture/Texture2D construction, typed-transfer and encoded-image c
 documented separately in [`TEXTURES.md`](TEXTURES.md).
 The Texture3D/TextureCube handle and region-transfer contract is documented in
 [`TEXTURE_VOLUMES.md`](TEXTURE_VOLUMES.md).
+Effect resources and their transitive descendant-view lifetime are documented in
+[`EFFECTS.md`](EFFECTS.md).
 
 All extensible inputs and outputs begin with `struct_size` and `struct_version`. Version one
 callers initialize both fields before a query; preset/value initializers fill the complete output.
@@ -20,7 +22,8 @@ Fixed-width identities and layouts are frozen by both C17 and C++23 compile-time
 
 ## Common graphics-resource contract
 
-Texture2D, Texture3D, TextureCube, RenderTarget2D, RenderTargetCube and VertexDeclaration handles
+Texture2D, Texture3D, TextureCube, RenderTarget2D, RenderTargetCube, VertexDeclaration,
+VertexBuffer, IndexBuffer and Effect handles
 support the generic `cna_graphics_resource_*` operations. A wrong-kind or stale handle is rejected before the native
 object is touched. Standalone declarations report an invalid graphics-device handle; game-owned
 resources return the same borrowed device handle only during an active lifecycle callback. The

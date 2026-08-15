@@ -46,6 +46,9 @@ typedef uint32_t CNA_EffectParameterType;
 /** @brief Cube texture effect parameter. */
 #define CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE UINT32_C(9)
 
+/** @brief Owned handle for a graphics-device effect instance. */
+typedef CNA_Handle CNA_EffectHandle;
+
 /** @brief Owned handle for an immutable effect annotation. */
 typedef CNA_Handle CNA_EffectAnnotationHandle;
 
@@ -1023,6 +1026,282 @@ CNA_C_API CNA_Result cna_effect_technique_collection_find(
     CNA_StringView name,
     CNA_Bool* out_found,
     CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Creates the minimal concrete adapter for the native abstract Effect base class.
+ * @param graphics_device Borrowed graphics-device handle from an active game callback.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_create_empty(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Attempts to create an Effect from compiled XNA `.fx` bytecode.
+ * @param graphics_device Borrowed graphics-device handle from an active game callback.
+ * @param effect_code Bytecode bytes copied during the call.
+ * @param effect_code_count Number of bytes at @p effect_code.
+ * @param out_effect Receives the owned effect handle on success.
+ * @return `CNA_RESULT_NOT_SUPPORTED` while native CNA bytecode loading is unavailable.
+ */
+CNA_C_API CNA_Result cna_effect_create_compiled(
+    CNA_Handle graphics_device,
+    const uint8_t* effect_code,
+    uint64_t effect_code_count,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Creates a source-based ShaderEffect.
+ * @param graphics_device Borrowed graphics-device handle from an active game callback.
+ * @param vertex_source UTF-8 vertex-shader source copied by the call.
+ * @param fragment_source UTF-8 fragment-shader source copied by the call.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; renderer availability is reported separately.
+ */
+CNA_C_API CNA_Result cna_shader_effect_create(
+    CNA_Handle graphics_device,
+    CNA_StringView vertex_source,
+    CNA_StringView fragment_source,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Creates an EffectMaterial using the source effect's graphics device.
+ * @param clone_source Source effect handle.
+ * @param out_effect Receives the owned material handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_material_create(
+    CNA_EffectHandle clone_source,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Creates the stock SpriteEffect.
+ * @param graphics_device Borrowed graphics-device handle from an active game callback.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_sprite_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Destroys an owned effect handle. */
+CNA_C_API CNA_Result cna_effect_destroy(CNA_EffectHandle effect);
+
+/**
+ * @brief Creates an independent native clone of an effect.
+ * @param effect Source effect.
+ * @param out_clone Receives an owned clone of the same concrete native type.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_clone(
+    CNA_EffectHandle effect,
+    CNA_EffectHandle* out_clone);
+
+/** @brief Disposes an effect's graphics resources without releasing its handle. */
+CNA_C_API CNA_Result cna_effect_dispose(CNA_EffectHandle effect);
+
+/** @brief Applies the effect and selects it on its owning graphics device. */
+CNA_C_API CNA_Result cna_effect_apply(CNA_EffectHandle effect);
+
+/**
+ * @brief Gets a mutable stable view of the effect parameter collection.
+ * @param effect Effect handle.
+ * @param out_collection Receives an owned collection-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_get_parameters(
+    CNA_EffectHandle effect,
+    CNA_EffectParameterCollectionHandle* out_collection);
+
+/**
+ * @brief Gets a mutable stable view of the effect technique collection.
+ * @param effect Effect handle.
+ * @param out_collection Receives an owned collection-view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_get_techniques(
+    CNA_EffectHandle effect,
+    CNA_EffectTechniqueCollectionHandle* out_collection);
+
+/**
+ * @brief Gets the current technique as an owned stable view.
+ * @param effect Effect handle.
+ * @param out_technique Receives a technique view, or the invalid handle when null.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_get_current_technique(
+    CNA_EffectHandle effect,
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Selects a technique belonging to this effect, or clears it with the invalid handle.
+ * @param effect Effect handle.
+ * @param technique Technique view from this effect, or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_set_current_technique(
+    CNA_EffectHandle effect,
+    CNA_EffectTechniqueHandle technique);
+
+/** @brief Gets the borrowed graphics-device handle that owns an effect. */
+CNA_C_API CNA_Result cna_effect_get_graphics_device(
+    CNA_EffectHandle effect,
+    CNA_Handle* out_graphics_device);
+
+/** @brief Gets the exact UTF-8 runtime type-name byte count. */
+CNA_C_API CNA_Result cna_effect_get_type_name_byte_count(
+    CNA_EffectHandle effect,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the UTF-8 runtime type name without a terminator. */
+CNA_C_API CNA_Result cna_effect_copy_type_name(
+    CNA_EffectHandle effect,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the exact UTF-8 vertex-source byte count. */
+CNA_C_API CNA_Result cna_effect_get_vertex_source_byte_count(
+    CNA_EffectHandle effect,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the UTF-8 vertex source without a terminator. */
+CNA_C_API CNA_Result cna_effect_copy_vertex_source(
+    CNA_EffectHandle effect,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the exact UTF-8 fragment-source byte count. */
+CNA_C_API CNA_Result cna_effect_get_fragment_source_byte_count(
+    CNA_EffectHandle effect,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the UTF-8 fragment source without a terminator. */
+CNA_C_API CNA_Result cna_effect_copy_fragment_source(
+    CNA_EffectHandle effect,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Reports whether the effect exposes a live renderer-specific compiled program. */
+CNA_C_API CNA_Result cna_effect_has_renderer(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_renderer);
+
+/** @brief Reports whether the effect is exactly the stock SpriteEffect runtime type. */
+CNA_C_API CNA_Result cna_effect_is_exact_stock_sprite_effect(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_is_exact);
+
+/** @brief Reports whether a ShaderEffect has a valid compiled shader program. */
+CNA_C_API CNA_Result cna_shader_effect_is_valid(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_is_valid);
+
+/** @brief Reports whether a ShaderEffect still owns a renderer program object. */
+CNA_C_API CNA_Result cna_shader_effect_has_renderer(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_renderer);
+
+/** @brief Sets a named column-major 4-by-4 shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_matrix(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_Matrix value);
+
+/** @brief Sets a named vec4 shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_vector4(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_Vector4 value);
+
+/** @brief Sets a named vec3 shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_vector3(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_Vector3 value);
+
+/** @brief Sets a named vec2 shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_vector2(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    CNA_Vector2 value);
+
+/** @brief Sets a named scalar float shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_float(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    float value);
+
+/** @brief Sets a named signed integer shader uniform. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_int32(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    int32_t value);
+
+/** @brief Sets a named array of scalar float shader uniforms. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_float_array(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    const float* values,
+    uint64_t count);
+
+/** @brief Sets a named array of vec2 shader uniforms. */
+CNA_C_API CNA_Result cna_shader_effect_set_uniform_vector2_array(
+    CNA_EffectHandle effect,
+    CNA_StringView name,
+    const CNA_Vector2* values,
+    uint64_t count);
+
+/** @brief Binds a Texture2D-compatible handle to a shader sampler unit. */
+CNA_C_API CNA_Result cna_shader_effect_set_texture2d(
+    CNA_EffectHandle effect,
+    int32_t unit,
+    CNA_Handle texture);
+
+/** @brief Binds a TextureCube-compatible handle to a shader sampler unit. */
+CNA_C_API CNA_Result cna_shader_effect_set_texture_cube(
+    CNA_EffectHandle effect,
+    int32_t unit,
+    CNA_Handle texture);
+
+/** @brief Binds a Texture3D handle to a shader sampler unit. */
+CNA_C_API CNA_Result cna_shader_effect_set_texture3d(
+    CNA_EffectHandle effect,
+    int32_t unit,
+    CNA_Handle texture);
+
+/** @brief Gets the ShaderEffect world matrix. */
+CNA_C_API CNA_Result cna_shader_effect_get_world(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the ShaderEffect world matrix. */
+CNA_C_API CNA_Result cna_shader_effect_set_world(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
+
+/** @brief Gets the ShaderEffect view matrix. */
+CNA_C_API CNA_Result cna_shader_effect_get_view(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the ShaderEffect view matrix. */
+CNA_C_API CNA_Result cna_shader_effect_set_view(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
+
+/** @brief Gets the ShaderEffect projection matrix. */
+CNA_C_API CNA_Result cna_shader_effect_get_projection(
+    CNA_EffectHandle effect,
+    CNA_Matrix* out_value);
+
+/** @brief Sets the ShaderEffect projection matrix. */
+CNA_C_API CNA_Result cna_shader_effect_set_projection(
+    CNA_EffectHandle effect,
+    CNA_Matrix value);
 
 #ifdef __cplusplus
 }

@@ -9,6 +9,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+class Effect;
 class IndexBuffer;
 class RenderTargetCube;
 class Texture;
@@ -19,6 +20,12 @@ class VertexBuffer;
 }
 
 namespace CNA::C::Detail {
+
+struct EffectResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::Effect> value;
+    CNA_Handle parentGame;
+    std::shared_ptr<void> adapterState;
+};
 
 struct Texture2DResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> value;

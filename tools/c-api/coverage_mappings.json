@@ -326,6 +326,16 @@
       "task": "CBIND-035D4"
     },
     {
+      "id": "effect-lifecycle-and-concrete-effects-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Effect|EffectMaterial|ShaderEffect|SpriteEffect)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "mapping": "owned game-child `CNA_EffectHandle` values for the abstract Effect contract through a minimal concrete adapter plus native EffectMaterial, ShaderEffect and SpriteEffect instances; explicit compiled-bytecode NOT_SUPPORTED behavior; clone/dispose/apply, borrowed device, current technique, stable parameter/technique views, exact type/source strings, renderer and stock-sprite identity queries, all ShaderEffect uniform/texture/matrix routes, and transitive child-view/device/texture lifetime retention. Renderer-specific pointers and GpuDrawParams remain behind the adapter and are consumed through Effect Apply and CNA draw operations",
+      "tests": "base/material/shader/sprite construction and same-type clones, compiled-bytecode refusal, dispose/apply, current-technique/pass validation, exact type/source strings, device ownership, all shader uniform and matrix operations, renderer-state consistency, Texture2D/cube dispatch and retention, Texture3D backend refusal, transitive pass lifetime after parent-handle destruction, and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D5"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

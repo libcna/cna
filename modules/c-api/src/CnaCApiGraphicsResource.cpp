@@ -6,6 +6,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -27,6 +28,7 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
@@ -175,6 +177,15 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(buffer->value);
         result.parentGame = buffer->parentGame;
+    } else if (kind == ObjectKind::Effect) {
+        std::shared_ptr<EffectResource> effect;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::Effect, &effect);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(effect->value);
+        result.parentGame = effect->parentGame;
     } else {
         return InvalidResource(CNA_RESULT_INVALID_HANDLE);
     }

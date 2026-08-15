@@ -78,6 +78,32 @@ The C Apply operation always invokes `EffectPass::Apply()`: ownerless D4 passes 
 successful no-op, while effect-owned views supplied by the effect lifecycle use the same route and
 therefore enforce current-technique identity before applying.
 
+## Effect lifecycle and concrete types
+
+`CNA_EffectHandle` is an owned game-child handle. `cna_effect_create_empty` supplies a minimal
+concrete adapter for CNA's abstract `Effect` base contract; `cna_effect_material_create`,
+`cna_shader_effect_create` and `cna_sprite_effect_create` construct the corresponding native
+types. Clone preserves the concrete runtime type. Dispose keeps the handle queryable and maps a
+later Apply to `CNA_RESULT_INVALID_STATE`; destroy releases the handle.
+
+Parameter, technique, current-technique and nested pass views alias the native effect storage.
+Destroying the parent effect handle does not invalidate a live descendant view: the descendant
+retains the native effect, its game-child ownership and any shader-bound texture until the final
+view is released. A current technique must originate from the same effect; the invalid handle
+explicitly selects null, after which applying one of that effect's passes reports invalid state.
+
+Type names and vertex/fragment shader sources use exact count/copy operations. Compiled XNA `.fx`
+bytecode construction reaches CNA's current native limitation and returns
+`CNA_RESULT_NOT_SUPPORTED`; it does not silently reinterpret bytecode as source. Renderer program
+pointers and `GpuDrawParams` remain private C++ implementation details consumed through Apply and
+draw paths.
+
+ShaderEffect exposes all named scalar/vector/matrix/array uniform setters, Texture2D/TextureCube/
+Texture3D bindings, world/view/projection properties and distinct renderer-present/program-valid
+queries. Source creation remains successful when a backend has no custom-shader renderer; callers
+inspect those queries instead of inferring compilation. Texture bindings require the same graphics
+device and retain the currently bound C resource per unit.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -96,3 +122,10 @@ pass Apply dispatch, nested annotation/pass views, both collection families, sta
 growth and collection destruction, exact strings and invalid/stale/wrong-kind/wrong-thread paths.
 The same strict-C source runs under HEADLESS and SDL_RENDERER and in a focused ASan+UBSan build;
 C17/C++23 assertions freeze all four handle widths.
+
+`EffectSmoke.c` covers the base adapter, EffectMaterial, ShaderEffect and SpriteEffect creation and
+same-type cloning, compiled-bytecode refusal, disposal and Apply, device/current-technique/pass
+validation, exact type/source strings, every shader uniform and matrix operation, renderer-state
+consistency, texture dispatch/retention and descendant lifetime after parent-handle destruction.
+It also covers invalid, stale, wrong-kind and wrong-thread calls under HEADLESS and SDL_RENDERER
+and in a focused ASan+UBSan build; C17/C++23 assertions freeze `CNA_EffectHandle`.
