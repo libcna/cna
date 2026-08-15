@@ -192,6 +192,40 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Sets the dielectric F0 colour factor. @param value The new colour factor. */
         CNAEXT void setSpecularColorFactorEXTProperty(const Vector3& value);
 
+        /** @brief Gets `KHR_materials_specular`'s scalar strength map (alpha channel, linear). */
+        CNAEXT [[nodiscard]] Texture2D* getSpecularMapEXTProperty() const;
+        /** @brief Sets the scalar specular-strength map. */
+        CNAEXT void setSpecularMapEXTProperty(Texture2D* value);
+        /** @brief Gives this effect shared ownership of its scalar specular-strength map. */
+        CNAEXT void SetOwnedSpecularMapEXT(std::shared_ptr<Texture2D> texture);
+        /** @brief Gets `KHR_materials_specular`'s colour map (RGB, sRGB by default). */
+        CNAEXT [[nodiscard]] Texture2D* getSpecularColorMapEXTProperty() const;
+        /** @brief Sets the specular-colour map. */
+        CNAEXT void setSpecularColorMapEXTProperty(Texture2D* value);
+        /** @brief Gives this effect shared ownership of its specular-colour map. */
+        CNAEXT void SetOwnedSpecularColorMapEXT(std::shared_ptr<Texture2D> texture);
+
+        /** @brief Gets the packed UV channel used by the scalar specular map. */
+        CNAEXT [[nodiscard]] int getSpecularTextureCoordinateSetEXTProperty() const;
+        /** @brief Selects packed UV channel 0 or 1 for the scalar specular map. */
+        CNAEXT void setSpecularTextureCoordinateSetEXTProperty(int set);
+        /** @brief Gets the packed UV channel used by the specular-colour map. */
+        CNAEXT [[nodiscard]] int getSpecularColorTextureCoordinateSetEXTProperty() const;
+        /** @brief Selects packed UV channel 0 or 1 for the specular-colour map. */
+        CNAEXT void setSpecularColorTextureCoordinateSetEXTProperty(int set);
+        /** @brief Gets the scalar specular map's independent UV transform. */
+        CNAEXT [[nodiscard]] TextureTransformEXT getSpecularTextureTransformEXTProperty() const;
+        /** @brief Sets the scalar specular map's independent UV transform. */
+        CNAEXT void setSpecularTextureTransformEXTProperty(const TextureTransformEXT& value);
+        /** @brief Gets the specular-colour map's independent UV transform. */
+        CNAEXT [[nodiscard]] TextureTransformEXT getSpecularColorTextureTransformEXTProperty() const;
+        /** @brief Sets the specular-colour map's independent UV transform. */
+        CNAEXT void setSpecularColorTextureTransformEXTProperty(const TextureTransformEXT& value);
+        /** @brief Whether specular-colour samples are sRGB encoded (true by default). */
+        CNAEXT [[nodiscard]] bool getSpecularColorTextureIsSrgbEXTProperty() const;
+        /** @brief Sets whether specular-colour samples require sRGB decoding. */
+        CNAEXT void setSpecularColorTextureIsSrgbEXTProperty(bool value);
+
         /** @brief Gets the emissive factor, multiplied with the emissive map's RGB. @return The emissive factor. */
         CNAEXT [[nodiscard]] Vector3 getEmissiveFactorProperty() const;
 
@@ -443,11 +477,15 @@ namespace Microsoft::Xna::Framework::Graphics
         Texture2D* metallicRoughnessMap_   = nullptr;
         Texture2D* emissiveMap_            = nullptr;
         Texture2D* occlusionMap_           = nullptr;
+        Texture2D* specularMapEXT_          = nullptr;
+        Texture2D* specularColorMapEXT_     = nullptr;
         std::shared_ptr<Texture2D> ownedTexture_;
         std::shared_ptr<Texture2D> ownedNormalMap_;
         std::shared_ptr<Texture2D> ownedMetallicRoughnessMap_;
         std::shared_ptr<Texture2D> ownedEmissiveMap_;
         std::shared_ptr<Texture2D> ownedOcclusionMap_;
+        std::shared_ptr<Texture2D> ownedSpecularMapEXT_;
+        std::shared_ptr<Texture2D> ownedSpecularColorMapEXT_;
 
         EffectParameter* diffuseColorParam_  = nullptr;
         EffectParameter* fogColorParam_      = nullptr;
@@ -462,9 +500,14 @@ namespace Microsoft::Xna::Framework::Graphics
         float occlusionStrength_ = 1.0f;
         bool baseColorTextureIsSrgb_ = true;
         bool emissiveTextureIsSrgb_  = true;
+        bool specularColorTextureIsSrgbEXT_ = true;
         bool encodeOutputToSrgb_     = true;
         std::array<int, 5> textureCoordinateSetsEXT_{};
         std::array<TextureTransformEXT, 5> textureTransformsEXT_{};
+        int specularTextureCoordinateSetEXT_ = 0;
+        int specularColorTextureCoordinateSetEXT_ = 0;
+        TextureTransformEXT specularTextureTransformEXT_{};
+        TextureTransformEXT specularColorTextureTransformEXT_{};
         Matrix world_      = Matrix::getIdentityProperty();
         Matrix view_       = Matrix::getIdentityProperty();
         Matrix projection_ = Matrix::getIdentityProperty();

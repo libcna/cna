@@ -5,6 +5,7 @@
 // See SkinnedPbrEffect.hpp's own doc comment for the design rationale.
 
 #include <gtest/gtest.h>
+#include <memory>
 #include <stdexcept>
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
@@ -191,6 +192,28 @@ TEST_F(SkinnedPbrEffectDefaultsTest, DielectricFresnelFactorsDefaultToCoreGltf)
     EXPECT_FLOAT_EQ(params.pbrDielectricF90, 1.0f);
 }
 
+TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsHaveNoOpDefaults)
+{
+    EXPECT_EQ(fx.getSpecularMapEXTProperty(), nullptr);
+    EXPECT_EQ(fx.getSpecularColorMapEXTProperty(), nullptr);
+    EXPECT_EQ(fx.getSpecularTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(fx.getSpecularColorTextureCoordinateSetEXTProperty(), 0);
+    EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), TextureTransformEXT{});
+    EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), TextureTransformEXT{});
+    EXPECT_TRUE(fx.getSpecularColorTextureIsSrgbEXTProperty());
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrSpecularMap, nullptr);
+    EXPECT_EQ(params.pbrSpecularColorMap, nullptr);
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask & 0b1100000u, 0u);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[0][0], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[1][1], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][0], 1.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][1], 1.0f);
+    EXPECT_TRUE(params.pbrSpecularColorTextureIsSrgb);
+}
+
 TEST_F(SkinnedPbrEffectDefaultsTest, EmissiveFactorDefaultsToZero)
 {
     EXPECT_EQ(fx.getEmissiveFactorProperty(), Vector3::Zero);
@@ -246,6 +269,50 @@ TEST_F(SkinnedPbrEffectDefaultsTest, IorAndSpecularFactorsRoundTripAndReachDrawP
     EXPECT_NEAR(params.pbrDielectricF0[2], 0.3f, 1e-7f)
         << "the colour product must clamp before specularFactor is applied";
     EXPECT_FLOAT_EQ(params.pbrDielectricF90, 0.3f);
+}
+
+TEST_F(SkinnedPbrEffectDefaultsTest, SpecularTextureInputsRoundTripAndReachDrawParams)
+{
+    auto strength = std::make_shared<Texture2D>(gd, 2, 2);
+    auto color = std::make_shared<Texture2D>(gd, 2, 2);
+    const TextureTransformEXT strengthTransform{
+        Vector2{0.25f, -0.5f}, Vector2{2.0f, 3.0f}, 1.5707963267948966f};
+    const TextureTransformEXT colorTransform{
+        Vector2{-0.75f, 0.5f}, Vector2{0.5f, 4.0f}, 0.0f};
+
+    fx.SetOwnedSpecularMapEXT(strength);
+    fx.SetOwnedSpecularColorMapEXT(color);
+    fx.setSpecularTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularColorTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularTextureTransformEXTProperty(strengthTransform);
+    fx.setSpecularColorTextureTransformEXTProperty(colorTransform);
+    fx.setSpecularColorTextureIsSrgbEXTProperty(false);
+
+    EXPECT_EQ(fx.getSpecularMapEXTProperty(), strength.get());
+    EXPECT_EQ(fx.getSpecularColorMapEXTProperty(), color.get());
+    EXPECT_EQ(fx.getSpecularTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(fx.getSpecularColorTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(fx.getSpecularTextureTransformEXTProperty(), strengthTransform);
+    EXPECT_EQ(fx.getSpecularColorTextureTransformEXTProperty(), colorTransform);
+    EXPECT_FALSE(fx.getSpecularColorTextureIsSrgbEXTProperty());
+    EXPECT_THROW(fx.setSpecularTextureCoordinateSetEXTProperty(-1), std::out_of_range);
+    EXPECT_THROW(fx.setSpecularColorTextureCoordinateSetEXTProperty(2), std::out_of_range);
+
+    GpuDrawParams params;
+    fx.FillGpuDrawParams(params);
+    EXPECT_EQ(params.pbrSpecularMap, &strength->GetRenderer());
+    EXPECT_EQ(params.pbrSpecularColorMap, &color->GetRenderer());
+    EXPECT_EQ(params.pbrTextureCoordinateSetMask & 0b1100000u, 0b1100000u);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[0][0], 0.0f, 1e-6f);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[0][1], -3.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[0][2], 0.25f);
+    EXPECT_NEAR(params.pbrSpecularTextureTransformRows[1][0], 2.0f, 1e-6f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[1][2], -0.5f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][0], 0.5f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[2][2], -0.75f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][1], 4.0f);
+    EXPECT_FLOAT_EQ(params.pbrSpecularTextureTransformRows[3][2], 0.5f);
+    EXPECT_FALSE(params.pbrSpecularColorTextureIsSrgb);
 }
 
 TEST_F(SkinnedPbrEffectDefaultsTest, SetEmissiveFactorRoundTrips)
@@ -386,6 +453,11 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     const TextureTransformEXT transform{
         Vector2{0.1f, 0.2f}, Vector2{0.3f, 0.4f}, -0.5f};
     fx.setTextureTransformEXTProperty(1, transform);
+    auto specularColor = std::make_shared<Texture2D>(gd, 2, 2);
+    fx.SetOwnedSpecularColorMapEXT(specularColor);
+    fx.setSpecularColorTextureCoordinateSetEXTProperty(1);
+    fx.setSpecularColorTextureTransformEXTProperty(transform);
+    fx.setSpecularColorTextureIsSrgbEXTProperty(false);
     std::vector<Matrix> bones(SkinnedPbrEffect::MaxBones, Matrix::getIdentityProperty());
     bones[1] = Matrix::CreateTranslation(Vector3(4, 5, 6));
     fx.SetBoneTransforms(bones);
@@ -401,6 +473,10 @@ TEST_F(SkinnedPbrEffectDefaultsTest, CloneCopiesMaterialAndBoneState)
     EXPECT_EQ(cloned->getTextureCoordinateSetsEXTProperty(),
               (std::array<int, 5>{0, 1, 0, 0, 0}));
     EXPECT_EQ(cloned->getTextureTransformsEXTProperty()[1], transform);
+    EXPECT_EQ(cloned->getSpecularColorMapEXTProperty(), specularColor.get());
+    EXPECT_EQ(cloned->getSpecularColorTextureCoordinateSetEXTProperty(), 1);
+    EXPECT_EQ(cloned->getSpecularColorTextureTransformEXTProperty(), transform);
+    EXPECT_FALSE(cloned->getSpecularColorTextureIsSrgbEXTProperty());
     const std::vector<Matrix> clonedBones = cloned->GetBoneTransforms(SkinnedPbrEffect::MaxBones);
     EXPECT_EQ(clonedBones[1], Matrix::CreateTranslation(Vector3(4, 5, 6)));
     delete cloned;

@@ -236,6 +236,66 @@ shader paths are compiler-verified, and the two specular texture inputs stay exp
 
 ---
 
+### 1.4b `KHR_materials_specular` texture inputs — `GLTF-344`
+
+**Problem.** Section 1.4a carries the extension's factors, but the optional `specularTexture`
+(linear alpha) and `specularColorTexture` (sRGB RGB) are still discarded. They may select different
+UV sets, transforms and samplers from each other and from every core PBR map. Folding either sample
+into a factor at import time would lose that per-fragment and per-map state.
+
+**Why not internal.** These are runtime shading inputs and non-glTF callers can construct both PBR
+effect classes directly. As with the five existing maps, the effect must own/clone the textures and
+carry their selectors and transforms into `GpuDrawParams`. The imported sampler state also has to
+remain inspectable on `ModelMeshPart`, where CNA already carries the five core PBR samplers.
+
+**Shape.** `PbrEffect` and `SkinnedPbrEffect` each gain the following CNAEXT members:
+
+```cpp
+Texture2D* getSpecularMapEXTProperty() const;
+void setSpecularMapEXTProperty(Texture2D* value);
+void SetOwnedSpecularMapEXT(std::shared_ptr<Texture2D> texture);
+Texture2D* getSpecularColorMapEXTProperty() const;
+void setSpecularColorMapEXTProperty(Texture2D* value);
+void SetOwnedSpecularColorMapEXT(std::shared_ptr<Texture2D> texture);
+
+int getSpecularTextureCoordinateSetEXTProperty() const;       // default 0
+void setSpecularTextureCoordinateSetEXTProperty(int set);     // 0 or 1
+int getSpecularColorTextureCoordinateSetEXTProperty() const;  // default 0
+void setSpecularColorTextureCoordinateSetEXTProperty(int set);// 0 or 1
+TextureTransformEXT getSpecularTextureTransformEXTProperty() const;
+void setSpecularTextureTransformEXTProperty(const TextureTransformEXT& value);
+TextureTransformEXT getSpecularColorTextureTransformEXTProperty() const;
+void setSpecularColorTextureTransformEXTProperty(const TextureTransformEXT& value);
+bool getSpecularColorTextureIsSrgbEXTProperty() const;        // default true
+void setSpecularColorTextureIsSrgbEXTProperty(bool value);
+```
+
+`ModelMeshPart` gains a separate two-entry `getSpecularSamplerStatesEXTProperty()` plus
+`setSpecularSamplerStateEXTProperty(int slot, ...)`, ordered scalar-strength then colour. Keeping
+these extension slots separate is deliberate: changing the return type of the existing public
+`std::array<...,5>` selector, transform or sampler getters would be an ABI and source break. The
+internal importer and draw block may use seven-slot storage because neither is public API.
+
+The scalar map is always linear and consumes alpha only. The colour map's default sRGB flag follows
+the glTF rule but remains configurable, matching the existing base-colour/emissive properties for
+non-glTF callers. Missing maps are multiplicative white and therefore preserve the factor-only
+result from §1.4a.
+
+**Compatibility.** Entirely additive. Null textures, UV0, identity transforms, linear scalar data
+and sRGB colour data are the defaults. Existing five-entry getters retain their exact signatures,
+ordering and values. Old `.cnj` files omit the new optional fields and produce those defaults.
+
+**Migration.** None. A caller interested in all glTF PBR slots reads the established five-entry
+properties and the two named specular properties; no existing index changes meaning.
+
+**Test.** Default/setter/ownership/clone tests cover both effect classes and assert draw slots 5/6,
+selector bits 5/6, the separate four affine extension rows and colour-space state. Import and direct/offline parity use
+independent texture views, UV selectors, transforms and samplers. Renderer source-policy tests pin
+both samples and their Khronos channel/colour-space equations, followed by an EasyGL pixel witness
+and the whole-corpus L7 policies.
+
+---
+
 ### 1.5 A home for rigid (non-joint) animation clips — `GLTF-294`
 
 **Problem.** `GLTF-293` imports rigid node animation correctly, but the clip has nowhere to be

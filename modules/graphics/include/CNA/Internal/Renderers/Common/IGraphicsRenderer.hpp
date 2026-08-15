@@ -1029,12 +1029,17 @@ namespace CNA::Internal::Renderers
         /// PbrEffect: occlusion map (R channel, 1=fully lit .. 0=fully occluded), or null
         /// (no occlusion darkening applied).
         const ITextureRenderer* pbrOcclusionMap = nullptr;
+        /// KHR_materials_specular scalar strength map; only alpha is meaningful and is linear.
+        const ITextureRenderer* pbrSpecularMap = nullptr;
+        /// KHR_materials_specular colour map; RGB is sRGB-encoded by default.
+        const ITextureRenderer* pbrSpecularColorMap = nullptr;
         /// plan_gltf.md GLTF-182/GLTF-183: bit i selects packed TextureCoordinate1 for PBR
-        /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion); a clear
+        /// texture slot i (base colour, normal, metallic-roughness, emissive, occlusion,
+        /// specular strength, specular colour); a clear
         /// bit selects TextureCoordinate0. The importer maps arbitrary glTF source TEXCOORD_n
         /// indices onto these two collision-free renderer channels before filling the effect.
         std::uint32_t pbrTextureCoordinateSetMask = 0;
-        /// plan_gltf.md GLTF-184: two affine rows per PBR map, in base-colour, normal,
+        /// plan_gltf.md GLTF-184: two affine rows per core PBR map, in base-colour, normal,
         /// metallic-roughness, emissive, occlusion order. For row vectors `r0` and `r1`, the
         /// transformed coordinate is `{dot(float3(uv,1),r0.xyz),
         /// dot(float3(uv,1),r1.xyz)}`. The fourth component is deterministic padding for native
@@ -1043,6 +1048,11 @@ namespace CNA::Internal::Renderers
             {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
             {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0},
             {1,0,0,0}, {0,1,0,0}};
+        /// GLTF-344: the same representation for specular strength then specular colour. Kept in
+        /// a separate additive block so existing native renderer structs that copy the ten core
+        /// rows by `sizeof(pbrTextureTransformRows)` retain their exact size and cannot overflow.
+        float pbrSpecularTextureTransformRows[4][4] = {
+            {1,0,0,0}, {0,1,0,0}, {1,0,0,0}, {0,1,0,0}};
         /// PbrEffect: metallic factor [0,1], multiplied with pbrMetallicRoughnessMap's B channel
         /// when bound (or used alone as a constant when it isn't).
         float pbrMetallicFactor = 1.0f;
@@ -1078,6 +1088,8 @@ namespace CNA::Internal::Renderers
         /// `pbrBaseColorTextureIsSrgb`. `emissiveColor` (the factor, possibly scaled above 1 by
         /// KHR_materials_emissive_strength) is linear and is not decoded.
         bool pbrEmissiveTextureIsSrgb = true;
+        /// KHR_materials_specular colour-map RGB follows glTF's sRGB encoding rule.
+        bool pbrSpecularColorTextureIsSrgb = true;
         /// plan_gltf.md GLTF-212: encode the fragment's RGB from linear back to sRGB before it
         /// reaches the framebuffer. Alpha is never encoded -- glTF §3.9.4 makes it coverage, not
         /// colour. Normal, occlusion and metallic-roughness maps carry no flag at all because
