@@ -150,6 +150,26 @@ jobs:
             fi
           done
           find cmake-build-wasm-multi -name "libcna_renderer_*.a" -printf "  %f\n" | sort
+
+          # The archives existing is necessary but not sufficient: a renderer is only SELECTABLE at
+          # run time if it has an entry in the generated registry. Assert the entry count, which is
+          # what CNA::GraphicsRendererSelection can actually reach.
+          #
+          # Match on "::GetDescriptor...()" rather than on renderer names: a family with a single
+          # public identity generates a bare GetDescriptor(), while a family serving several
+          # generates GetDescriptor<Identity>() (EasyGL -> GetDescriptorWebGL2). A pattern requiring
+          # the suffix silently counts only the multi-identity families -- it reported 1 of 4 here
+          # while the bundle was in fact correct.
+          registry=$(find cmake-build-wasm-multi -name "CnaRendererRegistry.generated.cpp" | head -1)
+          test -n "$registry" || { echo "generated registry not found" >&2; exit 1; }
+          registered=$(grep -cE "::GetDescriptor[A-Za-z0-9]*\(\)," "$registry" || true)
+          echo "registered renderers: ${registered}"
+          grep -oE "[A-Za-z]+::GetDescriptor[A-Za-z0-9]*\(\)" "$registry" | sort -u | sed "s/^/  /"
+          if [ "${registered}" -ne 4 ]; then
+            echo "expected 4 registered renderers, found ${registered}" >&2
+            exit 1
+          fi
+
           exit "$missing"
 
       - name: Archive the bundle on failure
