@@ -33,10 +33,10 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`; the public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`). TINYGL-19 cross-platform closure is still in progress:
-GitHub Actions run [31883910426](https://github.com/openeggbert/cna/actions/runs/31883910426)
-passes all 14/14 suites on Linux/GCC x86_64 and macOS/AppleClang arm64, while Windows/MSVC x86_64
-configures successfully but is currently blocked by a warnings-as-errors portability issue in the
-pinned `sharp-runtime`, before CNA or the TinyGL tests are compiled.
+Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, while Windows/MSVC
+x86_64 configures successfully and is still working through portability debt in the pinned
+`sharp-runtime`, before CNA or the TinyGL tests are compiled. Each cycle advances through a
+*different* error class, not a repeat of one: build step 37 → 55 → 91 of 596 so far.
 
 ## Implemented
 
@@ -171,7 +171,7 @@ them are refused one step earlier.
 | `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus (5 suites, 9 checks) | **DONE** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
-| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in run 31883910426; Windows reaches the build and then stops in `sharp-runtime` `TimeSpan.cpp` on MSVC C4996 |
+| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in every run; Windows is at build step 91/596, still inside `sharp-runtime` |
 
 ## Continuation handoff (2026-08-15)
 
@@ -182,9 +182,9 @@ portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract 
 ### Repositories and pushed heads
 
 - CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
-  `2b8b568803baf0045a7a9e79d882c981b0b9992c` (`origin/next`).
+  `9ad2194d9` plus the commit carrying this plan update and the pin below.
 - SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`, pushed
-  head `74a8fe5ad32c60af3365f4ee40d6afd31229866f`. The user explicitly authorized direct pushes to
+  head `498a130460768312c4ce72aa153253254aa25d22`. The user explicitly authorized direct pushes to
   `sharp-runtime/develop` for this work.
 - `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
   SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`; do not replace either pin with a moving branch.
@@ -216,17 +216,35 @@ portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract 
   `scripts/run_component_tests.sh build`: 16,341/16,341 checks passed across 37 executables before
   it was pushed to `develop`.
 
-### Latest CI evidence and exact blocker
+### Windows portability cycles completed on 2026-08-15
 
-Run [31883910426](https://github.com/openeggbert/cna/actions/runs/31883910426) was triggered by CNA
-commit `2b8b56880`:
+Each row is one CI cycle: a SharpRuntime fix verified locally at 16,341→16,344 checks across 37
+executables, pushed to `develop`, then pinned by its full SHA in the workflow.
 
-- Linux/GCC x86_64 job `95010287108`: configure and build pass; 14/14 TinyGL tests pass.
-- macOS/AppleClang arm64 job `95010287118`: configure and build pass; 14/14 TinyGL tests pass.
-- Windows/MSVC x86_64 job `95010287020`: configure passes; build stops at step 37/596 in
-  `sharp-runtime/modules/core/src/System/TimeSpan.cpp`. Lines 494 and 497 call `sscanf`; MSVC emits
-  C4996, and SharpRuntime correctly treats `/W4` warnings as errors with `/WX`. No TinyGL test is
-  reached in this job.
+| SharpRuntime | What MSVC rejected | Fix |
+|---|---|---|
+| `3ad2dd90` | `TimeSpan.cpp` C4996, deprecated `std::sscanf` (step 37/596) | `sscanf_s` on MSVC only |
+| `4df333e6` | `Calendar.hpp` C4244 (step 55/596), plus three more found locally | see below |
+| `707a5b9b` | `IdnMapping.cpp` C2015, UTF-8 `char32_t` literals read in the host code page | MSVC compiles with `/utf-8` |
+| `498a1304` | `FileSystemInfo.cpp` C2039/C3861, `file_clock::to_sys`/`from_sys` absent (step 91/596) | `requires`-detected direct members, `std::chrono::clock_cast` otherwise |
+
+Matching CNA pin commits: `1faefcd4b`, `3d5303410`, `9ad2194d9`, and the commit carrying this
+update. Linux/GCC x86_64 and macOS/AppleClang arm64 passed 14/14 in every one of these runs.
+
+The `4df333e6` cycle bundled four fixes because they were found *without* CI: compiling all 217
+SharpRuntime translation units with `clang++ -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion
+-Wshadow -Wshadow-all` approximates the `/W4` diagnostics GCC never emits. Reuse that technique
+before pushing — it turns four ~7-minute CI cycles into one. The whole repository yielded exactly
+one further narrowing (`String.cpp` `setw`) and one shadow (`XmlNode.cpp` C4456) beyond the
+`Calendar.hpp` C4244, and the census would have caught that C4244 too. `Calendar::AddMilliseconds`
+was a real defect, not compiler noise: a `double` amount above int range (2^31 ms ≈ 24.9 days) was
+narrowed and applied as a wrapped offset. It now follows .NET's `Calendar.Add` and has tests.
+
+Two scope facts worth keeping. The CI job compiles nearly every SharpRuntime module — `xml` and
+`net-http-headers` included, confirmed from a successful Linux job's own log — so a fix there is
+on the Windows path even though CNA does not name those components. And `-Wshadow-field` hits
+(a derived member hiding a base member) are *not* an MSVC `/W4` class; only `-Wshadow` proper maps
+to C4456.
 
 The Node.js 20 action-deprecation annotation and the macOS Homebrew untrusted-tap message are
 non-blocking runner warnings; both successful platform jobs prove they are unrelated to TINYGL-19.
@@ -235,23 +253,27 @@ permission. A pushed change to the watched workflow/source paths starts the matr
 
 ### Work remaining
 
-1. Fix the two MSVC `sscanf` C4996 diagnostics in SharpRuntime `TimeSpan.cpp` without weakening
-   `/WX`, without globally disabling secure-CRT diagnostics, and without changing .NET parsing
-   behavior. Add or extend focused tests if the implementation changes observable behavior.
+1. Watch the run triggered by the pin of SharpRuntime `498a1304`. If MSVC exposes the next
+   portability error, repeat the cycle: focused fix, no weakened warnings, no `develop` pin.
 2. In SharpRuntime, build with at most two jobs, run the relevant focused tests, then run the full
-   build and `scripts/run_component_tests.sh build`. Require zero warnings and all 16,341+ checks.
+   build and `scripts/run_component_tests.sh build`. Require zero warnings and all 16,344+ checks.
    Commit only the relevant files and push the completed fix to `develop`.
 3. Pin the new full 40-character SharpRuntime commit SHA in
    `.github/workflows/tinygl-cross-platform-ci.yml`, validate the YAML, commit it as TINYGL-19 and
    push CNA `next`. Watch the automatically triggered matrix.
-4. If MSVC exposes the next SharpRuntime portability error, repeat the same focused-fix, full-test,
-   push and immutable-pin cycle. Do not hide warnings or replace the pin with `develop`.
+4. Windows has not compiled a single CNA translation unit yet — the whole matrix so far has been
+   SharpRuntime. Expect a second wave once step ~250/596 is passed. CNA targets do not set
+   `/W4 /WX`, so only hard errors matter there; a libc++ syntax-only pass over the CI-built CNA
+   modules (`core`, `math`, `platform`, `graphics`, `runtime`, `renderers/tinygl`) already found
+   none, the only two hits being `Sdl2Window.cpp`, which this configuration does not build.
 5. When all three jobs build and pass 14/14, update this Status and the TINYGL-19 task to **DONE**,
    and update `docs/tinygl-renderer.md` so it records native Linux x86_64, macOS arm64 and Windows
    x86_64 verification instead of a Linux-only limitation. Link the final green Actions run.
-6. Before the final documentation commit, locally rebuild target `CNA`, run all 14 TinyGL suites,
-   run a no-OpenMP build/test pass, and run `python3 scripts/check_renderer_identities.py`. Report
-   changed files, no new stubs or dependencies, intentional TinyGL limitations, and all results.
+6. Step 6's local evidence is already collected against SharpRuntime `498a1304` and does not need
+   repeating unless CNA sources change: 14/14 TinyGL suites pass; the no-OpenMP pass
+   (`cmake -S . -B cmake-build-tinygl -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON`, rebuild, test,
+   then reconfigure with `=OFF` to restore) passes 14/14 with zero `GOMP_*`/`omp_*` references in
+   `libtinygl-static.a`; `python3 scripts/check_renderer_identities.py` reports 47 identities.
 
 Keep the current capability boundary: "maximum" here means every XNA-facing operation that the
 fixed-function TinyGL rasterizer can implement faithfully, plus deterministic rejection of
