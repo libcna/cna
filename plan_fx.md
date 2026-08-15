@@ -105,11 +105,11 @@ tests; configuring the same checkout again confirmed that patch application is i
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
-- the pixel/state half of the FNA oracle (`FX-005`) and a compiler-produced fixture (`FX-004`).
-  The reflection half of the oracle now exists and passes: `mono` was installed on 2026-08-15, and
-  `tools/fna-reference --effects` runs FNA's own reflection over the six stock binaries into
-  checked-in test data that a CNA test compares against subtree by subtree. What is still missing
-  is FNA-produced pixels and state observations, and a fixture produced by a real Effect compiler;
+- the pixel/state half of the FNA oracle (`FX-005`). Its reflection half now exists and passes,
+  and `FX-004`'s compiler-produced fixture is committed and covered: `mono` and the June 2010
+  DirectX SDK's `fxc` were made available on 2026-08-15, so CNA now has both a source it controls
+  compiled by the compiler XNA used, and FNA's own reflection of every committed binary as
+  checked-in test data. What is still missing is FNA-produced pixels and state observations;
 - a fuzz gate that runs dry on every driver (`FX-051`). Eighteen crash classes are fixed in the
   managed MojoShader patch and the campaign is clean on FNA3D's OpenGL driver; the SDL_GPU
   driver's SPIR-V emitter still asserts on hostile shader bytecode;
@@ -437,8 +437,8 @@ must be accepted before a row can close.
 | FX-001 | Freeze the v1 format boundary: XNA/FNA Effect Framework bytecode only; document MGFX and source `.fx` exclusions | - | Public docs and tests use unambiguous terminology |
 | FX-002 | Record the FNA `Effect`, `EffectPass`, reflection, state translation, clone, and `EffectReader` behavior as the compatibility oracle | FX-001 | Reviewable mapping from every CNA behavior to FNA/XNA semantics |
 | FX-003 | Inventory the six existing `.fxb` fixtures and preserve provenance, hashes, upstream revision, and license | FX-001 | CI verifies fixture hashes and provenance is auditable |
-| FX-004 | Create a purpose-built conformance `.fx` source and committed `.fxb` covering techniques, passes, defaults, arrays, structures, annotations, textures, samplers, and states | FX-002 | Source, compiler identity/version/hash, reproduction instructions, and legal provenance are committed |
-| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | **Reflection half done.** `tools/fna-reference --effects` runs FNA's own `Effect.INTERNAL_parseEffectStruct` over the six stock binaries and writes `tests/fixtures/compiled-effects/fna-effect-reflection.json`; `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's reflection against it subtree by subtree and passes. Deterministic pixel/state observations from FNA are still to come |
+| FX-004 | Create a purpose-built conformance `.fx` source and committed `.fxb` covering techniques, passes, defaults, arrays, structures, annotations, textures, samplers, and states | FX-002 | **Done.** `modules/renderers/fna3d/effects/CnaConformanceEffect.fx` and its `.fxb`, compiled with `fxc` 9.29.952.3111 from the June 2010 DirectX SDK at profile `fx_2_0` -- the compiler XNA's own Content Pipeline used. Compiler identity, SDK hash, origin URL, output hash, reproduction commands and legal provenance are in that directory's README |
+| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | **Reflection half done.** `tools/fna-reference --effects` runs FNA's own `Effect.INTERNAL_parseEffectStruct` over all seven committed binaries -- the six stock ones and CNA's compiler-produced conformance fixture -- and writes `tests/fixtures/compiled-effects/fna-effect-reflection.json`; `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's reflection against it subtree by subtree and passes. Deterministic pixel/state observations from FNA are still to come |
 | FX-006 | Add format sniffing tests for empty, random, truncated, valid FX bytecode, and MGFX | FX-001, FX-003 | Each category yields a stable, specific result |
 
 ### Phase B - Common compiled-effect architecture

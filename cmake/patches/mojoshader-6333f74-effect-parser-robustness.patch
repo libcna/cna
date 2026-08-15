@@ -106,7 +106,7 @@ index 486d7e0..7508971 100644
  
              operand->index = item;
 diff --git a/mojoshader_effects.c b/mojoshader_effects.c
-index 036f18d..e785971 100644
+index 036f18d..aa7acb3 100644
 --- a/mojoshader_effects.c
 +++ b/mojoshader_effects.c
 @@ -16,10 +16,21 @@
@@ -666,7 +666,33 @@ index 036f18d..e785971 100644
  
      /* Copy errors */
      siz = sizeof (MOJOSHADER_error) * effect->error_count;
-@@ -1734,22 +1863,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
+@@ -1587,13 +1716,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+             if (clone->objects[i].shader.samplers == NULL)
+                 goto cloneEffect_outOfMemory;
+             curSampler = 0;
++            // A shader object whose program failed to compile has no parse data, and the symbol
++            // and parameter tables it indexes are both sized by the file being cloned. -CNA
++            if ((pd == NULL) || (clone->objects[i].shader.params == NULL))
++                continue;
+             for (j = 0; j < pd->symbol_count; j++)
+                 if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
+                 {
+-                    clone->objects[i].shader.samplers[curSampler].sampler_name = clone->params[clone->objects[i].shader.params[j]].value.name;
++                    uint32 par;
++                    if (curSampler >= clone->objects[i].shader.sampler_count) break;
++                    if (j >= (int) clone->objects[i].shader.param_count) break;
++                    par = clone->objects[i].shader.params[j];
++                    if (par >= (uint32) clone->param_count) break;
++                    clone->objects[i].shader.samplers[curSampler].sampler_name = clone->params[par].value.name;
+                     clone->objects[i].shader.samplers[curSampler].sampler_register = pd->symbols[j].register_index;
+-                    clone->objects[i].shader.samplers[curSampler].sampler_state_count = clone->params[clone->objects[i].shader.params[j]].value.value_count;
+-                    clone->objects[i].shader.samplers[curSampler].sampler_states = clone->params[clone->objects[i].shader.params[j]].value.valuesSS;
++                    clone->objects[i].shader.samplers[curSampler].sampler_state_count = clone->params[par].value.value_count;
++                    clone->objects[i].shader.samplers[curSampler].sampler_states = clone->params[par].value.valuesSS;
+                     curSampler++;
+                 } // if
+         } // if
+@@ -1734,22 +1872,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
      for (i = 0; i < curPass->state_count; i++)
      {
          state = &curPass->states[i];
@@ -722,7 +748,7 @@ index 036f18d..e785971 100644
      } // for
  
      effect->state_changes->render_state_changes = curPass->states;
-@@ -1787,7 +1936,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1787,7 +1945,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
                                         unsigned int *param_loc,
                                         MOJOSHADER_symbol *symbols,
                                         unsigned int symbol_count,
@@ -734,7 +760,7 @@ index 036f18d..e785971 100644
  {
      int i, j, r, c;
  
-@@ -1800,45 +1952,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1800,45 +1961,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
          // float/int registers are vec4, so they have 4 elements each
          const uint32 start = sym->register_index << 2;
  
@@ -830,7 +856,7 @@ index 036f18d..e785971 100644
          } // else if
      } // for
  } // copy_parameter_data
-@@ -1856,6 +2047,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1856,6 +2056,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
      float selector;
      int shader_object;
      int selector_ran = 0;
@@ -838,7 +864,7 @@ index 036f18d..e785971 100644
  
      float *vs_reg_file_f, *ps_reg_file_f;
      int *vs_reg_file_i, *ps_reg_file_i;
-@@ -1866,27 +2058,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1866,27 +2067,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
       * -flibit
       */
      // !!! FIXME: We're just running the preshaders every time. Blech. -flibit
@@ -925,7 +951,7 @@ index 036f18d..e785971 100644
      if (selector_ran)
      {
          effect->ctx.bindShaders(effect->ctx.shaderContext,
-@@ -1921,7 +2160,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1921,7 +2169,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                  pd->symbol_count, \
                                  stage##_reg_file_f, \
                                  stage##_reg_file_i, \
@@ -937,7 +963,7 @@ index 036f18d..e785971 100644
              if (pd->preshader) \
              { \
                  copy_parameter_data(effect->params, raw->preshader_params, \
-@@ -1929,8 +2171,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1929,8 +2180,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                      pd->preshader->symbol_count, \
                                      pd->preshader->registers, \
                                      NULL, \

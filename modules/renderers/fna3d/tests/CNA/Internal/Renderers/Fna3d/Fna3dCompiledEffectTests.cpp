@@ -552,6 +552,59 @@ TEST(Fna3dCompiledEffectTest, StockFixtureReflectionMatchesTheFnaOracle)
     }
 }
 
+// plan_fx.md FX-004: the same states, but declared in HLSL and compiled by the Effect compiler
+// XNA itself used, rather than assembled byte by byte by CNA. This is the case a synthetic
+// fixture cannot cover: it proves CNA reads what a real compiler writes, including the sampler
+// states and pass render states it chooses to emit.
+TEST(Fna3dCompiledEffectTest, CompilerProducedFixtureAppliesItsStatesAndSamplers)
+{
+    using namespace Microsoft::Xna::Framework;
+    using namespace Microsoft::Xna::Framework::Graphics;
+
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    const auto bytes = LoadStockEffect("CnaConformanceEffect.fxb");
+    ASSERT_FALSE(bytes.empty()) << "the compiler-produced conformance fixture is missing";
+    Effect effect(device, bytes);
+
+    auto& parameters = effect.getParametersProperty();
+    ASSERT_NE(parameters["FxTexture"], nullptr);
+    Texture2D texture(device, 2, 2);
+    const Color pixels[4] = {Color::Red, Color::Red, Color::Red, Color::Red};
+    texture.SetData(pixels, 4);
+    parameters["FxTexture"]->SetValue(&texture);
+
+    auto* technique = effect.getTechniquesProperty()["FirstTechnique"];
+    ASSERT_NE(technique, nullptr);
+    ASSERT_EQ(technique->getPassesProperty().getCountProperty(), 2);
+    effect.setCurrentTechniqueProperty(technique);
+
+    // P0 binds the pixel shader that actually samples FxSampler, so this is the pass whose
+    // sampler register the Effect Framework reports -- the states below travel with the shader
+    // that uses the sampler, not with the effect as a whole.
+    technique->getPassesProperty()[0].Apply();
+    const SamplerState& sampler = device.getSamplerStatesProperty()[0];
+    EXPECT_EQ(sampler.getFilterProperty(), TextureFilter::MinPointMagLinearMipPoint);
+    EXPECT_EQ(sampler.getAddressUProperty(), TextureAddressMode::Mirror);
+    EXPECT_EQ(sampler.getAddressVProperty(), TextureAddressMode::Clamp);
+    EXPECT_EQ(sampler.getMaxAnisotropyProperty(), 8);
+    EXPECT_EQ(device.getTexturesProperty()[0], &texture);
+
+    technique->getPassesProperty()[1].Apply();
+
+    // The render states the source declares on StatePass.
+    const DepthStencilState& depth = device.getDepthStencilStateProperty();
+    EXPECT_FALSE(depth.getDepthBufferEnableProperty());
+    EXPECT_FALSE(depth.getDepthBufferWriteEnableProperty());
+    EXPECT_EQ(device.getRasterizerStateProperty().getCullModeProperty(), CullMode::None);
+    const BlendState& blend = device.getBlendStateProperty();
+    EXPECT_EQ(blend.getColorSourceBlendProperty(), Blend::SourceAlpha);
+    EXPECT_EQ(blend.getColorDestinationBlendProperty(), Blend::InverseSourceAlpha);
+    EXPECT_EQ(blend.getColorBlendFunctionProperty(), BlendFunction::Add);
+}
+
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
     GraphicsDevice device;
