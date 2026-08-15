@@ -783,7 +783,7 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-6 | ⬜ | Convert class (a) — batch 3: vertex-layout/declaration suites. |
 | RTR-P9-7 | ⬜ | Convert class (a) — batch 4: render-target/readback suites. |
 | RTR-P9-8 | ⬜ | Convert class (a) — batch 5: SpriteBatch/2D suites. |
-| RTR-P9-9 | ⬜ | Class (b) sites keep `#ifdef`, but on the family's **private** define, so a multi build compiles them for each family that is present. |
+| RTR-P9-9 | ✅ | Class (b) sites keep `#ifdef`, but on the family's **private** define, so a multi build compiles them for each family that is present. |
 | RTR-P9-10 | ⬜ | Delete class (c). |
 | RTR-P9-11 | ✅ | Same audit and conversion for the 16 `modules/content/tests` sites. |
 | RTR-P9-12 | ✅ | Audit the 557 `modules/graphics/examples` sites. Examples differ from tests: many are renderer-specific *demonstrations* and should stay compile-time. Publish the split. |

@@ -18,7 +18,11 @@
 // the under-read that corrupts the last block row.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_FNA3D)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.
+#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_PRESENT_FNA3D)
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
@@ -111,4 +115,4 @@ TEST(Fna3dSurfaceFormatTests, NonPositiveExtentsCountZeroRatherThanNegative)
     EXPECT_EQ(FormatRowByteCount(Ordinal(SurfaceFormat::Dxt5), 0), 0);
 }
 
-#endif // CNA_RENDERER_FNA3D
+#endif // CNA_RENDERER_FNA3D / CNA_RENDERER_PRESENT_FNA3D

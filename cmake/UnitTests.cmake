@@ -221,6 +221,33 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
     )
 
+    # plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
+    # COMPILED INTO THIS BUILD, on the test executable only.
+    #
+    # A renderer's own test suite guards its body on `#if defined(CNA_RENDERER_<X>)`, and only the
+    # DEFAULT renderer's macro is defined project-wide (that is what keeps every other renderer-gated
+    # test in the corpus unambiguous). So in a multi-renderer build those files compiled to nothing:
+    # the sources were there, the tests were not. Keeping their sources without this define was the
+    # empty half of the fix.
+    #
+    # PRESENT_ says "compiled in", never "selected", so it cannot be confused with the identity
+    # macros and does not disturb the exactly-one invariant GraphicsRendererCompileDefinitionTests
+    # asserts.
+    foreach(_cna_present_identity IN LISTS CNA_RENDERER_IDENTITIES)
+        target_compile_definitions(CnaTests PRIVATE "CNA_RENDERER_PRESENT_${_cna_present_identity}")
+    endforeach()
+
+    # ...and each compiled-in renderer's own public include root, for the same reason: those suites
+    # include their renderer's headers ("CNA/Internal/Renderers/Magnum/MagnumBuffers.hpp"), and only
+    # the DEFAULT renderer's target contributes its include directory to this executable. Enabling
+    # the define without the include root just moves the failure from "no tests" to "no such file".
+    foreach(_cna_present_dir IN LISTS CNA_RENDERER_DIRS)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
+            target_include_directories(CnaTests PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
+        endif()
+    endforeach()
+
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.

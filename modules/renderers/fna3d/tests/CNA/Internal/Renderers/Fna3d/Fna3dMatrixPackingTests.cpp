@@ -14,7 +14,11 @@
 // arithmetic so it cannot regress without a red unit test rather than a red image.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_FNA3D)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_FNA3D is defined project-wide.
+#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_PRESENT_FNA3D)
 #include "CNA/Internal/Renderers/Fna3d/Fna3dStockEffects.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 
@@ -117,4 +121,4 @@ TEST(Fna3dMatrixPackingTests, PackingIsIndependentPerMatrixInAnArray)
     EXPECT_FLOAT_EQ(packed[12 + 7], 2.0f);  // second bone's M42
 }
 
-#endif // CNA_RENDERER_FNA3D
+#endif // CNA_RENDERER_FNA3D / CNA_RENDERER_PRESENT_FNA3D

@@ -167,7 +167,11 @@ macro is private to that family's target. This keeps the compile-time accessors
 they all describe the **default**. Making the test corpus itself renderer-agnostic is a separate
 piece of work (`plan_runtimerenderer.md` phase P9).
 
-`CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in.
+`CNA_MULTI_RENDERER` is defined when more than one renderer is compiled in, and
+`CNA_RENDERER_PRESENT_<IDENTITY>` is defined on the test executable for **every** compiled-in
+renderer. The distinction matters: `CNA_RENDERER_<IDENTITY>` means "is the default", while
+`CNA_RENDERER_PRESENT_<IDENTITY>` means "is compiled in". A renderer's own device-free test suite
+guards on the latter, so it runs whenever that renderer is present.
 
 ### Which accessor answers which question
 

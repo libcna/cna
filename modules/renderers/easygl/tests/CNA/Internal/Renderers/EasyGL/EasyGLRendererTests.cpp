@@ -9,7 +9,11 @@
 // so no extra test-only seam is needed to reproduce the exact throwing path.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_EASYGL)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_EASYGL is defined project-wide.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_EASYGL)
 #include <SDL3/SDL.h>
 #include <stdexcept>
 
