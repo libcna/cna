@@ -32,11 +32,14 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 **The renderer implementation and post-implementation contract audit are delivered.** The local
 Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`; the public renderer identity count is **47**
-(`scripts/check_renderer_identities.py`). TINYGL-19 cross-platform closure is still in progress:
-Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, while Windows/MSVC
-x86_64 configures successfully and is still working through portability debt in the pinned
-`sharp-runtime`, before CNA or the TinyGL tests are compiled. Each cycle advances through a
-*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 → 168 → 257 → 329 → 571 of 596 so far. All of `sharp-runtime`, all of TinyGL and all of CNA now compile on MSVC; the remaining failures are at the link stage.
+(`scripts/check_renderer_identities.py`). TINYGL-19 cross-platform closure is nearly complete:
+Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, and Windows/MSVC
+x86_64 now **configures, compiles and links completely** — all 596 build steps — after eleven fix
+cycles that each cleared a *different* error class rather than repeating one (build step
+37 → 55 → 91 → 154 → 168 → 257 → 329 → 571 → 596). The one remaining Windows problem is that the
+suites do not yet run there: they timed out with no output because the SDL DLLs were not beside
+the executables. That fix is pushed and awaiting its run. Not one blocker so far has been a TinyGL
+rendering-contract failure.
 
 ## Implemented
 
@@ -171,180 +174,184 @@ them are refused one step earlier.
 | `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus (5 suites, 9 checks) | **DONE** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
-| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in every run; Windows is at build step 91/596, still inside `sharp-runtime` |
+| `TINYGL-19` | Native GCC/Linux x86_64, AppleClang/macOS arm64 and MSVC/Windows x86_64 verification | **IN PROGRESS** — Linux and macOS pass 14/14 in every run; Windows configures, compiles and links all 596 steps, and the suites' first run there is pending |
 
-## Continuation handoff (2026-08-15)
+## Continuation handoff (2026-08-15, written for a fresh context)
 
-The renderer audit and feature work are complete. The remaining work is to finish the Windows leg
-of TINYGL-19, then record the final three-platform evidence. Cross-platform CI has so far exposed
-portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract failure.
+The renderer, its audit and its capability work are **complete and unchanged by any of the work
+below**. Everything since is TINYGL-19: proving the same 14 suites build and pass on native
+Linux/GCC x86_64, macOS/AppleClang arm64 and Windows/MSVC x86_64. Nothing CI has exposed so far
+was a TinyGL rendering-contract failure — every single blocker was portability debt in the shared
+`sharp-runtime`, in upstream TinyGL's own build, or in CNA's build wiring.
 
-### Repositories and pushed heads
+### Where this stands right now
+
+Linux and macOS have passed 14/14 in every run all day. Windows now **configures, compiles and
+links completely** — all 596 build steps — after eleven fix cycles. The last remaining problem is
+that the tests do not yet *run* there.
+
+| Windows stage | State |
+|---|---|
+| Configure | passes |
+| Compile `sharp-runtime` (~250 steps) | passes |
+| Compile upstream TinyGL C sources | passes |
+| Compile CNA (~300 steps) | passes |
+| Link all 15 test executables | passes |
+| **Run the 14 suites** | **all timed out at 30 s with no output; fix pushed, unverified** |
+
+The final failing evidence is run
+[31892934349](https://github.com/openeggbert/cna/actions/runs/31892934349): every suite
+`***Timeout 30.00 sec`, not one gtest banner printed. That is not a test failure — the process
+never reached `main()`. SDL3 is built as DLLs on Windows and installed to
+`.sdl-prebuilt-Windows-AMD64/install/bin`, the test executables link `SDL3::SDL3`, and Windows
+resolves DLLs from the executable's own directory with no RPATH, so the loader killed each process
+before entry and the runner sat on it until ctest timed it out. CNA commit `a9017a01b` copies
+those DLLs next to the executables at configure time; **its CI run is the thing to check first.**
+
+### Repositories, heads and pins
 
 - CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
-  `b7a9cb532` plus the commit carrying this plan update.
+  `a9017a01b` plus whatever commit carries this plan update.
 - SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`. The
-  user explicitly authorized direct pushes to `sharp-runtime/develop` for this work. The last
+  user explicitly authorised direct pushes to `sharp-runtime/develop` for this work. The last
   commit made for TINYGL-19 is `f23ded28c7b94a745cf82f8804b5b7104ca5780e`, **and that is what the
-  workflow pins** -- deliberately, not because the pin is stale. A concurrent session has since
+  workflow pins** — deliberately, not because the pin is stale. A concurrent session has since
   advanced `develop` to `7a46a538` with 316 files of unrelated XML/IO work (its test floor is
-  17,057 across 38 executables, not the 16,344 this task verified against). The Windows job is now
-  *past* sharp-runtime entirely, so advancing the pin would re-open ~250 build steps of brand-new,
-  MSVC-unverified code in the middle of closing this task. Do not advance it to pick up unrelated
-  work; if a further SharpRuntime fix does turn out to be needed, that new content comes along with
-  it and has to be re-verified on all three platforms.
+  17,057 across 38 executables, not the 16,344 this task verified against). Windows is now past
+  sharp-runtime entirely, so advancing the pin would re-open ~250 build steps of brand-new,
+  MSVC-unverified code while this task is being closed. Do not advance it to pick up unrelated
+  work; if a further SharpRuntime fix does prove necessary, that content comes along with it and
+  has to be re-verified on all three platforms.
 - `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
-  SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`; do not replace either pin with a moving branch.
-- Both worktrees were clean at this handoff before this plan update.
+  SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`. Never replace either with a moving branch.
+- Local build directory `cmake-build-tinygl/` is configured and warm; local sharp-runtime builds
+  use its `build/` directory with at most two jobs.
 
-### Completed TinyGL audit and capability work
+### What TINYGL-19 has fixed, in order
 
-- `d5fdb2354` — TINYGL-20: explicit effect identity, vertex-alpha cutout, depth-clear validation and
-  transactional overflow-safe resize.
-- `433b7b667` — TINYGL-21: optional OpenMP with a complete single-threaded fallback.
-- `c21eb51e2` — TINYGL-22: all topology/draw routes, 32-bit indices and analytical
-  perspective-correct texture mapping coverage.
-- `f8497971d`, `75d7538a7`, `6c163c437` — fixed-function layouts, complete supported BasicEffect
-  lighting and five shared golden-image suites.
-- Local TinyGL result: 14/14 suites, 113 checks, no skips. Golden-image subset: 5/5 suites and nine
-  checks. Renderer identity validator: 47 identities.
+Each row is one CI cycle. SharpRuntime rows were verified locally (full build, then
+`scripts/run_component_tests.sh build`, 16,341→16,344 checks across 37 executables) before being
+pushed to `develop` and pinned by full SHA.
 
-### Completed cross-platform infrastructure and SharpRuntime fixes
-
-- CNA commits `2addbf912`, `37fccdec6`, `a51771dfd`, `d14aa68bd` and `a21d48f38` add the native
-  GCC/AppleClang/MSVC matrix, propagate Ninja into vendored builds, locate the MSVC SDL package,
-  watch SDL bootstrap changes and provision Windows zlib.
-- CNA commits `951b42f3c`, `d4ae8398b`, `fec882983` and `2b8b56880` advance the workflow's immutable
-  SharpRuntime pin after verified portability fixes.
-- SharpRuntime commits `3c5d74cb`, `7cf5d1e5`, `ca82a055`, `52c0e103` and `74a8fe5a` fix macOS
-  process-environment access, safe MSVC environment reads, portable floating-point bit casts,
-  unreachable conversion returns and Windows environment API macro collisions.
-- Every listed SharpRuntime change was built locally with at most two jobs and followed by
-  `scripts/run_component_tests.sh build`: 16,341/16,341 checks passed across 37 executables before
-  it was pushed to `develop`.
-
-### Windows portability cycles completed on 2026-08-15
-
-Each row is one CI cycle: a SharpRuntime fix verified locally at 16,341→16,344 checks across 37
-executables, pushed to `develop`, then pinned by its full SHA in the workflow.
-
-| SharpRuntime | What MSVC rejected | Fix |
+| Where | What Windows rejected | Fix |
 |---|---|---|
-| `3ad2dd90` | `TimeSpan.cpp` C4996, deprecated `std::sscanf` (step 37/596) | `sscanf_s` on MSVC only |
-| `4df333e6` | `Calendar.hpp` C4244 (step 55/596), plus three more found locally | see below |
-| `707a5b9b` | `IdnMapping.cpp` C2015, UTF-8 `char32_t` literals read in the host code page | MSVC compiles with `/utf-8` |
-| `498a1304` | `FileSystemInfo.cpp` C2039/C3861, `file_clock::to_sys`/`from_sys` absent (step 91/596) | *superseded — see below* |
-| `391563f1` | the above fix broke the green macOS job | preprocessor split on `_MSVC_STL_VERSION` |
-| `062b9286` | `Socket.cpp`/`TcpClient.cpp` C2589/C4003, `windows.h` `min`/`max` macros (step 154/596) | `NOMINMAX`, plus two Winsock narrowings CI had not yet reached |
-| `f23ded28` | `HttpDateParser.hpp` C4477, `sscanf_s` size passed as `size_t` (step 168/596) | narrowed to `unsigned`, the type the UCRT reads back |
-| *(CNA-side)* | upstream TinyGL `clip.c` C7660, `#pragma omp simd` needs OpenMP 4.0 (step 257/596) | MSVC takes the single-threaded TinyGL path |
+| SR `3ad2dd90` | `TimeSpan.cpp` C4996, deprecated `std::sscanf` (step 37/596) | `sscanf_s` on MSVC only |
+| SR `4df333e6` | `Calendar.hpp` C4244 (step 55/596) + three more found locally | see the census note below |
+| SR `707a5b9b` | `IdnMapping.cpp` C2015, UTF-8 `char32_t` literals read in the host code page | compile with `/utf-8` |
+| SR `498a1304` | `FileSystemInfo.cpp` C2039/C3861, no `file_clock::to_sys`/`from_sys` (step 91/596) | *superseded, see below* |
+| SR `391563f1` | the fix above broke the previously green macOS job | preprocessor split on `_MSVC_STL_VERSION` |
+| SR `062b9286` | `Socket.cpp`/`TcpClient.cpp` C2589/C4003, `windows.h` `min`/`max` macros (step 154/596) | `NOMINMAX` + two Winsock narrowings CI had not reached |
+| SR `f23ded28` | `HttpDateParser.hpp` C4477, `sscanf_s` size passed as `size_t` (step 168/596) | narrow it to `unsigned`, what the UCRT reads back |
+| CNA `d042781b7` | upstream TinyGL `clip.c` C7660, `#pragma omp simd` is OpenMP 4.0 (step 257/596) | disable the OpenMP *package* for the fetched subdirectory on MSVC |
+| CNA `a1019b671` | `Bc7Util.cpp` C2039/C3861 on `std::to_string` (step 329/596) | the three missing standard includes |
+| CNA `3f486d9df` | `LNK2019` on `Media::Video::Video` (step 571/596) | gate the video reader on `CNA_FFMPEG_AVAILABLE` |
+| CNA `82ee49a1b` | *(gate hole)* the fix above started no CI run at all | watch every module the matrix links, not six |
+| CNA `a9017a01b` | all 14 suites time out with no output | copy the SDL DLLs next to the executables |
 
-Matching CNA pin commits: `1faefcd4b`, `3d5303410`, `9ad2194d9`, `5e4457e27`, `4dd97692c`,
-`b7a9cb532`. Linux/GCC x86_64 and macOS/AppleClang arm64 passed 14/14 in every one of these runs
-except the `498a1304` cycle, which is the cautionary one: a `requires`-based detection of
-`file_clock::to_sys` looked portable and broke the previously green macOS job. Microsoft's STL
-*diagnoses* that requires-expression rather than evaluating it to false, because `file_clock` is
-not a dependent type there, and Apple's libc++ does not declare `std::chrono::clock_cast` at all,
-so naming it even in a discarded `if constexpr` branch fails at definition time. Only text the
-preprocessor removes is safe across these three libraries.
+Matching CNA pin commits for the SharpRuntime rows: `1faefcd4b`, `3d5303410`, `9ad2194d9`,
+`5e4457e27`, `4dd97692c`, `b7a9cb532`.
 
-**Two local censuses replace most CI round-trips. Use them before every push.** Neither needs a
-build directory; both are `-fsyntax-only` over `modules/*/src/**.cpp` with
-`-I` for each `modules/*/include` and `-isystem vendor`:
+### Four lessons that will save the next context real time
 
-1. *Host census*, for the `/W4` diagnostics GCC does not emit:
-   `clang++ -std=c++23 -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion -Wshadow -Wshadow-all`.
-2. *Windows-branch census*, the more valuable one, because until 2026-08-15 no local compiler had
-   ever built this repository's `_WIN32` code at all:
-   `clang++ --target=x86_64-w64-mingw32 -std=c++23 -fsyntax-only -Wshorten-64-to-32
-   -Wfloat-conversion -Wshadow -Wunused-parameter -Wunused-variable`. MinGW-w64 GCC 14 and its
-   headers are installed on this machine, and clang targets them directly.
+**1. Three local detectors replace most CI round-trips. Run them before every push.** None needs a
+build directory; all are `-fsyntax-only` with `-I` for each `modules/*/include` and
+`-isystem vendor`. **Validate a detector against a known failure before trusting its silence** —
+each of these was, and that is what makes a clean result meaningful.
 
-Census 2 reproduced exactly the four `TcpClient.cpp` lines MSVC named — validate a detector that
-way before trusting its silence — and then found four more in `NetworkStream.cpp` and
-`UdpClient.cpp` that CI had not reached. Both censuses are clean as of `062b9286`: zero errors
-(other than `zlib.h`, which only CI's vcpkg provides) and zero warnings. What they cannot see:
-MSVC-STL-only strictness like the `file_clock` case, `windows.h` macro collisions (MinGW's headers
-do not define `min`/`max` the same way), and C4127.
+- *Host census*, for `/W4` diagnostics GCC never emits:
+  `clang++ -std=c++23 -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion -Wshadow -Wshadow-all`.
+- *Windows-branch census*, over `_WIN32` code no local compiler had ever built:
+  `clang++ --target=x86_64-w64-mingw32 -std=c++23 -fsyntax-only -Wshorten-64-to-32
+  -Wfloat-conversion -Wshadow -Wunused-parameter -Wunused-variable`. MinGW-w64 GCC 14 and its
+  headers are installed on this machine and clang targets them directly. This one reproduced
+  exactly the four `TcpClient.cpp` lines MSVC named, then found four more in `NetworkStream.cpp`
+  and `UdpClient.cpp` that CI had not yet reached.
+- *Include-closure check*, for the class both of the above are blind to: walk each translation
+  unit's full project include closure and report standard headers whose contents are used but
+  which appear nowhere in it. libstdc++ and libc++ both hand out `<string>` transitively where
+  Microsoft's STL does not. It named the file MSVC had just failed on and found two more.
 
-**Watch item — resolved 2026-08-15: MSVC accepts it.** Windows compiled every CNA translation
-unit, `ContentManager.cpp` included, and reached the link stage, so the incomplete-type question
-below is a clang/libstdc++ strictness difference and not a portability defect for this matrix.
-Left recorded because the census still reports it and the next reader needs to know it is a known
-false positive on that toolchain, not an unexplored risk. The original note follows.
+What no local detector can see: MSVC-STL-only strictness (the `file_clock` case), `windows.h`
+macro collisions (MinGW does not define `min`/`max` the same way), C4127, and anything about
+*running* the tests.
 
-**Original watch item.** The Windows-target census rejects `CNA::Internal::JsonValue`
-(`modules/content/include/CNA/Internal/Json.hpp:37`) in 56 places across the CI closure, all one
-root cause: its `objectValue` member is a `std::vector<std::pair<std::string, JsonValue>>`, and
-`~vector` is instantiated while `JsonValue` is still incomplete. The sibling `arrayValue` is fine
-— `std::vector` is one of the three containers the standard explicitly allows over an incomplete
-type — but `std::pair` carries no such allowance, so this one really is non-conforming rather than
-merely unusual. GCC and clang/libc++ accept it, clang/libstdc++ rejects it, MSVC is unknown.
-`cna_content` is linked by every TinyGL test, so `ContentManager.cpp` is on the Windows path.
+**2. Only preprocessor text is portable across these three standard libraries.** The `498a1304`
+cycle is the cautionary one: a `requires`-based detection of `file_clock::to_sys` looked portable
+and broke the green macOS job. Microsoft's STL *diagnoses* that requires-expression rather than
+evaluating it to false, because `file_clock` is not a dependent type there; and Apple's libc++
+does not declare `std::chrono::clock_cast` at all, so naming it even in a discarded
+`if constexpr` branch fails at definition time.
 
-If MSVC rejects it, the smaller fix is user-declared special members (destructor, copy/move) that
-are *defined out of line* in `Json.cpp`, deferring the instantiation to where `JsonValue` is
-complete; it changes no API. The conforming fix replaces the pair with a `JsonMember` struct
-forward-declared before `JsonValue` and defined after it, which does change `.first`/`.second`
-into `.name`/`.value` at every use. Do not change either speculatively — GCC and libc++ both
-accept the current code, and the header is included widely.
+**3. Do not trust a comment that says "must match".** Two separate bugs were exactly that. CNA's
+`ThirdPartyTinyGL.cmake` claimed upstream's `OPENMP_C_FOUND` check was an ineffective
+mis-spelling of `OpenMP_C_FOUND`; it is not — CMake's `FindOpenMP` calls
+`find_package_handle_standard_args(OpenMP_C ...)` per language and FPHSA defines the upper-cased
+`<NAME>_FOUND`, so upstream really did switch OpenMP back on after CNA declined to link it. And
+`ContentManager.cpp` carried three copies of a platform list standing in for "FFmpeg is
+unavailable", with a comment saying it must match CMakeLists.txt — it had drifted, because CMake
+also turns FFmpeg off for every `WIN32` build. Both were settled by measurement (a two-file CMake
+probe for the first) rather than by reading.
 
-When reading that census, three error groups are **false positives** of running it over every
-`.cpp` in a module rather than over what CMake actually builds: `termios.h`, `poll.h`, `SIGWINCH`
-and `struct sigaction` come from `src/Terminal/`, which is gated `if(NOT WIN32)`; `SDL.h` and
-`SDL2/SDL_audio.h` come from the SDL2 backends this configuration never builds; and
-`libavformat/avformat.h` appears only because the census reuses Linux flags carrying
-`CNA_FFMPEG_AVAILABLE`, which the Windows job does not set (it installs zlib only).
+**4. A gate that does not run is worse than no gate.** The `paths:` filter named six modules while
+the fifteen test targets link fourteen, so the `modules/content` link fix pushed and started
+nothing, leaving a green tick that belonged to an older tree. Fixed in `82ee49a1b`; if a module is
+added to the link closure, add it to both `paths:` lists.
 
-The `4df333e6` cycle bundled four fixes because they were found *without* CI: compiling all 217
-SharpRuntime translation units with `clang++ -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion
--Wshadow -Wshadow-all` approximates the `/W4` diagnostics GCC never emits. Reuse that technique
-before pushing — it turns four ~7-minute CI cycles into one. The whole repository yielded exactly
-one further narrowing (`String.cpp` `setw`) and one shadow (`XmlNode.cpp` C4456) beyond the
-`Calendar.hpp` C4244, and the census would have caught that C4244 too. `Calendar::AddMilliseconds`
-was a real defect, not compiler noise: a `double` amount above int range (2^31 ms ≈ 24.9 days) was
-narrowed and applied as a wrapped offset. It now follows .NET's `Calendar.Add` and has tests.
+### Known false positives, so they are not re-investigated
 
-Two scope facts worth keeping. The CI job compiles nearly every SharpRuntime module — `xml` and
-`net-http-headers` included, confirmed from a successful Linux job's own log — so a fix there is
-on the Windows path even though CNA does not name those components. And `-Wshadow-field` hits
-(a derived member hiding a base member) are *not* an MSVC `/W4` class; only `-Wshadow` proper maps
-to C4456.
-
-The Node.js 20 action-deprecation annotation and the macOS Homebrew untrusted-tap message are
-non-blocking runner warnings; both successful platform jobs prove they are unrelated to TINYGL-19.
-Manual `workflow_dispatch` attempts returned HTTP 403 because that operation needs repository-admin
-permission. A pushed change to the watched workflow/source paths starts the matrix normally.
+- **`CNA::Internal::JsonValue`** (`modules/content/include/CNA/Internal/Json.hpp`): the
+  Windows-branch census rejects it in 56 places because `objectValue` is a
+  `std::vector<std::pair<std::string, JsonValue>>` whose `~vector` is instantiated while
+  `JsonValue` is incomplete. `arrayValue` is fine — `std::vector` is one of the three containers
+  the standard allows over an incomplete type, `std::pair` is not — so it is genuinely
+  non-conforming. But **MSVC accepts it**: Windows compiled `ContentManager.cpp` and reached the
+  link stage. Leave it alone unless a compiler actually rejects it; if one does, the small fix is
+  user-declared special members defined out of line (no API change), and the conforming one
+  replaces the pair with a `JsonMember` struct (changes `.first`/`.second` to `.name`/`.value` at
+  11 sites).
+- **Census noise from compiling every `.cpp` in a module** rather than what CMake builds:
+  `termios.h`, `poll.h`, `SIGWINCH` and `struct sigaction` come from `src/Terminal/`, gated
+  `if(NOT WIN32)`; `SDL.h` and `SDL2/SDL_audio.h` come from SDL2 backends this configuration never
+  builds; `libavformat/avformat.h` appears only because the census reuses Linux flags carrying
+  `CNA_FFMPEG_AVAILABLE`, which the Windows job does not set (it installs zlib only).
+- **34 files use `std::move`/`std::pair` without `<utility>`.** Real by include-what-you-use
+  standards, but every container header supplies it on MSVC too. Not touched; the list is one
+  include-closure run away if MSVC ever complains.
+- **Runner warnings**: the Node.js 20 action-deprecation annotation and the macOS Homebrew
+  untrusted-tap message are non-blocking, and both green platform jobs prove they are unrelated.
+- `workflow_dispatch` returns HTTP 403 — it needs repository-admin permission. Push a change under
+  the watched paths to start the matrix.
 
 ### Work remaining
 
-1. Watch the run triggered by the pin of SharpRuntime `062b9286`. If MSVC exposes the next
-   portability error, repeat the cycle: focused fix, no weakened warnings, no `develop` pin.
-   Run both censuses above first -- they are what turned three separate cycles into one.
-2. In SharpRuntime, build with at most two jobs, run the relevant focused tests, then run the full
-   build and `scripts/run_component_tests.sh build`. Require zero warnings and all 16,344+ checks.
-   Commit only the relevant files and push the completed fix to `develop`.
-3. Pin the new full 40-character SharpRuntime commit SHA in
-   `.github/workflows/tinygl-cross-platform-ci.yml`, validate the YAML, commit it as TINYGL-19 and
-   push CNA `next`. Watch the automatically triggered matrix.
-4. Windows has not compiled a single CNA translation unit yet — the whole matrix so far has been
-   SharpRuntime. Expect a second wave once step ~250/596 is passed. CNA targets do not set
-   `/W4 /WX`, so only hard errors matter there; a libc++ syntax-only pass over the CI-built CNA
-   modules (`core`, `math`, `platform`, `graphics`, `runtime`, `renderers/tinygl`) already found
-   none, the only two hits being `Sdl2Window.cpp`, which this configuration does not build.
-5. When all three jobs build and pass 14/14, update this Status and the TINYGL-19 task to **DONE**,
-   and update `docs/tinygl-renderer.md` so it records native Linux x86_64, macOS arm64 and Windows
-   x86_64 verification instead of a Linux-only limitation. Link the final green Actions run.
-6. Step 6's local evidence is already collected against SharpRuntime `498a1304` and does not need
-   repeating unless CNA sources change: 14/14 TinyGL suites pass; the no-OpenMP pass
-   (`cmake -S . -B cmake-build-tinygl -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON`, rebuild, test,
-   then reconfigure with `=OFF` to restore) passes 14/14 with zero `GOMP_*`/`omp_*` references in
-   `libtinygl-static.a`; `python3 scripts/check_renderer_identities.py` reports 47 identities.
+1. **Check the run for CNA `a9017a01b`.** If the 14 suites now pass on Windows, TINYGL-19 is done
+   except for documentation; go to step 4.
+2. If they still fail, distinguish the two shapes before fixing anything: *no output plus a
+   uniform 30 s timeout* means the process never started (a DLL the loader cannot find — check
+   which, the SDL trio is handled but zlib comes from vcpkg), whereas *gtest output followed by a
+   comparison failure* is a genuine renderer or fixture difference and belongs in this plan as a
+   capability note, not a build fix.
+3. Repeat the cycle for any further failure: run the three detectors first, fix at the root, never
+   weaken a warning, never replace a pin with a branch, and verify locally on Linux before
+   pushing. If a SharpRuntime change is needed, build it with at most two jobs, run
+   `scripts/run_component_tests.sh build` to a clean full pass, push to `develop` and pin the new
+   full 40-character SHA.
+4. When all three jobs are green: set this Status and the TINYGL-19 row to **DONE**, and update
+   `docs/tinygl-renderer.md` — it still says "Verified on Linux x86_64 only", which must become
+   native Linux x86_64, macOS arm64 and Windows x86_64, with the final green run linked. Note
+   there that MSVC builds TinyGL single-threaded (already documented in the build section).
+5. The local evidence for the final report is **already collected** against SharpRuntime
+   `f23ded28` and does not need repeating unless CNA sources change again: 14/14 TinyGL suites
+   pass; the no-OpenMP pass (`cmake -S . -B cmake-build-tinygl
+   -DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=ON`, rebuild, test, then reconfigure with `=OFF` to
+   restore) passes 14/14 with zero `GOMP_*`/`omp_*` references in `libtinygl-static.a`;
+   `python3 scripts/check_renderer_identities.py` reports 47 identities.
 
-Keep the current capability boundary: "maximum" here means every XNA-facing operation that the
+Keep the current capability boundary: "maximum" here means every XNA-facing operation the
 fixed-function TinyGL rasterizer can implement faithfully, plus deterministic rejection of
 unsupported stencil, shader, render-target, general-alpha and related paths. Do not claim parity
-with shader-capable GPU backends and do not turn documented refusals into silent approximations.
+with shader-capable GPU backends, and do not turn a documented refusal into a silent
+approximation.
 
 ## Design decisions
 
@@ -447,7 +454,7 @@ than overridden.
 
 ## Remaining phase
 
-`TINYGL-19` is the only active phase. Linux x86_64 and macOS arm64 are verified; finish the
-Windows x86_64 portability loop and final documentation exactly as recorded in the continuation
-handoff above. Any new renderer feature after TINYGL-19 needs its own explicit owner instruction,
+`TINYGL-19` is the only active phase. Linux x86_64 and macOS arm64 are verified; Windows x86_64
+builds and links completely and needs its first passing test run, then the final documentation --
+follow the continuation handoff above, which is written to be picked up cold. Any new renderer feature after TINYGL-19 needs its own explicit owner instruction,
 exactly like every other renderer's plan.
