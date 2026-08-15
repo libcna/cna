@@ -2454,7 +2454,23 @@ namespace Microsoft::Xna::Framework::Graphics
                     GraphicsRendererFallbackRecord{
                         candidateType, GraphicsRendererFallbackReason::InitializationFailed,
                         e.what()});
-                discardOwnedWindow();
+
+                // plan_runtimerenderer.md RTR-P5-13: only a window this device OWNS may be dropped
+                // here. discardOwnedWindow() correctly refuses to destroy a caller-supplied window,
+                // but it also cleared window_ and zeroed DeviceWindowHandle unconditionally -- so
+                // after any initialization failure CNA forgot the caller's window entirely and the
+                // next candidate created one of its own. Two consequences, both wrong:
+                //
+                //   * the caller's window was silently abandoned: not destroyed, but no longer
+                //     drawn into, and their DeviceWindowHandle field was set to 0 without a word
+                //   * design decision 8's refusal became unreachable. That check needs
+                //     window_ != nullptr at the top of the next iteration, and nothing could ever
+                //     leave it non-null, so WindowKindConflict was dead code
+                //
+                // Keeping the caller's window across the failure restores both: the next candidate
+                // either accepts it, or is refused with WindowKindConflict naming why.
+                if (ownsWindow_)
+                    discardOwnedWindow();
                 continue;
             }
 

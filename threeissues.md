@@ -204,6 +204,7 @@ kind**:
 | 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | behaviour preserved |
 | 6 | `BLEND2D`/`OPENVG` arms define no constants, so those builds cannot compile the suite | yes, by reading | no | **fixed**, RTR-P9-4 |
 | 7 | A guard with identical arms made every renderer claim SDL_GPU's boundary | yes | no | **fixed**, RTR-P9-10 |
+| 8 | A caller-supplied window was abandoned on fallback; the guard against it was dead code | yes, by test + reading | **yes** — found by RTR-P5-13's own test | **fixed**, RTR-P5-13 |
 
 ---
 
@@ -416,3 +417,57 @@ still passes 20/20 legs.
 are textually identical: 96 renderer guards with an `#else` across `modules/`, exactly one of them
 dead. A separate scan for guards naming a `CNA_RENDERER_<X>` macro that CMake never generates found
 none — so no guard is stranded on a removed renderer identity.
+
+## 8. A caller-supplied window was silently abandoned on fallback, and the guard against it was dead code
+
+`GraphicsDevice::resolveRenderer()` walks the fallback chain. When a candidate fails to initialise,
+the catch block recorded the failure and called `discardOwnedWindow()`.
+
+That helper is careful about the right thing and careless about the rest:
+
+```cpp
+if (ownsWindow_)
+{
+    ...
+    SDL_DestroyWindow(window_);      // correctly NOT done for a caller-supplied window
+}
+
+window_ = nullptr;                                          // done unconditionally
+ownsWindow_ = false;                                        // done unconditionally
+presentationParameters_.setDeviceWindowHandleProperty(0);   // done unconditionally
+```
+
+So a window the caller passed in through `PresentationParameters.DeviceWindowHandle` was never
+destroyed — but after any initialisation failure CNA forgot it, zeroed the caller's own handle
+field, and the next candidate created a window of its own. The caller's window was left orphaned:
+still alive, no longer drawn into, with no signal that this had happened.
+
+**It also made design decision 8 unreachable.** The cross-window-kind check at the top of the
+candidate loop is guarded by `window_ != nullptr`:
+
+```cpp
+if (window_ != nullptr && !AreWindowKindsCompatible(activeWindowKind_, candidate->windowKind))
+{
+    if (!ownsWindow_) { record WindowKindConflict; continue; }
+    discardOwnedWindow();
+}
+```
+
+Reading the whole loop shows nothing could leave `window_` non-null across an iteration: every exit
+after a window is attached goes through the catch, and the earlier `continue`s (not compiled in,
+probe unavailable) happen before any window exists. So `WindowKindConflict` — the whole "never
+silently reuse an incompatible window" contract — was **dead code**, and had been since it was
+written.
+
+**Fixed in RTR-P5-13:** the failure path discards the window only when this device actually owns it.
+A caller's window now survives the failure, and the next candidate either accepts it or is refused
+with `WindowKindConflict` naming the reason.
+
+**How it was found, which is the part worth repeating.** The test written for that contract skipped
+three times, each time for a different reason: the origin renderer chosen did not need a window at
+all; then the renderer set had no two renderers wanting windows of different kinds (`None` is
+compatible with everything, so no conflict was possible even in principle); and only after fixing
+both did the skip message — deliberately made to report what it observed — show that the device had
+been constructed with no conflict recorded at all. Accepting the first "SKIPPED" as a pass would
+have missed the defect entirely, and the test would have been a permanent green that asserted
+nothing.

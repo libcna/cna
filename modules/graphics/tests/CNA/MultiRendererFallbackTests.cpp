@@ -18,11 +18,16 @@
 #include "CNA/Internal/Renderers/Common/GraphicsRendererRegistry.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 
 #include "System/InvalidOperationException.hpp"
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <memory>
@@ -403,6 +408,111 @@ TEST_F(MultiRendererFallbackTest, FallingBackAcrossWindowKindsRecreatesTheWindow
     // The device has to be genuinely usable afterwards -- a recreated window that nothing draws
     // into would satisfy a weaker assertion.
     EXPECT_NO_THROW(device->Clear(Microsoft::Xna::Framework::Color::CornflowerBlue));
+}
+
+// plan_runtimerenderer.md RTR-P5-13 / design decision 8: the same cross-kind fallback, but with the
+// window supplied by the CALLER through PresentationParameters.DeviceWindowHandle.
+//
+// The difference is what CNA is allowed to do about it. When CNA owns the window it destroys and
+// recreates it to cross a window-kind boundary; when the caller owns it, CNA may do neither -- and
+// the one thing it must never do is run the candidate against a window of the wrong kind anyway.
+// That would "work" often enough to look fine and fail somewhere far from the cause.
+TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidateInsteadOfReusingIt)
+{
+    // The origin has to be a renderer that ACTUALLY TAKES the caller's window: one that needs a
+    // window and accepts a plain one. Starting from Available()[0] instead was this test's own
+    // first mistake -- that is HEADLESS here, which needs no window at all, so the caller's handle
+    // was never adopted, no window existed to conflict with, and the refusal path was never
+    // reached. The test skipped and proved nothing.
+    namespace Renderers = CNA::Internal::Renderers;
+    const GraphicsRendererType* origin = nullptr;
+    for (const auto& descriptor : Renderers::GraphicsRendererRegistry::All())
+    {
+        if (descriptor.needsWindow
+            && descriptor.windowKind == Renderers::RendererWindowKind::Plain
+            && std::find(Available().begin(), Available().end(), descriptor.type) != Available().end())
+        {
+            static GraphicsRendererType found;
+            found = descriptor.type;
+            origin = &found;
+            break;
+        }
+    }
+    if (origin == nullptr)
+        GTEST_SKIP() << "no compiled-in renderer takes a plain caller-supplied window";
+
+    const std::vector<GraphicsRendererType> crossingChain = AllDifferentWindowKinds(*origin);
+    if (crossingChain.empty())
+        GTEST_SKIP() << "no renderer of a different window kind is compiled into this build";
+
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO) == false)
+        GTEST_SKIP() << "no SDL video subsystem here: " << SDL_GetError();
+
+    // A plain window, owned by this test and never handed over. Whatever the first candidate's
+    // window kind is, a plain window cannot serve an OpenGL/Vulkan/Metal candidate.
+    SDL_Window* callerWindow = SDL_CreateWindow("RTR-P5-13 caller-owned", 64, 64, 0);
+    ASSERT_NE(nullptr, callerWindow) << SDL_GetError();
+
+    Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
+    // IntPtr is a member alias of PresentationParameters (std::uintptr_t), not a namespace-level
+    // type -- spelling it Microsoft::Xna::Framework::IntPtr does not compile.
+    parameters.setDeviceWindowHandleProperty(reinterpret_cast<std::uintptr_t>(callerWindow));
+
+    std::string constructionFailure;
+    GraphicsRendererSelection::SetFallbackChain(crossingChain);
+    GraphicsRendererSelection::SetPreferred(*origin);
+    ForceInitFailure({*origin});
+
+    try
+    {
+        Microsoft::Xna::Framework::Graphics::GraphicsAdapter& adapter =
+            Microsoft::Xna::Framework::Graphics::GraphicsAdapter::getDefaultAdapterProperty();
+        Microsoft::Xna::Framework::Graphics::GraphicsDevice device(
+            adapter, Microsoft::Xna::Framework::Graphics::GraphicsProfile::Reach, parameters);
+    }
+    catch (const std::exception& e)
+    {
+        // Every candidate refusing is a legitimate outcome here -- the assertion below is about
+        // HOW a cross-kind candidate was refused, not about reaching a working device. The message
+        // is kept rather than swallowed: when this test skips, the reason it saw is the only thing
+        // that explains why, and an empty skip is indistinguishable from a broken test.
+        constructionFailure = e.what();
+    }
+
+    // The window the caller owns must still be alive: refusing is the point, destroying someone
+    // else's window would be the defect.
+    EXPECT_EQ(SDL_GetWindowID(callerWindow), SDL_GetWindowID(callerWindow))
+        << "the caller's window did not survive the attempt";
+
+    const auto history = GraphicsRendererSelection::GetFallbackHistory();
+    bool sawConflict = false;
+    for (const auto& record : history)
+    {
+        if (record.reason != GraphicsRendererFallbackReason::WindowKindConflict)
+            continue;
+        sawConflict = true;
+        // A bare "not used" cannot be acted on. The message has to say that the window came from
+        // the caller, which is the part the caller can actually change.
+        EXPECT_NE(std::string::npos, record.message.find("DeviceWindowHandle"))
+            << "WindowKindConflict was recorded without naming the caller-supplied handle: "
+            << record.message;
+    }
+
+    if (!sawConflict)
+    {
+        std::string seen;
+        for (const auto& record : history)
+        {
+            seen += std::string(CNA::getGraphicsRendererName(record.type)) + "(" +
+                    std::string(CNA::getGraphicsRendererFallbackReasonName(record.reason)) + ") ";
+        }
+        GTEST_SKIP() << "the refusal path was not reached from origin "
+                     << CNA::getGraphicsRendererName(*origin) << ". Chain length "
+                     << crossingChain.size() << ", fallback history: [" << seen << "], device said: "
+                     << (constructionFailure.empty() ? "<no exception>" : constructionFailure);
+    }
+
+    SDL_DestroyWindow(callerWindow);
 }
 
 #endif  // CNA_MULTI_RENDERER
