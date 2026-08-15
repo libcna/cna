@@ -62,7 +62,17 @@ function(cna_configure_vendored_sdl)
     endforeach()
 
     set(_prefix    "${CNA_SDL_PREBUILT_ROOT}/install")
-    set(_cmake_dir "${_prefix}/lib/cmake")
+    if(MSVC)
+        # SDL projects intentionally install package configs directly under cmake/ for MSVC.
+        set(_sdl3_cmake_dir       "${_prefix}/cmake")
+        set(_sdl_image_cmake_dir  "${_prefix}/cmake")
+        set(_sdl_mixer_cmake_dir  "${_prefix}/cmake")
+    else()
+        set(_cmake_dir            "${_prefix}/lib/cmake")
+        set(_sdl3_cmake_dir       "${_cmake_dir}/SDL3")
+        set(_sdl_image_cmake_dir  "${_cmake_dir}/SDL3_image")
+        set(_sdl_mixer_cmake_dir  "${_cmake_dir}/SDL3_mixer")
+    endif()
 
     # Platform-specific shared-library filenames
     if(EMSCRIPTEN)
@@ -125,7 +135,7 @@ function(cna_configure_vendored_sdl)
             BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_image/build"
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                "-DSDL3_DIR=${_sdl3_cmake_dir}"
                 -DSDLIMAGE_INSTALL=ON
                 -DSDLIMAGE_VENDORED=ON
                 -DSDLIMAGE_TESTS=OFF
@@ -145,7 +155,7 @@ function(cna_configure_vendored_sdl)
             BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_mixer/build"
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                "-DSDL3_DIR=${_sdl3_cmake_dir}"
                 -DSDLMIXER_INSTALL=ON
                 -DSDLMIXER_VENDORED=ON
                 -DSDLMIXER_TESTS=OFF
@@ -163,9 +173,9 @@ function(cna_configure_vendored_sdl)
     endif()
 
     # SDL is now installed — let find_package set up the targets properly.
-    set(SDL3_DIR       "${_cmake_dir}/SDL3"       CACHE PATH "" FORCE)
-    set(SDL3_image_DIR "${_cmake_dir}/SDL3_image"  CACHE PATH "" FORCE)
-    set(SDL3_mixer_DIR "${_cmake_dir}/SDL3_mixer"  CACHE PATH "" FORCE)
+    set(SDL3_DIR       "${_sdl3_cmake_dir}"      CACHE PATH "" FORCE)
+    set(SDL3_image_DIR "${_sdl_image_cmake_dir}" CACHE PATH "" FORCE)
+    set(SDL3_mixer_DIR "${_sdl_mixer_cmake_dir}" CACHE PATH "" FORCE)
     find_package(SDL3       REQUIRED CONFIG)
     find_package(SDL3_image REQUIRED CONFIG)
     find_package(SDL3_mixer REQUIRED CONFIG)

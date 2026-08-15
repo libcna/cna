@@ -7,6 +7,7 @@ on:
       - '.github/workflows/tinygl-cross-platform-ci.yml'
       - 'CMakeLists.txt'
       - 'cmake/RendererSelection.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
       - 'cmake/ThirdPartyTinyGL.cmake'
       - 'cmake/TestHelpers.cmake'
       - 'modules/CMakeLists.txt'
@@ -21,6 +22,7 @@ on:
       - '.github/workflows/tinygl-cross-platform-ci.yml'
       - 'CMakeLists.txt'
       - 'cmake/RendererSelection.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
       - 'cmake/ThirdPartyTinyGL.cmake'
       - 'cmake/TestHelpers.cmake'
       - 'modules/CMakeLists.txt'
@@ -44,6 +46,8 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    env:
+      CMAKE_GENERATOR: Ninja
     strategy:
       fail-fast: false
       matrix:
@@ -65,10 +69,11 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout sharp-runtime sibling
+      - name: Checkout pinned sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: 52c0e10346601130b06934b4a21bcab4671695f8
           path: sharp-runtime
 
       - name: Checkout pinned TinyGL
@@ -103,6 +108,12 @@ jobs:
       - name: Set up Ninja on Windows
         if: runner.os == 'Windows'
         uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Install Windows build dependencies
+        if: runner.os == 'Windows'
+        run: |
+          /c/vcpkg/vcpkg.exe install zlib:x64-windows
+          echo "CMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake" >> "${GITHUB_ENV}"
 
       - name: Configure TinyGL
         working-directory: cna
