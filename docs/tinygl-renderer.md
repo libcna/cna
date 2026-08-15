@@ -32,7 +32,7 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 
 | Feature | Status | Notes |
 |---|---|---|
-| Clear (colour, depth) | ✅ | `glClearColor`/`glClear`. `ClearDepth`'s value is ignored — upstream records `glClearDepth`, but `glopClear` never reads it and always uses its fixed far value. |
+| Clear (colour, depth) | ✅ | `glClearColor`/`glClear`. The executable XNA far-depth value 1.0 is accepted; every other value is refused because upstream always uses its fixed far value. |
 | Backbuffer readback | ✅ | Direct `ZBuffer::pbuf` access; upstream `glReadPixels` is a stub. |
 | Resize | ✅ | `ZB_resize`, no context teardown; private width is padded up to a multiple of four so upstream cannot truncate logical columns. |
 | `Texture2D` create/update/`GetData` | ✅ | `GetData` is exact (CPU shadow), alpha included. |
@@ -115,9 +115,12 @@ capability query.
 TinyGL has no alpha, but it does have `TGL_NO_DRAW_COLOR` (`0xFF00FF`): its triangle rasterizer
 discards any textured fragment whose texel matches that key. CNA keeps two TinyGL objects per
 texture. The ordinary object preserves RGB for `BlendState::Opaque`; in the cutout object, source
-alpha multiplied by uniform `BasicEffect.Alpha` or SpriteBatch tint alpha is thresholded at
-`TinyGLTextureRenderer::kAlphaCutoutThreshold` (**128**) and low-alpha texels become the key. Alpha
-is never interpolated — a fragment is fully drawn or absent, with no compositing in between.
+alpha multiplied by uniform `BasicEffect.Alpha`, constant vertex alpha or SpriteBatch tint alpha is
+thresholded at `TinyGLTextureRenderer::kAlphaCutoutThreshold` (**128**) and low-alpha texels become
+the key. An untextured draw whose constant effective alpha is below the threshold is skipped. A
+varying untextured alpha that crosses the threshold, and varying textured vertex alpha, are refused
+because TinyGL cannot combine those values with the texture key faithfully. Alpha is never silently
+ignored — a fragment is fully drawn or absent, with no compositing in between.
 
 An opaque texel that genuinely *is* `0xFF00FF` would otherwise disappear; it is uploaded as
 `0xFF01FF` (green nudged by one) so it stays visible. Both behaviours are asserted by
@@ -156,7 +159,9 @@ expectations against this renderer need a tolerance of about 2, and the shipped 
 - **An unsupported argument reaching TinyGL kills the process.** Upstream calls `gl_fatal_error()`
   instead of setting an error flag. Every validation in this renderer runs *before* the native call
   for that reason; `TinyGL_Rejection` is the suite that keeps it that way. If you extend this
-  renderer, keep new validation on the same side of the call.
+  renderer, keep new validation on the same side of the call. Framebuffer resize additionally avoids
+  upstream `ZB_resize()` because its OOM path calls `exit(1)`; CNA allocates both replacement planes
+  transactionally and commits them only after both allocations succeed.
 
 ## Build and test
 
@@ -171,8 +176,8 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. An OpenMP-capable toolchain is required — see
 `plan_tinygl.md` §Build for why.
 
-Six suites, 68 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
-`TinyGL_State` (9), `TinyGL_Rejection` (11), and the post-audit `TinyGL_Contract` (23). All pass.
+Six suites, 81 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+`TinyGL_State` (9), `TinyGL_Rejection` (17), and the post-audit `TinyGL_Contract` (30). All pass.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

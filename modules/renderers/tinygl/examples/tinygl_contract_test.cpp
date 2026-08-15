@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BufferUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
@@ -15,6 +16,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IndexElementSize.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
@@ -26,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Graphics/VertexElementFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElementUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexPositionColorTexture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 
 #include "CNA/Internal/Renderers/TinyGL/TinyGLRenderer.hpp"
@@ -43,13 +46,22 @@ using namespace CNA::Internal::Renderers::TinyGL;
 
 namespace
 {
-    constexpr int kChecks = 23;
+    constexpr int kChecks = 30;
 
     VertexDeclaration PosColorDecl()
     {
         return VertexDeclaration(16, {
             VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
             VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+        });
+    }
+
+    VertexDeclaration PosColorTexDecl()
+    {
+        return VertexDeclaration(24, {
+            VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+            VertexElement(12, VertexElementFormat::Color, VertexElementUsage::Color, 0),
+            VertexElement(16, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
         });
     }
 
@@ -144,6 +156,44 @@ protected:
                   modulated.getGProperty() < 5 && modulated.getBProperty() < 5,
               "vertex colour is modulated by BasicEffect DiffuseColor and Alpha");
 
+        bool defaultDepthClearThrew = false;
+        try { renderer.ClearDepth(1.0f); }
+        catch (...) { defaultDepthClearThrew = true; }
+        Check(!defaultDepthClearThrew,
+              "the XNA default far-depth clear value remains executable");
+
+        AlphaTestEffect neverEffect(dev);
+        neverEffect.setVertexColorEnabledProperty(true);
+        neverEffect.setAlphaFunctionProperty(CompareFunction::Never);
+        neverEffect.Apply();
+        Check(Refused([&] { dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2); }),
+              "AlphaTestEffect.Never is identified and refused before drawing");
+
+        ShaderEffect shaderEffect(dev, "unsupported", "unsupported");
+        shaderEffect.Apply();
+        Check(Refused([&] { dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2); }),
+              "a renderer-less ShaderEffect is identified and refused before drawing");
+
+        VertexBuffer alphaVb(dev, PosColorDecl(), 6, BufferUsage::None);
+        VertexPositionColor alphaVertices[6];
+        FillQuad(alphaVertices, Color(255, 0, 0, 0));
+        alphaVb.SetData(alphaVertices, 0, 6);
+        dev.setBlendStateProperty(BlendState::NonPremultiplied);
+        dev.Clear(Color(0, 0, 40, 255));
+        effect.setDiffuseColorProperty(Vector3(1, 1, 1));
+        effect.setAlphaProperty(1.0f);
+        effect.Apply();
+        dev.SetVertexBuffer(&alphaVb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        Check(Near(ReadPixel(dev, 32, 32), 0, 0, 40),
+              "constant zero vertex alpha participates in the cutout approximation");
+
+        alphaVertices[2].Color = Color(255, 0, 0, 255);
+        alphaVb.SetData(alphaVertices, 0, 6);
+        Check(Refused([&] { dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2); }),
+              "vertex alpha crossing the cutout threshold is refused deterministically");
+        dev.setBlendStateProperty(BlendState::Opaque);
+
         effect.setDiffuseColorProperty(Vector3(1, 1, 1));
         effect.setAlphaProperty(1.0f);
         effect.Apply();
@@ -172,6 +222,34 @@ protected:
         Texture2D green(dev, 4, 4);
         std::vector<Color> greenPixels(16, Color(0, 255, 0, 255));
         green.SetData(greenPixels.data(), 16);
+
+        VertexBuffer texturedAlphaVb(dev, PosColorTexDecl(), 6, BufferUsage::None);
+        VertexPositionColorTexture texturedAlphaVertices[6] = {
+            {Vector3(-1, 1, 0), Color(255, 255, 255, 0), Vector2(0, 0)},
+            {Vector3(1, 1, 0), Color(255, 255, 255, 0), Vector2(1, 0)},
+            {Vector3(1, -1, 0), Color(255, 255, 255, 0), Vector2(1, 1)},
+            {Vector3(-1, 1, 0), Color(255, 255, 255, 0), Vector2(0, 0)},
+            {Vector3(1, -1, 0), Color(255, 255, 255, 0), Vector2(1, 1)},
+            {Vector3(-1, -1, 0), Color(255, 255, 255, 0), Vector2(0, 1)},
+        };
+        texturedAlphaVb.SetData(texturedAlphaVertices, 0, 6);
+        dev.setBlendStateProperty(BlendState::NonPremultiplied);
+        dev.Clear(Color(0, 0, 40, 255));
+        effect.setTextureEnabledProperty(true);
+        effect.setTextureProperty(&green);
+        effect.Apply();
+        dev.SetVertexBuffer(&texturedAlphaVb);
+        dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2);
+        Check(Near(ReadPixel(dev, 32, 32), 0, 0, 40),
+              "constant vertex alpha multiplies texture alpha in the cutout path");
+
+        texturedAlphaVertices[2].Color = Color::White;
+        texturedAlphaVb.SetData(texturedAlphaVertices, 0, 6);
+        Check(Refused([&] { dev.DrawPrimitives(PrimitiveType::TriangleList, 0, 2); }),
+              "varying textured vertex alpha is refused before TinyGL state changes");
+        effect.setTextureEnabledProperty(false);
+        effect.setTextureProperty(nullptr);
+        dev.setBlendStateProperty(BlendState::Opaque);
 
         dev.Clear(Color(0, 0, 40, 255));
         SpriteBatch originBatch(dev);

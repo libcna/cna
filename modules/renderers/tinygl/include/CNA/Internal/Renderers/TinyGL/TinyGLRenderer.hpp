@@ -816,11 +816,12 @@ namespace CNA::Internal::Renderers::TinyGL
         FixedFunctionDrawState TranslateDrawParams(const GpuDrawParams& params,
                                                    const char* route);
 
-        /// Validates the bound buffer's stride/declaration and installs TinyGL's array pointers.
-        /// Returns the record stride in bytes.
-        std::size_t BindVertexArrays(const TinyGLVertexBufferRenderer& vb,
-                                     const FixedFunctionDrawState& state,
-                                     const char* route);
+        /// Validates the bound buffer and referenced vertex alpha, then installs TinyGL's arrays.
+        /// Returns false when the complete draw is below the documented cutout threshold.
+        bool BindVertexArrays(const TinyGLVertexBufferRenderer& vb,
+                              const FixedFunctionDrawState& state,
+                              const char* route,
+                              const std::vector<std::uint32_t>& referencedVertices);
         /// Tears the array pointers down again, leaving no client state pointing at freed memory.
         void UnbindVertexArrays(bool textured);
         /// Installs world/view/projection through TinyGL's own matrix stack.

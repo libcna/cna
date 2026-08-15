@@ -24,6 +24,7 @@
 
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
 
 using namespace Microsoft::Xna::Framework;
@@ -33,7 +34,7 @@ using namespace CNA::Internal::Renderers::TinyGL;
 
 namespace
 {
-    constexpr int kChecks = 11;
+    constexpr int kChecks = 17;
 }
 
 class TinyGLRejectionTest : public Game
@@ -82,6 +83,14 @@ protected:
             catch (...) { threw = true; }
             check(!threw, "stencil clears are accepted and clear nothing, exactly as in real GL");
         }
+        expectRefusal([&] { renderer.ClearDepth(0.5f); },
+                      "a non-default ClearDepth value is refused");
+        expectRefusal([&] { renderer.ClearColorAndDepth(0, 0, 0, 1, 0.5f); },
+                      "a non-default ClearColorAndDepth value is refused");
+        expectRefusal([&] { renderer.ClearDepthAndStencil(0.5f, 0); },
+                      "a non-default ClearDepthAndStencil value is refused");
+        expectRefusal([&] { renderer.ClearColorDepthAndStencil(0, 0, 0, 1, 0.5f, 0); },
+                      "a non-default ClearColorDepthAndStencil value is refused");
         expectRefusal([&] { renderer.SetReferenceStencil(3); },
                       "a non-zero ReferenceStencil is refused");
         expectRefusal([&] {
@@ -147,6 +156,15 @@ protected:
         // --- Render targets: TinyGL owns exactly one framebuffer per context ---------------------
         expectRefusal([&] { renderer.SetRenderTarget2D(reinterpret_cast<IRenderTargetRenderer*>(1)); },
                       "binding a render target is refused");
+
+        expectRefusal(
+            [&] { renderer.SetVirtualResolution(std::numeric_limits<int>::max() - 3, 2); },
+            "a framebuffer whose TinyGL byte counts overflow signed 32-bit fields is refused");
+        int width = 0;
+        int height = 0;
+        renderer.GetViewportSize(width, height);
+        check(width == 64 && height == 64,
+              "a refused framebuffer resize leaves the live dimensions unchanged");
 
         std::printf("=== %d/%d PASS ===\n", passCount_, kChecks);
         result_ = (passCount_ == kChecks) ? 0 : 1;

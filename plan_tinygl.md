@@ -29,7 +29,7 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 6 CTest suites, 68 checks,
+**Delivered and green after the post-implementation contract audit.** 6 CTest suites, 81 checks,
 6/6 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
@@ -41,7 +41,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   validator.
 - Real TinyGL context (`ZB_open(ZB_MODE_RGBA)` + `glInit`) with a CPU colour buffer, no window and
   no display server. `Present()` is a no-op, and no native window or native 2D renderer exists.
-- `Clear` / `ClearColorAndDepth` / `ClearDepth` through `glClearColor`/`glClear`.
+- `Clear` / `ClearColorAndDepth` / `ClearDepth` through `glClearColor`/`glClear`; TinyGL's
+  executable far-depth value 1.0 is accepted and every other requested depth is refused.
 - `ReadBackbuffer()` straight off `ZBuffer::pbuf` (see TINYGL-0 fact A).
 - `SetVirtualResolution()` through `ZB_resize` — no context teardown. Because upstream rounds a
   `ZBuffer` width down to a multiple of four, CNA pads the private allocation up while preserving
@@ -106,9 +107,11 @@ defaults and leave a renderer that can only throw. Each is documented, tested, a
    executed as TinyGL's own `TGL_NO_DRAW_COLOR` colour-key cutout: texels below
    `TinyGLTextureRenderer::kAlphaCutoutThreshold` (128) are uploaded into a separate cutout texture
    as the key colour and TinyGL's triangle rasterizer discards them per fragment. The effective
-   threshold includes uniform `BasicEffect.Alpha` or SpriteBatch tint alpha. `BlendState::Opaque`
-   selects the ordinary RGB object and never applies this alpha discard. Alpha is thresholded,
-   never interpolated.
+   threshold includes uniform `BasicEffect.Alpha`, constant vertex alpha, or SpriteBatch tint alpha.
+   `BlendState::Opaque` selects the ordinary RGB object and never applies this alpha discard. A
+   complete draw below the threshold is skipped; varying untextured alpha that crosses the threshold
+   and varying textured alpha are refused because TinyGL cannot express them faithfully. Alpha is
+   thresholded, never silently ignored.
 2. **Sampler state is inert.** `glTexParameteri` is an upstream no-op and the texel fetch masks the
    fixed-point S/T against the texture dimension, so sampling is always nearest with wrap
    addressing whatever `SamplerState` asks for. `TextureFilter::Anisotropic` is still refused,
@@ -140,10 +143,11 @@ them are refused one step earlier.
 | `TINYGL-11` | `TinyGL_Smoke` (10 checks) | **DONE** |
 | `TINYGL-12` | `TinyGL_TextureSprite` (7 checks) | **DONE** |
 | `TINYGL-13` | `TinyGL_State` (9 checks) | **DONE** |
-| `TINYGL-14` | `TinyGL_Rejection` (11 checks) | **DONE** |
+| `TINYGL-14` | `TinyGL_Rejection` (17 checks) | **DONE** |
 | `TINYGL-14b` | `TinyGL_3D` (8 checks): earn `SupportsCapability(ThreeD)` with perspective, depth occlusion and modelview proofs | **DONE** |
-| `TINYGL-14c` | `TinyGL_Contract` (23 checks): post-implementation audit regressions for framebuffer alignment, effect modulation, offsets, SpriteBatch geometry/viewport/alpha, mip/MSAA refusals, capability hooks and validation ordering | **DONE** |
+| `TINYGL-14c` | `TinyGL_Contract` (30 checks): post-implementation audit regressions for framebuffer alignment, effect identity/modulation, offsets, SpriteBatch geometry/viewport/alpha, mip/MSAA refusals, capability hooks and validation ordering | **DONE** |
 | `TINYGL-15` | `docs/tinygl-renderer.md` capability boundary | **DONE** |
+| `TINYGL-20` | Post-audit contract remediation: explicit effect identity, vertex-alpha cutout, depth-clear validation and transactional overflow-safe resize | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
 | `TINYGL-18` | `VertexPositionNormalTexture` (stride 32) route, prerequisite for TINYGL-16 | **OPEN** |

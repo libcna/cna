@@ -875,6 +875,9 @@ namespace CNA::Internal::Renderers
         /// Shader evaluates: if ((y>0) ? (|a-x|<y) : (a<x)) ? z : w < 0 → discard.
         /// Default {0,0,1,1} = Always pass (never discard).
         float alphaTest[4]      = {0.0f, 0.0f, 1.0f, 1.0f};
+        /// True when the active stock effect is AlphaTestEffect, including its `Always` and
+        /// `Never` variants whose identity cannot be recovered from alphaTest.x/y alone.
+        bool alphaTestEffect = false;
         /// EnvironmentMapEffect: emissive+ambient combined, RGB 0..1.
         /// BasicEffect (lit path only): raw EmissiveColor*Alpha, added after the ambient/light
         /// sum is multiplied by DiffuseColor (CNA folds ambient into that multiply instead of
@@ -1020,6 +1023,10 @@ namespace CNA::Internal::Renderers
         /// safely ignore it, matching the established accepted-and-ignored pattern for other
         /// not-yet-renderer-supported `GpuDrawParams` fields.
         IEffectRenderer* customEffectRenderer = nullptr;
+        /// True whenever the active effect is ShaderEffect, even when this renderer returned no
+        /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
+        /// mistaking a null renderer for an ordinary fixed-function stock effect.
+        bool customEffectRequested = false;
         /// plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
         /// When null the surface normal from the vertex stream is used unperturbed.
         const ITextureRenderer* pbrNormalMap = nullptr;
