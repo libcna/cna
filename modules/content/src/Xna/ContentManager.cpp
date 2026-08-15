@@ -1075,6 +1075,49 @@ namespace Microsoft::Xna::Framework::Content
             return r;
         }
 
+        static std::array<Graphics::TextureTransformEXT, 5> ParseTextureTransformsEXT(
+            const std::string& j, std::size_t from)
+        {
+            std::array<Graphics::TextureTransformEXT, 5> result{};
+            if (from == std::string::npos) { return result; }
+            std::size_t pos = from + 1;
+            for (std::size_t valueIndex = 0; valueIndex < 25; ++valueIndex)
+            {
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                if (pos >= j.size())
+                    throw ContentLoadException(
+                        "Model .cnj 'textureTransforms' must contain exactly 25 numbers.");
+                std::size_t consumed = 0;
+                float value = 0.0f;
+                try { value = std::stof(j.substr(pos), &consumed); }
+                catch (...)
+                {
+                    throw ContentLoadException(
+                        "Model .cnj 'textureTransforms' must contain exactly 25 numbers.");
+                }
+                if (consumed == 0 || !std::isfinite(value))
+                    throw ContentLoadException(
+                        "Model .cnj 'textureTransforms' must contain exactly 25 numbers.");
+                pos += consumed;
+                Graphics::TextureTransformEXT& transform = result[valueIndex / 5];
+                switch (valueIndex % 5)
+                {
+                    case 0: transform.Offset.X = value; break;
+                    case 1: transform.Offset.Y = value; break;
+                    case 2: transform.Scale.X = value; break;
+                    case 3: transform.Scale.Y = value; break;
+                    default: transform.Rotation = value; break;
+                }
+                while (pos < j.size() && std::isspace(static_cast<unsigned char>(j[pos]))) ++pos;
+                const char separator = valueIndex == 24 ? ']' : ',';
+                if (pos >= j.size() || j[pos] != separator)
+                    throw ContentLoadException(
+                        "Model .cnj 'textureTransforms' must contain exactly 25 numbers.");
+                ++pos;
+            }
+            return result;
+        }
+
         static std::array<float, 3> JsonFloatArray3(const std::string& j, std::size_t from)
         {
             std::array<float, 3> r{};
@@ -2868,6 +2911,8 @@ namespace Microsoft::Xna::Framework::Content
                         pbrFx.setTextureCoordinateSetEXTProperty(
                             static_cast<int>(slot),
                             static_cast<int>(meshOut.material.textureCoordinateSetsEXT[slot]));
+                        pbrFx.setTextureTransformEXTProperty(
+                            static_cast<int>(slot), meshOut.material.textureTransformsEXT[slot]);
                     }
                     pbrFx.setDiffuseColorProperty(Vector3(
                         meshOut.material.baseColorFactor.X,
@@ -3060,23 +3105,6 @@ namespace Microsoft::Xna::Framework::Content
                                    "nowhere to go in this approximation -- the whole surface uses "
                                    "the single factor."
                                  : ""));
-                    }
-                    // plan_gltf.md GLTF-184/GLTF-336: two sampled UV channels now exist, but no
-                    // per-map transform state does, so every differing transform remains named.
-                    if (!meshOut.unbakedTextureTransformsEXT.empty())
-                    {
-                        std::string maps;
-                        for (const std::string& map : meshOut.unbakedTextureTransformsEXT)
-                        {
-                            if (!maps.empty()) { maps += ", "; }
-                            maps += map;
-                        }
-                        CNA::Logger::Warn(
-                            "glTF file '" + path + "': primitive '" + meshOut.name +
-                            "' declares a KHR_texture_transform on " + maps +
-                            " that differs from the reference transform. CNA carries two sampled "
-                            "UV channels but no per-map transform state, so those maps are sampled "
-                            "without their own transform (GLTF-184).");
                     }
                     // plan_gltf.md GLTF-173: normals CNA derived rather than the file authoring
                     // them. Only reported when the derivation had to approximate -- a faceted mesh
@@ -3948,6 +3976,8 @@ namespace Microsoft::Xna::Framework::Content
                                 material.textureCoordinateSetsEXT[slot] =
                                     static_cast<std::uint8_t>(textureCoordinateSets[slot]);
                             }
+                            material.textureTransformsEXT = ParseTextureTransformsEXT(
+                                mg, FindKeyArray(mg, "textureTransforms"));
                             // plan_gltf.md GLTF-228/GLTF-229/GLTF-231. Absent from a .cnj written
                             // before them, whose defaults are glTF's own -- so an older asset loads
                             // as the opaque, single-sided material it could only ever have been.
@@ -4455,6 +4485,9 @@ namespace Microsoft::Xna::Framework::Content
                                     pbrFx->setTextureCoordinateSetEXTProperty(
                                         static_cast<int>(slot), static_cast<int>(
                                             material.textureCoordinateSetsEXT[slot]));
+                                    pbrFx->setTextureTransformEXTProperty(
+                                        static_cast<int>(slot),
+                                        material.textureTransformsEXT[slot]);
                                 }
                                 pbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,
@@ -4501,6 +4534,9 @@ namespace Microsoft::Xna::Framework::Content
                                     skinnedPbrFx->setTextureCoordinateSetEXTProperty(
                                         static_cast<int>(slot), static_cast<int>(
                                             material.textureCoordinateSetsEXT[slot]));
+                                    skinnedPbrFx->setTextureTransformEXTProperty(
+                                        static_cast<int>(slot),
+                                        material.textureTransformsEXT[slot]);
                                 }
                                 skinnedPbrFx->setDiffuseColorProperty(Vector3(
                                     material.baseColorFactor.X, material.baseColorFactor.Y,

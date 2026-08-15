@@ -286,6 +286,14 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
                 dump.normalScale       = p.pbrNormalScale;
                 dump.occlusionStrength = p.pbrOcclusionStrength;
                 dump.textureCoordinateSetMask = p.pbrTextureCoordinateSetMask;
+                for (std::size_t row = 0; row < 10; ++row)
+                {
+                    for (std::size_t component = 0; component < 4; ++component)
+                    {
+                        dump.textureTransformRows[row * 4 + component] =
+                            p.pbrTextureTransformRows[row][component];
+                    }
+                }
                 dump.baseColorTextureIsSrgb = p.pbrBaseColorTextureIsSrgb;
                 dump.emissiveTextureIsSrgb  = p.pbrEmissiveTextureIsSrgb;
                 dump.encodeOutputToSrgb     = p.pbrEncodeOutputToSrgb;
@@ -378,6 +386,7 @@ using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
         out += ",\"occlusionStrength\":" + Num(dump.occlusionStrength);
         out += ",\"textureCoordinateSetMask\":" +
                std::to_string(dump.textureCoordinateSetMask);
+        out += ",\"textureTransformRows\":" + Flat(dump.textureTransformRows);
         out += ",\"baseColorTextureIsSrgb\":" + Bool(dump.baseColorTextureIsSrgb);
         out += ",\"emissiveTextureIsSrgb\":" + Bool(dump.emissiveTextureIsSrgb);
         out += ",\"encodeOutputToSrgb\":" + Bool(dump.encodeOutputToSrgb);

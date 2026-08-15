@@ -149,6 +149,8 @@ namespace CnaTest::GltfOracle
         float occlusionStrength = 0.0f;
         /** @brief Five-bit packed-UV selector mask from `GpuDrawParams`. */
         std::uint32_t textureCoordinateSetMask = 0;
+        /** @brief Five affine UV transforms, flattened in map/row/component order. */
+        std::array<float, 40> textureTransformRows{};
         /** @brief `GpuDrawParams::pbrBaseColorTextureIsSrgb`. */
         bool baseColorTextureIsSrgb = false;
         /** @brief `GpuDrawParams::pbrEmissiveTextureIsSrgb`. */

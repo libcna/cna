@@ -743,7 +743,7 @@ namespace
     // state -- proves the offline CLI tool's complete factor-only .cnj material serialization.
     const char* kPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
-  "extensionsUsed": [ "KHR_materials_ior", "KHR_materials_specular" ],
+  "extensionsUsed": [ "KHR_materials_ior", "KHR_materials_specular", "KHR_texture_transform" ],
   "scene": 0,
   "scenes": [ { "nodes": [0] } ],
   "nodes": [ { "name": "MeshNode", "mesh": 0 } ],
@@ -752,13 +752,19 @@ namespace
   }, "material": 0 } ] } ],
   "materials": [ {
     "pbrMetallicRoughness": {
-      "baseColorTexture": { "index": 0 },
+      "baseColorTexture": { "index": 0, "extensions": { "KHR_texture_transform": {
+        "offset": [0.125, 0.375], "scale": [2.0, 0.5], "rotation": 1.5707963267948966
+      } } },
       "baseColorFactor": [0.25, 0.5, 0.75, 0.4],
       "metallicRoughnessTexture": { "index": 2 },
       "metallicFactor": 0.5,
       "roughnessFactor": 0.3
     },
-    "normalTexture": { "index": 1, "scale": 0.35 },
+    "normalTexture": { "index": 1, "scale": 0.35, "extensions": {
+      "KHR_texture_transform": {
+        "offset": [0.625, 0.25], "scale": [0.75, 1.5], "rotation": -0.7853981633974483
+      }
+    } },
     "occlusionTexture": { "index": 3, "strength": 0.65 },
     "emissiveTexture": { "index": 3 },
     "emissiveFactor": [0.1, 0.2, 0.3],
@@ -811,6 +817,7 @@ namespace
     // back to SkinnedEffect or PbrEffect alone.
     const char* kSkinnedPbrGltf = R"GLTF({
   "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_texture_transform" ],
   "scene": 0,
   "scenes": [ { "nodes": [0, 1] } ],
   "nodes": [
@@ -822,7 +829,9 @@ namespace
   }, "material": 0 } ] } ],
   "materials": [ {
     "pbrMetallicRoughness": { "baseColorTexture": { "index": 0 } },
-    "normalTexture": { "index": 1 }
+    "normalTexture": { "index": 1, "extensions": { "KHR_texture_transform": {
+      "offset": [0.2, 0.4], "scale": [0.5, 0.75], "rotation": 0.3
+    } } }
   } ],
   "textures": [ { "source": 0 }, { "source": 1 } ],
   "images": [
@@ -987,6 +996,8 @@ namespace
         EXPECT_NEAR(runtime.normalScale, offline.normalScale, kTolerance);
         EXPECT_NEAR(runtime.occlusionStrength, offline.occlusionStrength, kTolerance);
         EXPECT_EQ(runtime.textureCoordinateSetMask, offline.textureCoordinateSetMask);
+        expectArrayNear(runtime.textureTransformRows, offline.textureTransformRows,
+                        "textureTransformRows");
         expectArrayNear(runtime.emissiveColor, offline.emissiveColor, "emissiveColor");
         expectArrayNear(runtime.ambientColor, offline.ambientColor, "ambientColor");
 
@@ -2105,6 +2116,8 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NE(std::string::npos, cnj.find("\"specularFactor\": 0.3"));
     EXPECT_NE(std::string::npos,
               cnj.find("\"specularColorFactor\": [0.25, 1, 12]"));
+    EXPECT_NE(std::string::npos,
+              cnj.find("\"textureTransforms\": [0.125, 0.375, 2, 0.5"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0Filter\": 1"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressU\": 1"));
     EXPECT_NE(std::string::npos, cnj.find("\"sampler0AddressV\": 2"));
@@ -2164,6 +2177,33 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_NEAR(pbrFx->getAlphaCutoffEXTProperty(), 0.73f, 1e-5f);
     EXPECT_TRUE(pbrFx->getDoubleSidedEXTProperty());
 
+    const auto& baseTransform = pbrFx->getTextureTransformsEXTProperty()[0];
+    EXPECT_FLOAT_EQ(baseTransform.Offset.X, 0.125f);
+    EXPECT_FLOAT_EQ(baseTransform.Offset.Y, 0.375f);
+    EXPECT_FLOAT_EQ(baseTransform.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(baseTransform.Scale.Y, 0.5f);
+    EXPECT_NEAR(baseTransform.Rotation, 1.5707963267948966f, 1e-5f);
+    const auto& normalTransform = pbrFx->getTextureTransformsEXTProperty()[1];
+    EXPECT_FLOAT_EQ(normalTransform.Offset.X, 0.625f);
+    EXPECT_FLOAT_EQ(normalTransform.Offset.Y, 0.25f);
+    EXPECT_FLOAT_EQ(normalTransform.Scale.X, 0.75f);
+    EXPECT_FLOAT_EQ(normalTransform.Scale.Y, 1.5f);
+    EXPECT_NEAR(normalTransform.Rotation, -0.7853981633974483f, 1e-5f);
+
+    auto* runtimeFx = dynamic_cast<PbrEffect*>(runtimeModel.getMeshesProperty()[0]
+        ->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(runtimeFx, nullptr);
+    for (std::size_t slot = 0; slot < 5; ++slot)
+    {
+        const auto& direct = runtimeFx->getTextureTransformsEXTProperty()[slot];
+        const auto& offline = pbrFx->getTextureTransformsEXTProperty()[slot];
+        EXPECT_NEAR(direct.Offset.X, offline.Offset.X, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Offset.Y, offline.Offset.Y, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Scale.X, offline.Scale.X, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Scale.Y, offline.Scale.Y, 1e-5f) << "slot " << slot;
+        EXPECT_NEAR(direct.Rotation, offline.Rotation, 1e-5f) << "slot " << slot;
+    }
+
     const auto& sampler = mesh->getMeshPartsProperty()[0]->getSamplerStatesEXTProperty()[0];
     EXPECT_EQ(TextureFilter::Point, sampler.getFilterProperty());
     EXPECT_EQ(TextureAddressMode::Clamp, sampler.getAddressUProperty());
@@ -2177,10 +2217,23 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     ASSERT_EQ(runtimeDraws.size(), offlineDraws.size());
     ASSERT_EQ(runtimeDraws.size(), 1u);
     ExpectL6MaterialStateEqual(runtimeDraws.front(), offlineDraws.front());
+    const auto& transformRows = runtimeDraws.front().textureTransformRows;
+    EXPECT_NEAR(transformRows[0], 0.0f, 1e-5f);
+    EXPECT_NEAR(transformRows[1], -0.5f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[2], 0.125f);
+    EXPECT_NEAR(transformRows[4], 2.0f, 1e-5f);
+    EXPECT_NEAR(transformRows[5], 0.0f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[6], 0.375f);
+    EXPECT_NEAR(transformRows[8], 0.5303301f, 1e-5f);
+    EXPECT_NEAR(transformRows[9], 1.0606602f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[10], 0.625f);
+    EXPECT_NEAR(transformRows[12], -0.5303301f, 1e-5f);
+    EXPECT_NEAR(transformRows[13], 1.0606602f, 1e-5f);
+    EXPECT_FLOAT_EQ(transformRows[14], 0.25f);
 
-    // A pre-GLTF-216/343/344 or hand-written PBR .cnj may omit diffuseColor/alpha and the Fresnel
-    // extension fields. Removing all of them from the rich output must retain the historical
-    // white/opaque/core-glTF defaults rather than manufacturing black or zero reflectance.
+    // A pre-GLTF-216/343/344/184 or hand-written PBR .cnj may omit diffuseColor/alpha, Fresnel or
+    // texture-transform fields. Removing all of them from the rich output must retain the
+    // historical white/opaque/core-glTF/identity defaults.
     std::string legacyCnj = cnj;
     const auto eraseArrayField = [&](const std::string& field) {
         const std::string prefix = ", \"" + field + "\": [";
@@ -2200,6 +2253,7 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     };
     eraseArrayField("diffuseColor");
     eraseArrayField("specularColorFactor");
+    eraseArrayField("textureTransforms");
     eraseScalarField("alpha");
     eraseScalarField("ior");
     eraseScalarField("specularFactor");
@@ -2215,6 +2269,33 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsPbrMaterialThroughTheOfflineCnjPath)
     EXPECT_FLOAT_EQ(legacyFx->getIorEXTProperty(), 1.5f);
     EXPECT_FLOAT_EQ(legacyFx->getSpecularFactorEXTProperty(), 1.0f);
     EXPECT_EQ(legacyFx->getSpecularColorFactorEXTProperty(), Vector3(1.0f, 1.0f, 1.0f));
+    const TextureTransformEXT identityTransform;
+    for (const auto& transform : legacyFx->getTextureTransformsEXTProperty())
+        EXPECT_EQ(identityTransform, transform);
+
+    const auto replaceTransformValues = [&](std::string text, const std::string& values) {
+        const std::size_t field = text.find("\"textureTransforms\": [");
+        EXPECT_NE(std::string::npos, field);
+        const std::size_t begin = text.find('[', field);
+        const std::size_t end = text.find(']', begin);
+        EXPECT_NE(std::string::npos, begin);
+        EXPECT_NE(std::string::npos, end);
+        text.replace(begin + 1, end - begin - 1, values);
+        return text;
+    };
+    WriteFile(contentRoot.path() / "short-transform.cnj",
+              replaceTransformValues(cnj, "0"));
+    EXPECT_THROW((void)cm.Load<Model>("short-transform"), ContentLoadException);
+    WriteFile(contentRoot.path() / "nonfinite-transform.cnj",
+              replaceTransformValues(cnj,
+                  "1e39, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, "
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0"));
+    EXPECT_THROW((void)cm.Load<Model>("nonfinite-transform"), ContentLoadException);
+    WriteFile(contentRoot.path() / "long-transform.cnj",
+              replaceTransformValues(cnj,
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, "
+                  "0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 42"));
+    EXPECT_THROW((void)cm.Load<Model>("long-transform"), ContentLoadException);
 }
 
 // plan_gltf.md GLTF-237 and the L6 half of GLTF-244: one rich probe can prove that every schema
@@ -2443,6 +2524,18 @@ TEST(GltfToCnjToolTest, SerializesAndReloadsSkinnedPbrMaterialThroughTheOfflineC
     ASSERT_NE(skinnedPbrFx, nullptr);
     ASSERT_NE(skinnedPbrFx->getTextureProperty(), nullptr);
     ASSERT_NE(skinnedPbrFx->getNormalMapProperty(), nullptr);
+    const TextureTransformEXT expectedTransform{
+        Vector2{0.2f, 0.4f}, Vector2{0.5f, 0.75f}, 0.3f};
+    EXPECT_EQ(expectedTransform, skinnedPbrFx->getTextureTransformsEXTProperty()[1]);
+
+    ContentManager runtimeCm(nullptr, gltfDir.path().string());
+    runtimeCm.setGraphicsDevice(gd);
+    Model runtimeModel = runtimeCm.Load<Model>("skinnedpbr");
+    auto* runtimeFx = dynamic_cast<SkinnedPbrEffect*>(runtimeModel.getMeshesProperty()[0]
+        ->getMeshPartsProperty()[0]->getEffectProperty());
+    ASSERT_NE(runtimeFx, nullptr);
+    EXPECT_EQ(runtimeFx->getTextureTransformsEXTProperty(),
+              skinnedPbrFx->getTextureTransformsEXTProperty());
 }
 
 // Morph target CLI/.cnj serialization: the offline CLI tool must write a binary morph sidecar +

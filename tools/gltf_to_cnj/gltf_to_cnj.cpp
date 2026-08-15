@@ -488,23 +488,6 @@ namespace
                             : ""));
                 }
 
-                // plan_gltf.md GLTF-184/GLTF-336: two sampled UV channels now exist, but no
-                // per-map transform state does, so every differing transform remains named.
-                if (!meshOut.unbakedTextureTransformsEXT.empty())
-                {
-                    std::string maps;
-                    for (const std::string& map : meshOut.unbakedTextureTransformsEXT)
-                    {
-                        if (!maps.empty()) { maps += ", "; }
-                        maps += map;
-                    }
-                    warnings.push_back(
-                        "Primitive '" + partName + "' declares a KHR_texture_transform on " + maps +
-                        " that differs from the reference transform; CNA carries two sampled UV "
-                        "channels but no per-map transform state, so those maps are sampled "
-                        "without their own transform.");
-                }
-
                 // plan_gltf.md GLTF-173: computed normals that had to be averaged rather than
                 // truly flat, because a vertex is shared between faces of different orientation.
                 if (meshOut.smoothedNormalVertexCountEXT > 0)
@@ -1101,6 +1084,26 @@ namespace
                     {
                         if (slot != 0) json << ", ";
                         json << static_cast<int>(e.material.textureCoordinateSetsEXT[slot]);
+                    }
+                    json << "]";
+                }
+                const Microsoft::Xna::Framework::Graphics::TextureTransformEXT identityTransform;
+                if (std::any_of(e.material.textureTransformsEXT.begin(),
+                                e.material.textureTransformsEXT.end(),
+                                [&](const auto& transform) {
+                                    return transform != identityTransform;
+                                }))
+                {
+                    // Flat five-values-per-slot form keeps the deliberately small .cnj reader
+                    // unambiguous: offset.xy, scale.xy, rotation for each established PBR slot.
+                    json << ", \"textureTransforms\": [";
+                    for (std::size_t slot = 0; slot < e.material.textureTransformsEXT.size(); ++slot)
+                    {
+                        if (slot != 0) json << ", ";
+                        const auto& transform = e.material.textureTransformsEXT[slot];
+                        json << transform.Offset.X << ", " << transform.Offset.Y << ", "
+                             << transform.Scale.X << ", " << transform.Scale.Y << ", "
+                             << transform.Rotation;
                     }
                     json << "]";
                 }
