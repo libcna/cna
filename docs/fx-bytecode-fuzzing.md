@@ -143,6 +143,7 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_profile_spirv.c` `emit_SPIRV_dotproduct` | Asserted that both operands share a type; either can be a value whose load was already refused |
 | `mojoshader_profile_spirv.c` `spv_output_color_location`, `spv_output_attrib_location` | A colour-output register number, a vertex attribute usage and its register number all index fixed sixteen-entry tables with no bound, so an out-of-range one wrote past the patch table into whatever followed it |
 | `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Dereferenced a shader's parse data without checking the shader compiled at all, and indexed its symbol and parameter tables unbounded |
+| `mojoshader.c` `parse_ctab_typeinfo` | A struct's member-table offset was read from the constant table and never bounded, so a structure in untrusted bytecode could point its member list anywhere. Found after 275,896 coverage-guided executions |
 | `mojoshader_common.c` `MOJOSHADER_printFloat` | Advances its cursor past the buffer on purpose, so the return value stays the length the caller needed -- but then kept formatting *through* that cursor, writing past the end. Each step now asks `snprintf` for the needed length instead of writing once the cursor is out of bounds |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which

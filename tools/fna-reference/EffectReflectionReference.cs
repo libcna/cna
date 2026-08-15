@@ -17,6 +17,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -242,7 +243,8 @@ namespace CNA.FnaReference
 				.Add("type", parameter.ParameterType.ToString())
 				.Add("rowCount", parameter.RowCount)
 				.Add("columnCount", parameter.ColumnCount)
-				.AddRaw("annotations", DescribeAnnotations(parameter.Annotations));
+				.AddRaw("annotations", DescribeAnnotations(parameter.Annotations))
+				.AddRaw("value", DescribeValue(parameter));
 
 			if (depth < 8)
 			{
@@ -268,6 +270,56 @@ namespace CNA.FnaReference
 				else writer.AddRaw("structureMembers", "null");
 			}
 			return writer.ToString();
+		}
+
+		/// <summary>
+		/// Dumps a numeric parameter's current value the way FNA hands it back.
+		/// </summary>
+		/// <remarks>
+		/// This is the half of the oracle that catches register padding: the Effect Framework
+		/// stores a float3 as a padded float4 register, and a getter that returned the padding,
+		/// or dropped a row, would look identical in the structural comparison above.
+		/// Non-numeric parameters (textures, strings) have no value to compare.
+		/// </remarks>
+		private static string DescribeValue(EffectParameter parameter)
+		{
+			int count = parameter.RowCount * parameter.ColumnCount;
+			if (count <= 0) return "null";
+			int elements = parameter.Elements == null ? 0 : parameter.Elements.Count;
+			if (elements > 0) count *= elements;
+
+			try
+			{
+				if (parameter.ParameterType == EffectParameterType.Single)
+				{
+					float[] values = parameter.GetValueSingleArray(count);
+					var written = new List<string>();
+					foreach (float value in values)
+						written.Add(value.ToString("R", CultureInfo.InvariantCulture));
+					return "[" + string.Join(",", written.ToArray()) + "]";
+				}
+				if (parameter.ParameterType == EffectParameterType.Int32)
+				{
+					int[] values = parameter.GetValueInt32Array(count);
+					var written = new List<string>();
+					foreach (int value in values)
+						written.Add(value.ToString(CultureInfo.InvariantCulture));
+					return "[" + string.Join(",", written.ToArray()) + "]";
+				}
+				if (parameter.ParameterType == EffectParameterType.Bool)
+				{
+					bool[] values = parameter.GetValueBooleanArray(count);
+					var written = new List<string>();
+					foreach (bool value in values) written.Add(value ? "true" : "false");
+					return "[" + string.Join(",", written.ToArray()) + "]";
+				}
+			}
+			catch (Exception error)
+			{
+				// A getter that refuses is itself worth recording rather than hiding.
+				return new JsonWriter().Add("error", error.GetType().Name).ToString();
+			}
+			return "null";
 		}
 
 		private static string DescribeAnnotations(EffectAnnotationCollection annotations)

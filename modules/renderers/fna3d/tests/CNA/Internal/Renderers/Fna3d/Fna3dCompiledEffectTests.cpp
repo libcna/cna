@@ -436,7 +436,7 @@ namespace
     /** @brief Compares one CNA parameter subtree against FNA's own reflection of it. */
     void ExpectParameterMatchesOracle(
         const Microsoft::Xna::Framework::Graphics::EffectParameter& parameter,
-        const JsonValue& oracle, const std::string& path)
+        const JsonValue& oracle, const std::string& path, bool insideStructure = false)
     {
         using namespace Microsoft::Xna::Framework::Graphics;
         SCOPED_TRACE(path);
@@ -449,6 +449,26 @@ namespace
                   OracleString(oracle, "type"));
         EXPECT_EQ(parameter.getRowCountProperty(), OracleInt(oracle, "rowCount"));
         EXPECT_EQ(parameter.getColumnCountProperty(), OracleInt(oracle, "columnCount"));
+
+        // The value comparison is what catches register padding: the Effect Framework stores a
+        // float3 as a padded float4 register, so a getter that returned the padding, or dropped a
+        // row, would look identical in the structural comparison above.
+        // Struct members are deliberately excluded -- CNA and FNA genuinely disagree there, and
+        // the disagreement is recorded in plan_fx.md rather than asserted either way here.
+        const JsonValue* value = insideStructure ? nullptr : oracle.FindMember("value");
+        if (value != nullptr && value->type == CNA::Internal::JsonType::Array &&
+            parameter.getParameterTypeProperty() == EffectParameterType::Single)
+        {
+            const auto actual = parameter.GetValueSingleArray(
+                static_cast<int>(value->arrayValue.size()));
+            ASSERT_EQ(actual.size(), value->arrayValue.size());
+            for (std::size_t i = 0; i < actual.size(); ++i)
+            {
+                EXPECT_FLOAT_EQ(actual[i],
+                                static_cast<float>(value->arrayValue[i].numberValue))
+                    << "float " << i << " of " << path;
+            }
+        }
 
         const JsonValue* annotations = oracle.FindMember("annotations");
         if (annotations != nullptr &&
@@ -473,7 +493,8 @@ namespace
             {
                 ExpectParameterMatchesOracle(
                     parameter.getElementsProperty()[static_cast<int>(i)],
-                    elements->arrayValue[i], path + "[" + std::to_string(i) + "]");
+                    elements->arrayValue[i], path + "[" + std::to_string(i) + "]",
+                    insideStructure);
             }
         }
 
@@ -487,7 +508,7 @@ namespace
                 ExpectParameterMatchesOracle(
                     parameter.getStructureMembersProperty()[static_cast<int>(i)],
                     members->arrayValue[i], path + "." + OracleString(
-                        members->arrayValue[i], "name"));
+                        members->arrayValue[i], "name"), true);
             }
         }
     }

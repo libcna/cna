@@ -1,8 +1,22 @@
 diff --git a/mojoshader.c b/mojoshader.c
-index 486d7e0..7508971 100644
+index 486d7e0..eb22cab 100644
 --- a/mojoshader.c
 +++ b/mojoshader.c
-@@ -2625,21 +2625,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2259,7 +2259,12 @@ static int parse_ctab_typeinfo(Context *ctx, const uint8 *start,
+     } // else
+ 
+     unsigned int i;
+-    const uint32 *member = (const uint32 *) (start + typeptr[6]);
++    // The member table's own offset is read from the constant table and was never bounded, so a
++    // struct in untrusted bytecode could point its member list anywhere. -CNA
++    const uint32 memberpos = (uint32) SWAP16(typeptr[6]);
++    if ((memberpos >= bytes) || ((bytes - memberpos) < (member_count * 8)))
++        return 0;  // corrupt CTAB.
++    const uint32 *member = (const uint32 *) (start + memberpos);
+     for (i = 0; i < member_count; i++)
+     {
+         MOJOSHADER_symbolStructMember *mbr = &info->members[i];
+@@ -2625,21 +2630,24 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
      // The FXLC block has the actual instructions...
      uint32 opcode_count = SWAP32(fxlc.tokens[1]);
  
@@ -34,7 +48,7 @@ index 486d7e0..7508971 100644
      MOJOSHADER_preshaderInstruction *inst = preshader->instructions;
      while (opcode_count--)
      {
-@@ -2686,6 +2689,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2686,6 +2694,14 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
  
          uint32 operand_count = SWAP32(fxlc.tokens[1]) + 1;  // +1 for dest.
  
@@ -49,7 +63,7 @@ index 486d7e0..7508971 100644
          inst->opcode = opcode;
          inst->element_count = (unsigned int) (opcodetok & 0xFF);
          inst->operand_count = (unsigned int) operand_count;
-@@ -2726,7 +2737,13 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2726,7 +2742,13 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                      {
                          const uint32 base = sym->register_index * 4;
                          const uint32 count = sym->register_count * 4;
@@ -64,7 +78,7 @@ index 486d7e0..7508971 100644
                          if ( (base <= item) && ((base + count) > item) )
                              break;
                      } // for
-@@ -2738,13 +2755,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2738,13 +2760,25 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                      operand->type = MOJOSHADER_PRESHADEROPERAND_INPUT;
                      if (numarrays > 0)
                      {
@@ -91,7 +105,7 @@ index 486d7e0..7508971 100644
                          for (i = 0; i < numarrays; i++)
                          {
                              const uint32 jmp = SWAP32(fxlc.tokens[4]);
-@@ -2788,8 +2817,11 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2788,8 +2822,11 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
                  } // case
  
                  default:

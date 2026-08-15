@@ -29,14 +29,14 @@ old `OPEN` headings are historical where this disposition explicitly supersedes 
 **Backend:** FNA3D (the defect is in MojoShader itself, so it reaches every backend that would use
 it -- SDL_GPU, OpenGL, D3D11 and the planned Vulkan/Metal adapters alike).
 
-**Status:** PARTIALLY FIXED. Twenty-five crash classes are fixed by
+**Status:** PARTIALLY FIXED. Twenty-six crash classes are fixed by
 `cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`. The campaign is now clean on
 FNA3D's OpenGL driver across three independent seeds and on the SDL_GPU driver for 4,000
 iterations across two seeds; the SPIR-V emitter still validates with `assert()` in about fifty places.
 
 A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
 written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
-(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found twenty-five distinct ways it crashed the
+(`tools/graphics/compiled_effect_fuzzer.cpp --campaign`) found twenty-six distinct ways it crashed the
 process -- dereferenced NULL parse results, asserts on parsed values, allocations sized before
 their own bounds check, register copies sized by a constant table rather than by the parsed
 storage, an unchecked shader-array selector, and a union member read without checking the object's

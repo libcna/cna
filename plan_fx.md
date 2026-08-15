@@ -45,7 +45,7 @@ Delivered task groups:
   application and post-source-destruction clone use, which also builds as a standalone corpus
   replayer and mutation-campaign driver in any configuration, plus the deterministic in-build
   mutation corpus extended from construction only to that same full surface (`FX-051`);
-- twenty-five upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
+- twenty-six upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
   a dereferenced NULL preshader parse, a SPIR-V attribute fixup assert, register copies sized by
   the constant table rather than the parsed storage, an unbounded preshader operand count, two
   asserts on untrusted preshader tokens, an allocation sized before its own bounds check, and an
@@ -451,10 +451,28 @@ must be accepted before a row can close.
 | FX-013 | Add a distinct compiled runtime/token to `GpuDrawParams` and draw dispatch without changing `ShaderEffect` | FX-011 | Stock, source custom, and compiled paths are mutually distinguishable |
 | FX-014 | Make base `Effect` concrete with default `OnApply()` and compiled-aware `Clone()`, preserving every existing derived override | FX-011, FX-012 | All stock and CNAEXT effects compile and existing clone tests remain unchanged |
 | FX-015 | Add private/internal collection builders and exact technique/pass identities | FX-011, FX-014 | Reflected order, name lookup, ownership checks, and exact pass selection unit tests pass |
-| FX-016 | Implement bounded parameter backing storage, element/member views, defaults, strings, textures, and dirty revisions | FX-002, FX-011 | FNA oracle matches for scalar/vector/matrix/array/struct getters and setters |
+| FX-016 | Implement bounded parameter backing storage, element/member views, defaults, strings, textures, and dirty revisions | FX-002, FX-011 | **Done, with one recorded divergence.** The FNA oracle now carries parameter *values*, and CNA matches it for every top-level scalar, vector, matrix and array in all seven committed binaries. Struct **members** deliberately differ -- see the note below |
 | FX-017 | Populate annotations and sampler-to-texture bindings from descriptors | FX-016 | Annotation lookup/defaults and texture sampler associations match the oracle |
 | FX-018 | Implement compiled constructor validation, reflection population, first-technique selection, and differentiated errors | FX-006, FX-012, FX-014, FX-015, FX-016, FX-017 | Valid fixtures construct; unsupported renderer and malformed/foreign formats fail distinctly |
 | FX-019 | Implement independent compiled-effect clone and lifecycle/device guards | FX-018 | Values, textures, technique, owners, disposal, and device-loss tests pass without aliasing |
+
+#### Recorded divergence: struct member values
+
+The Effect Framework pads each row of a structure member out to a float4 register. CNA reads a
+member through that padded stride; FNA reads it contiguously, so its members come back shifted.
+Measured on `CnaConformanceEffect.fxb`, whose source declares
+`Direction = float3(0.6f, 0.7f, 0.8f)` and `Thresholds = { 0.9f, 1.0f }`:
+
+| Getter | CNA | FNA |
+|---|---|---|
+| `Lighting.Direction[0]` | `0.6` | `0` |
+| `Lighting.Thresholds[0]` | `0` | `0.6` |
+
+CNA returns what the source declares; FNA returns the parent's storage read at unpadded offsets.
+This is the one place the compatibility oracle is not followed, and deliberately so -- matching FNA
+here would mean returning a value the effect author never wrote. Top-level parameters agree
+exactly, which is where real ports read their values, and the oracle comparison therefore asserts
+values everywhere except inside a structure.
 
 ### Phase C - Pass and GraphicsDevice semantics
 
@@ -496,7 +514,7 @@ must be accepted before a row can close.
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
-| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness, corpus and a deterministic mutation campaign **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). Now also runs **coverage-guided under clang libFuzzer**, which is what finds things fastest -- it reached a new crash within 6,500 executions and writes reproducible `crash-<hash>` artifacts. Twenty-five crash classes found so far, all in pinned MojoShader and none in CNA, all fixed by the managed patch. Still open: the SPIR-V emitter validates with `assert()` in about fifty places, so more will surface as the campaign runs longer, and an 80,000-iteration soak reached a use-after-free where MojoShader publishes a destroyed effect's sampler array as the current pass's state changes |
+| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness, corpus and a deterministic mutation campaign **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). Now also runs **coverage-guided under clang libFuzzer**, which is what finds things fastest -- it reached a new crash within 6,500 executions and writes reproducible `crash-<hash>` artifacts. Twenty-six crash classes found so far, all in pinned MojoShader and none in CNA, all fixed by the managed patch. Still open: the SPIR-V emitter validates with `assert()` in about fifty places, so more will surface as the campaign runs longer, and an 80,000-iteration soak reached a use-after-free where MojoShader publishes a destroyed effect's sampler array as the current pass's state changes |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | **Done for CNA-owned code.** 340 FX/Effect/XNB/capability tests pass under ASan+UBSan with zero address findings and zero CNA undefined-behaviour findings; the FX-038 reset and repeated create/apply/dispose stress cases run inside that suite. LeakSanitizer runs after all (the earlier ptrace claim was wrong) and attributes every leak record to pinned MojoShader's SPIR-V emitter or to `FNA3D_CreateDevice`, none to CNA. The remaining third-party UBSan/leak findings are recorded upstream findings, not a CNA gate |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | **Done.** The whole `CnaTests` binary runs under FNA3D: 5,997 pass and every remaining failure is explained -- one real regression from this branch (a stale FNA3D instancing message) fixed here, three `MouseCursorTest` failures caused by `SDL_VIDEODRIVER=offscreen` having no system cursors, one render-target readback that fails only on the SDL_GPU/Vulkan driver and passes on FNA3D's OpenGL driver, and one pre-existing FNA3D device-lifetime crash unrelated to compiled effects, now recorded in `known_bugs.md` |
