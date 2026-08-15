@@ -204,6 +204,7 @@ configure time, not merely to exist.
 | Set | Status |
 |---|---|
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
+| `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
 | `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
@@ -249,6 +250,19 @@ It sits alongside the renderer-specific debug variables this project already has
 on its own.
 
 ---
+
+## Building for the browser
+
+The Emscripten build needs two things this repository does not currently supply, both pre-existing
+and unrelated to renderer selection:
+
+- **zlib.** `sharp-runtime`'s io-compression component calls `find_package(ZLIB)`, which fails under
+  Emscripten. Build Emscripten's own port once (`embuilder build zlib`) and point CMake at it:
+  `-DZLIB_LIBRARY=$EMSDK/upstream/emscripten/cache/sysroot/lib/wasm32-emscripten/libz.a`
+  `-DZLIB_INCLUDE_DIR=$EMSDK/upstream/emscripten/cache/sysroot/include`
+- **A `-Werror` unused-function** in `sharp-runtime`'s `System/IO/RandomAccess.cpp`, which Clang
+  diagnoses and GCC does not. Until it is fixed upstream, add
+  `-DCMAKE_CXX_FLAGS="-Wno-error=unused-function"`.
 
 ## See also
 

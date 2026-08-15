@@ -815,7 +815,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-19 | ⬜ | Windows/MinGW multi set: `DIRECTX9 + DIRECTX11 + DIRECTX12`. |
 | RTR-P10-20 | ⬜ | Windows legacy multi set: `DIRECTX1 + DIRECTX2 + DIRECTX3 + DIRECTX5 + DIRECTX6 + DIRECTX7 + DIRECTX8` — seven families sharing DirectDraw-era headers. |
 | RTR-P10-21 | ⬜ | `+ DIRECT2D + GDI + FREEDIRECT` on Windows (`GDI` excludes `SOFTWARE`, per the conflict matrix). |
-| RTR-P10-22 | ⬜ | Emscripten multi set: `WEBGL2 + CANVAS + HTML_DOM + SVG_DOM` — one wasm bundle, renderer chosen from JS before start. Highest practical payoff of the whole plan. |
+| RTR-P10-22 | 🟨 | Emscripten multi set: `WEBGL2 + CANVAS + HTML_DOM + SVG_DOM` — one wasm bundle, renderer chosen from JS before start. Highest practical payoff of the whole plan. |
 | RTR-P10-23 | ⬜ | JS-side selection surface for that Emscripten set (a `Module` property or exported function feeding `SetPreferred()`), documented in `docs/runtime-renderer-selection.md`. |
 | RTR-P10-24 | ⬜ | macOS multi set: `METAL + OPENGL4 + SOFTWARE`. |
 | RTR-P10-25 | ⬜ | Record binary size and build time for every set above; publish the table so the cost of each addition is visible. |
@@ -842,7 +842,7 @@ glTF path, not in renderer selection.
 | RTR-P11-5 | ✅ | Five descriptors from one `easygl` target, one per GL identity, each pinning its profile. |
 | RTR-P11-6 | ✅ | Remove the "two GL profiles conflict" entry from the P6 conflict matrix. |
 | RTR-P11-7 | ✅ | Multi set `OPENGLES2 + OPENGLES3 + OPENGL33` proven on Linux. |
-| RTR-P11-8 | ⬜ | Multi set `WEBGL1 + WEBGL2` proven under Emscripten. |
+| RTR-P11-8 | 🟨 | Multi set `WEBGL1 + WEBGL2` proven under Emscripten. |
 | RTR-P11-9 | ⬜ | Measure the binary-size cost of carrying all shader variants; document it. |
 | RTR-P11-10 | ⬜ | Verify `plan_glbackends.md`'s documented invariants still hold and update it with the runtime-profile addition. |
 | RTR-P11-11 | ⬜ | Re-run `scripts/run-oracle-corpus-diff-easygl.sh` for each profile from a single multi binary. |
