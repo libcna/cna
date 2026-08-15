@@ -779,6 +779,17 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "SDL_GPU")
     set(RENDERER_TARGET "cna_renderer_sdl_gpu")
     add_compile_definitions(CNA_RENDERER_SDL_GPU)
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_SDL_GPU")
+    # plan_fx.md FX-061: compiled XNA effects on this renderer go through MojoShader's own SDL_GPU
+    # adapter, which emits SPIR-V -- the format this renderer already builds its pipelines from.
+    # Off by default because it pulls a fetched dependency into a renderer that does not otherwise
+    # need one; the capability stays false until the FX-060 shared suite passes here.
+    option(CNA_SDL_GPU_COMPILED_EFFECTS
+           "Build SDL_GPU support for compiled XNA Effect bytecode (plan_fx.md FX-061)" OFF)
+    if(CNA_SDL_GPU_COMPILED_EFFECTS)
+        include(cmake/ThirdPartyFNA3D.cmake)
+        cna_configure_mojoshader()
+        add_compile_definitions(CNA_SDL_GPU_COMPILED_EFFECTS)
+    endif()
 elseif(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES1")
     message(STATUS "CNA: Using OPENGLES1 (fixed-function OpenGL ES 1.1) graphics renderer")
     set(RENDERER_DIR "modules/renderers/opengles1")

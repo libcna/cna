@@ -27,12 +27,20 @@ set(CNA_FNA3D_GIT_REPOSITORY "https://github.com/FNA-XNA/FNA3D.git"
 set(CNA_FNA3D_GIT_TAG "3240147"
     CACHE STRING "Pinned FNA3D revision used by the FNA3D graphics renderer")
 
-# Configures the fetched FNA3D and publishes `cna_fna3d` -- the interface target the renderer
-# module links. It carries FNA3D itself plus the two things FNA3D's own install surface does not
-# give a consumer: the MojoShader include root (mojoshader is PRIVATE-linked inside FNA3D) and the
-# MojoShader preprocessor switches without which mojoshader.h leaves MOJOSHADER_effect an
-# incomplete type. Both were established empirically -- see fna3d-spike/README.md.
-function(cna_configure_fna3d)
+# plan_fx.md FX-061/FX-062/FX-063/FX-065: fetches the pin and publishes `cna_mojoshader` alone --
+# the Effect Framework parser plus the OpenGL, SDL_GPU and D3D11 adapters, with no FNA3D linked.
+# A renderer other than FNA3D calls this directly, so it can read a compiled effect without
+# depending on a second graphics API it does not use. `cna_configure_fna3d()` builds on top of it.
+#
+# The pin is FNA3D's repository because MojoShader ships as its submodule and has no release of its
+# own that carries these adapters. FNA3D's own targets are declared EXCLUDE_FROM_ALL, so a
+# configuration that wants only MojoShader does not compile FNA3D as a side effect; the FNA3D
+# renderer still gets it, pulled in as a link dependency of `cna_fna3d`.
+function(cna_configure_mojoshader)
+    if(TARGET cna_mojoshader)
+        return()
+    endif()
+
     include(FetchContent)
 
     set(_cna_fna3d_mojoshader_patch
@@ -42,8 +50,8 @@ function(cna_configure_fna3d)
 
     if(NOT TARGET SDL3::SDL3)
         message(FATAL_ERROR
-            "CNA: the FNA3D renderer needs SDL3::SDL3 before cna_configure_fna3d() runs -- FNA3D "
-            "depends solely on SDL 3.2.0 or newer and resolves it from this target.")
+            "CNA: MojoShader and FNA3D need SDL3::SDL3 before cna_configure_mojoshader() runs -- "
+            "both depend solely on SDL 3.2.0 or newer and resolve it from this target.")
     endif()
 
     FetchContent_Declare(
@@ -53,6 +61,7 @@ function(cna_configure_fna3d)
         GIT_SHALLOW    FALSE
         GIT_PROGRESS   TRUE
         GIT_SUBMODULES_RECURSE TRUE
+        EXCLUDE_FROM_ALL
         PATCH_COMMAND  "${CMAKE_COMMAND}"
                        "-DCNA_FNA3D_MOJOSHADER_PATCH_FILE=${_cna_fna3d_mojoshader_patch}"
                        -P "${_cna_fna3d_mojoshader_patch_script}"
@@ -140,10 +149,27 @@ function(cna_configure_fna3d)
         MOJOSHADER_USE_SDL_STDLIB
         USE_SDL3)
 
+    message(STATUS "CNA: MojoShader pinned with FNA3D ${CNA_FNA3D_GIT_TAG} (${fna3d_SOURCE_DIR})")
+endfunction()
+
+# Publishes `cna_fna3d`: FNA3D itself on top of the MojoShader target above.
+function(cna_configure_fna3d)
+    cna_configure_mojoshader()
+    if(TARGET cna_fna3d)
+        return()
+    endif()
+
+    FetchContent_GetProperties(fna3d SOURCE_DIR _cna_fna3d_source_dir)
+    if(NOT TARGET FNA3D)
+        message(FATAL_ERROR
+            "CNA: no FNA3D target was defined -- the pin CNA_FNA3D_GIT_TAG=${CNA_FNA3D_GIT_TAG} "
+            "may not be an FNA3D checkout.")
+    endif()
+
     add_library(cna_fna3d INTERFACE)
     target_link_libraries(cna_fna3d INTERFACE FNA3D cna_mojoshader)
     target_include_directories(cna_fna3d SYSTEM INTERFACE
-        "${fna3d_SOURCE_DIR}/include")
+        "${_cna_fna3d_source_dir}/include")
 
-    message(STATUS "CNA: FNA3D pinned at ${CNA_FNA3D_GIT_TAG} (${fna3d_SOURCE_DIR})")
+    message(STATUS "CNA: FNA3D pinned at ${CNA_FNA3D_GIT_TAG} (${_cna_fna3d_source_dir})")
 endfunction()
