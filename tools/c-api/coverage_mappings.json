@@ -316,6 +316,16 @@
       "task": "CBIND-035D3"
     },
     {
+      "id": "effect-technique-pass-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Effect(?:Pass|Technique)(?:Collection)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "mapping": "owned `CNA_EffectPassHandle` / `CNA_EffectTechniqueHandle` values and stable collection-element aliases plus owned mutable pass/technique collection views; exact UTF-8 names, stable non-pointer technique identities, nested annotation/pass views, canonical Apply dispatch and count/index/name operations replace native owner pointers, references, unique-pointer vectors and iterators",
+      "tests": "default/named construction, canonical P0 creation, stable unique technique identities, ownerless Apply dispatch, annotation/pass nesting, collection add/count/index/name behavior, stable aliases across growth/destruction, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectTechniqueSmoke.c`, plus C/C++ handle ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D4"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

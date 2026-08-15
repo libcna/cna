@@ -9,6 +9,10 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPass.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -49,6 +53,10 @@ using Microsoft::Xna::Framework::Graphics::EffectParameter;
 using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
 using Microsoft::Xna::Framework::Graphics::EffectParameterCollection;
 using Microsoft::Xna::Framework::Graphics::EffectParameterType;
+using Microsoft::Xna::Framework::Graphics::EffectPass;
+using Microsoft::Xna::Framework::Graphics::EffectPassCollection;
+using Microsoft::Xna::Framework::Graphics::EffectTechnique;
+using Microsoft::Xna::Framework::Graphics::EffectTechniqueCollection;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
@@ -130,6 +138,39 @@ struct ParameterResource final {
 
 struct ParameterCollectionResource final {
     std::shared_ptr<ParameterCollectionState> state;
+};
+
+struct PassCollectionState final {
+    std::shared_ptr<EffectPassCollection> value;
+    Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
+};
+
+struct TechniqueState final {
+    std::shared_ptr<PassCollectionState> passes;
+    Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
+};
+
+struct TechniqueCollectionState final {
+    std::shared_ptr<EffectTechniqueCollection> value;
+    Microsoft::Xna::Framework::Graphics::Effect* owner = nullptr;
+    std::unordered_map<EffectTechnique*, std::shared_ptr<TechniqueState>> elementStates;
+};
+
+struct PassResource final {
+    std::shared_ptr<EffectPass> value;
+};
+
+struct PassCollectionResource final {
+    std::shared_ptr<PassCollectionState> state;
+};
+
+struct TechniqueResource final {
+    std::shared_ptr<EffectTechnique> value;
+    std::shared_ptr<TechniqueState> state;
+};
+
+struct TechniqueCollectionResource final {
+    std::shared_ptr<TechniqueCollectionState> state;
 };
 
 [[nodiscard]] CNA_Result InvalidArgument(const char* const message)
@@ -482,6 +523,179 @@ template<typename TNative, typename TC, typename TConvert>
     }
     *outCount = static_cast<int>(count);
     return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyEffectName(
+    const CNA_StringView name,
+    std::string* const outName,
+    const char* const failureMessage)
+{
+    const CNA_Result result = CopyStringView(name, true, outName);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(result, ErrorCategoryForResult(result), failureMessage);
+}
+
+[[nodiscard]] CNA_Result GetPass(
+    const CNA_EffectPassHandle handle,
+    std::shared_ptr<PassResource>* const outPass)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectPass, outPass);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The EffectPass handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetPassCollection(
+    const CNA_EffectPassCollectionHandle handle,
+    std::shared_ptr<PassCollectionResource>* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectPassCollection, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The EffectPassCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetTechnique(
+    const CNA_EffectTechniqueHandle handle,
+    std::shared_ptr<TechniqueResource>* const outTechnique)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectTechnique, outTechnique);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The EffectTechnique handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetTechniqueCollection(
+    const CNA_EffectTechniqueCollectionHandle handle,
+    std::shared_ptr<TechniqueCollectionResource>* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectTechniqueCollection, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The EffectTechniqueCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreatePassHandle(
+    std::shared_ptr<EffectPass> value,
+    CNA_EffectPassHandle* const outPass)
+{
+    const auto resource = std::make_shared<PassResource>(PassResource{std::move(value)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectPass, resource, outPass);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned EffectPass handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreatePassCollectionHandle(
+    std::shared_ptr<PassCollectionState> state,
+    CNA_EffectPassCollectionHandle* const outCollection)
+{
+    const auto resource = std::make_shared<PassCollectionResource>(
+        PassCollectionResource{std::move(state)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectPassCollection, resource, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned EffectPassCollection handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateTechniqueHandle(
+    std::shared_ptr<EffectTechnique> value,
+    std::shared_ptr<TechniqueState> state,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    const auto resource = std::make_shared<TechniqueResource>(
+        TechniqueResource{std::move(value), std::move(state)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectTechnique, resource, outTechnique);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned EffectTechnique handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateTechniqueCollectionHandle(
+    std::shared_ptr<TechniqueCollectionState> state,
+    CNA_EffectTechniqueCollectionHandle* const outCollection)
+{
+    const auto resource = std::make_shared<TechniqueCollectionResource>(
+        TechniqueCollectionResource{std::move(state)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectTechniqueCollection, resource, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The owned EffectTechniqueCollection handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateAnnotationCollectionAlias(
+    std::shared_ptr<void> owner,
+    EffectAnnotationCollection* const value,
+    CNA_EffectAnnotationCollectionHandle* const outCollection)
+{
+    const auto resource = std::make_shared<AnnotationCollectionResource>(
+        AnnotationCollectionResource{
+            std::shared_ptr<EffectAnnotationCollection>(std::move(owner), value)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectAnnotationCollection, resource, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result, ErrorCategoryForResult(result),
+        "The effect annotation-collection view could not be created.");
+}
+
+[[nodiscard]] std::shared_ptr<TechniqueState> GetTechniqueElementState(
+    const std::shared_ptr<TechniqueCollectionState>& collection,
+    EffectTechnique* const technique)
+{
+    auto [iterator, inserted] = collection->elementStates.try_emplace(technique);
+    if (inserted || iterator->second == nullptr) {
+        iterator->second = std::make_shared<TechniqueState>();
+        iterator->second->owner = collection->owner;
+    }
+    return iterator->second;
+}
+
+[[nodiscard]] CNA_Result CreateTechniqueElementHandle(
+    const std::shared_ptr<TechniqueCollectionState>& collection,
+    EffectTechnique* const technique,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CreateTechniqueHandle(
+        std::shared_ptr<EffectTechnique>(collection->value, technique),
+        GetTechniqueElementState(collection, technique),
+        outTechnique);
 }
 
 } // namespace
@@ -1978,6 +2192,570 @@ CNA_Result cna_effect_parameter_collection_find_semantic(
         }
         const CNA_Result result = CreateCollectionElementHandle(
             collection->state, parameter, outParameter);
+        if (result == CNA_RESULT_SUCCESS) {
+            *outFound = CNA_TRUE;
+        }
+        return result;
+    });
+}
+
+CNA_Result cna_effect_pass_create(
+    const CNA_StringView name,
+    const uint64_t techniqueIdentity,
+    CNA_EffectPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return InvalidArgument("The EffectPass output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreatePassHandle(
+            std::make_shared<EffectPass>(nullptr, std::move(copiedName), techniqueIdentity),
+            outPass);
+    });
+}
+
+CNA_Result cna_effect_pass_destroy(const CNA_EffectPassHandle passHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(passHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(result, ErrorCategoryForResult(result),
+                   "The owned EffectPass handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_pass_get_name_byte_count(
+    const CNA_EffectPassHandle passHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetStringByteCount(outByteCount, [&]() {
+            return pass->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_pass_copy_name(
+    const CNA_EffectPassHandle passHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyString(destination, capacity, outByteCount, [&]() {
+            return pass->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_pass_get_annotations(
+    const CNA_EffectPassHandle passHandle,
+    CNA_EffectAnnotationCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectPass annotations output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateAnnotationCollectionAlias(
+            pass->value, &pass->value->getAnnotationsProperty(), outCollection);
+    });
+}
+
+CNA_Result cna_effect_pass_apply(const CNA_EffectPassHandle passHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassResource> pass;
+        if (const CNA_Result result = GetPass(passHandle, &pass);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        pass->value->Apply();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_pass_collection_create(
+    CNA_EffectPassCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectPassCollection output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        auto state = std::make_shared<PassCollectionState>();
+        state->value = std::make_shared<EffectPassCollection>();
+        return CreatePassCollectionHandle(std::move(state), outCollection);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_destroy(
+    const CNA_EffectPassCollectionHandle collectionHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<PassCollectionResource> collection;
+        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(result, ErrorCategoryForResult(result),
+                   "The owned EffectPassCollection handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_pass_collection_get_count(
+    const CNA_EffectPassCollectionHandle collectionHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The EffectPassCollection count output is null.");
+        }
+        std::shared_ptr<PassCollectionResource> collection;
+        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_pass_collection_add_create(
+    const CNA_EffectPassCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    const uint64_t techniqueIdentity,
+    CNA_EffectPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return InvalidArgument("The EffectPass element output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<PassCollectionResource> collection;
+        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectPass name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        collection->state->value->Add(
+            EffectPass(collection->state->owner, std::move(copiedName), techniqueIdentity));
+        EffectPass* const pass = &(*collection->state->value)[
+            collection->state->value->getCountProperty() - 1];
+        return CreatePassHandle(
+            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_get_at(
+    const CNA_EffectPassCollectionHandle collectionHandle,
+    const uint64_t index,
+    CNA_EffectPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPass == nullptr) {
+            return InvalidArgument("The EffectPass element output handle is null.");
+        }
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<PassCollectionResource> collection;
+        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
+            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                "The EffectPassCollection index is outside the collection.");
+        }
+        EffectPass* const pass = &(*collection->state->value)[static_cast<int>(index)];
+        return CreatePassHandle(
+            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+    });
+}
+
+CNA_Result cna_effect_pass_collection_find(
+    const CNA_EffectPassCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    CNA_EffectPassHandle* const outPass)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outPass == nullptr) {
+            return InvalidArgument("The EffectPassCollection find output is null.");
+        }
+        *outFound = CNA_FALSE;
+        *outPass = CNA_INVALID_HANDLE;
+        std::shared_ptr<PassCollectionResource> collection;
+        if (const CNA_Result result = GetPassCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectPass lookup name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        EffectPass* const pass = (*collection->state->value)[copiedName];
+        if (pass == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const CNA_Result result = CreatePassHandle(
+            std::shared_ptr<EffectPass>(collection->state->value, pass), outPass);
+        if (result == CNA_RESULT_SUCCESS) {
+            *outFound = CNA_TRUE;
+        }
+        return result;
+    });
+}
+
+CNA_Result cna_effect_technique_create_default(
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        return CreateTechniqueHandle(
+            std::make_shared<EffectTechnique>(),
+            std::make_shared<TechniqueState>(),
+            outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_create_named(
+    const CNA_StringView name,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateTechniqueHandle(
+            std::make_shared<EffectTechnique>(nullptr, std::move(copiedName)),
+            std::make_shared<TechniqueState>(),
+            outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_destroy(
+    const CNA_EffectTechniqueHandle techniqueHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(techniqueHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(result, ErrorCategoryForResult(result),
+                   "The owned EffectTechnique handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_technique_get_name_byte_count(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetStringByteCount(outByteCount, [&]() {
+            return technique->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_technique_copy_name(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyString(destination, capacity, outByteCount, [&]() {
+            return technique->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_technique_get_identity(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    uint64_t* const outIdentity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIdentity == nullptr) {
+            return InvalidArgument("The EffectTechnique identity output is null.");
+        }
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outIdentity = technique->value->getIdInternal();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_technique_get_passes(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    CNA_EffectPassCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectTechnique passes output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (technique->state->passes == nullptr) {
+            auto state = std::make_shared<PassCollectionState>();
+            state->value = std::shared_ptr<EffectPassCollection>(
+                technique->value, &technique->value->getPassesProperty());
+            state->owner = technique->state->owner;
+            technique->state->passes = std::move(state);
+        }
+        return CreatePassCollectionHandle(technique->state->passes, outCollection);
+    });
+}
+
+CNA_Result cna_effect_technique_get_annotations(
+    const CNA_EffectTechniqueHandle techniqueHandle,
+    CNA_EffectAnnotationCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectTechnique annotations output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueResource> technique;
+        if (const CNA_Result result = GetTechnique(techniqueHandle, &technique);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateAnnotationCollectionAlias(
+            technique->value,
+            &technique->value->getAnnotationsProperty(),
+            outCollection);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_create(
+    CNA_EffectTechniqueCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectTechniqueCollection output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        auto state = std::make_shared<TechniqueCollectionState>();
+        state->value = std::make_shared<EffectTechniqueCollection>();
+        return CreateTechniqueCollectionHandle(std::move(state), outCollection);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_destroy(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(result, ErrorCategoryForResult(result),
+                   "The owned EffectTechniqueCollection handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_technique_collection_get_count(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The EffectTechniqueCollection count output is null.");
+        }
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_technique_collection_add_default(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique element output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        collection->state->value->Add(EffectTechnique());
+        EffectTechnique* const technique = &(*collection->state->value)[
+            collection->state->value->getCountProperty() - 1];
+        return CreateTechniqueElementHandle(
+            collection->state, technique, outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_add_named(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique element output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectTechnique name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        collection->state->value->Add(
+            EffectTechnique(nullptr, std::move(copiedName)));
+        EffectTechnique* const technique = &(*collection->state->value)[
+            collection->state->value->getCountProperty() - 1];
+        return CreateTechniqueElementHandle(
+            collection->state, technique, outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_get_at(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle,
+    const uint64_t index,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechnique element output handle is null.");
+        }
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
+            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_RANGE,
+                "The EffectTechniqueCollection index is outside the collection.");
+        }
+        EffectTechnique* const technique =
+            &(*collection->state->value)[static_cast<int>(index)];
+        return CreateTechniqueElementHandle(
+            collection->state, technique, outTechnique);
+    });
+}
+
+CNA_Result cna_effect_technique_collection_find(
+    const CNA_EffectTechniqueCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    CNA_EffectTechniqueHandle* const outTechnique)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outTechnique == nullptr) {
+            return InvalidArgument("The EffectTechniqueCollection find output is null.");
+        }
+        *outFound = CNA_FALSE;
+        *outTechnique = CNA_INVALID_HANDLE;
+        std::shared_ptr<TechniqueCollectionResource> collection;
+        if (const CNA_Result result = GetTechniqueCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyEffectName(
+                name, &copiedName, "The EffectTechnique lookup name is not valid UTF-8 text.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        EffectTechnique* const technique = (*collection->state->value)[copiedName];
+        if (technique == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const CNA_Result result = CreateTechniqueElementHandle(
+            collection->state, technique, outTechnique);
         if (result == CNA_RESULT_SUCCESS) {
             *outFound = CNA_TRUE;
         }

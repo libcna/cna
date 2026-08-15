@@ -52,6 +52,10 @@ enum class ObjectKind : uint32_t {
     EffectAnnotationCollection = 23,
     EffectParameter = 24,
     EffectParameterCollection = 25,
+    EffectPass = 26,
+    EffectPassCollection = 27,
+    EffectTechnique = 28,
+    EffectTechniqueCollection = 29,
     Test = UINT32_MAX
 };
 

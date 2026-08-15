@@ -64,6 +64,20 @@ is destroyed. Nested element/member collections and annotation collections simil
 native owner. Native mutable/const indexers and iterator types collapse into count and lookup
 operations because C has no reference or iterator ABI.
 
+## Techniques and passes
+
+`CNA_EffectTechniqueHandle` and `CNA_EffectPassHandle` own standalone values or stable aliases to
+unique-pointer collection elements. Default technique construction preserves the empty name and
+empty pass collection; named construction preserves the canonical automatically created `P0` pass.
+Technique identities are opaque non-pointer `uint64_t` tokens from the native implementation.
+
+Pass and technique collections expose construction-plus-add, count, index and exact-name lookup.
+Returned aliases survive later collection growth and destruction of the collection-view handle.
+Pass/technique annotation views and technique pass views retain their owner and share mutation.
+The C Apply operation always invokes `EffectPass::Apply()`: ownerless D4 passes preserve its native
+successful no-op, while effect-owned views supplied by the effect lifecycle use the same route and
+therefore enforce current-technique identity before applying.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -76,3 +90,9 @@ texture overload dispatch and Texture2D retention. It also exercises atomic capa
 invalid, stale, wrong-kind and wrong-thread handles under both tested renderers, with a focused
 ASan+UBSan run. C17/C++23 assertions freeze value/texture tag ordinals plus handle and descriptor
 layouts.
+
+`EffectTechniqueSmoke.c` covers both technique constructors, automatic `P0`, unique identities,
+pass Apply dispatch, nested annotation/pass views, both collection families, stable aliases across
+growth and collection destruction, exact strings and invalid/stale/wrong-kind/wrong-thread paths.
+The same strict-C source runs under HEADLESS and SDL_RENDERER and in a focused ASan+UBSan build;
+C17/C++23 assertions freeze all four handle widths.

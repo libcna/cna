@@ -729,6 +729,301 @@ CNA_C_API CNA_Result cna_effect_parameter_collection_find_semantic(
     CNA_Bool* out_found,
     CNA_EffectParameterHandle* out_parameter);
 
+/** @brief Owned handle for an effect pass or stable collection element view. */
+typedef CNA_Handle CNA_EffectPassHandle;
+
+/** @brief Owned handle for a mutable effect-pass collection view. */
+typedef CNA_Handle CNA_EffectPassCollectionHandle;
+
+/** @brief Owned handle for an effect technique or stable collection element view. */
+typedef CNA_Handle CNA_EffectTechniqueHandle;
+
+/** @brief Owned handle for a mutable effect-technique collection view. */
+typedef CNA_Handle CNA_EffectTechniqueCollectionHandle;
+
+/**
+ * @brief Creates an ownerless native pass with copied UTF-8 name and identity metadata.
+ * @param name UTF-8 pass name copied by the call.
+ * @param technique_identity Owning-technique identity metadata, or zero.
+ * @param out_pass Receives the owned pass handle.
+ * @return A CNA result code; failure leaves @p out_pass invalid.
+ */
+CNA_C_API CNA_Result cna_effect_pass_create(
+    CNA_StringView name,
+    uint64_t technique_identity,
+    CNA_EffectPassHandle* out_pass);
+
+/**
+ * @brief Destroys a pass or stable pass-element view handle.
+ * @param pass Owned pass handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_destroy(CNA_EffectPassHandle pass);
+
+/**
+ * @brief Gets the exact UTF-8 pass-name byte count.
+ * @param pass Pass handle.
+ * @param out_byte_count Receives the byte count without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_get_name_byte_count(
+    CNA_EffectPassHandle pass,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the UTF-8 pass name without a terminator.
+ * @param pass Pass handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_effect_pass_copy_name(
+    CNA_EffectPassHandle pass,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets a mutable view of the pass annotation collection.
+ * @param pass Pass handle.
+ * @param out_collection Receives an owned annotation-collection view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_get_annotations(
+    CNA_EffectPassHandle pass,
+    CNA_EffectAnnotationCollectionHandle* out_collection);
+
+/**
+ * @brief Applies a pass through the canonical native dispatch.
+ *
+ * Ownerless passes are the native successful no-op. Effect-owned pass views introduced with the
+ * effect lifecycle validate their technique against that effect's current technique.
+ *
+ * @param pass Pass handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_apply(CNA_EffectPassHandle pass);
+
+/**
+ * @brief Creates an owned empty pass collection.
+ * @param out_collection Receives the owned collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_create(
+    CNA_EffectPassCollectionHandle* out_collection);
+
+/**
+ * @brief Destroys an owned pass-collection view.
+ * @param collection Owned collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_destroy(
+    CNA_EffectPassCollectionHandle collection);
+
+/**
+ * @brief Gets the pass count.
+ * @param collection Collection handle.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_get_count(
+    CNA_EffectPassCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Constructs and adds a pass, returning a stable element view.
+ * @param collection Collection handle.
+ * @param name UTF-8 pass name copied by the call.
+ * @param technique_identity Owning-technique identity metadata, or zero.
+ * @param out_pass Receives an owned stable element-view handle.
+ * @return A CNA result code; failure leaves @p out_pass invalid.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_add_create(
+    CNA_EffectPassCollectionHandle collection,
+    CNA_StringView name,
+    uint64_t technique_identity,
+    CNA_EffectPassHandle* out_pass);
+
+/**
+ * @brief Gets a stable pass view by index.
+ * @param collection Collection handle.
+ * @param index Zero-based pass index.
+ * @param out_pass Receives an owned stable element-view handle.
+ * @return A CNA result code; failure leaves @p out_pass invalid.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_get_at(
+    CNA_EffectPassCollectionHandle collection,
+    uint64_t index,
+    CNA_EffectPassHandle* out_pass);
+
+/**
+ * @brief Finds the first pass with an exact UTF-8 name.
+ * @param collection Collection handle.
+ * @param name Exact UTF-8 name.
+ * @param out_found Receives true when a match exists.
+ * @param out_pass Receives an owned element view, or invalid handle when absent.
+ * @return A CNA result code; absence is a successful false result.
+ */
+CNA_C_API CNA_Result cna_effect_pass_collection_find(
+    CNA_EffectPassCollectionHandle collection,
+    CNA_StringView name,
+    CNA_Bool* out_found,
+    CNA_EffectPassHandle* out_pass);
+
+/**
+ * @brief Creates the native default ownerless technique with empty name and no passes.
+ * @param out_technique Receives the owned technique handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_create_default(
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Creates a named ownerless technique with its canonical default `P0` pass.
+ * @param name UTF-8 technique name copied by the call.
+ * @param out_technique Receives the owned technique handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_create_named(
+    CNA_StringView name,
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Destroys a technique or stable technique-element view handle.
+ * @param technique Owned technique handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_destroy(CNA_EffectTechniqueHandle technique);
+
+/**
+ * @brief Gets the exact UTF-8 technique-name byte count.
+ * @param technique Technique handle.
+ * @param out_byte_count Receives the byte count without a terminator.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_get_name_byte_count(
+    CNA_EffectTechniqueHandle technique,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies the UTF-8 technique name without a terminator.
+ * @param technique Technique handle.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_effect_technique_copy_name(
+    CNA_EffectTechniqueHandle technique,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets the technique's stable non-pointer identity token.
+ * @param technique Technique handle.
+ * @param out_identity Receives the nonzero native identity.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_get_identity(
+    CNA_EffectTechniqueHandle technique,
+    uint64_t* out_identity);
+
+/**
+ * @brief Gets a mutable view of the technique's pass collection.
+ * @param technique Technique handle.
+ * @param out_collection Receives an owned pass-collection view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_get_passes(
+    CNA_EffectTechniqueHandle technique,
+    CNA_EffectPassCollectionHandle* out_collection);
+
+/**
+ * @brief Gets a mutable view of the technique annotation collection.
+ * @param technique Technique handle.
+ * @param out_collection Receives an owned annotation-collection view handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_get_annotations(
+    CNA_EffectTechniqueHandle technique,
+    CNA_EffectAnnotationCollectionHandle* out_collection);
+
+/**
+ * @brief Creates an owned empty technique collection.
+ * @param out_collection Receives the owned collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_create(
+    CNA_EffectTechniqueCollectionHandle* out_collection);
+
+/**
+ * @brief Destroys an owned technique-collection view.
+ * @param collection Owned collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_destroy(
+    CNA_EffectTechniqueCollectionHandle collection);
+
+/**
+ * @brief Gets the technique count.
+ * @param collection Collection handle.
+ * @param out_count Receives the count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_get_count(
+    CNA_EffectTechniqueCollectionHandle collection,
+    uint64_t* out_count);
+
+/**
+ * @brief Constructs and adds a default technique, returning a stable element view.
+ * @param collection Collection handle.
+ * @param out_technique Receives an owned stable element-view handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_add_default(
+    CNA_EffectTechniqueCollectionHandle collection,
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Constructs and adds a named technique with its canonical `P0` pass.
+ * @param collection Collection handle.
+ * @param name UTF-8 technique name copied by the call.
+ * @param out_technique Receives an owned stable element-view handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_add_named(
+    CNA_EffectTechniqueCollectionHandle collection,
+    CNA_StringView name,
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Gets a stable technique view by index.
+ * @param collection Collection handle.
+ * @param index Zero-based technique index.
+ * @param out_technique Receives an owned stable element-view handle.
+ * @return A CNA result code; failure leaves @p out_technique invalid.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_get_at(
+    CNA_EffectTechniqueCollectionHandle collection,
+    uint64_t index,
+    CNA_EffectTechniqueHandle* out_technique);
+
+/**
+ * @brief Finds the first technique with an exact UTF-8 name.
+ * @param collection Collection handle.
+ * @param name Exact UTF-8 name.
+ * @param out_found Receives true when a match exists.
+ * @param out_technique Receives an owned element view, or invalid handle when absent.
+ * @return A CNA result code; absence is a successful false result.
+ */
+CNA_C_API CNA_Result cna_effect_technique_collection_find(
+    CNA_EffectTechniqueCollectionHandle collection,
+    CNA_StringView name,
+    CNA_Bool* out_found,
+    CNA_EffectTechniqueHandle* out_technique);
+
 #ifdef __cplusplus
 }
 #endif

@@ -341,6 +341,19 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_effect_parameter_smoke)
     add_test(NAME CApi_EffectParameterSmoke COMMAND cna_c_api_effect_parameter_smoke)
 
+    add_executable(cna_c_api_effect_technique_smoke
+        tests/pure_c/EffectTechniqueSmoke.c
+    )
+    set_target_properties(cna_c_api_effect_technique_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_effect_technique_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_effect_technique_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_effect_technique_smoke)
+    add_test(NAME CApi_EffectTechniqueSmoke COMMAND cna_c_api_effect_technique_smoke)
+
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c
     )

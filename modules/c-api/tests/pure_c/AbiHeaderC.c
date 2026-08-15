@@ -93,6 +93,11 @@ _Static_assert(sizeof(CNA_EffectParameterCreateInfo) == 56U &&
 _Static_assert(sizeof(CNA_EffectParameterInfo) == 24U &&
                    _Alignof(CNA_EffectParameterInfo) == 4U,
                "CNA_EffectParameterInfo layout must remain stable");
+_Static_assert(sizeof(CNA_EffectPassHandle) == 8U &&
+                   sizeof(CNA_EffectPassCollectionHandle) == 8U &&
+                   sizeof(CNA_EffectTechniqueHandle) == 8U &&
+                   sizeof(CNA_EffectTechniqueCollectionHandle) == 8U,
+               "CNA effect technique/pass handles must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
