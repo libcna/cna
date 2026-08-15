@@ -28,8 +28,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-036E1` adds discovered sessions and their collection, and `CBIND-036E2` adds the session
 > object itself with its rosters, state and gamer management plus the minimum signed-in-gamer
 > surface a session needs to exist, `CBIND-036E3` adds the ten session event registrations and
-> `CBIND-036E4` adds discovery, join and the collapsed fake-async pairs. The generated
-> inventory currently records 3,823 implemented, 30 partial, 2,446 planned and 116
+> `CBIND-036E4` adds discovery, join and the collapsed fake-async pairs, and `CBIND-036E5` adds the
+> local gamers that close parent `CBIND-036`: every receive and send overload, the borrowed sender
+> view and the two CNAEXT queue routes, leaving the whole `net` module mapped. The generated
+> inventory currently records 3,841 implemented, 30 partial, 2,428 planned and 116
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

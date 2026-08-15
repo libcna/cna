@@ -12,6 +12,12 @@ namespace Microsoft::Xna::Framework::Net {
 class NetworkGamer;
 class NetworkSession;
 class NetworkSessionProperties;
+class PacketReader;
+class PacketWriter;
+}
+
+namespace Microsoft::Xna::Framework::GamerServices {
+class SignedInGamer;
 }
 
 namespace CNA::C::Detail {
@@ -48,6 +54,24 @@ namespace CNA::C::Detail {
 [[nodiscard]] CNA_Result BorrowNetworkSession(
     CNA_Handle handle,
     Microsoft::Xna::Framework::Net::NetworkSession** outSession);
+
+// The packet buffers are owned by the networking adapter; the local-gamer routes hand them to the
+// canonical send and receive calls without learning that adapter's resource layout.
+[[nodiscard]] CNA_Result BorrowPacketReader(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::Net::PacketReader** outReader);
+
+[[nodiscard]] CNA_Result BorrowPacketWriter(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::Net::PacketWriter** outWriter);
+
+// A local gamer is a network gamer, so it shares the gamer handle kind; only the gamer adapter
+// knows how to build an owning record for one.
+[[nodiscard]] CNA_Result CreateOwnedLocalNetworkGamer(
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedInGamer,
+    Microsoft::Xna::Framework::Net::NetworkSession* session,
+    CNA_Handle sessionHandle,
+    CNA_Handle* outGamer);
 
 } // namespace CNA::C::Detail
 

@@ -383,6 +383,34 @@ CNA_Result CreateOwnedNetworkSessionProperties(
         "The owned NetworkSessionProperties handle could not be created.");
 }
 
+CNA_Result BorrowPacketReader(const CNA_Handle handle, PacketReader** const outReader)
+{
+    if (outReader == nullptr) {
+        return InvalidArgument("The borrowed PacketReader output is null.");
+    }
+    *outReader = nullptr;
+    std::shared_ptr<PacketReaderResource> reader;
+    if (const CNA_Result result = GetReader(handle, &reader); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outReader = reader->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result BorrowPacketWriter(const CNA_Handle handle, PacketWriter** const outWriter)
+{
+    if (outWriter == nullptr) {
+        return InvalidArgument("The borrowed PacketWriter output is null.");
+    }
+    *outWriter = nullptr;
+    std::shared_ptr<PacketWriterResource> writer;
+    if (const CNA_Result result = GetWriter(handle, &writer); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outWriter = writer->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
 } // namespace CNA::C::Detail
 
 CNA_Result cna_quality_of_service_init(CNA_QualityOfService* const outValue)

@@ -1156,6 +1156,277 @@ CNA_C_API CNA_Result cna_network_session_join_invited_with_local_gamers_async(
     void* context,
     CNA_NetworkSessionHandle* out_session);
 
+/**
+ * @brief Creates an owned local network gamer.
+ *
+ * @param signed_in_gamer Signed-in gamer handle, or `CNA_INVALID_HANDLE` for none.
+ * @param session Owning session handle, or `CNA_INVALID_HANDLE` for a gamer with no session.
+ * @param out_gamer Receives an owned gamer handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * This maps the canonical local-gamer factory. A local gamer created this way is not in any
+ * session roster; a session adds its own through `cna_network_session_add_local_gamer`. The
+ * receive and send routes dereference the owning session, so a gamer created without one can only
+ * be queried, not driven.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_create_ext(
+    CNA_SignedInGamerHandle signed_in_gamer,
+    CNA_NetworkSessionHandle session,
+    CNA_NetworkGamerHandle* out_gamer);
+
+/**
+ * @brief Gets whether an incoming packet is queued on a local gamer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param out_value Receives `CNA_TRUE` when a packet is waiting.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_get_is_data_available(
+    CNA_NetworkGamerHandle gamer,
+    CNA_Bool* out_value);
+
+/**
+ * @brief Gets the signed-in gamer backing a local gamer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param out_signed_in_gamer Receives a borrowed signed-in gamer handle, or `CNA_INVALID_HANDLE`
+ * when the local gamer has none.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread failure.
+ *
+ * The returned handle observes a signed-in gamer this call does not own; release it with
+ * `cna_signed_in_gamer_destroy` when done.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_get_signed_in_gamer(
+    CNA_NetworkGamerHandle gamer,
+    CNA_SignedInGamerHandle* out_signed_in_gamer);
+
+/**
+ * @brief Enables or disables sending voice data to a remote gamer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param remote_gamer Remote gamer handle, or `CNA_INVALID_HANDLE`.
+ * @param enable `CNA_TRUE` to enable voice sending.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented thread failure.
+ *
+ * The canonical operation is a declared no-op, and this route reports that faithfully by
+ * succeeding without changing anything.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_enable_send_voice(
+    CNA_NetworkGamerHandle gamer,
+    CNA_NetworkGamerHandle remote_gamer,
+    CNA_Bool enable);
+
+/**
+ * @brief Sends party invites to nearby gamers.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented thread failure.
+ *
+ * The canonical operation is a declared no-op.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_party_invites(CNA_NetworkGamerHandle gamer);
+
+/**
+ * @brief Receives the next queued packet into a caller buffer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_sender Receives a borrowed gamer handle for the sender, or `CNA_INVALID_HANDLE`.
+ * @param out_received Receives the number of bytes received, or zero when no packet was queued.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread/native failure.
+ *
+ * The canonical operation fills the destination up to its own length, so the capacity given here
+ * is the length the canonical call sees. Release the sender handle when done.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_receive_data(
+    CNA_NetworkGamerHandle gamer,
+    uint8_t* destination,
+    uint64_t capacity,
+    CNA_NetworkGamerHandle* out_sender,
+    uint64_t* out_received);
+
+/**
+ * @brief Receives the next queued packet into a caller buffer at an offset.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param offset Offset within the destination to begin writing at.
+ * @param out_sender Receives a borrowed gamer handle for the sender, or `CNA_INVALID_HANDLE`.
+ * @param out_received Receives the number of bytes received, or zero when no packet was queued.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when the canonical bounds check
+ * rejects the offset, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local gamer, or
+ * a documented thread/native failure.
+ *
+ * The canonical implementation consumes the packet before it validates the offset, so a rejected
+ * offset still discards the packet.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_receive_data_at(
+    CNA_NetworkGamerHandle gamer,
+    uint8_t* destination,
+    uint64_t capacity,
+    int32_t offset,
+    CNA_NetworkGamerHandle* out_sender,
+    uint64_t* out_received);
+
+/**
+ * @brief Receives the next queued packet into a packet reader.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param reader Owned packet-reader handle.
+ * @param out_sender Receives a borrowed gamer handle for the sender, or `CNA_INVALID_HANDLE`.
+ * @param out_received Receives the canonical result.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread/native failure.
+ *
+ * The canonical implementation always reports zero bytes for this overload, whether or not a
+ * packet was available; the C route preserves that rather than substituting a plausible count.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
+    CNA_NetworkGamerHandle gamer,
+    CNA_PacketReaderHandle reader,
+    CNA_NetworkGamerHandle* out_sender,
+    uint64_t* out_received);
+
+/**
+ * @brief Sends a payload to every gamer in the session.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
+ * @param count Number of bytes beginning at @p data.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_data(
+    CNA_NetworkGamerHandle gamer,
+    const uint8_t* data,
+    uint64_t count,
+    CNA_SendDataOptions options);
+
+/**
+ * @brief Sends a sub-range of a payload to every gamer in the session.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
+ * @param count Number of bytes beginning at @p data.
+ * @param offset Offset within @p data to begin sending from.
+ * @param length Number of bytes to send.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_data_range(
+    CNA_NetworkGamerHandle gamer,
+    const uint8_t* data,
+    uint64_t count,
+    int32_t offset,
+    int32_t length,
+    CNA_SendDataOptions options);
+
+/**
+ * @brief Sends a payload to one recipient.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
+ * @param count Number of bytes beginning at @p data.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
+ * kind of gamer, or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_data_to(
+    CNA_NetworkGamerHandle gamer,
+    const uint8_t* data,
+    uint64_t count,
+    CNA_SendDataOptions options,
+    CNA_NetworkGamerHandle recipient);
+
+/**
+ * @brief Sends a sub-range of a payload to one recipient.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param data Caller-owned bytes copied during this call, or null only when @p count is zero.
+ * @param count Number of bytes beginning at @p data.
+ * @param offset Offset within @p data to begin sending from.
+ * @param length Number of bytes to send.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle does not name the right
+ * kind of gamer, or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_data_range_to(
+    CNA_NetworkGamerHandle gamer,
+    const uint8_t* data,
+    uint64_t count,
+    int32_t offset,
+    int32_t length,
+    CNA_SendDataOptions options,
+    CNA_NetworkGamerHandle recipient);
+
+/**
+ * @brief Sends a packet writer's contents to every gamer in the session.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param writer Owned packet-writer handle.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
+ * or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer(
+    CNA_NetworkGamerHandle gamer,
+    CNA_PacketWriterHandle writer,
+    CNA_SendDataOptions options);
+
+/**
+ * @brief Sends a packet writer's contents to one recipient.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param writer Owned packet-writer handle.
+ * @param options One of the `CNA_SEND_DATA_OPTIONS_*` identities.
+ * @param recipient Recipient gamer handle, or `CNA_INVALID_HANDLE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when a handle is not the right kind,
+ * or a documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_send_packet_writer_to(
+    CNA_NetworkGamerHandle gamer,
+    CNA_PacketWriterHandle writer,
+    CNA_SendDataOptions options,
+    CNA_NetworkGamerHandle recipient);
+
+/**
+ * @brief Clears every queued incoming packet on a local gamer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented thread failure.
+ *
+ * This maps a CNA extension that restores the same-library access the canonical session uses when
+ * it disposes.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_clear_packet_queue_ext(CNA_NetworkGamerHandle gamer);
+
+/**
+ * @brief Queues an incoming packet on a local gamer.
+ *
+ * @param gamer Gamer handle naming a local gamer.
+ * @param event_info Versioned event description; its payload is copied during this call.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_HANDLE` when the handle does not name a local
+ * gamer, or a documented argument/thread/native failure.
+ *
+ * This maps a CNA extension used to deliver a packet a transport received. The description's
+ * gamer field names the sender, matching what a later receive reports.
+ */
+CNA_C_API CNA_Result cna_local_network_gamer_enqueue_packet_ext(
+    CNA_NetworkGamerHandle gamer,
+    const CNA_NetworkEventInfo* event_info);
+
 /** @brief Owned handle for one session event subscription. */
 typedef CNA_Handle CNA_NetworkSessionEventRegistrationHandle;
 

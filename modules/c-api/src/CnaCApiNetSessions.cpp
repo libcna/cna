@@ -19,6 +19,10 @@
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSession.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionProperties.hpp"
+#include "Microsoft/Xna/Framework/Net/PacketReader.hpp"
+#include "Microsoft/Xna/Framework/Net/PacketWriter.hpp"
+#include "Microsoft/Xna/Framework/Net/SendDataOptions.hpp"
+#include "SharpRuntime/SharpRuntimeHelper.hpp"
 #include "Microsoft/Xna/Framework/Net/QualityOfService.hpp"
 #include "System/AsyncCallback.hpp"
 #include "System/IAsyncResult.hpp"
@@ -2545,5 +2549,553 @@ CNA_Result cna_network_session_join_invited_with_local_gamers_async(
             CompletionDelegate(callback, context),
             std::any{});
         return CreateSessionResourceHandle(NetworkSession::EndJoinInvited(pending), outSession);
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Net::LocalNetworkGamer;
+using Microsoft::Xna::Framework::Net::SendDataOptions;
+
+// A local gamer shares the network-gamer handle kind, because it is one. The routes below refuse a
+// handle whose gamer is not actually local rather than reinterpreting it.
+[[nodiscard]] CNA_Result BorrowLocalGamer(const CNA_Handle handle, LocalNetworkGamer** const outGamer)
+{
+    *outGamer = nullptr;
+    NetworkGamer* gamer = nullptr;
+    if (const CNA_Result result = BorrowNetworkGamer(handle, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const local = dynamic_cast<LocalNetworkGamer*>(gamer);
+    if (local == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The gamer handle does not name a local gamer.");
+    }
+    *outGamer = local;
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result BorrowOptionalGamer(const CNA_Handle handle, NetworkGamer** const outGamer)
+{
+    *outGamer = nullptr;
+    if (handle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return BorrowNetworkGamer(handle, outGamer);
+}
+
+[[nodiscard]] CNA_Result ValidateSendOptions(const CNA_SendDataOptions options)
+{
+    if (options > CNA_SEND_DATA_OPTIONS_CHAT) {
+        return InvalidArgument(
+            "The requested option is not a canonical SendDataOptions identity.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopyPayload(
+    const uint8_t* const data,
+    const uint64_t count,
+    std::vector<SharpRuntime::bytecs>* const outPayload)
+{
+    if (data == nullptr && count != 0U) {
+        return InvalidArgument("The payload is invalid.");
+    }
+    if (count > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The payload exceeds the canonical range.");
+    }
+    outPayload->assign(data, data + count);
+    return CNA_RESULT_SUCCESS;
+}
+
+// The sender a receive reports is a gamer the session owns, so it is handed back as a view that
+// keeps that session alive for as long as the caller holds it.
+[[nodiscard]] CNA_Result PublishSender(
+    NetworkGamer* const sender,
+    const CNA_Handle gamerHandle,
+    CNA_Handle* const outSender)
+{
+    *outSender = CNA_INVALID_HANDLE;
+    if (sender == nullptr) {
+        return CNA_RESULT_SUCCESS;
+    }
+    CNA_Handle sessionHandle = CNA_INVALID_HANDLE;
+    if (cna_network_gamer_get_session(gamerHandle, &sessionHandle) != CNA_RESULT_SUCCESS ||
+        sessionHandle == CNA_INVALID_HANDLE) {
+        return CNA_RESULT_SUCCESS;
+    }
+    std::shared_ptr<NetworkSessionResource> session;
+    if (GetSessionResource(sessionHandle, &session) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return CreateBorrowedNetworkGamer(
+        sender,
+        session,
+        &session->activeGamerViews,
+        sessionHandle,
+        outSender);
+}
+
+} // namespace
+
+CNA_Result cna_local_network_gamer_create_ext(
+    const CNA_SignedInGamerHandle signedInGamerHandle,
+    const CNA_NetworkSessionHandle sessionHandle,
+    CNA_NetworkGamerHandle* const outGamer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGamer == nullptr) {
+            return InvalidArgument("The NetworkGamer output handle is null.");
+        }
+        *outGamer = CNA_INVALID_HANDLE;
+        Microsoft::Xna::Framework::GamerServices::SignedInGamer* signedIn = nullptr;
+        if (signedInGamerHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(
+                    signedInGamerHandle,
+                    &signedIn);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        NetworkSession* session = nullptr;
+        if (sessionHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = CNA::C::Detail::BorrowNetworkSession(
+                    sessionHandle,
+                    &session);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+        return CNA::C::Detail::CreateOwnedLocalNetworkGamer(
+            signedIn,
+            session,
+            sessionHandle,
+            outGamer);
+    });
+}
+
+CNA_Result cna_local_network_gamer_get_is_data_available(
+    const CNA_NetworkGamerHandle gamerHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The packet-availability output is null.");
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = gamer->getIsDataAvailableProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_get_signed_in_gamer(
+    const CNA_NetworkGamerHandle gamerHandle,
+    CNA_SignedInGamerHandle* const outSignedInGamer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSignedInGamer == nullptr) {
+            return InvalidArgument("The SignedInGamer output handle is null.");
+        }
+        *outSignedInGamer = CNA_INVALID_HANDLE;
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CNA::C::Detail::CreateBorrowedSignedInGamer(
+            gamer->getSignedInGamerProperty(),
+            outSignedInGamer);
+    });
+}
+
+CNA_Result cna_local_network_gamer_enable_send_voice(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const CNA_NetworkGamerHandle remoteGamerHandle,
+    const CNA_Bool enable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        NetworkGamer* remote = nullptr;
+        if (const CNA_Result result = BorrowOptionalGamer(remoteGamerHandle, &remote);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->EnableSendVoice(remote, enable != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_party_invites(const CNA_NetworkGamerHandle gamerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendPartyInvites();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data(
+    const CNA_NetworkGamerHandle gamerHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    CNA_NetworkGamerHandle* const outSender,
+    uint64_t* const outReceived)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSender == nullptr || outReceived == nullptr ||
+            (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The receive output is invalid.");
+        }
+        *outSender = CNA_INVALID_HANDLE;
+        *outReceived = 0U;
+        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The receive capacity exceeds the canonical range.");
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
+        NetworkGamer* sender = nullptr;
+        const int received = gamer->ReceiveData(buffer, sender);
+        if (received > 0) {
+            std::memcpy(destination, buffer.data(), static_cast<std::size_t>(received));
+        }
+        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+        return PublishSender(sender, gamerHandle, outSender);
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data_at(
+    const CNA_NetworkGamerHandle gamerHandle,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    const int32_t offset,
+    CNA_NetworkGamerHandle* const outSender,
+    uint64_t* const outReceived)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSender == nullptr || outReceived == nullptr ||
+            (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The receive output is invalid.");
+        }
+        *outSender = CNA_INVALID_HANDLE;
+        *outReceived = 0U;
+        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The receive capacity exceeds the canonical range.");
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity));
+        NetworkGamer* sender = nullptr;
+        const int received = gamer->ReceiveData(buffer, static_cast<int>(offset), sender);
+        if (received > 0) {
+            std::memcpy(destination, buffer.data(), buffer.size());
+        }
+        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+        return PublishSender(sender, gamerHandle, outSender);
+    });
+}
+
+CNA_Result cna_local_network_gamer_receive_data_into_packet_reader(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const CNA_PacketReaderHandle readerHandle,
+    CNA_NetworkGamerHandle* const outSender,
+    uint64_t* const outReceived)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSender == nullptr || outReceived == nullptr) {
+            return InvalidArgument("The receive output is invalid.");
+        }
+        *outSender = CNA_INVALID_HANDLE;
+        *outReceived = 0U;
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Net::PacketReader* reader = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowPacketReader(readerHandle, &reader);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        NetworkGamer* sender = nullptr;
+        const int received = gamer->ReceiveData(*reader, sender);
+        *outReceived = received < 0 ? 0U : static_cast<uint64_t>(received);
+        return PublishSender(sender, gamerHandle, outSender);
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const uint8_t* const data,
+    const uint64_t count,
+    const CNA_SendDataOptions options)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> payload;
+        if (const CNA_Result result = CopyPayload(data, count, &payload);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(payload, static_cast<SendDataOptions>(options));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_range(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const uint8_t* const data,
+    const uint64_t count,
+    const int32_t offset,
+    const int32_t length,
+    const CNA_SendDataOptions options)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> payload;
+        if (const CNA_Result result = CopyPayload(data, count, &payload);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(
+            payload,
+            static_cast<int>(offset),
+            static_cast<int>(length),
+            static_cast<SendDataOptions>(options));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_to(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const uint8_t* const data,
+    const uint64_t count,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipientHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        NetworkGamer* recipient = nullptr;
+        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> payload;
+        if (const CNA_Result result = CopyPayload(data, count, &payload);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(payload, static_cast<SendDataOptions>(options), recipient);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_data_range_to(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const uint8_t* const data,
+    const uint64_t count,
+    const int32_t offset,
+    const int32_t length,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipientHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        NetworkGamer* recipient = nullptr;
+        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<SharpRuntime::bytecs> payload;
+        if (const CNA_Result result = CopyPayload(data, count, &payload);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(
+            payload,
+            static_cast<int>(offset),
+            static_cast<int>(length),
+            static_cast<SendDataOptions>(options),
+            recipient);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_packet_writer(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const CNA_PacketWriterHandle writerHandle,
+    const CNA_SendDataOptions options)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Net::PacketWriter* writer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowPacketWriter(writerHandle, &writer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(*writer, static_cast<SendDataOptions>(options));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_send_packet_writer_to(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const CNA_PacketWriterHandle writerHandle,
+    const CNA_SendDataOptions options,
+    const CNA_NetworkGamerHandle recipientHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSendOptions(options);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        NetworkGamer* recipient = nullptr;
+        if (const CNA_Result result = BorrowOptionalGamer(recipientHandle, &recipient);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microsoft::Xna::Framework::Net::PacketWriter* writer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowPacketWriter(writerHandle, &writer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->SendData(*writer, static_cast<SendDataOptions>(options), recipient);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_clear_packet_queue_ext(
+    const CNA_NetworkGamerHandle gamerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        gamer->ClearPacketQueue();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_local_network_gamer_enqueue_packet_ext(
+    const CNA_NetworkGamerHandle gamerHandle,
+    const CNA_NetworkEventInfo* const eventInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (eventInfo == nullptr || eventInfo->struct_size < sizeof(CNA_NetworkEventInfo) ||
+            eventInfo->struct_version != StructureVersion) {
+            return InvalidArgument("The network event description is invalid.");
+        }
+        if (eventInfo->type > CNA_NETWORK_EVENT_TYPE_STATE_CHANGE ||
+            eventInfo->reliable > CNA_SEND_DATA_OPTIONS_CHAT ||
+            eventInfo->state > CNA_NETWORK_SESSION_STATE_ENDED ||
+            eventInfo->reason > CNA_NETWORK_SESSION_END_REASON_DISCONNECTED) {
+            return InvalidArgument("The network event description names an unknown identity.");
+        }
+        if (eventInfo->packet == nullptr && eventInfo->packet_byte_count != 0U) {
+            return InvalidArgument("The network event payload is invalid.");
+        }
+        LocalNetworkGamer* gamer = nullptr;
+        if (const CNA_Result result = BorrowLocalGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        NetworkSession::NetworkEvent event;
+        event.Type = static_cast<NetworkSession::NetworkEventType>(eventInfo->type);
+        event.Reliable = static_cast<SendDataOptions>(eventInfo->reliable);
+        event.State = static_cast<NetworkSessionState>(eventInfo->state);
+        event.Reason = static_cast<NetworkSessionEndReason>(eventInfo->reason);
+        if (const CNA_Result result = BorrowOptionalGamer(eventInfo->gamer, &event.Gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = BorrowOptionalGamer(eventInfo->sender, &event.Sender);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (eventInfo->packet_byte_count != 0U) {
+            event.Packet.assign(
+                eventInfo->packet,
+                eventInfo->packet + eventInfo->packet_byte_count);
+        }
+        gamer->EnqueuePacket(std::move(event));
+        return CNA_RESULT_SUCCESS;
     });
 }

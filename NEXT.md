@@ -305,8 +305,19 @@
 > Two more canonical behaviors are preserved: a search refuses a local-only session type outright,
 > and only a SystemLink search reaches real discovery. The inventory is now 3,823 implemented, 30
 > partial, 2,446 planned and 116 N/A, and `LocalNetworkGamer` is the only `net` header with planned
-> rows left; all three trees stay green at 50/50. CBIND-036E5 (local network gamers, 18 rows) closes
-> parent CBIND-036.
+> rows left; all three trees stay green at 50/50.
+>
+> CBIND-036E5 then maps those local gamers and closes parent CBIND-036. A local gamer is a network
+> gamer, so it reuses `CNA_NetworkGamerHandle` and every route refuses a handle that is not local
+> rather than reinterpreting it. All three `ReceiveData` overloads and all six `SendData` overloads
+> get their own routes, the sender a receive reports comes back as a borrowed view that keeps its
+> session alive, and the two CNAEXT queue operations keep an `_ext` suffix. Three canonical
+> behaviors are preserved and asserted instead of tidied up: the offset receive consumes its packet
+> **before** rejecting an out-of-range offset, the packet-reader receive always reports zero bytes
+> even when it consumed a packet, and `EnableSendVoice`/`SendPartyInvites` are declared no-ops. The
+> inventory is now 3,841 implemented, 30 partial, 2,428 planned and 116 N/A, and the `net` module
+> has no planned row left; all three trees stay green at 50/50. CBIND-037 (collections, events,
+> services, media and devices) owns everything that remains.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

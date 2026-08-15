@@ -1842,7 +1842,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "no C route raises or registers these directly: every one takes or returns a native object — a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself — that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
+      "mapping": "no C route raises or registers these directly: every one takes or returns a native object \u2014 a partially constructed `System::Object*`, a `GraphicsResource*` or the renderer itself \u2014 that must not cross the ABI. Their observable effects are already C-native: creation and destruction reach `cna_graphics_device_subscribe_resource_created`/`_destroyed`, tracking is automatic for every owned C resource and visible through `cna_graphics_device_get_tracked_resource_count`, and renderer identity and capabilities are queried through `cna_graphics_device_get_renderer_info` and `cna_graphics_device_supports_capability`",
       "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F5"
@@ -1913,7 +1913,7 @@
         "destructor",
         "method"
       ],
-      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract — clone, dispose, apply, type name, parameters — covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
+      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract \u2014 clone, dispose, apply, type name, parameters \u2014 covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
       "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_RENDERER with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
       "status": "implemented",
       "task": "CBIND-035F7"
@@ -2465,6 +2465,18 @@
       "tests": "Doxygen declaration inventory; the public factory is covered by `NetSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-036D"
+    },
+    {
+      "id": "local-network-gamer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::LocalNetworkGamer(?:::(?:CreateInternal|ClearPacketQueue|EnableSendVoice|EnqueuePacket|ReceiveData|SendData|SendPartyInvites|getIsDataAvailableProperty|getIsLocalProperty|getSignedInGamerProperty))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the local-gamer routes over the same owned `CNA_NetworkGamerHandle`, because a local gamer is a network gamer. Every route refuses a handle whose gamer is not local with `CNA_RESULT_INVALID_HANDLE` rather than reinterpreting it. Each canonical `ReceiveData` and `SendData` overload gets its own route so C never depends on overload resolution; a payload crosses as a pointer and a byte count, and the sender comes back as a borrowed gamer view that keeps its session alive. `CreateInternal` becomes `cna_local_network_gamer_create_ext`, and `ClearPacketQueue`/`EnqueuePacket` keep an `_ext` suffix as CNA extensions. No `PacketReader`, `PacketWriter` or `NetworkEvent` object crosses the boundary: the packet buffers arrive as their own handles and the event as the fixed `CNA_NetworkEventInfo` description",
+      "tests": "`NetSmoke.c` the local roster view, the backing signed-in gamer, the declared-no-op voice and party-invite routes, an enqueue/receive round trip with the sender view, the empty-queue zero answer, the canonical offset overload consuming its packet before rejecting an out-of-range offset and then writing at a valid offset, the always-zero packet-reader overload, all six send overloads, an unknown send option and a null payload refused, a non-local gamer handle refused, and a session-less local gamer reporting no queued data, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E5"
     },
     {
       "id": "network-machine",

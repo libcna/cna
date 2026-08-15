@@ -5,8 +5,8 @@
 `CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
 event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions, their
-collection and the session object itself. Local gamers are the one later coverage task. Nothing here opens a socket unless a `SystemLink` session is created; a
-`Local` session touches no transport at all.
+collection, the session object itself and its local gamers. Nothing here opens a socket unless a
+`SystemLink` session is created; a `Local` session touches no transport at all.
 
 ## Identities
 
@@ -217,3 +217,52 @@ session's type and no host role, and the invited-join routes build a session fro
 fixed values rather than from any live invite state.
 
 Only one session exists at a time, so a caller releases one before creating or joining the next.
+
+## Local gamers
+
+A local gamer **is** a network gamer, so it uses the same owned `CNA_NetworkGamerHandle` rather than
+a second handle kind. Every `cna_local_network_gamer_*` route therefore starts by checking that the
+handle really names a local gamer and returns `CNA_RESULT_INVALID_HANDLE` when it does not, instead
+of reinterpreting a remote gamer as a local one.
+
+The usual way to obtain one is `cna_network_session_get_gamer` with the
+`CNA_NETWORK_SESSION_ROSTER_LOCAL` roster. `cna_local_network_gamer_create_ext` maps the canonical
+internal factory for the cases where a gamer is needed outside a session; the session handle may be
+`CNA_INVALID_HANDLE`, and such a gamer belongs to no roster.
+
+### Receiving
+
+Each canonical `ReceiveData` overload gets its own route, so C never depends on overload
+resolution. A payload arrives in a caller-owned buffer described by a pointer and a byte count, and
+the sender comes back as a **borrowed gamer view** that keeps its session alive exactly like a
+roster view — the caller releases it. An empty queue is not a failure: the route succeeds and
+reports zero bytes.
+
+Two canonical behaviors are preserved rather than smoothed over:
+
+- `cna_local_network_gamer_receive_data_at` **consumes the packet before** it validates the offset,
+  so an out-of-range offset returns `CNA_RESULT_INVALID_ARGUMENT` *and* the packet is gone. The
+  offset form also fills the caller's buffer from the offset onwards, so the buffer must be large
+  enough for the offset plus the packet.
+- `cna_local_network_gamer_receive_data_into_packet_reader` always reports **zero** bytes received,
+  even when it consumed a packet, because the canonical overload never returns the length it read.
+
+### Sending
+
+All six canonical `SendData` overloads are mapped: the plain and offset/length byte forms, each
+with and without a recipient, and the two packet-writer forms. A null recipient handle means "every
+gamer", matching the canonical null pointer.
+
+`CNA_SendDataOptions` is validated against the canonical identities, because its members are
+discrete values rather than composable flags; an unknown value is refused instead of being cast
+through.
+
+### The two extensions
+
+`cna_local_network_gamer_clear_packet_queue_ext` and `cna_local_network_gamer_enqueue_packet_ext`
+carry an `_ext` suffix because the canonical operations they map are CNA extensions. Enqueuing takes
+the same fixed `CNA_NetworkEventInfo` description the session pump uses, so no canonical event
+object crosses the ABI.
+
+`EnableSendVoice` and `SendPartyInvites` are declared no-ops in the canonical implementation. Their
+routes exist, validate their arguments and succeed; they deliberately do not pretend to do more.

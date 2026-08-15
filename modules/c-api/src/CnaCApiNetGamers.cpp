@@ -9,6 +9,7 @@
 #include "Microsoft/Xna/Framework/Net/GamerJoinedEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/GamerLeftEventArgs.hpp"
 #include "Microsoft/Xna/Framework/Net/HostChangedEventArgs.hpp"
+#include "Microsoft/Xna/Framework/Net/LocalNetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkGamer.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkMachine.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionEndedEventArgs.hpp"
@@ -230,6 +231,34 @@ CNA_Result CreateBorrowedNetworkGamer(
         *viewCounter += 1U;
     }
     return CNA_RESULT_SUCCESS;
+}
+
+CNA_Result CreateOwnedLocalNetworkGamer(
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer* const signedInGamer,
+    Microsoft::Xna::Framework::Net::NetworkSession* const session,
+    const CNA_Handle sessionHandle,
+    CNA_Handle* const outGamer)
+{
+    if (outGamer == nullptr) {
+        return InvalidArgument("The NetworkGamer output handle is null.");
+    }
+    *outGamer = CNA_INVALID_HANDLE;
+    const auto resource = std::make_shared<NetworkGamerResource>();
+    resource->owned = std::make_shared<Microsoft::Xna::Framework::Net::LocalNetworkGamer>(
+        Microsoft::Xna::Framework::Net::LocalNetworkGamer::CreateInternal(signedInGamer, session));
+    resource->value = resource->owned.get();
+    resource->session = sessionHandle;
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::NetworkGamer,
+        resource,
+        outGamer);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned LocalNetworkGamer handle could not be created.");
 }
 
 } // namespace CNA::C::Detail
