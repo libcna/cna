@@ -770,3 +770,31 @@ _Static_assert(sizeof(CNA_ContentReaderCreateInfo) == 48U &&
                    offsetof(CNA_ContentReaderCreateInfo, platform) == 44U &&
                    offsetof(CNA_ContentReaderCreateInfo, reserved) == 45U,
                "CNA_ContentReaderCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_NetworkSessionEndReason) == sizeof(uint32_t) &&
+                   sizeof(CNA_NetworkSessionJoinError) == sizeof(uint32_t) &&
+                   sizeof(CNA_NetworkSessionState) == sizeof(uint32_t) &&
+                   sizeof(CNA_NetworkSessionType) == sizeof(uint32_t) &&
+                   sizeof(CNA_SendDataOptions) == sizeof(uint32_t) &&
+                   sizeof(CNA_NetworkSessionPropertiesHandle) == 8U &&
+                   sizeof(CNA_NetworkSessionPropertyEnumeratorHandle) == 8U &&
+                   sizeof(CNA_PacketWriterHandle) == 8U &&
+                   sizeof(CNA_PacketReaderHandle) == 8U &&
+                   CNA_NETWORK_SESSION_END_REASON_DISCONNECTED == UINT32_C(3) &&
+                   CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_FULL == UINT32_C(2) &&
+                   CNA_NETWORK_SESSION_STATE_ENDED == UINT32_C(2) &&
+                   CNA_NETWORK_SESSION_TYPE_LOCAL_WITH_LEADERBOARDS == UINT32_C(4) &&
+                   CNA_SEND_DATA_OPTIONS_CHAT == UINT32_C(4),
+               "CNA network identities must remain stable");
+_Static_assert(sizeof(CNA_QualityOfService) == 40U && _Alignof(CNA_QualityOfService) == 8U &&
+                   offsetof(CNA_QualityOfService, is_available) == 8U &&
+                   offsetof(CNA_QualityOfService, reserved) == 9U &&
+                   offsetof(CNA_QualityOfService, average_roundtrip_ticks) == 16U &&
+                   offsetof(CNA_QualityOfService, minimum_roundtrip_ticks) == 24U &&
+                   offsetof(CNA_QualityOfService, bytes_per_second_downstream) == 32U &&
+                   offsetof(CNA_QualityOfService, bytes_per_second_upstream) == 36U,
+               "CNA_QualityOfService layout must remain stable");
+_Static_assert(sizeof(CNA_OptionalInt32) == 8U && _Alignof(CNA_OptionalInt32) == 4U &&
+                   offsetof(CNA_OptionalInt32, has_value) == 0U &&
+                   offsetof(CNA_OptionalInt32, reserved) == 1U &&
+                   offsetof(CNA_OptionalInt32, value) == 4U,
+               "CNA_OptionalInt32 layout must remain stable");

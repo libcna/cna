@@ -33,7 +33,9 @@ morph-target descriptors/data, blending, track evaluation and retained mesh-part
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and typed Color Texture2D, TextureCube and SoundEffect load routes,
 with an owned compiled-asset reader over a storage stream and the process-wide type-reader
-registry alongside it; owned
+registry alongside it. Networking contributes the session identity enumerations, the
+quality-of-service value, owned session-property lists with enumerators and owned packet read and
+write buffers; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async
@@ -102,7 +104,7 @@ The exact modules and headers are defined in the implementation plan. The curren
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
-`content_readers.h`, `storage.h` and `audio.h`;
+`content_readers.h`, `storage.h`, `net.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations
@@ -138,7 +140,8 @@ callbacks/threading, renderer capability reporting, [graphics resources](GRAPHIC
 [math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
 Runtime boundary. The owned content/cache
 contract is in [`CONTENT.md`](CONTENT.md); the device/container/stream ownership and fake-async
-contract is in [`STORAGE.md`](STORAGE.md). The
+contract is in [`STORAGE.md`](STORAGE.md); the networking values, packet buffers and
+join-failure contract are in [`NET.md`](NET.md). The
 [audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

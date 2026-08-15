@@ -63,6 +63,12 @@ const LastError& GetLastError() noexcept
     return lastError;
 }
 
+void SetLastJoinError(const uint32_t joinError) noexcept
+{
+    lastError.hasJoinError = true;
+    lastError.joinError = joinError;
+}
+
 void SetLastError(
     const CNA_Result result,
     const CNA_ErrorCategory category,
@@ -70,6 +76,8 @@ void SetLastError(
 {
     lastError.result = result;
     lastError.category = category;
+    lastError.hasJoinError = false;
+    lastError.joinError = 0U;
     try {
         if (message.empty()) {
             lastError.message.clear();

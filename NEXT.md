@@ -239,8 +239,22 @@
 > made the reader's own limit and truncation failures land correctly. `ContentReaderSmoke.c` builds
 > a compiled-asset fixture through the storage API and asserts the whole protocol byte-exactly. The
 > inventory is now 3,582 implemented, 28 partial, 2,704 planned and 101 N/A, with no planned
-> `content` or `storage` row left; all three trees are green at 49/49. CBIND-036C (network
-> identities, values and packet transfer, 98 rows) is next.
+> `content` or `storage` row left; all three trees are green at 49/49.
+>
+> CBIND-036C then maps the 98 network identity, value and packet rows. Four things are worth
+> keeping: `SendDataOptions` is exposed as discrete identities, not a bit set, because the canonical
+> enumeration is marked as flags but uses plain sequential values; the canonical packet color
+> asymmetry (writer emits four bytes, reader consumes four floats) is preserved and proved in both
+> directions rather than corrected; the canonical `NetworkSessionProperties` forwards `Insert` and
+> `RemoveAt` to its backing vector with no bounds check and its enumerator dereferences before its
+> first advance, so the C routes decide both cases themselves instead of passing undefined behavior
+> through; and a join failure's join error -- the one canonical payload a diagnostic message cannot
+> carry -- is recorded per thread by the firewall and read back through
+> `cna_net_get_last_join_error`, cleared by any later failure so it can never go stale. Two `_ext`
+> routes move packet bytes, because the canonical API hands buffers straight to send/receive and
+> never exposes them, which would otherwise leave the whole packet surface untestable. The inventory
+> is now 3,665 implemented, 29 partial, 2,606 planned and 115 N/A; all three trees are green at
+> 50/50. CBIND-036D (network gamers, machines and events, 65 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

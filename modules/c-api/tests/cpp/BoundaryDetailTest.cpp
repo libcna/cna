@@ -2,6 +2,7 @@
 
 #include "CnaCApiDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
 #include <cstdint>
@@ -187,6 +188,31 @@ int main()
             CNA_ERROR_CATEGORY_STATE,
             "storage device removed")) {
         return 15;
+    }
+
+    using Microsoft::Xna::Framework::Net::NetworkSessionJoinException;
+    using Microsoft::Xna::Framework::Net::NetworkSessionJoinError;
+
+    // The join error lives on the exception object, which never crosses the ABI, so the firewall
+    // has to record it per thread alongside the usual result, category and diagnostic.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw NetworkSessionJoinException(
+                "session is full",
+                NetworkSessionJoinError::SessionFull);
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "session is full") ||
+        !GetLastError().hasJoinError ||
+        GetLastError().joinError !=
+            static_cast<std::uint32_t>(NetworkSessionJoinError::SessionFull)) {
+        return 16;
+    }
+
+    // Any later failure clears the record, so a stale join error can never be read back.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw std::invalid_argument("unrelated failure");
+        }) != CNA_RESULT_INVALID_ARGUMENT ||
+        GetLastError().hasJoinError) {
+        return 17;
     }
 
     return 0;

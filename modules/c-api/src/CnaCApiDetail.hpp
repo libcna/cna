@@ -17,6 +17,7 @@
 // out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
 // translation unit that never throws one.
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
 #include "System/ArgumentException.hpp"
@@ -96,6 +97,10 @@ enum class ObjectKind : uint32_t {
     StorageContainerEventRegistration = 51,
     ContentReader = 52,
     ContentTypeReader = 53,
+    NetworkSessionProperties = 54,
+    NetworkSessionPropertyEnumerator = 55,
+    PacketWriter = 56,
+    PacketReader = 57,
     Test = UINT32_MAX
 };
 
@@ -103,6 +108,10 @@ struct LastError final {
     CNA_Result result = CNA_RESULT_SUCCESS;
     CNA_ErrorCategory category = CNA_ERROR_CATEGORY_NONE;
     std::string message;
+    // A join failure is the one canonical exception whose payload is not expressible in the
+    // message alone, so the firewall records it here rather than dropping it.
+    bool hasJoinError = false;
+    uint32_t joinError = 0U;
 };
 
 [[nodiscard]] const LastError& GetLastError() noexcept;
@@ -118,6 +127,8 @@ void SetLastError(
     CNA_Result result,
     CNA_ErrorCategory category,
     std::string_view message) noexcept;
+
+void SetLastJoinError(uint32_t joinError) noexcept;
 
 template<typename TCallable>
 [[nodiscard]] CNA_Result CallWithExceptionBarrier(TCallable&& callable) noexcept
@@ -148,6 +159,11 @@ template<typename TCallable>
     } catch (
         const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::Net::NetworkSessionJoinException& exception) {
+        const CNA_Result result =
+            Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+        SetLastJoinError(static_cast<uint32_t>(exception.getJoinErrorProperty()));
+        return result;
     } catch (const System::ArgumentException& exception) {
         return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, exception.what());
     } catch (const System::NotImplementedException& exception) {

@@ -33,6 +33,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiMath.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
+    src/CnaCApiNet.cpp
     src/CnaCApiPackedVectors.cpp
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
@@ -69,7 +70,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content)
+target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content CNA_Net)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -249,6 +250,18 @@ if(CNA_BUILD_TESTS)
     set_tests_properties(CApi_ContentReaderSmoke PROPERTIES
         ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-reader-smoke-home"
     )
+
+    add_executable(cna_c_api_net_smoke
+        tests/pure_c/NetSmoke.c
+    )
+    set_target_properties(cna_c_api_net_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_net_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_net_smoke)
+    add_test(NAME CApi_NetSmoke COMMAND cna_c_api_net_smoke)
 
     add_executable(cna_c_api_vector_smoke
         tests/pure_c/VectorSmoke.c
@@ -841,6 +854,8 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
         ${PROJECT_SOURCE_DIR}/modules/content/include
+        ${PROJECT_SOURCE_DIR}/modules/net/include
+        ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         Threads::Threads
@@ -861,12 +876,15 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
         ${PROJECT_SOURCE_DIR}/modules/content/include
+        ${PROJECT_SOURCE_DIR}/modules/net/include
+        ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
     )
-    # The storage exception is the one canonical type this test throws whose constructors are not
+    # The storage and network-join exceptions are the canonical types this test throws whose constructors are not
     # header-only, so proving its conversion needs the storage module on the link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
         sharp_runtime_core_base
         cna_storage
+        CNA_Net
     )
     cna_link_sharp_runtime(cna_c_api_boundary_detail_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)

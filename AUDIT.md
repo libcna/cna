@@ -21,8 +21,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `content` module: asset-path/cache-key queries, loader registration, graphics-device get/set,
 > manifest and `.xnb` reader-usage snapshots, typed Texture2D, TextureCube and SoundEffect load
 > routes, and the compiled-asset reader pipeline with its owned readers, type readers and
-> process-wide registry. The generated
-> inventory currently records 3,582 implemented, 28 partial, 2,704 planned and 101
+> process-wide registry. `CBIND-036C` adds the network identity enumerations, the
+> quality-of-service value, owned session-property lists with enumerators, owned packet read and
+> write buffers, and the join-failure conversion with its per-thread join-error record. The generated
+> inventory currently records 3,665 implemented, 29 partial, 2,606 planned and 115
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

@@ -2302,6 +2302,146 @@
       "tests": "Doxygen declaration inventory; no C-callable public operation exists",
       "status": "not-applicable",
       "task": "CBIND-036B2"
+    },
+    {
+      "id": "net-session-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/(?:NetworkSessionEndReason|NetworkSessionJoinError|NetworkSessionState|NetworkSessionType|SendDataOptions)\\.hpp$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_NetworkSessionEndReason`, `CNA_NetworkSessionJoinError`, `CNA_NetworkSessionState`, `CNA_NetworkSessionType` and `CNA_SendDataOptions` with their `CNA_*` value macros at the canonical ordinals, pinned by adapter static assertions. The delivery options are exposed as discrete identities rather than a bit set, because the canonical enumeration is marked as flags but uses plain sequential values",
+      "tests": "`NetSmoke.c` identity checks plus C and C++ ABI assertions on every width and representative ordinal, and compile-time assertions against the native enumerations",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "quality-of-service",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/QualityOfService\\.hpp$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the fixed `CNA_QualityOfService` structure carries availability, both round-trip times as 100-nanosecond ticks and both throughput measurements, and the two canonical factories become `cna_quality_of_service_init` and `cna_quality_of_service_init_measured`. `System::TimeSpan` never crosses the boundary; the value is a copied POD rather than a handle because the canonical type is an immutable measurement snapshot",
+      "tests": "`NetSmoke.c` unmeasured and measured initialization, including the canonical quirk that an unmeasured description still reports itself available, plus invalid-structure refusals and C and C++ ABI layout assertions",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-join-exception",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionJoinException(?:::(?:NetworkSessionJoinException|getJoinErrorProperty))?$",
+      "signature_regex": "^(?:|\\(\\)|\\(const std::string &message\\)|\\(const std::string &message, NetworkSessionJoinError joinError\\)|\\(const std::string &message, std::exception_ptr innerException\\)|\\(\\) const)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "the C exception firewall converts this canonical failure to `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE` and the message in the per-thread diagnostic. The join error is the one canonical payload a message cannot carry, so the firewall records it per thread as well and `cna_net_get_last_join_error` reads it back; any later failure clears the record, so a stale join error can never be returned",
+      "tests": "default-message, custom-message and join-error conversion including the clearing rule in the `cna_c_api_boundary_detail_test` adapter test, plus `NetSmoke.c` asserting that an ordinary failure reports no join error",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-join-exception-non-c-members",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionJoinException::(?:NetworkSessionJoinException|setJoinErrorProperty)$",
+      "signature_regex": "^(?:\\(System::Runtime::Serialization::SerializationInfo &info, System::Runtime::Serialization::StreamingContext &context\\)|\\(NetworkSessionJoinError value\\))$",
+      "kinds": [
+        "constructor",
+        "method"
+      ],
+      "mapping": "No C mapping: the serialization constructor takes Sharp Runtime serialization objects, and the setter mutates an exception instance that C never holds. The firewall converts a thrown join failure instead of exposing the exception object",
+      "tests": "Doxygen declaration inventory; the conversion these belong to is covered by the adapter test",
+      "status": "not-applicable",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "packet-buffer-base",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::Packet(?:Reader|Writer)Stream(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "field"
+      ],
+      "mapping": "No C mapping: a base-from-member helper that exists only to construct the backing buffer before the binary base receives a pointer to it. Its constructors are protected and its field is the buffer the packet reader and writer own internally",
+      "tests": "Doxygen declaration inventory; the negative-capacity refusal it enforces is asserted through `cna_packet_reader_create` and `cna_packet_writer_create` in `NetSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "packet-writer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::PacketWriter(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_PacketWriterHandle` with length and position access and one route per canonical `Write` overload, so C never relies on overload resolution. `cna_packet_writer_copy_data_ext` is a documented C-side extension: the canonical API hands a writer straight to a send operation and never exposes its bytes, which leaves a C consumer no way to move or observe a packet on its own",
+      "tests": "`NetSmoke.c` negative-capacity refusals, length and position round trips, byte-exact write-then-read of vector2/3/4, quaternion, matrix, single and double through a copied payload, the deliberate color asymmetry proved in both directions, the end-of-buffer I/O failure, and stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "packet-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::PacketReader(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_PacketReaderHandle` with length and position access and one route per canonical read, including the color read that consumes four floats while the writer emits four bytes -- the canonical asymmetry is preserved rather than corrected. `cna_packet_reader_set_data_ext` is a documented C-side extension for supplying a packet that arrived over a transport the C API does not own",
+      "tests": "`NetSmoke.c` negative-capacity refusals, length and position round trips, byte-exact write-then-read of vector2/3/4, quaternion, matrix, single and double through a copied payload, the deliberate color asymmetry proved in both directions, the end-of-buffer I/O failure, and stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-properties",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties(?:::(?:NetworkSessionProperties|getCountProperty|getItem|setItem|IndexOf|Insert|RemoveAt|getIsReadOnlyProperty|Add|Remove|Contains|Clear|CopyTo|GetEnumerator))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_NetworkSessionPropertiesHandle` over the canonical list, with the optional element modeled as the fixed `CNA_OptionalInt32` POD, count/read-only queries, strict indexed read, appending setter, index-of, insert, remove-at, add, remove, contains, clear and a capacity-checked copy-to. `GetEnumerator` becomes an owned `CNA_NetworkSessionPropertyEnumeratorHandle` with advance, current, reset and release; it observes the live list, so the list refuses destruction while one is open. The canonical list forwards `Insert` and `RemoveAt` to its backing vector with no bounds check, so the C routes decide those ranges themselves rather than passing an invalid position through, and the canonical enumerator dereferences before its first advance, so the C route reports that as a state failure",
+      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-properties-const-indexer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::operator\\[\\]$",
+      "signature_regex": "^\\(int index\\) const override$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_network_session_properties_get_item`, which is the same strict bounds-checked read",
+      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "status": "implemented",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-properties-mutating-indexer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::operator\\[\\]$",
+      "signature_regex": "^\\(int index\\) override$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_network_session_properties_get_item` and `_set_item` express the strict read and the appending write separately, which is what the canonical header itself recommends. The proxy this operator returns has no C counterpart, so its documented quirk -- that a bare out-of-range *read* through it also appends, because the proxy must bind a slot before it knows whether the caller will read or write -- cannot be reproduced and is not simulated",
+      "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
+      "status": "partial",
+      "task": "CBIND-036C"
+    },
+    {
+      "id": "network-session-properties-stl-interop",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSessionProperties::(?:begin|end)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: range-for interop for C++ callers. C iteration is expressed as count plus indexed access, and as the owned enumerator handle that maps `GetEnumerator`",
+      "tests": "Doxygen declaration inventory; C iteration is covered by the count/index and enumerator tests in `NetSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036C"
     }
   ]
 }
