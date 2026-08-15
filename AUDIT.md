@@ -49,8 +49,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > location and collection value surfaces over the existing fixed snapshot, and every `TouchPanel`
 > static. `CBIND-037B6` then adds the haptics extension family: device enumeration and opening,
 > the owned device handle with its whole effect and rumble lifecycle, and the feature, effect,
-> direction and capability values. The
-> generated inventory currently records 4,407 implemented, 30 partial, 1,849 planned and 129
+> direction and capability values, and `CBIND-037B7a` adds the raw joystick family: the type and
+> hat-position identities, the descriptor and capability values, an owned captured snapshot with a
+> count/copy pair per array, and both hot-plug events as owned registrations. The
+> generated inventory currently records 4,461 implemented, 30 partial, 1,795 planned and 129
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

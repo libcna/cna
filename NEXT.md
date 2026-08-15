@@ -476,6 +476,38 @@
 > `not-applicable` with reasons: the `SDL_Haptic*` constructor and the two move operations. The
 > inventory is now 4,407 implemented, 30 partial, 1,849 planned and 129 N/A; all four trees stay
 > green, now at 52/52 with the new `CApi_HapticsSmoke` target.
+>
+> CBIND-037B7a then adds the raw joystick family, 54 rows, in `input_joystick.h` /
+> `CnaCApiInputJoystick.cpp` / `JoystickSmoke.c`. Two design points carry the slice. First, **the
+> snapshot is an owned handle, not a fixed POD** — the one deliberate departure from the input
+> families' value rule. `JoystickStateEXT` carries four heterogeneous variable-length arrays with no
+> canonical maximum, unlike the touch panel's fixed eight slots: a fixed value would have to invent
+> a capacity that silently truncates a real HOTAS setup, and four independent per-array queries would
+> answer from four different instants. So `cna_joysticks_capture_state` captures once into a
+> `CNA_JoystickStateHandle` (`ObjectKind` 69) and each array is read with its own count/copy pair
+> against that instant — which also matters because trackball motion is relative and capturing
+> consumes it. Second, **the POV hat is an ordinal identity, not a bit set**: the plan's own handoff
+> guessed "probably a bit set", and the canonical header says the opposite — the platform's
+> combinable up/down and left/right bits are enumerated as the nine reachable combinations, so
+> `RIGHT_UP` is 5 and composing these values is wrong. Both corrections came from reading the
+> canonical source rather than assuming. The haptics **closed-device-is-not-an-error** contract
+> carried over unchanged and is again the only path any verification tree exercises: an unconnected
+> identifier answers with the disconnected defaults, a power percent of -1 meaning "unknown" rather
+> than "empty", two empty strings and four empty arrays. The device name and GUID stay outside the
+> capability value, so the comparison takes both strings alongside both values; both hot-plug events
+> become owned registrations (`ObjectKind` 70) with one shared release route plus raise routes that
+> invoke the same public multicast field the platform layer invokes, so no `Internal` bridge crosses
+> the ABI. The inventory is now 4,461 implemented, 30 partial, 1,795 planned and 129 N/A; all four
+> trees are green at 53/53 with the new `CApi_JoystickSmoke` target, the sanitizer tree with leak
+> detection on. **Next: CBIND-037B7b** — the last 38 `input` rows (host sensors, device enumeration,
+> clipboard, power), which closes parents `CBIND-037B7` and `CBIND-037B` and the whole `input`
+> module.
+>
+> Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
+> the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
+> TextureCube, input events and other families that later slices implemented. It belongs to
+> `CBIND-041` (consumer documentation), not to an input slice; a focused pass should reconcile that
+> list against the implemented table rather than each slice patching one line of it.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

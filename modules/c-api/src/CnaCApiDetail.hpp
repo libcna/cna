@@ -113,6 +113,8 @@ enum class ObjectKind : uint32_t {
     MouseCursor = 66,
     TextInputEventRegistration = 67,
     HapticDevice = 68,
+    JoystickState = 69,
+    JoystickEventRegistration = 70,
     Test = UINT32_MAX
 };
 

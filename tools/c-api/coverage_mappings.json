@@ -3754,6 +3754,115 @@
       "tests": "Doxygen declaration inventory; ownership transfer is covered by the open/destroy round trips in `HapticsSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037B6"
+    },
+    {
+      "id": "joystick-type",
+      "qualified_name_regex": "^CNA::Input::JoystickTypeEXT(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_JoystickType` with one `CNA_JOYSTICK_TYPE_*` macro per canonical value at its canonical ordinal, plus `CNA_JOYSTICK_TYPE_MAXIMUM` for validation. Every route taking a type refuses an ordinal above the maximum rather than passing an undefined enumerator into C++",
+      "tests": "`JoystickSmoke.c` round-trips all ten identities through a descriptor comparison and refuses the first undefined one; the ordinals are pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-hat-position",
+      "qualified_name_regex": "^CNA::Input::JoystickHatPositionEXT(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_JoystickHatPosition` with one `CNA_JOYSTICK_HAT_POSITION_*` macro per canonical value at its canonical ordinal, plus `CNA_JOYSTICK_HAT_POSITION_MAXIMUM`. The native layer encodes a hat as combinable up/down and left/right bits, but the canonical type enumerates the nine reachable combinations as ordinals, so this is an **identity and not a bit set**: `RIGHT_UP` is 5, not `RIGHT | UP`",
+      "tests": "`JoystickSmoke.c` asserts every hat a captured snapshot reports is a defined identity; the ordinals and the not-a-bit-set property are pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-info",
+      "qualified_name_regex": "^CNA::Input::JoystickInfoEXT(::(id|name|type))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed 16-byte `CNA_JoystickInfo` value plus `cna_joystick_info_init` for the canonical default. The canonical `name` field is the one member left out of the value — a string does not belong inside a POD — and is read through `cna_joysticks_get_name_size_at`/`_copy_name_at` instead",
+      "tests": "`JoystickSmoke.c` asserts the canonical default, reads the name of every device this machine enumerates, and pins the layout through C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-info-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const JoystickInfoEXT &left, const JoystickInfoEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_joystick_info_equals`, which takes the two names alongside the two values because the name lives outside the POD, and so reproduces the canonical three-field comparison exactly. The canonical `!=` is this comparison negated and needs no route of its own",
+      "tests": "`JoystickSmoke.c` separates two descriptors on the identifier, on the type and on the name alone, and covers the undefined-identity, invalid-structure, malformed-UTF-8 and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-capabilities",
+      "qualified_name_regex": "^CNA::Input::JoystickCapabilitiesEXT(::(isConnected|axisCount|buttonCount|hatCount|ballCount|type|name|guid|powerState|powerPercent))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed 40-byte `CNA_JoystickCapabilities` value plus `cna_joystick_capabilities_init` for the canonical defaults, whose power percent is **-1 rather than zero** because \"unknown charge\" is deliberately distinguishable from \"empty battery\". The two string members stay outside the value and are read by identifier through `cna_joysticks_get_capabilities_name_size`/`_copy_capabilities_name` and the matching GUID pair; the GUID is the canonical lowercase hexadecimal text, not a binary value",
+      "tests": "`JoystickSmoke.c` asserts the canonical defaults, proves an unconnected identifier answers with them plus two empty strings rather than failing, and reads the real values of every connected device; the layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-capabilities-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const JoystickCapabilitiesEXT &left, const JoystickCapabilitiesEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_joystick_capabilities_equals`, which takes both names and both GUIDs alongside the two values, so all ten canonical fields participate exactly as the canonical comparison does. The canonical `!=` is this comparison negated and needs no route of its own",
+      "tests": "`JoystickSmoke.c` separates two capability values on a numeric field, on the power percent, on the name alone and on the GUID alone, and covers the undefined type/power-state, invalid-structure and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-state",
+      "qualified_name_regex": "^CNA::Input::JoystickStateEXT(::(axes|buttons|hats|balls))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "an owned `CNA_JoystickStateHandle` captured by `cna_joysticks_capture_state`, with one count/copy pair per canonical array (`cna_joystick_state_get_axis_count`/`_copy_axes` and the button, hat and trackball equivalents) and explicit `cna_joystick_state_destroy`. **A handle rather than a fixed POD**, deliberately: the canonical snapshot carries four heterogeneous variable-length arrays with no canonical maximum, so a fixed value would either invent a capacity that silently truncates real hardware or force four independent queries whose answers come from four different instants. Trackball values are relative motion since the previous read, so capturing consumes them",
+      "tests": "`JoystickSmoke.c` captures a snapshot per connected device plus two absent-device snapshots, copies all four arrays, checks the reported counts against the copied element counts, asserts every hat is a defined identity and every button is a canonical boolean, and covers zero capacity, buffer-too-small, null-output, stale-handle and double-release behavior",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joystick-state-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const JoystickStateEXT &left, const JoystickStateEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_joystick_state_equals`, which compares two captured snapshots handle-to-handle — the only honest C form of a comparison over four variable-length arrays. The canonical `!=` is this comparison negated and needs no route of its own",
+      "tests": "`JoystickSmoke.c` proves two absent-device snapshots compare equal, and covers the null-output and stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
+    },
+    {
+      "id": "joysticks-facade",
+      "qualified_name_regex": "^CNA::Input::Joysticks(::(GetJoysticksEXT|GetCapabilitiesEXT|GetStateEXT|ConnectedEXT|DisconnectedEXT|ResetForTests))?$",
+      "kinds": [
+        "class",
+        "method",
+        "field"
+      ],
+      "mapping": "the index-addressed enumeration `cna_joysticks_get_count` plus `cna_joysticks_get_info_at` and the name count/copy pair; `cna_joysticks_get_capabilities` and `cna_joysticks_capture_state` addressed by native identifier; and, for the two static multicast fields, `cna_joysticks_subscribe_connected_ext`/`_subscribe_disconnected_ext` returning an owned registration released by one shared `cna_joysticks_unsubscribe_ext`, with `cna_joysticks_raise_connected_ext`/`_raise_disconnected_ext` invoking the same public field a platform layer invokes and `cna_joysticks_reset_for_tests_ext` mapping the canonical test-support helper. The enumeration reports the devices the native layer currently holds open, so it is a point-in-time snapshot: an index is valid only until the device set changes. The subscriptions are process-wide rather than game-owned, exactly like the canonical static fields",
+      "tests": "`JoystickSmoke.c` enumerates every device this machine reports and round-trips each descriptor and name, refuses an index at or past the count — which pins the zero-device case every verification tree actually has — proves an unconnected identifier is an ordinary answer for both capabilities and capture, and drives both hot-plug events end to end: each callback receives its own identifier and context, releasing one registration detaches exactly that subscription, and a registration released after the process event was cleared removes nothing rather than failing",
+      "status": "implemented",
+      "task": "CBIND-037B7a"
     }
   ]
 }

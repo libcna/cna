@@ -1082,3 +1082,53 @@ _Static_assert(sizeof(CNA_HapticEffect) == 108U &&
                    offsetof(CNA_HapticEffect, custom_channels) == 98U &&
                    offsetof(CNA_HapticEffect, fade_level) == 106U,
                "CNA_HapticEffect layout must remain stable");
+
+_Static_assert(sizeof(CNA_JoystickStateHandle) == 8U &&
+                   sizeof(CNA_JoystickEventRegistrationHandle) == 8U &&
+                   sizeof(CNA_JoystickType) == sizeof(uint32_t) &&
+                   CNA_JOYSTICK_TYPE_UNKNOWN == UINT32_C(0) &&
+                   CNA_JOYSTICK_TYPE_GAMEPAD == UINT32_C(1) &&
+                   CNA_JOYSTICK_TYPE_WHEEL == UINT32_C(2) &&
+                   CNA_JOYSTICK_TYPE_ARCADE_STICK == UINT32_C(3) &&
+                   CNA_JOYSTICK_TYPE_FLIGHT_STICK == UINT32_C(4) &&
+                   CNA_JOYSTICK_TYPE_DANCE_PAD == UINT32_C(5) &&
+                   CNA_JOYSTICK_TYPE_GUITAR == UINT32_C(6) &&
+                   CNA_JOYSTICK_TYPE_DRUM_KIT == UINT32_C(7) &&
+                   CNA_JOYSTICK_TYPE_ARCADE_PAD == UINT32_C(8) &&
+                   CNA_JOYSTICK_TYPE_THROTTLE == UINT32_C(9) &&
+                   CNA_JOYSTICK_TYPE_MAXIMUM == UINT32_C(9),
+               "CNA joystick type identities must remain stable");
+
+/* The canonical hat enumerates its nine reachable combinations as ordinals, so this is an identity
+   rather than a bit set: RightUp is 5, not RIGHT | UP. */
+_Static_assert(sizeof(CNA_JoystickHatPosition) == sizeof(uint32_t) &&
+                   CNA_JOYSTICK_HAT_POSITION_CENTERED == UINT32_C(0) &&
+                   CNA_JOYSTICK_HAT_POSITION_UP == UINT32_C(1) &&
+                   CNA_JOYSTICK_HAT_POSITION_RIGHT == UINT32_C(2) &&
+                   CNA_JOYSTICK_HAT_POSITION_DOWN == UINT32_C(3) &&
+                   CNA_JOYSTICK_HAT_POSITION_LEFT == UINT32_C(4) &&
+                   CNA_JOYSTICK_HAT_POSITION_RIGHT_UP == UINT32_C(5) &&
+                   CNA_JOYSTICK_HAT_POSITION_RIGHT_DOWN == UINT32_C(6) &&
+                   CNA_JOYSTICK_HAT_POSITION_LEFT_UP == UINT32_C(7) &&
+                   CNA_JOYSTICK_HAT_POSITION_LEFT_DOWN == UINT32_C(8) &&
+                   CNA_JOYSTICK_HAT_POSITION_MAXIMUM == UINT32_C(8),
+               "CNA joystick hat-position identities must remain stable");
+
+_Static_assert(sizeof(CNA_JoystickInfo) == 16U &&
+                   _Alignof(CNA_JoystickInfo) == 4U &&
+                   offsetof(CNA_JoystickInfo, id) == 8U &&
+                   offsetof(CNA_JoystickInfo, type) == 12U,
+               "CNA_JoystickInfo layout must remain stable");
+
+_Static_assert(sizeof(CNA_JoystickCapabilities) == 40U &&
+                   _Alignof(CNA_JoystickCapabilities) == 4U &&
+                   offsetof(CNA_JoystickCapabilities, axis_count) == 8U &&
+                   offsetof(CNA_JoystickCapabilities, button_count) == 12U &&
+                   offsetof(CNA_JoystickCapabilities, hat_count) == 16U &&
+                   offsetof(CNA_JoystickCapabilities, ball_count) == 20U &&
+                   offsetof(CNA_JoystickCapabilities, type) == 24U &&
+                   offsetof(CNA_JoystickCapabilities, power_state) == 28U &&
+                   offsetof(CNA_JoystickCapabilities, power_percent) == 32U &&
+                   offsetof(CNA_JoystickCapabilities, is_connected) == 36U &&
+                   offsetof(CNA_JoystickCapabilities, reserved) == 37U,
+               "CNA_JoystickCapabilities layout must remain stable");

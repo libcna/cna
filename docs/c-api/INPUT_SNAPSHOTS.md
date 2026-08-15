@@ -185,9 +185,60 @@ composes them itself, and every route validates against `CNA_HAPTIC_FEATURE_ALL`
 No `SDL_Haptic` ever crosses the ABI. The device enumeration is a point-in-time snapshot taken by
 each call, so an index from `cna_haptics_get_count` is only valid until the device set changes.
 
+## Raw joysticks
+
+`input_joystick.h` maps the `CNA::Input` raw-joystick family — flight sticks, wheels, throttles and
+arbitrary HID controllers that `GamePad` cannot represent. Like haptics it is a CNA-namespace
+surface, so its routes carry no `_ext` suffix except the two hot-plug events and the test reset,
+whose names follow the canonical members. Everything here is raw and unmapped: axis order, button
+numbering and hat count are whatever the hardware reports, with no XNA semantic assignment. A device
+the platform also maps as a gamepad appears here too, as `CNA_JOYSTICK_TYPE_GAMEPAD` — an
+independent view of the same hardware, not a second copy of `GamePad`.
+
+**A snapshot is an owned handle, not a value.** This is the one place the input families depart from
+the fixed-POD rule, and deliberately. The canonical `JoystickStateEXT` carries four heterogeneous
+variable-length arrays — axes, buttons, hats and trackballs — with no canonical maximum, unlike the
+touch panel's fixed eight slots. A fixed value would have to invent a capacity, and any capacity
+small enough to be reasonable silently truncates a real HOTAS setup. Four independent per-array
+queries would avoid that but would answer from four different instants. So
+`cna_joysticks_capture_state` captures once into a `CNA_JoystickStateHandle`, and each array is read
+with its own count/copy pair against that one instant. Release it with `cna_joystick_state_destroy`.
+
+**A hat is an identity, not a bit set.** The platform encodes a POV hat as an up/down bit combined
+with a left/right bit, but the canonical enumeration lists the nine reachable combinations, and so
+does `CNA_JoystickHatPosition`: `CNA_JOYSTICK_HAT_POSITION_RIGHT_UP` is 5, not `RIGHT | UP`. Do not
+compose these values.
+
+**An absent device is an ordinary answer, not a failure** — the same contract haptics established.
+`cna_joysticks_get_capabilities` on an identifier that is not connected succeeds with
+`is_connected` false, zero counts, an unknown type and power state, a power percent of **-1**
+("unknown", deliberately distinguishable from an empty battery) and two empty strings;
+`cna_joysticks_capture_state` succeeds with four empty arrays. As with haptics, that is what makes
+the family testable on a machine with no joystick, which is the normal case.
+
+Two strings stay outside the capability value, for the reason a string never belongs in a POD: the
+device name and the device GUID are read by identifier through
+`cna_joysticks_get_capabilities_name_size`/`_copy_capabilities_name` and the matching GUID pair, and
+`cna_joystick_capabilities_equals` therefore takes both strings alongside both values so it
+reproduces the canonical ten-field comparison exactly. The GUID is the canonical lowercase
+hexadecimal text, not a binary value. The enumerated descriptor works the same way:
+`CNA_JoystickInfo` carries the identifier and type, and the name comes from
+`cna_joysticks_get_name_size_at`/`_copy_name_at`.
+
+The two hot-plug events are process-wide static fields, exactly like the mouse and text-input
+events, so their subscriptions take no game handle. One shared `cna_joysticks_unsubscribe_ext`
+releases either kind, `cna_joysticks_raise_connected_ext`/`_raise_disconnected_ext` invoke the same
+public field the platform layer invokes, and `cna_joysticks_reset_for_tests_ext` clears every
+subscriber — process-wide state a caller does not own alone. Releasing a registration after that
+reset removes nothing rather than failing.
+
+No `SDL_Joystick` ever crosses the ABI. The enumeration reports the devices the native layer
+currently holds open and is a point-in-time snapshot taken by each call, so an index from
+`cna_joysticks_get_count` is only valid until the device set changes. Trackball values are relative
+motion since the previous read, so capturing consumes them.
+
 ## Current scope boundary
 
-Apart from the text-input events above, the input families deliberately expose no live native state
-pointer, per-key platform call or device event subscription. The remaining `CNA::Input` joystick,
-sensor, clipboard, power and device-enumeration extensions remain planned for
-complete-public-API coverage.
+Apart from the text-input and joystick hot-plug events above, the input families deliberately expose
+no live native state pointer or per-key platform call. The remaining `CNA::Input` sensor, clipboard,
+power and device-enumeration extensions remain planned for complete-public-API coverage.

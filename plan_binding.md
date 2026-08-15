@@ -394,7 +394,9 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B4d | 27 | Complete text input | ✅ | `input_text.h` maps every `TextInputEXT` row through `cna_text_input_*` free functions, because C has no static class. All three events become owned `CNA_TextInputRegistrationHandle` values with **one** shared release route, since a registration already knows which event it came from; the subscriptions take no game handle, as the canonical events are process-wide statics. A committed code unit crosses as a `uint16_t` and an above-BMP code point arrives as two surrogate calls; the two multi-field events hand over fixed versioned infos whose UTF-8 text and candidate strings are `CNA_StringView`s borrowed only for the callback, so neither `std::string` nor `std::vector` crosses the ABI. The three `INTERNAL_On*` dispatchers become the raise routes that make the events observable without a keyboard. Two canonical quirks are preserved and asserted: composition `start`/`length` are byte offsets forwarded verbatim and `selected` is not range-checked, because the canonical dispatch checks neither. One **deliberate deviation**: an undefined type hint is refused, where the canonical conversion silently falls back to plain text. **Borrowed from CBIND-037B7:** `TextInputTypeEXT` and its nine values (10 rows) — 27 rows here, 92 left there. This closes parent `CBIND-037B4`. The suite never branches on renderer identity: it forces the unbound case to prove the null-guarded contract on every backend, then restores whatever the backend really bound — which on SDL_RENDERER is a live window where start genuinely activates text input and stop genuinely deactivates it, asserted as a relationship rather than a fixed answer. Green in all four trees (51/51) and under ASan+UBSan with leak detection on. |
 | CBIND-037B5 | 80 | Complete touch and gestures | ✅ | `input_touch.h` maps the whole touch family onto the representations the C API already had. `GestureType` is a `uint32_t` bit set whose four canonical operators need **no** route — unlike the gamepad button identities these really are flags, so C composes and masks them with its own operators and every route validates against `CNA_GESTURE_TYPE_ALL`. `GestureSample` is a fixed 64-byte value rather than a handle, since it is a copyable snapshot with no identity; its eight canonical getters are plain fields and `System::TimeSpan` crosses as `int64_t` 100-nanosecond ticks, the spelling `runtime.h` and `audio.h` already use. `TouchLocation`, `TouchPanelCapabilities` and the entire `TouchCollection` mutation surface extend the **existing** fixed eight-slot `CNA_TouchState`/`CNA_TouchLocation`/`CNA_TouchCapabilities` values, so the ABI never grows a second spelling of a touch snapshot. Four canonical behaviors are preserved and asserted rather than smoothed over: equality, the hash and the text all ignore the pressure extension and the text carries **only** the position; reading an empty gesture queue throws canonically and so is refused in C rather than answered with a default sample; a raised touch event feeds gesture detection and **not** the snapshot, and is dropped outright until a display size is published, because the dispatch scales by it; and `ResetForTests` clears the display metrics and window handle even though the canonical class comment claims they survive — **the C contract follows the implementation and says so**. `CopyTo` inserts and shifts rather than overwriting, which is why the destination's element count is an argument. Three deliberate C deviations are documented: a negative maximum touch count, a pressure outside zero through one, and an append past the fixed capacity are refused rather than stored or silently dropped. Five rows are `not-applicable` with reasons: the four iterator overloads, because an iterator has no C counterpart and C indexes the fixed array directly, and the class-local `intcs` alias, which declares no operation. `InputSnapshotsSmoke.c` grew three pure validators and one in-game validator with their own return codes, proving the pressure-blind match, the insert-semantics copy, the exact text, the enqueue/read round trip, the empty-queue refusal, the released frame after a slot is cleared, and the reset really clearing the display metrics. Green in all four trees (51/51) and under ASan+UBSan with leak detection on. |
 | CBIND-037B6 | 126 | Complete the haptics extension family | ✅ | `input_haptics.h` maps the whole `CNA::Input` haptics surface. This is the first input slice with **no XNA counterpart at all**, so the whole header maps a CNA-namespace surface and its routes take no `_ext` suffixes, following the `core_ext.h` precedent. It is also the first input slice to produce an **owned handle** rather than a value: `HapticDevice` becomes `CNA_HapticDeviceHandle` (`ObjectKind` 68), with the destructor/`Dispose` split `MouseCursor` established, so a caller can close a device without giving up its handle. The decision that makes the family testable at all is that a **closed device is not an error state**: the three open routes never fail for want of hardware, they hand back a real handle whose open flag reports whether anything is behind it, and every route on a closed device answers `CNA_FALSE`, zero or -1 through its output — exactly as the canonical class behaves. No verification tree has force-feedback hardware, so that path is the one actually exercised, and it is asserted rather than skipped. `HapticFeatureEXT` is a `uint32_t` bit set whose five operators need no route, C composing them itself; its canonical bit gaps (LeftRight at 11, Custom at 15, the four global capabilities at 16–19) are reproduced exactly and pinned by ABI assertions. `HapticEffectTypeEXT` and `HapticDirectionTypeEXT` are ordinal identities and an out-of-range value is refused. Two representational decisions are documented, not hidden: a **custom waveform travels beside the effect value** rather than inside it, so the 108-byte `CNA_HapticEffect` stays a plain copyable POD owning no heap, and the **device name is left out of the capability value** and read through the count/copy pair — which is why `cna_haptic_capabilities_equals` takes both names as arguments, reproducing the canonical comparison exactly instead of quietly comparing fewer fields than it does. Canonical pass-throughs are preserved: rumble strength, gain and autocenter reach the platform unvalidated, and freeing an unknown effect identifier is a successful no-op because the canonical operation reports nothing. `RunEffectEXT`'s defaulted iteration count is passed explicitly. Three rows are `not-applicable` with reasons: the `SDL_Haptic*` constructor, which would put a native backend pointer in the ABI, and the move constructor and move assignment, which have no counterpart because a handle is the only name C has for a device. The slice gets its own strict-C `HapticsSmoke.c` and `CApi_HapticsSmoke` target rather than growing `InputSnapshotsSmoke.c` further, matching its own adapter file. Green in all four trees (52/52) and under ASan+UBSan with leak detection on. |
-| CBIND-037B7 | 102 | Complete the remaining input extensions | ⬜ | Map the `CNA::Input` joystick, sensor, key-modifier, button-label, text-input-type, device-enumeration, clipboard, power and connection-state surfaces. |
+| CBIND-037B7 | 92 | Complete the remaining input extensions | 🟨 | Map the remaining `CNA::Input` joystick, sensor, device-enumeration, clipboard and power surfaces. The key-modifier, button-label, text-input-type and connection-state identities this row originally owned were borrowed into `CBIND-037B3`, `B4a` and `B4d`, which is why 92 rows remain rather than the 102 first partitioned. Split by concern into `CBIND-037B7a`–`B7b` below, because the joystick family is a device surface with its own values, snapshot and hot-plug events while the rest are small host-system queries. |
+| CBIND-037B7a | 54 | Complete the raw joystick family | ✅ | `input_joystick.h` and `CnaCApiInputJoystick.cpp` map `JoystickTypeEXT`, `JoystickHatPositionEXT`, `JoystickInfoEXT`, `JoystickCapabilitiesEXT`, `JoystickStateEXT` and the `Joysticks` facade. Like haptics this is a CNA-namespace surface, so the routes take no `_ext` suffix except the two hot-plug events and the test reset, which follow their canonical member names. **The one deliberate departure from the input families' fixed-POD rule is the snapshot**, and it is the decision the slice turns on: `JoystickStateEXT` carries four heterogeneous variable-length arrays with no canonical maximum — unlike the touch panel's fixed eight slots — so a fixed value would have to invent a capacity that silently truncates a real HOTAS setup, while four independent per-array queries would answer from four different instants. `cna_joysticks_capture_state` therefore captures once into an owned `CNA_JoystickStateHandle` (`ObjectKind` 69) and each array is read with its own count/copy pair against that one instant; trackball motion is relative, so capturing consumes it, which is another reason one capture must serve all four arrays. **The hat is an identity, not a bit set** — the plan's own guess said "probably a bit set", and the canonical header says the opposite: the platform's combinable up/down and left/right bits are enumerated as the nine reachable combinations, so `RIGHT_UP` is the ordinal 5 and composing these values is wrong. That is pinned by an ABI assertion and stated in the header. The haptics **closed-device-is-not-an-error** contract carries over unchanged: an unconnected identifier answers `cna_joysticks_get_capabilities` with the canonical disconnected defaults, a power percent of -1 meaning "unknown" rather than "empty", and two empty strings, and answers `cna_joysticks_capture_state` with four empty arrays — which is the path every verification tree actually exercises, and it is asserted rather than skipped. The device name and GUID stay outside the capability value for the same reason the haptic device name does, so `cna_joystick_capabilities_equals` takes both strings alongside both values and reproduces the canonical ten-field comparison exactly; `cna_joystick_info_equals` does the same with the descriptor name. Both static multicast fields become owned registrations (`ObjectKind` 70) with one shared release route, mirroring the text-input surface, plus raise routes that invoke the same public field the platform layer invokes — no `Internal` bridge crosses the ABI. The slice gets its own strict-C `JoystickSmoke.c` and `CApi_JoystickSmoke` target, matching its own adapter file. Green in all four trees (53/53) and under ASan+UBSan with leak detection on. |
+| CBIND-037B7b | 38 | Complete host sensors, device enumeration, clipboard and power | ⬜ | Map `SensorTypeEXT`, `SensorInfoEXT` and the `Sensors` facade, `InputDeviceInfoEXT` and the `InputDevices` facade with its four hot-plug events, `Clipboard` and `Power`. Reuse the shapes `CBIND-037B7a` settled: the descriptor value with its name outside the POD, the index-addressed enumeration, the availability-separate-from-the-answer rule for the two sensor reads, and the process-wide event registration. Closes parent `CBIND-037B7`, parent `CBIND-037B` and the whole `input` module. |
 
 #### CBIND-036B content implementation slices
 
@@ -529,8 +531,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037B6`):** 414 headers / 6,415 symbols —
-**4,407 implemented, 30 partial, 1,849 planned, 129 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037B7a`):** 414 headers / 6,415 symbols —
+**4,461 implemented, 30 partial, 1,795 planned, 129 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -540,13 +542,13 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 | `CBIND-000`–`CBIND-034` | ✅ all |
 | `CBIND-035` (math, geometry, textures, effects, models, device and draw submission) | ✅ closed by `CBIND-035G` |
 | `CBIND-036` (storage, content, networking, fake-async) | ✅ closed by `CBIND-036E5` |
-| `CBIND-037A` core, `CBIND-037B1`–`B3` gamepad, `CBIND-037B4` keyboard/mouse/cursor/text input, `CBIND-037B5` touch and gestures, `CBIND-037B6` haptics | ✅ |
+| `CBIND-037A` core, `CBIND-037B1`–`B3` gamepad, `CBIND-037B4` keyboard/mouse/cursor/text input, `CBIND-037B5` touch and gestures, `CBIND-037B6` haptics, `CBIND-037B7a` raw joysticks | ✅ |
 
 **Four modules now have no planned row left: `storage`, `content`, `net`, `core`.**
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,849 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,795 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -554,7 +556,7 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037B7` remaining input extensions | 92 (after the B4a/B4d borrows) | closes parent `CBIND-037B`; joysticks, sensors, clipboard, power, device enumeration |
+| 1 | `CBIND-037B7b` host sensors, device enumeration, clipboard, power | 38 | closes parents `CBIND-037B7` and `CBIND-037B`, and the whole `input` module |
 | 2 | `CBIND-037C` media | 325 | sub-partition on arrival |
 | 3 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info |
 | 4 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
@@ -864,7 +866,16 @@ waveform travels beside the effect value rather than inside it, keeping that val
 POD, and the device name is not part of the capability value, which is why the capability
 comparison takes both names as arguments instead of silently comparing fewer fields than the
 canonical operator does. The snapshot is now 4,407 implemented, 30 partial, 1,849 planned and 129
-not applicable.
+not applicable. CBIND-037B7a then completes the 54 raw-joystick rows and is the first input slice to
+capture an owned **snapshot** handle rather than a value: four heterogeneous variable-length arrays
+with no canonical maximum cannot honestly become a fixed POD, because any invented capacity
+truncates real hardware and four separate queries would answer from four different instants. Two
+things the plan had guessed wrong are corrected from the canonical source rather than assumed: the
+POV hat is an ordinal identity, not a composable bit set, and the joystick facade returns plain
+values, so only the snapshot and the two hot-plug registrations needed handle kinds (69 and 70). The
+haptics closed-device contract carried over unchanged and is again the only path the verification
+trees exercise. The snapshot is now 4,461 implemented, 30 partial, 1,795 planned and 129 not
+applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -873,35 +884,33 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037B6` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037B7a` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. Parent `CBIND-037B4` is closed, and the
-  `Microsoft::Xna::Framework::Input::Touch` namespace and the whole haptics family have no planned
-  row left.
-- **Next task:** `CBIND-037B7`, the remaining `CNA::Input` extensions — **92 rows**, verified
-  against the inventory, after the borrows `CBIND-037B3`, `B4a` and `B4d` already took (button
-  labels, connection state, power state, key modifiers and the text-input type are done). It closes
-  parent `CBIND-037B`, and with it the whole `input` module. The rows split by header:
+  `Microsoft::Xna::Framework::Input::Touch` namespace, the haptics family and the whole raw-joystick
+  family have no planned row left.
+- **Next task:** `CBIND-037B7b`, the last **38 `CNA::Input` rows** — host sensors, device
+  enumeration, clipboard and power. It closes parent `CBIND-037B7`, parent `CBIND-037B`, and with
+  them the whole `input` module. The rows split by header:
 
   | rows | header | shape to expect |
   |---:|---|---|
-  | 18 | `Sensors.hpp` | queries; watch for the availability-separate-from-answer rule |
-  | 13 | `JoystickCapabilities.hpp` | fixed value, like `HapticCapabilitiesEXT` |
-  | 11 | `JoystickType.hpp` | ordinal identity |
-  | 10 | `JoystickHatPosition.hpp` | probably a bit set — check before assuming |
-  | 9 | `InputDevices.hpp` | facade |
-  | 7 | `JoystickState.hpp` | fixed value snapshot |
-  | 7 | `Joysticks.hpp` | facade, mirrors `Haptics` |
-  | 6 | `JoystickInfo.hpp` | id + name; reuse the haptics index-addressed enumeration |
-  | 5 | `InputDeviceInfo.hpp` | id + name, same shape |
-  | 4 | `Clipboard.hpp` | count/copy strings |
-  | 2 | `Power.hpp` | `PowerStateEXT` itself is already done by `B3` |
+  | 18 | `Sensors.hpp` | the identity, the descriptor and a three-route facade; both reads return `bool` plus an output reference, so the **availability-separate-from-the-answer** rule applies |
+  | 9 | `InputDevices.hpp` | facade with **four** hot-plug events; reuse the joystick registration shape (one `ObjectKind`, one shared release route, a raise route per event) |
+  | 5 | `InputDeviceInfo.hpp` | id + name; note the id is `uint64_t` here, not `uint32_t` as on the joystick and sensor descriptors |
+  | 4 | `Clipboard.hpp` | count/copy get, a borrowed-view set, and a has-text query |
+  | 2 | `Power.hpp` | one query returning `PowerStateEXT` — already mapped by `B3` — plus two output references that are -1 when unknown |
 
-  Three shapes are already solved and should be reused rather than reinvented: the **facade plus
-  owned device handle** (`Haptics`/`HapticDevice`), the **index-addressed enumeration with count/copy
-  names** (`HapticInfoEXT`), and the **closed-device-is-not-an-error** contract. As a `CNA::Input`
-  surface the whole header takes no `_ext` suffixes. `ObjectKind` 69 is the next free number if the
-  joystick device turns out to be an owned resource — check whether `Joysticks::OpenEXT` returns an
-  RAII object like `HapticDevice` or a plain value before deciding.
+  Every shape this slice needs is already solved by `CBIND-037B7a` and should be reused rather than
+  reinvented: the **descriptor value with its name outside the POD** plus an `_equals` that takes
+  both names, the **index-addressed enumeration** (`cna_x_get_count` / `_get_info_at` /
+  `_get_name_size_at` / `_copy_name_at`), and the **process-wide event registration** with one
+  shared unsubscribe. As a `CNA::Input` surface the routes take no `_ext` suffix except where the
+  canonical member name carries one. `ObjectKind` 71 is the next free number.
+  Two things to check in the canonical `.cpp` before writing, because the headers do not say:
+  `Sensors::GetAccelerometerEXT`/`GetGyroscopeEXT` read *the first* sensor of that kind through
+  `SystemSensorBackend::ReadSensor`, and `Clipboard` calls SDL directly rather than going through a
+  backend, so it needs SDL's video subsystem — which means its behavior differs between the trees
+  and the test must assert a relationship, not a fixed answer.
 - Do not reopen a closed slice without a concrete demonstrated defect.
 - The four verification trees and the shared ccache are set up and warm; nothing needs configuring
   before the next slice. See *Environment and disk hygiene* below for what was cleaned up on
@@ -916,13 +925,13 @@ order:
 
 | File | Role |
 |---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 47 today (`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 48 today (`input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
-| `src/CnaCApi<Family>.cpp` | the adapter — 37 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
-| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 69**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
+| `src/CnaCApi<Family>.cpp` | the adapter — 38 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
+| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 71**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (52 tests today). |
-| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 47 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (53 tests today). |
+| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 48 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
 | `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
 | `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
 | `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
@@ -1018,7 +1027,7 @@ unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap paral
 | `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
 | `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
 
-All four run the same 52 C API tests green. The sanitizer tree runs with
+All four run the same 53 C API tests green. The sanitizer tree runs with
 `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
 `detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
 `-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no

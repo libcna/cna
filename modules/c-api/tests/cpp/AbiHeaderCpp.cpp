@@ -802,3 +802,17 @@ static_assert(sizeof(CNA_HapticEffect) == 108U);
 static_assert(alignof(CNA_HapticEffect) == 4U);
 static_assert(offsetof(CNA_HapticEffect, direction) == 16U);
 static_assert(offsetof(CNA_HapticEffect, fade_level) == 106U);
+
+static_assert(sizeof(CNA_JoystickStateHandle) == 8U);
+static_assert(sizeof(CNA_JoystickEventRegistrationHandle) == 8U);
+static_assert(sizeof(CNA_JoystickType) == sizeof(uint32_t));
+static_assert(CNA_JOYSTICK_TYPE_MAXIMUM == UINT32_C(9));
+static_assert(sizeof(CNA_JoystickHatPosition) == sizeof(uint32_t));
+static_assert(CNA_JOYSTICK_HAT_POSITION_RIGHT_UP == UINT32_C(5));
+static_assert(CNA_JOYSTICK_HAT_POSITION_MAXIMUM == UINT32_C(8));
+static_assert(sizeof(CNA_JoystickInfo) == 16U);
+static_assert(offsetof(CNA_JoystickInfo, type) == 12U);
+static_assert(sizeof(CNA_JoystickCapabilities) == 40U);
+static_assert(alignof(CNA_JoystickCapabilities) == 4U);
+static_assert(offsetof(CNA_JoystickCapabilities, power_percent) == 32U);
+static_assert(offsetof(CNA_JoystickCapabilities, reserved) == 37U);
