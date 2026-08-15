@@ -1,5 +1,5 @@
 diff --git a/mojoshader.c b/mojoshader.c
-index 486d7e0..eb22cab 100644
+index 486d7e0..500b322 100644
 --- a/mojoshader.c
 +++ b/mojoshader.c
 @@ -2259,7 +2259,12 @@ static int parse_ctab_typeinfo(Context *ctx, const uint8 *start,
@@ -105,7 +105,22 @@ index 486d7e0..eb22cab 100644
                          for (i = 0; i < numarrays; i++)
                          {
                              const uint32 jmp = SWAP32(fxlc.tokens[4]);
-@@ -2788,8 +2822,11 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+@@ -2782,14 +2816,26 @@ static void parse_preshader(Context *ctx, const uint32 *tokens, uint32 tokcount)
+                 case 7:
+                 {
+                     operand->type = MOJOSHADER_PRESHADEROPERAND_TEMP;
++                    // The temp count is grown from operand indices, and run_preshader alloca()s
++                    // one double per temp. A structural bound keeps a made-up index from asking
++                    // for a stack frame the process does not have: each instruction can introduce
++                    // at most one temp of four components. -CNA
++                    if (item >= ((preshader->instruction_count * 4) + 4))
++                    {
++                        fail(ctx, "Bogus preshader temp register.");
++                        return;
++                    } // if
+                     if (item >= preshader->temp_count)
+                         preshader->temp_count = item + 1;
+                     break;
                  } // case
  
                  default:
@@ -157,10 +172,10 @@ index 39cb5c0..1b7b303 100644
              if (len >= left)
                  left = (left < 1) ? left : 1;
 diff --git a/mojoshader_effects.c b/mojoshader_effects.c
-index 036f18d..4e33815 100644
+index 036f18d..bd71a4f 100644
 --- a/mojoshader_effects.c
 +++ b/mojoshader_effects.c
-@@ -16,10 +16,21 @@
+@@ -16,16 +16,31 @@
  #include <math.h>
  #endif /* MOJOSHADER_USE_SDL_STDLIB */
  
@@ -183,7 +198,17 @@ index 036f18d..4e33815 100644
  
      // this is fairly straightforward, as there aren't any branching
      //  opcodes in the preshader instruction set (at the moment, at least).
-@@ -59,8 +70,11 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+     const int scalarstart = (int) MOJOSHADER_PRESHADEROP_SCALAR_OPS;
+ 
+     double *temps = NULL;
++    // The parser bounds this too; this is the second line of defence, because the cost of being
++    // wrong here is the process stack rather than a bad pixel. -CNA
++    if (preshader->temp_count > 8192)
++        return;
+     if (preshader->temp_count > 0)
+     {
+         temps = (double *) alloca(sizeof (double) * preshader->temp_count);
+@@ -59,8 +74,11 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
          const int elemsbytes = sizeof (double) * elems;
          const int isscalarop = (inst->opcode >= scalarstart);
  
@@ -197,7 +222,7 @@ index 036f18d..4e33815 100644
  
          // load up our operands...
          int opiter, elemiter;
-@@ -72,11 +86,15 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+@@ -72,11 +90,15 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
              {
                  case MOJOSHADER_PRESHADEROPERAND_LITERAL:
                  {
@@ -216,7 +241,7 @@ index 036f18d..4e33815 100644
                      else
                      {
                          for (elemiter = 0; elemiter < elems; elemiter++)
-@@ -90,24 +108,38 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+@@ -90,24 +112,38 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
                      {
                          int i;
                          const int *regsi = (const int *) inregs;
@@ -257,7 +282,7 @@ index 036f18d..4e33815 100644
                      if (isscalar)
                          src[opiter][0] = outregs[index];
                      else
-@@ -117,10 +149,14 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+@@ -117,10 +153,14 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
                              src[opiter][cpy] = outregs[index+cpy];
                      } // else
                      break;
@@ -272,7 +297,7 @@ index 036f18d..4e33815 100644
                          if (isscalar)
                              src[opiter][0] = temps[index];
                          else
-@@ -129,7 +165,7 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+@@ -129,7 +169,7 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
                      break;
  
                  default:
@@ -281,7 +306,7 @@ index 036f18d..4e33815 100644
                      return;
              } // switch
          } // for
-@@ -190,22 +226,35 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
+@@ -190,22 +230,35 @@ static void run_preshader(const MOJOSHADER_preshader *preshader,
              } // case
  
              default:
@@ -324,7 +349,7 @@ index 036f18d..4e33815 100644
          } // else
      } // for
  } // run_preshader
-@@ -266,40 +315,66 @@ static uint32 readui32(const uint8 **_ptr, uint32 *_len)
+@@ -266,40 +319,66 @@ static uint32 readui32(const uint8 **_ptr, uint32 *_len)
      return retval;
  } // readui32
  
@@ -402,7 +427,7 @@ index 036f18d..4e33815 100644
                        const uint32 typeoffset,
                        const uint32 valoffset,
                        MOJOSHADER_effectValue *value,
-@@ -319,8 +394,8 @@ static void readvalue(const uint8 *base,
+@@ -319,8 +398,8 @@ static void readvalue(const uint8 *base,
  
      value->type.parameter_type = (MOJOSHADER_symbolType) type;
      value->type.parameter_class = (MOJOSHADER_symbolClass) valclass;
@@ -413,7 +438,7 @@ index 036f18d..4e33815 100644
      value->type.elements = numelements;
  
      /* Class sanity check */
-@@ -380,7 +455,7 @@ static void readvalue(const uint8 *base,
+@@ -380,7 +459,7 @@ static void readvalue(const uint8 *base,
                  const uint32 statevaloffset = readui32(&valptr, &vallen);
  
                  state->type = (MOJOSHADER_samplerStateType) stype;
@@ -422,7 +447,7 @@ index 036f18d..4e33815 100644
                            &state->value, objects,
                            m, d);
                  if (stype == MOJOSHADER_SAMP_TEXTURE)
-@@ -413,8 +488,25 @@ static void readvalue(const uint8 *base,
+@@ -413,8 +492,25 @@ static void readvalue(const uint8 *base,
          uint32 siz;
  
          value->type.member_count = readui32(&typeptr, &typelen);
@@ -448,7 +473,7 @@ index 036f18d..4e33815 100644
  
          uint32 structsize = 0;
          for (i = 0; i < value->type.member_count; i++)
-@@ -426,7 +518,7 @@ static void readvalue(const uint8 *base,
+@@ -426,7 +522,7 @@ static void readvalue(const uint8 *base,
  
              const uint32 memname = readui32(&typeptr, &typelen);
              /*const uint32 memsemantic =*/ readui32(&typeptr, &typelen);
@@ -457,7 +482,7 @@ index 036f18d..4e33815 100644
  
              mem->info.elements = readui32(&typeptr, &typelen);
              mem->info.columns = readui32(&typeptr, &typelen);
-@@ -477,6 +569,7 @@ static void readvalue(const uint8 *base,
+@@ -477,6 +573,7 @@ static void readvalue(const uint8 *base,
  
  static void readannotations(const uint32 numannos,
                              const uint8 *base,
@@ -465,7 +490,7 @@ index 036f18d..4e33815 100644
                              const uint8 **ptr,
                              uint32 *len,
                              MOJOSHADER_effectAnnotation **annotations,
-@@ -498,7 +591,7 @@ static void readannotations(const uint32 numannos,
+@@ -498,7 +595,7 @@ static void readannotations(const uint32 numannos,
          const uint32 typeoffset = readui32(ptr, len);
          const uint32 valoffset = readui32(ptr, len);
  
@@ -474,7 +499,7 @@ index 036f18d..4e33815 100644
                    anno, objects,
                    m, d);
      } // for
-@@ -506,6 +599,7 @@ static void readannotations(const uint32 numannos,
+@@ -506,6 +603,7 @@ static void readannotations(const uint32 numannos,
  
  static void readparameters(const uint32 numparams,
                             const uint8 *base,
@@ -482,7 +507,7 @@ index 036f18d..4e33815 100644
                             const uint8 **ptr,
                             uint32 *len,
                             MOJOSHADER_effectParam **params,
-@@ -530,11 +624,11 @@ static void readparameters(const uint32 numparams,
+@@ -530,11 +628,11 @@ static void readparameters(const uint32 numparams,
          const uint32 numannos = readui32(ptr, len);
  
          param->annotation_count = numannos;
@@ -496,7 +521,7 @@ index 036f18d..4e33815 100644
                    &param->value, objects,
                    m, d);
      } // for
-@@ -542,6 +636,7 @@ static void readparameters(const uint32 numparams,
+@@ -542,6 +640,7 @@ static void readparameters(const uint32 numparams,
  
  static void readstates(const uint32 numstates,
                         const uint8 *base,
@@ -504,7 +529,7 @@ index 036f18d..4e33815 100644
                         const uint8 **ptr,
                         uint32 *len,
                         MOJOSHADER_effectState **states,
-@@ -566,7 +661,7 @@ static void readstates(const uint32 numstates,
+@@ -566,7 +665,7 @@ static void readstates(const uint32 numstates,
          const uint32 valoffset = readui32(ptr, len);
  
          state->type = (MOJOSHADER_renderStateType) type;
@@ -513,7 +538,7 @@ index 036f18d..4e33815 100644
                    &state->value, objects,
                    m, d);
      } // for
-@@ -574,6 +669,7 @@ static void readstates(const uint32 numstates,
+@@ -574,6 +673,7 @@ static void readstates(const uint32 numstates,
  
  static void readpasses(const uint32 numpasses,
                         const uint8 *base,
@@ -521,7 +546,7 @@ index 036f18d..4e33815 100644
                         const uint8 **ptr,
                         uint32 *len,
                         MOJOSHADER_effectPass **passes,
-@@ -596,15 +692,15 @@ static void readpasses(const uint32 numpasses,
+@@ -596,15 +696,15 @@ static void readpasses(const uint32 numpasses,
          const uint32 numannos = readui32(ptr, len);
          const uint32 numstates = readui32(ptr, len);
  
@@ -540,7 +565,7 @@ index 036f18d..4e33815 100644
                     &pass->states, objects,
                     m, d);
      } // for
-@@ -612,6 +708,7 @@ static void readpasses(const uint32 numpasses,
+@@ -612,6 +712,7 @@ static void readpasses(const uint32 numpasses,
  
  static void readtechniques(const uint32 numtechniques,
                             const uint8 *base,
@@ -548,7 +573,7 @@ index 036f18d..4e33815 100644
                             const uint8 **ptr,
                             uint32 *len,
                             MOJOSHADER_effectTechnique **techniques,
-@@ -634,15 +731,15 @@ static void readtechniques(const uint32 numtechniques,
+@@ -634,15 +735,15 @@ static void readtechniques(const uint32 numtechniques,
          const uint32 numannos = readui32(ptr, len);
          const uint32 numpasses = readui32(ptr, len);
  
@@ -567,7 +592,7 @@ index 036f18d..4e33815 100644
                     &technique->passes, objects,
                     m, d);
      } // for
-@@ -670,6 +767,16 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -670,6 +771,16 @@ static void readsmallobjects(const uint32 numsmallobjects,
          const uint32 index = readui32(ptr, len);
          const uint32 length = readui32(ptr, len);
  
@@ -584,7 +609,7 @@ index 036f18d..4e33815 100644
          MOJOSHADER_effectObject *object = &effect->objects[index];
          if (object->type == MOJOSHADER_SYMTYPE_STRING)
          {
-@@ -702,6 +809,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -702,6 +813,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
                || object->type == MOJOSHADER_SYMTYPE_VERTEXSHADER)
          {
              char mainfn[32];
@@ -598,7 +623,7 @@ index 036f18d..4e33815 100644
              snprintf(mainfn, sizeof(mainfn), "ShaderFunction%u", (unsigned int) index);
              object->shader.technique = -1;
              object->shader.pass = -1;
-@@ -734,7 +848,10 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -734,7 +852,10 @@ static void readsmallobjects(const uint32 numsmallobjects,
              {
                  int par = findparameter(effect->params,
                                          effect->param_count,
@@ -610,7 +635,7 @@ index 036f18d..4e33815 100644
                  object->shader.params[j] = par;
                  if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
                  {
-@@ -751,9 +868,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
+@@ -751,9 +872,13 @@ static void readsmallobjects(const uint32 numsmallobjects,
                  object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
                  for (j = 0; j < pd->preshader->symbol_count; j++)
                  {
@@ -627,7 +652,7 @@ index 036f18d..4e33815 100644
                  } // for
              } // if
          } // else if
-@@ -798,6 +919,14 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -798,6 +923,14 @@ static void readlargeobjects(const uint32 numlargeobjects,
          const uint32 type = readui32(ptr, len);
          const uint32 length = readui32(ptr, len);
  
@@ -642,7 +667,7 @@ index 036f18d..4e33815 100644
          uint32 objectIndex;
          if (technique == -1)
              objectIndex = effect->params[index].value.valuesSS[state].value.valuesI[0];
-@@ -819,28 +948,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -819,28 +952,48 @@ static void readlargeobjects(const uint32 numlargeobjects,
                   */
                  object->shader.is_preshader = 1;
                  const uint32 start = *((uint32 *) *ptr) + 4;
@@ -699,7 +724,7 @@ index 036f18d..4e33815 100644
                  snprintf(mainfn, sizeof (mainfn), "ShaderFunction%u", (unsigned int) objectIndex);
                  object->shader.shader = effect->ctx.compileShader(effect->ctx.shaderContext,
                                                                    mainfn, *ptr, length,
-@@ -871,7 +1020,10 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -871,7 +1024,10 @@ static void readlargeobjects(const uint32 numlargeobjects,
                  {
                      int par = findparameter(effect->params,
                                              effect->param_count,
@@ -711,7 +736,7 @@ index 036f18d..4e33815 100644
                      object->shader.params[j] = par;
                      if (pd->symbols[j].register_set == MOJOSHADER_SYMREGSET_SAMPLER)
                      {
-@@ -888,9 +1040,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
+@@ -888,9 +1044,13 @@ static void readlargeobjects(const uint32 numlargeobjects,
                      object->shader.preshader_params = (uint32 *) m(object->shader.preshader_param_count * sizeof (uint32), d);
                      for (j = 0; j < pd->preshader->symbol_count; j++)
                      {
@@ -728,7 +753,7 @@ index 036f18d..4e33815 100644
                      } // for
                  } // if
              }
-@@ -977,6 +1133,7 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -977,6 +1137,7 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
  
      /* Read in header magic, seek to initial offset */
      const uint8 *base = NULL;
@@ -736,7 +761,7 @@ index 036f18d..4e33815 100644
      uint16 magic;
      uint8 version_major;
      uint8 version_minor;
-@@ -988,8 +1145,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -988,8 +1149,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
           * -flibit
           */
          const uint32 skip = readui32(&ptr, &len) - 8;
@@ -751,7 +776,7 @@ index 036f18d..4e33815 100644
          read_version_token(&ptr, &len, &magic, &version_major, &version_minor);
      } // if
      if (!((magic == 0xFEFF) && (version_major == 0x09) && (version_minor == 0x01)))
-@@ -1003,6 +1165,9 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1003,6 +1169,9 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
          base = ptr;
          if (offset > len)
              goto parseEffect_unexpectedEOF;
@@ -761,7 +786,7 @@ index 036f18d..4e33815 100644
          ptr += offset;
          len -= offset;
      } // else
-@@ -1016,6 +1181,17 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1016,6 +1185,17 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
      /*const uint32 FIXME =*/ readui32(&ptr, &len);
      const uint32 numobjects = readui32(&ptr, &len);
  
@@ -779,7 +804,7 @@ index 036f18d..4e33815 100644
      /* Alloc structures now, so object types can be stored */
      retval->object_count = numobjects;
      const uint32 siz = sizeof (MOJOSHADER_effectObject) * numobjects;
-@@ -1026,13 +1202,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
+@@ -1026,13 +1206,13 @@ MOJOSHADER_effect *MOJOSHADER_compileEffect(const unsigned char *buf,
  
      /* Parse effect parameters */
      retval->param_count = numparams;
@@ -795,7 +820,7 @@ index 036f18d..4e33815 100644
                     &retval->techniques, retval->objects,
                     m, d);
  
-@@ -1221,6 +1397,14 @@ void copysymboltypeinfo(MOJOSHADER_symbolTypeInfo *dst,
+@@ -1221,6 +1401,14 @@ void copysymboltypeinfo(MOJOSHADER_symbolTypeInfo *dst,
      {
          siz = dst->member_count * sizeof (MOJOSHADER_symbolStructMember);
          dst->members = (MOJOSHADER_symbolStructMember *) m(siz, d);
@@ -810,7 +835,7 @@ index 036f18d..4e33815 100644
          for (i = 0; i < dst->member_count; i++)
          {
              COPY_STRING(members[i].name)
-@@ -1420,13 +1604,20 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+@@ -1420,13 +1608,20 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
      /* Copy ctx */
      memcpy(&clone->ctx, &effect->ctx, sizeof(MOJOSHADER_effectShaderContext));
  
@@ -831,7 +856,7 @@ index 036f18d..4e33815 100644
  
      /* Copy errors */
      siz = sizeof (MOJOSHADER_error) * effect->error_count;
-@@ -1587,13 +1778,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
+@@ -1587,13 +1782,22 @@ MOJOSHADER_effect *MOJOSHADER_cloneEffect(const MOJOSHADER_effect *effect)
              if (clone->objects[i].shader.samplers == NULL)
                  goto cloneEffect_outOfMemory;
              curSampler = 0;
@@ -857,7 +882,7 @@ index 036f18d..4e33815 100644
                      curSampler++;
                  } // if
          } // if
-@@ -1734,22 +1934,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
+@@ -1734,22 +1938,42 @@ void MOJOSHADER_effectBeginPass(MOJOSHADER_effect *effect,
      for (i = 0; i < curPass->state_count; i++)
      {
          state = &curPass->states[i];
@@ -913,7 +938,7 @@ index 036f18d..4e33815 100644
      } // for
  
      effect->state_changes->render_state_changes = curPass->states;
-@@ -1787,7 +2007,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1787,7 +2011,10 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
                                         unsigned int *param_loc,
                                         MOJOSHADER_symbol *symbols,
                                         unsigned int symbol_count,
@@ -925,7 +950,7 @@ index 036f18d..4e33815 100644
  {
      int i, j, r, c;
  
-@@ -1800,45 +2023,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
+@@ -1800,45 +2027,84 @@ static inline void copy_parameter_data(MOJOSHADER_effectParam *params,
          // float/int registers are vec4, so they have 4 elements each
          const uint32 start = sym->register_index << 2;
  
@@ -1021,7 +1046,7 @@ index 036f18d..4e33815 100644
          } // else if
      } // for
  } // copy_parameter_data
-@@ -1856,6 +2118,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1856,6 +2122,7 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
      float selector;
      int shader_object;
      int selector_ran = 0;
@@ -1029,7 +1054,7 @@ index 036f18d..4e33815 100644
  
      float *vs_reg_file_f, *ps_reg_file_f;
      int *vs_reg_file_i, *ps_reg_file_i;
-@@ -1866,27 +2129,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1866,27 +2133,74 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
       * -flibit
       */
      // !!! FIXME: We're just running the preshaders every time. Blech. -flibit
@@ -1116,7 +1141,7 @@ index 036f18d..4e33815 100644
      if (selector_ran)
      {
          effect->ctx.bindShaders(effect->ctx.shaderContext,
-@@ -1921,7 +2231,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1921,7 +2235,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                  pd->symbol_count, \
                                  stage##_reg_file_f, \
                                  stage##_reg_file_i, \
@@ -1128,7 +1153,7 @@ index 036f18d..4e33815 100644
              if (pd->preshader) \
              { \
                  copy_parameter_data(effect->params, raw->preshader_params, \
-@@ -1929,8 +2242,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
+@@ -1929,8 +2246,10 @@ void MOJOSHADER_effectCommitChanges(MOJOSHADER_effect *effect)
                                      pd->preshader->symbol_count, \
                                      pd->preshader->registers, \
                                      NULL, \
