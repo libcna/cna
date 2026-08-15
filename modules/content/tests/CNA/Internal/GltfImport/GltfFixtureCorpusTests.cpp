@@ -633,6 +633,132 @@ TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
     EXPECT_NE(std::string::npos, scriptText.find("if len(renderers) != 1"));
 }
 
+TEST(GltfFixtureCorpus, SoftwareCorpusL7ReportIsCompleteExactAndReproducible)
+{
+    // GLTF-387/390/391: the production-viewer retake proves CPU-rendered pixels. This ordinary
+    // no-display integrity test proves that the report still names every canonical input, the
+    // exact 137 SOFTWARE-owned goldens, all eight safe rejections and a zero-delta comparison.
+    const std::filesystem::path repository =
+        CorpusDirectory().parent_path().parent_path().parent_path();
+    const std::filesystem::path policyPath =
+        repository / "tests" / "gltf-l7" / "software-policy.json";
+    const std::filesystem::path reportPath =
+        repository / "docs" / "gltf-l7-software-corpus-report.json";
+
+    JsonValue policy;
+    const std::vector<std::uint8_t> policyBytes = ReadAllBytes(policyPath);
+    ASSERT_NO_THROW(policy = CNA::Internal::ParseJson(
+        std::string(policyBytes.begin(), policyBytes.end())));
+    ASSERT_EQ(JsonType::Object, policy.type);
+    EXPECT_EQ("SOFTWARE", StringOr(policy, "renderer", ""));
+    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "rgbTolerance", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "alphaTolerance", -1.0));
+    const std::vector<std::string> tasks = Strings(Member(policy, "tasks"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-387"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-390"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-391"));
+
+    JsonValue report;
+    const std::vector<std::uint8_t> reportBytes = ReadAllBytes(reportPath);
+    ASSERT_NO_THROW(report = CNA::Internal::ParseJson(
+        std::string(reportBytes.begin(), reportBytes.end())));
+    ASSERT_EQ(JsonType::Object, report.type);
+    EXPECT_EQ("SOFTWARE", StringOr(report, "renderer", ""));
+    EXPECT_EQ(145.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(137.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
+    EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "alphaTolerance", -1.0));
+    const JsonValue& environment = Member(Member(report, "capture"), "environment");
+    EXPECT_EQ("x11", StringOr(environment, "SDL_VIDEODRIVER", ""));
+    EXPECT_EQ("dummy", StringOr(environment, "SDL_AUDIODRIVER", ""));
+    const JsonValue& rendererEnvironment = Member(report, "rendererEnvironment");
+    ASSERT_EQ(JsonType::Array, rendererEnvironment.type);
+    ASSERT_EQ(1u, rendererEnvironment.arrayValue.size());
+    EXPECT_EQ("SOFTWARE", rendererEnvironment.arrayValue.front().stringValue);
+    const JsonValue& activeDivergences =
+        Member(Member(report, "classification"), "activeGoldenDivergences");
+    ASSERT_EQ(JsonType::Array, activeDivergences.type);
+    EXPECT_TRUE(activeDivergences.arrayValue.empty());
+
+    System::Security::Cryptography::SHA256 sha;
+    EXPECT_EQ(StringOr(report, "corpusManifestSha256", ""),
+              HexDigest(sha.ComputeHash(ReadAllBytes(CorpusDirectory() / "manifest.json"))));
+    const std::vector<std::string> fixtureIds = CorpusFixtureIds();
+    ASSERT_EQ(145u, fixtureIds.size());
+    const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
+    const JsonValue& assets = Member(report, "assets");
+    ASSERT_EQ(JsonType::Array, assets.type);
+    ASSERT_EQ(expectedIds.size(), assets.arrayValue.size());
+
+    std::set<std::string> seen;
+    std::set<std::string> capturedIds;
+    std::size_t rejected = 0;
+    for (const JsonValue& result : assets.arrayValue)
+    {
+        const std::string id = StringOr(result, "id", "");
+        ASSERT_NE(expectedIds.end(), expectedIds.find(id)) << "unknown SOFTWARE L7 asset " << id;
+        EXPECT_TRUE(seen.insert(id).second) << "duplicate SOFTWARE L7 result " << id;
+
+        const std::filesystem::path source =
+            CorpusDirectory() / StringOr(result, "source", "");
+        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << source.string();
+        EXPECT_EQ(StringOr(result, "sourceSha256", ""),
+                  HexDigest(sha.ComputeHash(ReadAllBytes(source)))) << id;
+
+        const std::string disposition = StringOr(result, "disposition", "");
+        if (disposition == "capture")
+        {
+            capturedIds.insert(id);
+            const std::filesystem::path golden =
+                repository / StringOr(result, "golden", "");
+            ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << golden.string();
+            const std::string digest = HexDigest(sha.ComputeHash(ReadAllBytes(golden)));
+            EXPECT_EQ(StringOr(result, "goldenPngSha256", ""), digest) << id;
+            EXPECT_EQ(StringOr(result, "twoProcessPngSha256", ""), digest) << id;
+            EXPECT_TRUE(BoolOr(result, "twoProcessPngByteIdentical", false)) << id;
+            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumRgbDelta", -1.0)) << id;
+            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumAlphaDelta", -1.0)) << id;
+            EXPECT_TRUE(NumberOr(result, "nonClearPixelCount", 0.0) > 0.0
+                        || BoolOr(result, "emptyForegroundAllowed", false)) << id;
+        }
+        else if (disposition == "reject")
+        {
+            ++rejected;
+            EXPECT_TRUE(BoolOr(result, "twoProcessDispositionIdentical", false)) << id;
+            EXPECT_FALSE(StringOr(result, "owningTask", "").empty()) << id;
+            EXPECT_FALSE(StringOr(result, "errorContains", "").empty()) << id;
+        }
+        else
+        {
+            ADD_FAILURE() << id << ": unknown SOFTWARE L7 disposition " << disposition;
+        }
+    }
+    EXPECT_EQ(expectedIds, seen);
+    EXPECT_EQ(137u, capturedIds.size());
+    EXPECT_EQ(8u, rejected);
+
+    std::set<std::string> goldenIds;
+    const std::filesystem::path goldenRoot = repository / "tests" / "gltf-l7" / "software";
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(goldenRoot))
+    {
+        if (entry.is_regular_file() && entry.path().extension() == ".png")
+            goldenIds.insert(entry.path().stem().string());
+    }
+    EXPECT_EQ(capturedIds, goldenIds)
+        << "the SOFTWARE L7 golden directory has a missing or stale PNG";
+
+    const std::filesystem::path script = repository / "scripts" / "gltf-l7-corpus.py";
+    const std::vector<std::uint8_t> scriptBytes = ReadAllBytes(script);
+    const std::string scriptText(scriptBytes.begin(), scriptBytes.end());
+    EXPECT_NE(std::string::npos, scriptText.find("tests/gltf-l7/software"));
+    EXPECT_NE(std::string::npos, scriptText.find("CNA: graphics renderer: "));
+    EXPECT_NE(std::string::npos, scriptText.find("SDL_VIDEODRIVER"));
+    EXPECT_NE(std::string::npos, scriptText.find("if len(renderers) != 1"));
+}
+
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
 {
     // GLTF-015: the CI tool is external, but which tool CI trusts is checkout state. Pin the exact
