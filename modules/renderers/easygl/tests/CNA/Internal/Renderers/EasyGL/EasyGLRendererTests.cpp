@@ -13,7 +13,16 @@
 // device-free policy coverage for its own renderer, so it is worth compiling and running
 // whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
 // selected one. Only the default renderer's CNA_RENDERER_EASYGL is defined project-wide.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_EASYGL)
+// EasyGL is a FAMILY, not a public identity, so cmake never generates
+// CNA_RENDERER_PRESENT_EASYGL -- UnitTests.cmake emits one PRESENT_ macro per PUBLIC IDENTITY
+// (CNA_RENDERER_IDENTITIES). Naming the family here made the guard dead, so this suite still
+// compiled only for the default renderer: exactly the gap RTR-P9-9 existed to close, reintroduced
+// by the fix for it. Verified against a real multi build, whose build.ninja defines PRESENT_ only
+// for the identities in the set. The five public identities this family serves are named instead.
+#if defined(CNA_RENDERER_EASYGL) \
+    || defined(CNA_RENDERER_PRESENT_OPENGLES2) || defined(CNA_RENDERER_PRESENT_OPENGLES3) \
+    || defined(CNA_RENDERER_PRESENT_OPENGL33) \
+    || defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
 #include <SDL3/SDL.h>
 #include <stdexcept>
 
