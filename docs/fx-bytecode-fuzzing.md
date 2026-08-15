@@ -25,6 +25,24 @@ allocation is a finding.
 The device is created once and reused, because device creation dwarfs the cost of the code under
 test.
 
+## Coverage-guided campaign (clang libFuzzer)
+
+This is the shape that finds things fastest, and it is what found the last few defects below. It
+needs its own build tree, because every translation unit has to carry coverage instrumentation:
+
+```sh
+cmake -S . -B cmake-build-fx-fuzz -DCMAKE_BUILD_TYPE=Debug   -DCNA_GRAPHICS_RENDERER=FNA3D -DCNA_FX_FUZZER_ENTRY_POINT=ON   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++   -DCMAKE_C_FLAGS="-fsanitize=fuzzer-no-link,address -fno-omit-frame-pointer -g"   -DCMAKE_CXX_FLAGS="-fsanitize=fuzzer-no-link,address -fno-omit-frame-pointer -g"   -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
+cmake --build cmake-build-fx-fuzz --target cna_compiled_effect_fuzzer -j3
+
+mkdir -p fx-corpus findings && cp modules/renderers/fna3d/effects/*.fxb fx-corpus/
+cd findings && SDL_VIDEODRIVER=offscreen SDL_ASSERT=abort FNA3D_FORCE_DRIVER=OpenGL   ../cmake-build-fx-fuzz/cna_compiled_effect_fuzzer -detect_leaks=0     -max_len=1048576 -rss_limit_mb=4096 -timeout=30 -max_total_time=2400 ../fx-corpus
+```
+
+`-detect_leaks=0` matters: the pinned MojoShader's SPIR-V emitter leaks by design of its own, and
+those reports would drown the campaign. A crashing input is written to the working directory as
+`crash-<hash>` and replays with `cna_compiled_effect_fuzzer <file>`, which is a far better
+reproduction handle than a seed and an iteration number.
+
 ## Standalone replay (any compiler)
 
 The harness builds in every ordinary test configuration and replays files or directories:
@@ -124,6 +142,8 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 | `mojoshader_profile_spirv.c` `spv_swizzle` | Asserted on a zero type id, on a write mask outside the four legal values, and on a type it could not classify -- all three come straight from a destination token |
 | `mojoshader_profile_spirv.c` `emit_SPIRV_dotproduct` | Asserted that both operands share a type; either can be a value whose load was already refused |
 | `mojoshader_profile_spirv.c` `spv_output_color_location`, `spv_output_attrib_location` | A colour-output register number, a vertex attribute usage and its register number all index fixed sixteen-entry tables with no bound, so an out-of-range one wrote past the patch table into whatever followed it |
+| `mojoshader_effects.c` `MOJOSHADER_cloneEffect` | Dereferenced a shader's parse data without checking the shader compiled at all, and indexed its symbol and parameter tables unbounded |
+| `mojoshader_common.c` `MOJOSHADER_printFloat` | Advances its cursor past the buffer on purpose, so the return value stays the length the caller needed -- but then kept formatting *through* that cursor, writing past the end. Each step now asks `snprintf` for the needed length instead of writing once the cursor is out of bounds |
 
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.

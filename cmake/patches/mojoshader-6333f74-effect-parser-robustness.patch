@@ -105,6 +105,43 @@ index 486d7e0..7508971 100644
              } // switch
  
              operand->index = item;
+diff --git a/mojoshader_common.c b/mojoshader_common.c
+index 39cb5c0..1b7b303 100644
+--- a/mojoshader_common.c
++++ b/mojoshader_common.c
+@@ -976,6 +976,12 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+     size_t len;
+     size_t left = maxlen;
+     char *textstart = text;
++    /* The cursor is deliberately advanced past the end so the return value stays the length the
++     * caller would have needed -- that is how callers detect a too-small buffer. Once it is past,
++     * nothing may be written through it, so each formatting step below asks snprintf for the
++     * needed length instead of writing. -CNA
++     */
++    const char *textend = text + maxlen;
+ 
+     int precision = 9;
+ 
+@@ -1013,7 +1019,8 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+             arg = -arg;
+         } // if
+         value = (unsigned long) arg;
+-        len = snprintf(text, left, "%lu", value);
++        len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
++                               : (size_t) snprintf(NULL, 0, "%lu", value);
+         text += len;
+         if (len >= left)
+             left = (left < 1) ? left : 1;
+@@ -1031,7 +1038,8 @@ size_t MOJOSHADER_printFloat(char *text, size_t maxlen, float arg)
+         while (precision-- > 0)
+         {
+             value = (unsigned long) (arg * mult);
+-            len = snprintf(text, left, "%lu", value);
++            len = (text < textend) ? (size_t) snprintf(text, left, "%lu", value)
++                                   : (size_t) snprintf(NULL, 0, "%lu", value);
+             text += len;
+             if (len >= left)
+                 left = (left < 1) ? left : 1;
 diff --git a/mojoshader_effects.c b/mojoshader_effects.c
 index 036f18d..aa7acb3 100644
 --- a/mojoshader_effects.c

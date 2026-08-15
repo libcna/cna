@@ -255,8 +255,8 @@ exactly one MojoShader — the revision FNA3D pins — and never builds a second
 - FNA3D: pinned at `3240147` by `cmake/ThirdPartyFNA3D.cmake`.
 - MojoShader: `6333f74dbd5644789a63e903816441b16c1e8b60`, zlib licence.
 - CNA applies one narrow, versioned robustness patch to that exact MojoShader revision
-  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns twenty-three ways
-  untrusted bytecode could crash the process into ordinary parser errors. Twenty-two of the twenty-three were
+  (`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`), which turns twenty-five ways
+  untrusted bytecode could crash the process into ordinary parser errors. Twenty-four of the twenty-five were
   found by the FX-051 fuzz campaign; see [`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) for
   the list and for the exposure that remains. CMake applies the patch automatically and
   idempotently, for fetched checkouts and for an explicit `FETCHCONTENT_SOURCE_DIR_FNA3D` override
