@@ -219,7 +219,7 @@ kind**:
 | 2 | `OPENGL33` glTF segfault | **no longer reproducible** (4 scenarios, 2026-08-15) | no | superseded: 4 display-dependent pixel failures instead |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | **fixed upstream**, `sharp-runtime` `bc8dbf41` |
 | 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |
-| 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | behaviour preserved |
+| 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | **fixed** — the test was wrong |
 | 6 | `BLEND2D`/`OPENVG` arms define no constants, so those builds cannot compile the suite | yes, by reading | no | **fixed**, RTR-P9-4 |
 | 7 | A guard with identical arms made every renderer claim SDL_GPU's boundary | yes | no | **fixed**, RTR-P9-10 |
 | 8 | A caller-supplied window was abandoned on fallback; the guard against it was dead code | yes, by test + reading | **yes** — found by RTR-P5-13's own test | **fixed**, RTR-P5-13 |
@@ -305,7 +305,18 @@ the corpus would find any others.
 `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`
 (`UnsupportedFormatConstructionTest`, the `kAllFormats` loop).
 
-**Status:** confirmed pre-existing. Behaviour preserved, not changed.
+**Status: FIXED on 2026-08-15 — the TEST was wrong, the implementation was right.**
+
+Decided from the source rather than by preference. `SkiaTextureRenderer.cpp` carries
+`IsCompressedTextureFormat`, the correct block sizes (8 bytes for `Dxt1`, 16 for the rest) and
+REAL decoders -- `DxtUtil::DecompressDxt1`/`Dxt3`/`Dxt5` and `Bc7Util::DecompressBc7` -- which
+decode to RGBA for the CPU raster surface, and it throws `NotSupportedException` for a format it
+has no decoder for. That is genuine support, not silent acceptance: if Skia had merely swallowed
+the bytes and drawn nonsense, the test would have been right and the validation would need fixing.
+It is the other way round, so the five block-compressed formats were added to the test's
+Skia-supported list and the implementation was left untouched.
+
+Gates after the change, all unchanged: HEADLESS 6172, SOFTWARE 6253, OPENGLES3 6369, 0 failures.
 
 ### What was found
 

@@ -566,6 +566,23 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::NormalizedByte2
             || format == SurfaceFormat::NormalizedByte4
             || format == SurfaceFormat::HdrBlendable
+            // threeissues.md finding 5: the block-compressed formats belong here. This list used to
+            // omit them while SkiaRenderer accepted them, so the two halves of the contract
+            // contradicted each other and this loop failed on SKIA for as long as both had their
+            // current contents.
+            //
+            // The implementation is the half that is right, and that was checked rather than
+            // assumed: SkiaTextureRenderer.cpp carries IsCompressedTextureFormat, the correct block
+            // sizes (8 bytes for Dxt1, 16 for the rest) and real decoders -- DxtUtil::DecompressDxt1
+            // /Dxt3/Dxt5 and Bc7Util::DecompressBc7 -- decoding to RGBA for the CPU raster surface,
+            // and it throws NotSupportedException for a format it has no decoder for. That is
+            // genuine support, not silent acceptance, so a test demanding a throw was asserting the
+            // opposite of what the renderer does.
+            || format == SurfaceFormat::Dxt1
+            || format == SurfaceFormat::Dxt3
+            || format == SurfaceFormat::Dxt5
+            || format == SurfaceFormat::Bc7EXT
+            || format == SurfaceFormat::Bc7SrgbEXT
             ))
             ;
         if (supported)
