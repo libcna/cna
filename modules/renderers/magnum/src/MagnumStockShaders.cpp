@@ -432,6 +432,8 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform sampler2D uMetallicRoughnessMap;\n";
             source += "uniform sampler2D uEmissiveMap;\n";
             source += "uniform sampler2D uOcclusionMap;\n";
+            source += "uniform sampler2D uSpecularMap;\n";
+            source += "uniform sampler2D uSpecularColorMap;\n";
             source += "uniform vec4 uDiffuseColor;\n";
             source += "uniform vec3 uAmbientColor;\n";
             source += "uniform vec3 uEmissiveColor;\n";
@@ -449,8 +451,10 @@ void cnaLighting(vec3 rawNormal, vec3 worldPosition, out vec3 lightSum, out vec3
             source += "uniform vec4 uAlphaTest;\n";
             source += "uniform vec3 uFogColor;\n";
             source += "uniform vec3 uSrgb;\n";
-            source += "uniform vec4 uDielectricFresnel;\n";
+            source += "uniform vec4 uSpecularFresnelInputs;\n";
+            source += "uniform vec3 uSpecularMapFlags;\n";
             source += "uniform vec4 uTextureTransformRows[10];\n";
+            source += "uniform vec4 uSpecularTextureTransformRows[4];\n";
             // Unit 4 (the occlusion map) needs a fifth flag, which does not fit in uRtFlipV's four
             // components -- this is the only program that samples that far.
             source += "uniform vec4 uRtFlipVHi;\n";
@@ -494,6 +498,11 @@ vec2 cnaPbrTransformUV(vec2 uv, int slot){
     return vec2(dot(value, uTextureTransformRows[slot * 2].xyz),
                 dot(value, uTextureTransformRows[slot * 2 + 1].xyz));
 }
+vec2 cnaPbrSpecularTransformUV(vec2 uv, int slot){
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, uSpecularTextureTransformRows[slot * 2].xyz),
+                dot(value, uSpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
 )";
             source += "void main(){\n";
             source += "    vec4 baseColor = texture(uTexture, cnaSampleUV(cnaPbrTransformUV(vTexCoord, 0), uRtFlipV.x));\n";
@@ -517,8 +526,12 @@ vec2 cnaPbrTransformUV(vec2 uv, int slot){
             source += "    float roughness = clamp(metallicRoughness.g * uRoughnessFactor, 0.045, 1.0);\n";
             source += "    float metallic = clamp(metallicRoughness.b * uMetallicFactor, 0.0, 1.0);\n";
             source += "    vec3 view = normalize(uEyePosition - vWorldPosition);\n";
-            source += "    vec3 f0 = mix(uDielectricFresnel.xyz, albedo, metallic);\n";
-            source += "    vec3 f90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic);\n";
+            source += "    float specularWeight = uSpecularFresnelInputs.w * texture(uSpecularMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 0), uSpecularMapFlags.y)).a;\n";
+            source += "    vec3 specularColorTex = texture(uSpecularColorMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 1), uSpecularMapFlags.z)).rgb;\n";
+            source += "    specularColorTex = mix(specularColorTex, cnaSrgbToLinear(specularColorTex), uSpecularMapFlags.x);\n";
+            source += "    vec3 dielectricF0 = min(uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight;\n";
+            source += "    vec3 f0 = mix(dielectricF0, albedo, metallic);\n";
+            source += "    vec3 f90 = mix(vec3(specularWeight), vec3(1.0), metallic);\n";
             source += "    vec3 reflected = cnaPbrLight(shadingNormal, view, normalize(-uLight0Dir),\n";
             source += "                                 uLight0Diffuse, albedo, f0, f90, roughness, metallic)\n";
             source += "                   + cnaPbrLight(shadingNormal, view, normalize(-uLight1Dir),\n";

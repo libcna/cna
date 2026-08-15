@@ -43,6 +43,8 @@ namespace CNA::Internal::Renderers::Magnum
         constexpr int kPbrMetallicRoughnessMapSlot = 2;
         constexpr int kPbrEmissiveMapSlot = 3;
         constexpr int kPbrOcclusionMapSlot = 4;
+        constexpr int kPbrSpecularMapSlot = 5;
+        constexpr int kPbrSpecularColorMapSlot = 6;
 
         Mg::Color4 ToMagnumColor(float r, float g, float b, float a)
         {
@@ -1039,6 +1041,8 @@ namespace CNA::Internal::Renderers::Magnum
         {
             EnsureDefaultPbrMaps();
             float occlusionFlip = 0.0f;
+            float specularFlip = 0.0f;
+            float specularColorFlip = 0.0f;
             program.SetVector4(program.LocationOf("uDiffuseColor"), Mg::Vector4{
                 params.diffuseColor[0], params.diffuseColor[1],
                 params.diffuseColor[2], params.diffuseColor[3]});
@@ -1051,6 +1055,10 @@ namespace CNA::Internal::Renderers::Magnum
                        *defaultWhiteTexture_, renderTargetFlips[3]);
             BindPbrMap(program, "uOcclusionMap", kPbrOcclusionMapSlot, params.pbrOcclusionMap,
                        *defaultWhiteTexture_, occlusionFlip);
+            BindPbrMap(program, "uSpecularMap", kPbrSpecularMapSlot, params.pbrSpecularMap,
+                       *defaultWhiteTexture_, specularFlip);
+            BindPbrMap(program, "uSpecularColorMap", kPbrSpecularColorMapSlot,
+                       params.pbrSpecularColorMap, *defaultWhiteTexture_, specularColorFlip);
             program.SetFloat(program.LocationOf("uMetallicFactor"), params.pbrMetallicFactor);
             program.SetFloat(program.LocationOf("uRoughnessFactor"), params.pbrRoughnessFactor);
             program.SetFloat(program.LocationOf("uNormalScale"), params.pbrNormalScale);
@@ -1059,14 +1067,24 @@ namespace CNA::Internal::Renderers::Magnum
                 params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f});
-            program.SetVector4(program.LocationOf("uDielectricFresnel"), Mg::Vector4{
-                params.pbrDielectricF0[0], params.pbrDielectricF0[1],
-                params.pbrDielectricF0[2], params.pbrDielectricF90});
+            program.SetVector4(program.LocationOf("uSpecularFresnelInputs"), Mg::Vector4{
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor});
+            program.SetVector3(program.LocationOf("uSpecularMapFlags"), Mg::Vector3{
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f,
+                specularFlip, specularColorFlip});
             for (int row = 0; row < 10; ++row)
             {
                 const float* values = params.pbrTextureTransformRows[row];
                 program.SetVector4(program.LocationOf(
                     "uTextureTransformRows[" + std::to_string(row) + "]"),
+                    Mg::Vector4{values[0], values[1], values[2], values[3]});
+            }
+            for (int row = 0; row < 4; ++row)
+            {
+                const float* values = params.pbrSpecularTextureTransformRows[row];
+                program.SetVector4(program.LocationOf(
+                    "uSpecularTextureTransformRows[" + std::to_string(row) + "]"),
                     Mg::Vector4{values[0], values[1], values[2], values[3]});
             }
             program.SetVector3(program.LocationOf("uAmbientColor"), Mg::Vector3{

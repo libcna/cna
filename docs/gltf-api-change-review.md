@@ -224,7 +224,7 @@ with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the gra
 always one. The core defaults are algebraically identical to the former constants. The repository-
 wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
 test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
-`KHR_materials_specular` is implemented with a named limit and remains unclaimed because nine PBR
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed because eight PBR
 renderers still need bindings for its two optional textures.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
@@ -236,7 +236,7 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL2, OpenGL4 and DirectX9/11/12 sample them, and the remaining nine renderer bindings
+OpenGL2, OpenGL4, DirectX9/11/12 and Magnum sample them, and the remaining eight renderer bindings
 stay explicitly open.
 
 ---
@@ -301,6 +301,8 @@ Khronos `SpecularTest.glb` direct/offline pixel witness. OpenGL2/4 compile nativ
 cross-compile after all rigid/skinned and single/dual-UV HLSL variants pass D3DCompile. DirectX9's
 rigid/skinned ps_3_0 programs use seven samplers and 278 of 512 instruction slots; their 5,588-byte
 bytecode, exact c24–c29 register layout and MinGW renderer build are regenerated and verified.
+Magnum binds the same white identity maps on units 5/6; its shared rigid/skinned GLSL compiles and
+passes the six-check analytic Fresnel witness on an Xvfb llvmpipe OpenGL 4.5 context.
 
 ---
 

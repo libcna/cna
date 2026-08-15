@@ -175,7 +175,7 @@ namespace
         // Together these fragments form the CPU-field -> native binding -> shader-declaration
         // chain. Keeping the fragments renderer-specific is intentional: a WebGPU bind-group
         // binding and a Wicked HLSL resource register are not interchangeable kinds of "unit".
-        std::array<const char*, 16> evidence;
+        std::array<const char*, 18> evidence;
     };
 
     constexpr std::array<RendererSlotAudit, 15> kSlotAudits{{
@@ -323,11 +323,13 @@ namespace
            R"(layout(binding = 6) uniform texture2D metallicRoughnessMap;)" ,
            R"(layout(binding = 8) uniform texture2D emissiveMap;)" ,
            R"(layout(binding = 10) uniform texture2D occlusionMap;)"}}},
-        {"magnum", "GL texture units 0,1,2,3,4",
+        {"magnum", "GL texture units 0 through 6",
          {{R"(constexpr int kPbrNormalMapSlot = 1;
               constexpr int kPbrMetallicRoughnessMapSlot = 2;
               constexpr int kPbrEmissiveMapSlot = 3;
-              constexpr int kPbrOcclusionMapSlot = 4;)",
+              constexpr int kPbrOcclusionMapSlot = 4;
+              constexpr int kPbrSpecularMapSlot = 5;
+              constexpr int kPbrSpecularColorMapSlot = 6;)",
            R"(BindTextureToSlot(0, params.texture0);
               program.SetInt(program.LocationOf("uTexture"), 0);)",
            R"(BindPbrMap(program, "uNormalMap", kPbrNormalMapSlot, params.pbrNormalMap)",
@@ -335,11 +337,16 @@ namespace
            R"(params.pbrMetallicRoughnessMap, *defaultWhiteTexture_)",
            R"(BindPbrMap(program, "uEmissiveMap", kPbrEmissiveMapSlot, params.pbrEmissiveMap)",
            R"(BindPbrMap(program, "uOcclusionMap", kPbrOcclusionMapSlot, params.pbrOcclusionMap)",
+           R"(BindPbrMap(program, "uSpecularMap", kPbrSpecularMapSlot, params.pbrSpecularMap)",
+           R"(BindPbrMap(program, "uSpecularColorMap", kPbrSpecularColorMapSlot)",
+           R"(params.pbrSpecularColorMap, *defaultWhiteTexture_, specularColorFlip)",
            R"(uniform sampler2D uTexture;)" ,
            R"(uniform sampler2D uNormalMap;)" ,
            R"(uniform sampler2D uMetallicRoughnessMap;)" ,
            R"(uniform sampler2D uEmissiveMap;)" ,
-           R"(uniform sampler2D uOcclusionMap;)"}}},
+           R"(uniform sampler2D uOcclusionMap;)" ,
+           R"(uniform sampler2D uSpecularMap;)" ,
+           R"(uniform sampler2D uSpecularColorMap;)"}}},
         {"metal", "fragment texture/sampler indices 0,1,2,3,4",
          {{R"(texture0=resolveMetal2DTextureBinding(p,params->texture0,MetalStockTextureSlot::PbrBaseColor))",
            R"(normalMap=resolveMetal2DTextureBinding(p,params->pbrNormalMap,MetalStockTextureSlot::PbrNormal))",
@@ -811,8 +818,8 @@ namespace
          "vec3 F90 = mix(vec3(dielectricFresnel.w), vec3(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 3},
         {"magnum",
-         "vec3 f0 = mix(uDielectricFresnel.xyz, albedo, metallic)",
-         "vec3 f90 = mix(vec3(uDielectricFresnel.w), vec3(1.0), metallic)",
+         "vec3 f0 = mix(dielectricF0, albedo, metallic)",
+         "vec3 f90 = mix(vec3(specularWeight), vec3(1.0), metallic)",
          "vec3 fresnel = f0 + (f90 - f0) *", 1},
         {"metal",
          "float3 F0 = mix(pu.dielectricFresnel.xyz, albedo, metallic)",
@@ -1893,6 +1900,34 @@ TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextu
     {
         EXPECT_EQ(2u, CountOccurrences(source, Normalize(evidence)))
             << "both DirectX 9 PBR shaders must contain: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, MagnumSamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "magnum");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "constexpr int kPbrSpecularMapSlot = 5",
+             "constexpr int kPbrSpecularColorMapSlot = 6",
+             "params.pbrSpecularMap, *defaultWhiteTexture_, specularFlip",
+             "params.pbrSpecularColorMap, *defaultWhiteTexture_, specularColorFlip",
+             "params.pbrDielectricF0Unclamped[0]",
+             "params.pbrSpecularFactor",
+             "params.pbrSpecularColorTextureIsSrgb",
+             "params.pbrSpecularTextureTransformRows[row]",
+             "uniform sampler2D uSpecularMap",
+             "uniform sampler2D uSpecularColorMap",
+             "texture(uSpecularMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 0), uSpecularMapFlags.y)).a",
+             "texture(uSpecularColorMap, cnaSampleUV(cnaPbrSpecularTransformUV(vTexCoord, 1), uSpecularMapFlags.z)).rgb",
+             "mix(specularColorTex, cnaSrgbToLinear(specularColorTex), uSpecularMapFlags.x)",
+             "min(uSpecularFresnelInputs.xyz * specularColorTex, vec3(1.0)) * specularWeight",
+             "mix(vec3(specularWeight), vec3(1.0), metallic)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing Magnum specular binding evidence: " << evidence;
     }
 }
 

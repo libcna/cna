@@ -249,10 +249,12 @@ authored extension factors. A grazing pair holds F0 at `.04` and changes only F9
 yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` separately inventories
 all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
-`specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4 and DirectX9/11/12
-now consume both; the other nine renderer bindings remain the named `GLTF-344` limit. DirectX9's
+`specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4, DirectX9/11/12 and
+Magnum now consume both; the other eight renderer bindings remain the named `GLTF-344` limit. DirectX9's
 two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
+Magnum's shared rigid/skinned GLSL binds white units 5/6, and both its six-check analytic Fresnel
+witness and existing six-check metallic-roughness PBR test pass on llvmpipe under Xvfb.
 
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 

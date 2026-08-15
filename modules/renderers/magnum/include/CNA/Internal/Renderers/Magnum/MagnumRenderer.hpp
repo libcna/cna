@@ -607,10 +607,10 @@ namespace CNA::Internal::Renderers::Magnum
         std::unique_ptr<MagnumStockShaderCache> stockShaders_ =
             std::make_unique<MagnumStockShaderCache>();
         /**
-         * Stand-ins for the PbrEffect maps a material does not supply. The shader samples all four
+         * Stand-ins for the PbrEffect maps a material does not supply. The shader samples all six
          * unconditionally -- branching per map would cost more than a 1x1 fetch -- so an absent one
          * must resolve to its own neutral value: opaque white for metallic-roughness, emissive and
-         * occlusion, and a flat +Z normal for the normal map.
+         * occlusion and both specular-extension maps, and a flat +Z normal for the normal map.
          */
         std::unique_ptr<Mg::GL::Texture2D> defaultWhiteTexture_;
         std::unique_ptr<Mg::GL::Texture2D> defaultFlatNormalTexture_;
