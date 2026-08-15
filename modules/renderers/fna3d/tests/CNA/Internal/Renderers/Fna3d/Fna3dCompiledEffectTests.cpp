@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include "CNA/GraphicsCapability.hpp"
+#include "CNA/Internal/Json.hpp"
 #include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "CNA/TestSupport/CompiledEffectFixtures.hpp"
 #include "CNA/TestSupport/CompiledEffectFormat.hpp"
@@ -349,6 +350,208 @@ namespace
 // device setup. FNA3D is the reference backend, so it runs the shared contract here and keeps its
 // own backend-specific evidence -- fixture provenance, native parser diagnostics, golden pixels,
 // SpriteBatch and Content Pipeline integration -- in the tests below.
+namespace
+{
+    using CNA::Internal::JsonValue;
+
+    /** @brief Reads FNA's checked-in reflection oracle (plan_fx.md FX-005). */
+    JsonValue LoadFnaReflectionOracle()
+    {
+        const std::filesystem::path path = std::filesystem::path(__FILE__).parent_path() /
+            "../../../../../../../../tests/fixtures/compiled-effects/fna-effect-reflection.json";
+        std::ifstream input(path);
+        if (!input) return {};
+        std::ostringstream text;
+        text << input.rdbuf();
+        return CNA::Internal::ParseJson(text.str());
+    }
+
+    const JsonValue* FindOracleEffect(const JsonValue& document, const std::string& file)
+    {
+        const JsonValue* effects = document.FindMember("effects");
+        if (effects == nullptr) return nullptr;
+        for (const JsonValue& effect : effects->arrayValue)
+        {
+            const JsonValue* name = effect.FindMember("file");
+            if (name != nullptr && name->stringValue == file) return &effect;
+        }
+        return nullptr;
+    }
+
+    std::string OracleString(const JsonValue& object, const char* key)
+    {
+        const JsonValue* member = object.FindMember(key);
+        return member != nullptr && member->type == CNA::Internal::JsonType::String
+            ? member->stringValue : std::string();
+    }
+
+    int OracleInt(const JsonValue& object, const char* key)
+    {
+        const JsonValue* member = object.FindMember(key);
+        return member != nullptr ? static_cast<int>(member->numberValue) : 0;
+    }
+
+    /**
+     * @brief Spells a CNA parameter class the way FNA's own enum ToString() spells it.
+     *
+     * The two enums carry the same XNA names, so this is a name mapping rather than a
+     * translation: anything unmapped is reported as such so the comparison cannot pass by
+     * accident.
+     */
+    std::string ToOracleClassName(
+        Microsoft::Xna::Framework::Graphics::EffectParameterClass value)
+    {
+        using Class = Microsoft::Xna::Framework::Graphics::EffectParameterClass;
+        switch (value)
+        {
+            case Class::Scalar: return "Scalar";
+            case Class::Vector: return "Vector";
+            case Class::Matrix: return "Matrix";
+            case Class::Object: return "Object";
+            case Class::Struct: return "Struct";
+        }
+        return "<unmapped class>";
+    }
+
+    /** @brief Spells a CNA parameter type the way FNA's own enum ToString() spells it. */
+    std::string ToOracleTypeName(Microsoft::Xna::Framework::Graphics::EffectParameterType value)
+    {
+        using Type = Microsoft::Xna::Framework::Graphics::EffectParameterType;
+        switch (value)
+        {
+            case Type::Void: return "Void";
+            case Type::Bool: return "Bool";
+            case Type::Int32: return "Int32";
+            case Type::Single: return "Single";
+            case Type::String: return "String";
+            case Type::Texture: return "Texture";
+            case Type::Texture1D: return "Texture1D";
+            case Type::Texture2D: return "Texture2D";
+            case Type::Texture3D: return "Texture3D";
+            case Type::TextureCube: return "TextureCube";
+        }
+        return "<unmapped type>";
+    }
+
+    /** @brief Compares one CNA parameter subtree against FNA's own reflection of it. */
+    void ExpectParameterMatchesOracle(
+        const Microsoft::Xna::Framework::Graphics::EffectParameter& parameter,
+        const JsonValue& oracle, const std::string& path)
+    {
+        using namespace Microsoft::Xna::Framework::Graphics;
+        SCOPED_TRACE(path);
+        EXPECT_EQ(parameter.getNameProperty(), OracleString(oracle, "name"));
+        // FNA leaves a missing semantic as an empty string, exactly as CNA does.
+        EXPECT_EQ(parameter.getSemanticProperty(), OracleString(oracle, "semantic"));
+        EXPECT_EQ(ToOracleClassName(parameter.getParameterClassProperty()),
+                  OracleString(oracle, "class"));
+        EXPECT_EQ(ToOracleTypeName(parameter.getParameterTypeProperty()),
+                  OracleString(oracle, "type"));
+        EXPECT_EQ(parameter.getRowCountProperty(), OracleInt(oracle, "rowCount"));
+        EXPECT_EQ(parameter.getColumnCountProperty(), OracleInt(oracle, "columnCount"));
+
+        const JsonValue* annotations = oracle.FindMember("annotations");
+        if (annotations != nullptr &&
+            annotations->type == CNA::Internal::JsonType::Array)
+        {
+            ASSERT_EQ(parameter.getAnnotationsProperty().getCountProperty(),
+                      static_cast<int>(annotations->arrayValue.size()));
+            for (std::size_t i = 0; i < annotations->arrayValue.size(); ++i)
+            {
+                EXPECT_EQ(parameter.getAnnotationsProperty()[static_cast<int>(i)]
+                              .getNameProperty(),
+                          OracleString(annotations->arrayValue[i], "name"));
+            }
+        }
+
+        const JsonValue* elements = oracle.FindMember("elements");
+        if (elements != nullptr && elements->type == CNA::Internal::JsonType::Array)
+        {
+            ASSERT_EQ(parameter.getElementsProperty().getCountProperty(),
+                      static_cast<int>(elements->arrayValue.size()));
+            for (std::size_t i = 0; i < elements->arrayValue.size(); ++i)
+            {
+                ExpectParameterMatchesOracle(
+                    parameter.getElementsProperty()[static_cast<int>(i)],
+                    elements->arrayValue[i], path + "[" + std::to_string(i) + "]");
+            }
+        }
+
+        const JsonValue* members = oracle.FindMember("structureMembers");
+        if (members != nullptr && members->type == CNA::Internal::JsonType::Array)
+        {
+            ASSERT_EQ(parameter.getStructureMembersProperty().getCountProperty(),
+                      static_cast<int>(members->arrayValue.size()));
+            for (std::size_t i = 0; i < members->arrayValue.size(); ++i)
+            {
+                ExpectParameterMatchesOracle(
+                    parameter.getStructureMembersProperty()[static_cast<int>(i)],
+                    members->arrayValue[i], path + "." + OracleString(
+                        members->arrayValue[i], "name"));
+            }
+        }
+    }
+}
+
+// plan_fx.md FX-005: the only check here that is not self-consistency. Every other reflection
+// test compares CNA against the format or against CNA's own fixtures; this one compares it
+// against reflection produced by *running* FNA over the same bytes, through the same pinned
+// FNA3D/MojoShader. Regenerate the oracle with tools/fna-reference (see its README).
+TEST(Fna3dCompiledEffectTest, StockFixtureReflectionMatchesTheFnaOracle)
+{
+    GraphicsDevice device;
+    if (!device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+
+    const JsonValue oracle = LoadFnaReflectionOracle();
+    const JsonValue* effects = oracle.FindMember("effects");
+    ASSERT_NE(effects, nullptr) << "the FNA reflection oracle is missing or unreadable";
+    ASSERT_FALSE(effects->arrayValue.empty());
+
+    for (const JsonValue& expected : effects->arrayValue)
+    {
+        const std::string file = OracleString(expected, "file");
+        SCOPED_TRACE(file);
+        const auto bytes = LoadStockEffect(file.c_str());
+        ASSERT_FALSE(bytes.empty()) << "fixture " << file << " is missing";
+
+        Effect effect(device, bytes);
+
+        const JsonValue* parameters = expected.FindMember("parameters");
+        ASSERT_NE(parameters, nullptr);
+        ASSERT_EQ(effect.getParametersProperty().getCountProperty(),
+                  static_cast<int>(parameters->arrayValue.size()))
+            << "FNA and CNA disagree on how many parameters this effect exposes";
+        for (std::size_t i = 0; i < parameters->arrayValue.size(); ++i)
+        {
+            ExpectParameterMatchesOracle(
+                effect.getParametersProperty()[static_cast<int>(i)],
+                parameters->arrayValue[i], OracleString(parameters->arrayValue[i], "name"));
+        }
+
+        const JsonValue* techniques = expected.FindMember("techniques");
+        ASSERT_NE(techniques, nullptr);
+        ASSERT_EQ(effect.getTechniquesProperty().getCountProperty(),
+                  static_cast<int>(techniques->arrayValue.size()));
+        for (std::size_t t = 0; t < techniques->arrayValue.size(); ++t)
+        {
+            const JsonValue& expectedTechnique = techniques->arrayValue[t];
+            auto& technique = effect.getTechniquesProperty()[static_cast<int>(t)];
+            EXPECT_EQ(technique.getNameProperty(), OracleString(expectedTechnique, "name"));
+
+            const JsonValue* passes = expectedTechnique.FindMember("passes");
+            ASSERT_NE(passes, nullptr);
+            ASSERT_EQ(technique.getPassesProperty().getCountProperty(),
+                      static_cast<int>(passes->arrayValue.size()));
+            for (std::size_t p = 0; p < passes->arrayValue.size(); ++p)
+            {
+                EXPECT_EQ(technique.getPassesProperty()[static_cast<int>(p)].getNameProperty(),
+                          OracleString(passes->arrayValue[p], "name"));
+            }
+        }
+    }
+}
+
 TEST(Fna3dCompiledEffectTest, SharedBackendConformanceContract)
 {
     GraphicsDevice device;

@@ -105,12 +105,11 @@ tests; configuring the same checkout again confirmed that patch application is i
 
 Still open before the FNA3D slice can satisfy every aspirational exit criterion in this plan:
 
-- an independent normalized FNA oracle (`FX-005`) and the compiler-produced fixture it would be
-  compared against (`FX-004`). This is **blocked by the environment, not by effort**: the FNA
-  reference tool needs `mono`/`xbuild` and a built `FNA.dll`, and neither `mono` nor `dotnet`
-  exists on the development machine. The synthetic fixture now covers reflection, pass identity,
-  every render-state token, samplers, textures and a real Shader Model 2.0 program without a
-  proprietary compiler, but comparing CNA against itself is self-consistency, not ground truth;
+- the pixel/state half of the FNA oracle (`FX-005`) and a compiler-produced fixture (`FX-004`).
+  The reflection half of the oracle now exists and passes: `mono` was installed on 2026-08-15, and
+  `tools/fna-reference --effects` runs FNA's own reflection over the six stock binaries into
+  checked-in test data that a CNA test compares against subtree by subtree. What is still missing
+  is FNA-produced pixels and state observations, and a fixture produced by a real Effect compiler;
 - a fuzz gate that runs dry on every driver (`FX-051`). Eighteen crash classes are fixed in the
   managed MojoShader patch and the campaign is clean on FNA3D's OpenGL driver; the SDL_GPU
   driver's SPIR-V emitter still asserts on hostile shader bytecode;
@@ -439,7 +438,7 @@ must be accepted before a row can close.
 | FX-002 | Record the FNA `Effect`, `EffectPass`, reflection, state translation, clone, and `EffectReader` behavior as the compatibility oracle | FX-001 | Reviewable mapping from every CNA behavior to FNA/XNA semantics |
 | FX-003 | Inventory the six existing `.fxb` fixtures and preserve provenance, hashes, upstream revision, and license | FX-001 | CI verifies fixture hashes and provenance is auditable |
 | FX-004 | Create a purpose-built conformance `.fx` source and committed `.fxb` covering techniques, passes, defaults, arrays, structures, annotations, textures, samplers, and states | FX-002 | Source, compiler identity/version/hash, reproduction instructions, and legal provenance are committed |
-| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | Oracle output is reproducible and checked into test data |
+| FX-005 | Extend the FNA reference tool to emit normalized JSON reflection and deterministic pixels/state observations for all fixtures | FX-003, FX-004 | **Reflection half done.** `tools/fna-reference --effects` runs FNA's own `Effect.INTERNAL_parseEffectStruct` over the six stock binaries and writes `tests/fixtures/compiled-effects/fna-effect-reflection.json`; `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's reflection against it subtree by subtree and passes. Deterministic pixel/state observations from FNA are still to come |
 | FX-006 | Add format sniffing tests for empty, random, truncated, valid FX bytecode, and MGFX | FX-001, FX-003 | Each category yields a stable, specific result |
 
 ### Phase B - Common compiled-effect architecture
@@ -573,7 +572,7 @@ of remaining effort alone.
 | Criterion | State |
 |---|---|
 | byte-array and XNB loading | **Pass** — both paths tested, including an end-to-end ContentManager load and draw |
-| reflection matches the FNA oracle | **Not met.** There is no oracle. `FX-005` needs the FNA reference tool, which needs `mono`/`xbuild` and a built `FNA.dll`; neither `mono` nor `dotnet` exists on this machine. Reflection is currently verified against the format and against CNA's own fixtures, which is self-consistency, not ground truth |
+| reflection matches the FNA oracle | **Pass, for the six stock fixtures.** `tools/fna-reference --effects` emits FNA's own reflection and `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's against it -- parameter order, names, semantics, classes, types, row/column counts, annotations, array elements, structure members, technique and pass names all agree. The synthetic fixtures still have no oracle, because no compiler produced them |
 | parameters, annotations, textures/samplers, techniques, passes, states | **Pass** — covered by the shared conformance suite and the FNA3D-specific tests |
 | SpriteBatch and 3D pixel tests | **Pass** — deterministic pixels for both paths and for a blend-factor state oracle |
 | clone and lifetime | **Pass** — clone chains, device reset, disposal ordering, repeated cycles |
