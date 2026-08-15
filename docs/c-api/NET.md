@@ -5,7 +5,7 @@
 `CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
 session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
 event descriptions, and `CNA/C/net_sessions.h` adds discovered sessions, their
-collection and the session object itself. Live discovery, join and local gamers are later coverage tasks. Nothing here opens a socket unless a `SystemLink` session is created; a
+collection and the session object itself. Local gamers are the one later coverage task. Nothing here opens a socket unless a `SystemLink` session is created; a
 `Local` session touches no transport at all.
 
 ## Identities
@@ -197,3 +197,23 @@ already in the session the instant a handler subscribes, so the callback fires b
 
 Nothing in the canonical implementation currently raises the three leaderboard events or
 `InviteAccepted`; their subscriptions are real and released normally, but no delivery happens yet.
+
+## Discovery, join and the fake-async pairs
+
+Every canonical `Begin`/`End` pair collapses into one synchronous C route, because CNA completes
+the pair before `Begin` returns. Each `*_async` route still takes the canonical completion callback
+and invokes it before returning; the callback receives only the caller's own context, because no
+operation object may cross the ABI, and no `std::any` state is exposed.
+
+The three `cna_network_session_create_*_async` routes are **not** aliases of their synchronous
+counterparts. The canonical end step substitutes its own gamer limit rather than forwarding the
+caller's, so a session created asynchronously reports a different maximum. That is canonical
+behavior, preserved rather than smoothed over.
+
+`cna_network_session_find` refuses a local-only session type outright, matching the canonical
+search, and only a `SystemLink` search reaches real discovery — every other type returns an empty
+collection by design. `cna_network_session_join` produces a session that reports the discovered
+session's type and no host role, and the invited-join routes build a session from the canonical
+fixed values rather than from any live invite state.
+
+Only one session exists at a time, so a caller releases one before creating or joining the next.

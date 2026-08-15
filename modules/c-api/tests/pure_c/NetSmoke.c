@@ -1339,6 +1339,140 @@ static int validate_secondary_sessions(const CNA_SignedInGamerHandle signed_in)
         cna_network_session_properties_destroy(properties) == CNA_RESULT_SUCCESS;
 }
 
+static void on_async_completed(void* const context)
+{
+    *(int*)context += 1;
+}
+
+static int destroy_session_and_check(const CNA_NetworkSessionHandle session, const int ok)
+{
+    return cna_network_session_destroy(session) == CNA_RESULT_SUCCESS && ok;
+}
+
+static int validate_session_discovery(const CNA_SignedInGamerHandle signed_in)
+{
+    CNA_AvailableNetworkSessionCollectionHandle collection = CNA_INVALID_HANDLE;
+    CNA_AvailableNetworkSessionHandle available = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
+    CNA_NetworkSessionType type = CNA_NETWORK_SESSION_TYPE_LOCAL;
+    CNA_Bool host = CNA_TRUE;
+    int completions = 0;
+    int32_t number = -1;
+
+    /* The canonical search refuses a local-only session type outright, and only a SystemLink
+       search reaches real discovery, so a PlayerMatch search is empty by design. */
+    if (cna_network_session_find(
+            CNA_NETWORK_SESSION_TYPE_LOCAL, 1, CNA_INVALID_HANDLE, &collection) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_session_find(
+            CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, &collection) !=
+            CNA_RESULT_SUCCESS ||
+        cna_available_network_session_collection_get_count(collection, &number) !=
+            CNA_RESULT_SUCCESS ||
+        number != 0 ||
+        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_find_with_local_gamers(
+            CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, &signed_in, UINT64_C(1), CNA_INVALID_HANDLE,
+            &collection) != CNA_RESULT_SUCCESS ||
+        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_find_async(
+            CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, on_async_completed,
+            &completions, &collection) != CNA_RESULT_SUCCESS ||
+        completions != 1 ||
+        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_find_with_local_gamers_async(
+            CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, &signed_in, UINT64_C(1), CNA_INVALID_HANDLE,
+            on_async_completed, &completions, &collection) != CNA_RESULT_SUCCESS ||
+        completions != 2 ||
+        cna_available_network_session_collection_destroy(collection) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_find(CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH, 1, CNA_INVALID_HANDLE, 0) !=
+        CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The canonical end step substitutes its own gamer limit instead of forwarding the caller's. */
+    if (cna_network_session_create_async(
+            CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 8, on_async_completed, &completions, &session) !=
+            CNA_RESULT_SUCCESS ||
+        completions != 3 ||
+        cna_network_session_get_max_gamers(session, &number) != CNA_RESULT_SUCCESS ||
+        number == 8) {
+        return destroy_session_and_check(session, 0);
+    }
+    if (cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_create_with_properties_async(
+            CNA_NETWORK_SESSION_TYPE_LOCAL, 1, 8, 2, CNA_INVALID_HANDLE, on_async_completed,
+            &completions, &session) != CNA_RESULT_SUCCESS ||
+        completions != 4 ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_create_with_local_gamers_async(
+            CNA_NETWORK_SESSION_TYPE_LOCAL, &signed_in, UINT64_C(1), 8, 0, CNA_INVALID_HANDLE,
+            on_async_completed, &completions, &session) != CNA_RESULT_SUCCESS ||
+        completions != 5 ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    CNA_AvailableNetworkSessionCreateInfo info = make_session_info("Host", 1, CNA_INVALID_HANDLE);
+    info.session_type = CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH;
+    if (cna_available_network_session_create_ext(&info, 0, &available) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_join(available, &session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_get_session_type(session, &type) != CNA_RESULT_SUCCESS ||
+        type != CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH ||
+        cna_network_session_get_is_host(session, &host) != CNA_RESULT_SUCCESS ||
+        host != CNA_FALSE ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        (void)cna_available_network_session_destroy(available);
+        return 0;
+    }
+    if (cna_network_session_join_async(available, on_async_completed, &completions, &session) !=
+            CNA_RESULT_SUCCESS ||
+        completions != 6 ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS ||
+        cna_available_network_session_destroy(available) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The canonical invite path builds its session from fixed values, not from live invite state. */
+    if (cna_network_session_join_invited(1, &session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_get_session_type(session, &type) != CNA_RESULT_SUCCESS ||
+        type != CNA_NETWORK_SESSION_TYPE_PLAYER_MATCH ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_join_invited_with_local_gamers(
+            &signed_in, UINT64_C(1), &session) != CNA_RESULT_SUCCESS ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_network_session_join_invited_async(
+            1, on_async_completed, &completions, &session) != CNA_RESULT_SUCCESS ||
+        completions != 7 ||
+        cna_network_session_destroy(session) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return cna_network_session_join_invited_with_local_gamers_async(
+            &signed_in, UINT64_C(1), on_async_completed, &completions, &session) ==
+            CNA_RESULT_SUCCESS &&
+        completions == 8 &&
+        cna_network_session_destroy(session) == CNA_RESULT_SUCCESS &&
+        cna_network_session_join_invited(1, 0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static int validate_sessions(void)
 {
     CNA_NetworkSessionHandle session = CNA_INVALID_HANDLE;
@@ -1410,7 +1544,7 @@ static int validate_sessions(void)
         return 0;
     }
 
-    if (!validate_secondary_sessions(signed_in)) {
+    if (!validate_secondary_sessions(signed_in) || !validate_session_discovery(signed_in)) {
         return 0;
     }
     return cna_gamer_set_signed_in_gamers_ext(0, UINT64_C(0)) == CNA_RESULT_SUCCESS &&

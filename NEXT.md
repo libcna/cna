@@ -295,8 +295,18 @@
 > releasing it after the session is gone is a no-op rather than a use-after-free. The canonical
 > gamer-joined replay — which fires once per gamer already present the moment a handler subscribes —
 > is asserted directly. The inventory is now 3,806 implemented, 30 partial, 2,463 planned and 116
-> N/A; all three trees stay green at 50/50. CBIND-036E4 (discovery, join and the fake-async pairs,
-> 17 rows) is next.
+> N/A; all three trees stay green at 50/50.
+>
+> CBIND-036E4 then collapses every canonical `Begin`/`End` pair into one synchronous C route that
+> still invokes the completion delegate — the same shape storage used in CBIND-036A — and maps
+> discovery, join and the invited path alongside them. The asynchronous creations are deliberately
+> **not** aliases of the synchronous ones: the canonical end step substitutes its own gamer limit
+> instead of forwarding the caller's, and the test asserts that difference rather than hiding it.
+> Two more canonical behaviors are preserved: a search refuses a local-only session type outright,
+> and only a SystemLink search reaches real discovery. The inventory is now 3,823 implemented, 30
+> partial, 2,446 planned and 116 N/A, and `LocalNetworkGamer` is the only `net` header with planned
+> rows left; all three trees stay green at 50/50. CBIND-036E5 (local network gamers, 18 rows) closes
+> parent CBIND-036.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -37,7 +37,8 @@ registry alongside it. Networking contributes the session identity enumerations,
 quality-of-service value, owned session-property lists with enumerators, owned packet read and
 write buffers, owned network gamers and machines, the seven event descriptions, owned discovered
 sessions with their read-only collection and the owned session object with its rosters, state,
-gamer management and all ten event subscriptions; owned
+gamer management, all ten event subscriptions and the
+discovery, join and invited-join routes; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async

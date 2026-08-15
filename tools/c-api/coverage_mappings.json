@@ -2626,6 +2626,39 @@
       "tests": "`NetSmoke.c` subscribes to all ten events on a live session, asserts the canonical gamer-joined replay fires once per gamer already present at subscription time and that its payload handle is usable inside the callback, then drives a real join, leave, start, end, host change and session end through the pump and counts each delivery exactly; the leaderboard and invite events are registered and released because nothing in the canonical implementation raises them yet. Null callbacks and null outputs are refused, and every registration is released twice to prove the second release reports a stale handle",
       "status": "implemented",
       "task": "CBIND-036E3"
+    },
+    {
+      "id": "network-session-async-create",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::(?:BeginCreate|EndCreate)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "the three `cna_network_session_create_*_async` routes, one per canonical `BeginCreate` overload, each collapsing its `Begin`/`End` pair into a single synchronous call because CNA completes the pair before `Begin` returns. Each still invokes the canonical completion delegate, which receives only the caller's own context because no operation object may cross the ABI, and no `std::any` state is exposed. These are deliberately not aliases of the synchronous creations: the canonical end step substitutes its own gamer limit rather than forwarding the caller's, and that difference is preserved",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E4"
+    },
+    {
+      "id": "network-session-find",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::(?:Find|BeginFind|EndFind)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_network_session_find` and `_find_with_local_gamers` for the two synchronous overloads, plus `_find_async` and `_find_with_local_gamers_async` collapsing the `BeginFind`/`EndFind` pair with a completion callback. The result is an owned discovered-session collection. The canonical refusal of a local-only session type and the fact that only a SystemLink search reaches real discovery are both preserved rather than smoothed over",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E4"
+    },
+    {
+      "id": "network-session-join",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkSession::(?:Join|BeginJoin|EndJoin|JoinInvited|BeginJoinInvited|EndJoinInvited)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_network_session_join` and `_join_async` for a discovered session, and `cna_network_session_join_invited`, `_join_invited_with_local_gamers` and both `_async` forms for the invited path. Every `Begin`/`End` pair collapses into one synchronous call that still invokes the completion callback. The canonical fixed values the invited path builds its session from, and the joined session's non-host role, are both preserved",
+      "tests": "`NetSmoke.c` drives every route from a published signed-in gamer: the canonical refusal of a local-only search type, an empty non-SystemLink search through both synchronous overloads and both asynchronous ones with their completion callbacks counted, all three asynchronous creations including the canonical substituted gamer limit that proves the asynchronous path is not the synchronous one, join and asynchronous join from a discovered session with the joined session reporting the discovered type and no host role, and all four invited-join routes reporting the canonical fixed session type, each session released before the next is created because only one exists at a time, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036E4"
     }
   ]
 }

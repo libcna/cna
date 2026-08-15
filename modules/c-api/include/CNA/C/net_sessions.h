@@ -908,6 +908,254 @@ CNA_C_API CNA_Result cna_network_session_dispose(CNA_NetworkSessionHandle sessio
  */
 CNA_C_API CNA_Result cna_network_session_destroy(CNA_NetworkSessionHandle session);
 
+/**
+ * @brief Receives the completion of a session operation.
+ *
+ * The canonical delegate receives an operation object, which never crosses the ABI, so the C
+ * callback receives only the caller's own context.
+ *
+ * @param context Caller-owned context supplied at the call site.
+ */
+typedef void (*CNA_NetworkSessionAsyncCallback)(void* context);
+
+/**
+ * @brief Creates an owned session through the canonical asynchronous pair.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param max_gamers Largest number of gamers; the canonical asynchronous path ignores it.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/thread/native failure.
+ *
+ * CNA completes the canonical `Begin`/`End` pair before `Begin` returns, so this is one
+ * synchronous call that still invokes the completion callback. It is not identical to
+ * `cna_network_session_create`: the canonical end step substitutes its own gamer limit rather than
+ * forwarding @p max_gamers, and that behavior is preserved.
+ */
+CNA_C_API CNA_Result cna_network_session_create_async(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    int32_t max_gamers,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Creates an owned session with private slots and properties through the asynchronous pair.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param max_gamers Largest number of gamers; the canonical asynchronous path ignores it.
+ * @param private_gamer_slots Number of reserved private slots.
+ * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_create_with_properties_async(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    int32_t max_gamers,
+    int32_t private_gamer_slots,
+    CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Creates an owned session from an explicit local-gamer list through the asynchronous pair.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param max_gamers Largest number of gamers; the canonical asynchronous path ignores it.
+ * @param private_gamer_slots Number of reserved private slots.
+ * @param session_properties Properties copied during creation, or `CNA_INVALID_HANDLE`.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_create_with_local_gamers_async(
+    CNA_NetworkSessionType session_type,
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    int32_t max_gamers,
+    int32_t private_gamer_slots,
+    CNA_NetworkSessionPropertiesHandle session_properties,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Searches for joinable sessions.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param search_properties Properties copied during the search, or `CNA_INVALID_HANDLE`.
+ * @param out_collection Receives an owned collection handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ *
+ * Only a `SystemLink` search reaches real discovery; every other session type returns an empty
+ * collection, matching the canonical implementation rather than pretending to search.
+ */
+CNA_C_API CNA_Result cna_network_session_find(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_AvailableNetworkSessionCollectionHandle* out_collection);
+
+/**
+ * @brief Searches for joinable sessions on behalf of an explicit local-gamer list.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param search_properties Properties copied during the search, or `CNA_INVALID_HANDLE`.
+ * @param out_collection Receives an owned collection handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_find_with_local_gamers(
+    CNA_NetworkSessionType session_type,
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_AvailableNetworkSessionCollectionHandle* out_collection);
+
+/**
+ * @brief Searches for joinable sessions through the canonical asynchronous pair.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param search_properties Properties copied during the search, or `CNA_INVALID_HANDLE`.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_collection Receives an owned collection handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_find_async(
+    CNA_NetworkSessionType session_type,
+    int32_t max_local_gamers,
+    CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_AvailableNetworkSessionCollectionHandle* out_collection);
+
+/**
+ * @brief Searches on behalf of an explicit local-gamer list through the asynchronous pair.
+ *
+ * @param session_type One of the `CNA_NETWORK_SESSION_TYPE_*` identities.
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param search_properties Properties copied during the search, or `CNA_INVALID_HANDLE`.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_collection Receives an owned collection handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/state/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_find_with_local_gamers_async(
+    CNA_NetworkSessionType session_type,
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    CNA_NetworkSessionPropertiesHandle search_properties,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_AvailableNetworkSessionCollectionHandle* out_collection);
+
+/**
+ * @brief Joins a discovered session.
+ *
+ * @param available_session Owned discovered-session handle.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_join(
+    CNA_AvailableNetworkSessionHandle available_session,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Joins a discovered session through the canonical asynchronous pair.
+ *
+ * @param available_session Owned discovered-session handle.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_join_async(
+    CNA_AvailableNetworkSessionHandle available_session,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Joins the session an accepted invite names.
+ *
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/thread/native failure.
+ *
+ * The canonical implementation builds a session from the accepted invite's own fixed values rather
+ * than from any live invite state.
+ */
+CNA_C_API CNA_Result cna_network_session_join_invited(
+    int32_t max_local_gamers,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Joins the session an accepted invite names on behalf of an explicit local-gamer list.
+ *
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_join_invited_with_local_gamers(
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Joins the invited session through the canonical asynchronous pair.
+ *
+ * @param max_local_gamers Largest number of local gamers, between one and four.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_join_invited_async(
+    int32_t max_local_gamers,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
+/**
+ * @brief Joins the invited session for an explicit local-gamer list through the asynchronous pair.
+ *
+ * @param local_gamers Caller-owned array of signed-in gamer handles, or null when @p count is zero.
+ * @param count Number of handles beginning at @p local_gamers.
+ * @param callback Optional completion callback invoked before this call returns.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_session Receives an owned session handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a session already exists, or a
+ * documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_network_session_join_invited_with_local_gamers_async(
+    const CNA_Handle* local_gamers,
+    uint64_t count,
+    CNA_NetworkSessionAsyncCallback callback,
+    void* context,
+    CNA_NetworkSessionHandle* out_session);
+
 /** @brief Owned handle for one session event subscription. */
 typedef CNA_Handle CNA_NetworkSessionEventRegistrationHandle;
 
