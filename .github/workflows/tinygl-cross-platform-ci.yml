@@ -11,12 +11,23 @@ on:
       - 'cmake/ThirdPartyTinyGL.cmake'
       - 'cmake/TestHelpers.cmake'
       - 'modules/CMakeLists.txt'
+      # Every module the TinyGL test executables actually link. The list used to name only six;
+      # a fix in modules/content then pushed without starting this matrix at all, even though
+      # cna_content is in the link closure of all fifteen targets below.
+      - 'modules/audio/**'
+      - 'modules/content/**'
       - 'modules/core/**'
-      - 'modules/math/**'
-      - 'modules/platform/**'
+      - 'modules/devices/**'
+      - 'modules/devices-ext/**'
       - 'modules/graphics/**'
-      - 'modules/runtime/**'
+      - 'modules/graphics-ext/**'
+      - 'modules/input/**'
+      - 'modules/math/**'
+      - 'modules/media/**'
+      - 'modules/platform/**'
       - 'modules/renderers/tinygl/**'
+      - 'modules/runtime/**'
+      - 'modules/storage/**'
   pull_request:
     paths:
       - '.github/workflows/tinygl-cross-platform-ci.yml'
@@ -26,12 +37,23 @@ on:
       - 'cmake/ThirdPartyTinyGL.cmake'
       - 'cmake/TestHelpers.cmake'
       - 'modules/CMakeLists.txt'
+      # Every module the TinyGL test executables actually link. The list used to name only six;
+      # a fix in modules/content then pushed without starting this matrix at all, even though
+      # cna_content is in the link closure of all fifteen targets below.
+      - 'modules/audio/**'
+      - 'modules/content/**'
       - 'modules/core/**'
-      - 'modules/math/**'
-      - 'modules/platform/**'
+      - 'modules/devices/**'
+      - 'modules/devices-ext/**'
       - 'modules/graphics/**'
-      - 'modules/runtime/**'
+      - 'modules/graphics-ext/**'
+      - 'modules/input/**'
+      - 'modules/math/**'
+      - 'modules/media/**'
+      - 'modules/platform/**'
       - 'modules/renderers/tinygl/**'
+      - 'modules/runtime/**'
+      - 'modules/storage/**'
   workflow_dispatch: {}
 
 permissions:
