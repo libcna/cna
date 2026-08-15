@@ -47,6 +47,12 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "DIRECTX11")
         endif()
     endmacro()
 
+    # GLTF-386: official DXVK archives identify themselves as "DXVK: v2.6" whereas older/package
+    # builds use "DXVK: 2.6.0". Keep the authenticity gate strict while accepting both real forms.
+    cna_register_renderer_test(NAME DirectX11_DxvkGate
+        COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/test-run-wine-dxvk-gate.sh
+        TIMEOUT 10 LABELS "DIRECTX11")
+
     cna_directx11_test(cna_test_directx11_smoke directx11_smoke_test.cpp)
     cna_directx11_ctest_command(_directx11_smoke_cmd cna_test_directx11_smoke)
     cna_register_renderer_test(NAME DirectX11_Smoke COMMAND ${_directx11_smoke_cmd}

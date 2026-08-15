@@ -51,7 +51,9 @@ wine "$@" 2>&1 | tee "$logFile"
 wineExit="${PIPESTATUS[0]}"
 
 if [ "${CNA_D3D11_ALLOW_WINED3D:-0}" != "1" ] && [ "${CNA_D3D11_SKIP_DXVK_GATE:-0}" != "1" ]; then
-    if ! grep -Eq 'DXVK: [0-9]+\.[0-9]+' "$logFile"; then
+    # Official DXVK 2.6 binaries print "DXVK: v2.6" while older/package builds print
+    # "DXVK: 2.6.0". Both are authoritative DXVK logger markers.
+    if ! grep -Eq 'DXVK: v?[0-9]+\.[0-9]+' "$logFile"; then
         echo "error: DX-85 gate failed -- no 'DXVK: <version>' log line was seen in this run's" >&2
         echo "output, so this looks like a silent WineD3D fallback rather than a real DXVK-backed" >&2
         echo "Direct3D 11 run. This invalidates any D3D11-semantics pixel-test result from this" >&2
