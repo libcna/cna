@@ -281,6 +281,9 @@ namespace CNA::Internal::Renderers::DirectX9
                                             params.pbrDielectricF0[2], params.pbrDielectricF90};
         TryUploadPixelShaderConstantEXT(
             device_.Get(), psRegs, psCount, "DielectricFresnel", dielectricFresnel);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "TextureTransformRows",
+            &params.pbrTextureTransformRows[0][0]);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
         // s4=OcclusionMap -- matches EnsurePbrProgram()'s own unit assignment and GpuDrawParams'

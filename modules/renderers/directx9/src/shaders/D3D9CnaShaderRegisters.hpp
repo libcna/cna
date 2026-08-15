@@ -57,9 +57,10 @@ static constexpr D3D9ShaderConstantSlot kPbr3DPS_Registers[] = {
     {"EyePosition", 'p', 10, 1},
     {"AlphaTest", 'p', 11, 1},
     {"FogColor", 'p', 12, 1},
-    {"DielectricFresnel", 'p', 13, 1}
+    {"DielectricFresnel", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}
 };
-static constexpr int kPbr3DPS_RegistersCount = 14;
+static constexpr int kPbr3DPS_RegistersCount = 15;
 
 static constexpr D3D9ShaderConstantSlot kPbrSkinned3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},
@@ -87,9 +88,10 @@ static constexpr D3D9ShaderConstantSlot kPbrSkinned3DPS_Registers[] = {
     {"EyePosition", 'p', 10, 1},
     {"AlphaTest", 'p', 11, 1},
     {"FogColor", 'p', 12, 1},
-    {"DielectricFresnel", 'p', 13, 1}
+    {"DielectricFresnel", 'p', 13, 1},
+    {"TextureTransformRows", 'p', 14, 10}
 };
-static constexpr int kPbrSkinned3DPS_RegistersCount = 14;
+static constexpr int kPbrSkinned3DPS_RegistersCount = 15;
 
 static constexpr D3D9ShaderConstantSlot kSkinnedVertexColor3DVS_Registers[] = {
     {"WorldViewProj", 'v', 0, 4},

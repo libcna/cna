@@ -146,6 +146,7 @@ float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
 float4 DielectricFresnel       : register(c13); // xyz=dielectric F0, w=dielectric F90
+float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
 
 struct PSInput
 {
@@ -169,6 +170,13 @@ float3 CnaLinearToSrgb(float3 color)
     float exponent = 1.0 / 2.4;
     float3 high = 1.055 * pow(max(color, 0.0), float3(exponent, exponent, exponent)) - 0.055;
     return lerp(low, high, step(float3(0.0031308, 0.0031308, 0.0031308), color));
+}
+
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, TextureTransformRows[slot * 2].xyz),
+                  dot(value, TextureTransformRows[slot * 2 + 1].xyz));
 }
 
 // Identical BRDF to Pbr3D.hlsl's own PbrLight() -- see that file's own comment for the citation.
@@ -195,7 +203,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
 {
-    float4 baseColorTex = tex2D(Texture, pin.UV);
+    float4 baseColorTex = tex2D(Texture, CnaPbrTransformUv(pin.UV, 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), AmbientColor.w);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
@@ -205,11 +213,11 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     float3 B = cross(N, T) * pin.TangentWS.w;
     float3x3 TBN = float3x3(T, B, N);
 
-    float3 sampledNormal = tex2D(NormalMap, pin.UV).rgb * 2.0 - 1.0;
+    float3 sampledNormal = tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= MetallicRoughnessFactor.z;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    float4 mr = tex2D(MetallicRoughnessMap, pin.UV);
+    float4 mr = tex2D(MetallicRoughnessMap, CnaPbrTransformUv(pin.UV, 2));
     float roughness = clamp(mr.g * MetallicRoughnessFactor.y, 0.045, 1.0);
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
@@ -223,10 +231,10 @@ float4 PSPbrSkinned3D(PSInput pin) : SV_Target0
     Lo += PbrLight(finalNormal, V, normalize(-Light1Dir), Light1Diffuse, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light2Dir), Light2Diffuse, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = tex2D(OcclusionMap, pin.UV).r;
+    float occlusion = tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r;
     occlusion = 1.0 + MetallicRoughnessFactor.w * (occlusion - 1.0);
     float3 ambient = AmbientColor.xyz * albedo * occlusion;
-    float3 emissiveSample = tex2D(EmissiveMap, pin.UV).rgb;
+    float3 emissiveSample = tex2D(EmissiveMap, CnaPbrTransformUv(pin.UV, 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), EmissiveColor.w);
     float3 emissive = EmissiveColor.xyz * emissiveSample;
 
