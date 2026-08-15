@@ -127,6 +127,10 @@ enum class ObjectKind : uint32_t {
     GenreCollection = 80,
     Playlist = 81,
     PlaylistCollection = 82,
+    Picture = 83,
+    PictureCollection = 84,
+    PictureAlbum = 85,
+    PictureAlbumCollection = 86,
     Test = UINT32_MAX
 };
 

@@ -898,6 +898,7 @@ if(CNA_BUILD_TESTS)
     )
     target_compile_definitions(cna_c_api_media_library_smoke PRIVATE
         CNA_C_API_MEDIA_FIXTURE_MUSIC="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music"
+        CNA_C_API_MEDIA_FIXTURE_PICTURES="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Pictures"
     )
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE Threads::Threads)

@@ -4199,6 +4199,68 @@
       "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. A scanned song is asserted to name the fixture's album, artist and genre, and a song the caller built from a file path is asserted to report all three as unavailable with its output handle untouched",
       "status": "implemented",
       "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-picture",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Picture(::(Dispose|getAlbumProperty|getDateProperty|getHeightProperty|getIsDisposedProperty|getNameProperty|getWidthProperty|GetImage|GetThumbnail|Equals|GetHashCode|ToString|GetTypeName|getTokenEXT|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_PictureHandle` with the name count/copy pair, width, height, the containing album as an optional child, `cna_picture_equals` (canonically the resolved file path, which is also the token) and the hash. The canonical date is a `std::chrono` time point, so **the ABI gains its first point-in-time representation**: `cna_picture_get_date_unix_ticks` reports 100-nanosecond ticks counted from the Unix epoch — the same tick the duration routes use, but from a fixed epoch rather than from a duration's zero. The image and thumbnail follow the album-art shape: the canonical members return a caller-owned stream, C reads it to its end and destroys it inside the call, and the picture crosses as bytes with no stream in the ABI. The thumbnail is the same image as the full-size one, which is canonical. `getTokenEXT` keeps its `_ext` suffix and is what the library's token lookup accepts",
+      "tests": "`MediaLibrarySmoke.c` extends the generated fixture library with a one-pixel BMP, so the picture side is as deterministic as the music side and no real user directory is read or written. The scanned picture's measured 1×1 dimensions, its nonzero date, its token round-tripping through the library lookup, image and thumbnail bytes equal to the fixture file byte for byte, the buffer-too-small case writing nothing, path equality and hash agreement between the collection and token routes, and idempotent disposal leaving every other member answering",
+      "status": "implemented",
+      "task": "CBIND-037C4"
+    },
+    {
+      "id": "media-picture-album",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::PictureAlbum(::(Dispose|getAlbumsProperty|getIsDisposedProperty|getNameProperty|getParentProperty|getPicturesProperty|Equals|GetHashCode|ToString|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_PictureAlbumHandle` with the name count/copy pair, its child-album and picture collections, equality, hash and type name. **This is the one tree in the media family**, and the root's absent parent is what makes it walkable: `cna_picture_album_get_parent` reports availability rather than failing, so a caller climbs until the flag turns false",
+      "tests": "`MediaLibrarySmoke.c` extends the generated fixture library with a one-pixel BMP, so the picture side is as deterministic as the music side and no real user directory is read or written. The library's root album is asserted to have no parent — the C_FALSE answer that ends an upward walk — its child-album and picture collections are read, and its type name is checked literally",
+      "status": "implemented",
+      "task": "CBIND-037C4"
+    },
+    {
+      "id": "media-picture-collections",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::(Picture|PictureAlbum)Collection(::(Dispose|getCountProperty|getIsDisposedProperty|operator\\[\\]|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "`CNA_PictureCollectionHandle` and `CNA_PictureAlbumCollectionHandle`, each with the same six-route shape the album, artist, genre and playlist collections use: `_get_count`, `_get_at`, `_get_is_disposed`, `_dispose`, `_destroy` and a type-name count/copy pair. Elements are borrowed views that keep the owning library alive, and canonical disposal empties the collection while its elements keep answering",
+      "tests": "`MediaLibrarySmoke.c` extends the generated fixture library with a one-pixel BMP, so the picture side is as deterministic as the music side and no real user directory is read or written. Both collections are read, the picture collection's type name is checked literally, an index past the count is refused, and disposal is proven to empty a collection without disturbing an element handle taken beforehand",
+      "status": "implemented",
+      "task": "CBIND-037C4"
+    },
+    {
+      "id": "media-picture-collection-iteration",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::(Picture|PictureAlbum)Collection::(iterator|const_iterator|begin|end)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "No C mapping: a C++ iterator pair and its two type aliases have no C counterpart, and C reads each collection through its count and its indexer instead",
+      "tests": "Doxygen declaration inventory; the index-addressed routes are covered in `MediaLibrarySmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037C4"
+    },
+    {
+      "id": "media-library-pictures",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaLibrary::(getPicturesProperty|getSavedPicturesProperty|getRootPictureAlbumProperty|GetPictureFromToken|SavePicture)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_media_library_get_pictures`, `_get_saved_pictures`, `_get_root_picture_album`, `_get_picture_from_token` and the two save routes. The root album and the token lookup can both answer \"none\", so both report availability rather than failing — an unknown token is an ordinary answer, exactly as the canonical lookup's null is. The two canonical `SavePicture` overloads become `cna_media_library_save_picture`, taking bytes, and `cna_media_library_save_picture_from_stream`, taking a **storage stream handle**: a storage stream is the only byte source this ABI owns, so it is what the stream-taking overload accepts, and the stream is borrowed for the call and stays the caller's to close. A picture the image loader cannot measure is still saved, with zero dimensions, exactly as the canonical operation records it",
+      "tests": "`MediaLibrarySmoke.c` extends the generated fixture library with a one-pixel BMP, so the picture side is as deterministic as the music side and no real user directory is read or written. Saving the fixture image produces a live picture that joins the saved-picture collection, whose token then finds it again and whose bytes read back identically; the null-buffer and null-output refusals are covered, an unknown token is proven to be a successful \"not found\", and the suite deletes the file it saved so a later run starts from the same state",
+      "status": "implemented",
+      "task": "CBIND-037C4"
     }
   ]
 }

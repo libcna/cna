@@ -1245,6 +1245,672 @@ CNA_C_API CNA_Result cna_song_get_genre(
     CNA_GenreHandle* out_genre,
     CNA_Bool* out_available);
 
+/* ---- Pictures ---- */
+
+/** @brief Borrowed handle to one picture in a media library. */
+typedef CNA_Handle CNA_PictureHandle;
+
+/** @brief Borrowed handle to one ordered, read-only collection of pictures. */
+typedef CNA_Handle CNA_PictureCollectionHandle;
+
+/** @brief Borrowed handle to one picture album in a media library. */
+typedef CNA_Handle CNA_PictureAlbumHandle;
+
+/** @brief Borrowed handle to one ordered, read-only collection of picture albums. */
+typedef CNA_Handle CNA_PictureAlbumCollectionHandle;
+
+/**
+ * @brief Returns the byte count of a picture's display name.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical string conversion returns this same name, so it needs no route of its own.
+ */
+CNA_C_API CNA_Result cna_picture_get_name_size(CNA_PictureHandle picture, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a picture's display name.
+ *
+ * @param picture Borrowed picture handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_copy_name(
+    CNA_PictureHandle picture,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of a picture's library token.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The token is what `cna_media_library_get_picture_from_token` accepts. CNA uses the picture's
+ * resolved file path as its token, which is also its equality key.
+ */
+CNA_C_API CNA_Result cna_picture_get_token_size_ext(
+    CNA_PictureHandle picture,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a picture's library token.
+ *
+ * @param picture Borrowed picture handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_copy_token_ext(
+    CNA_PictureHandle picture,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the album that contains a picture.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_album Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param out_available Receives `CNA_TRUE` when the picture belongs to an album.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_album(
+    CNA_PictureHandle picture,
+    CNA_PictureAlbumHandle* out_album,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Returns when a picture was taken.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_unix_ticks Receives the time as 100-nanosecond ticks since 1970-01-01 UTC.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The unit is the ABI's existing 100-nanosecond tick, counted from the Unix epoch rather than from
+ * a duration's zero, because this is a point in time rather than a length of one. A picture whose
+ * file carries no timestamp reports the value the scan recorded, which may be zero.
+ */
+CNA_C_API CNA_Result cna_picture_get_date_unix_ticks(
+    CNA_PictureHandle picture,
+    int64_t* out_unix_ticks);
+
+/**
+ * @brief Returns a picture's width in pixels.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_width Receives the width, or zero when the image could not be measured.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_width(CNA_PictureHandle picture, int32_t* out_width);
+
+/**
+ * @brief Returns a picture's height in pixels.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_height Receives the height, or zero when the image could not be measured.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_height(CNA_PictureHandle picture, int32_t* out_height);
+
+/**
+ * @brief Returns the byte count of a picture's full-size image.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_bytes Receives the image's byte count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * As with album art, the canonical member returns a stream whose caller owns it; C reads that
+ * stream to its end and destroys it inside the call, so the image crosses as bytes and no stream
+ * enters the ABI. The file is read on every call, so query the size and copy in one sequence.
+ */
+CNA_C_API CNA_Result cna_picture_get_image_size(CNA_PictureHandle picture, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a picture's full-size image.
+ *
+ * @param picture Borrowed picture handle.
+ * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_picture_copy_image(
+    CNA_PictureHandle picture,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of a picture's thumbnail image.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_bytes Receives the image's byte count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * CNA generates no separate thumbnail, so this is the same image the full-size routes return —
+ * canonical behavior rather than a C limitation.
+ */
+CNA_C_API CNA_Result cna_picture_get_thumbnail_size(
+    CNA_PictureHandle picture,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a picture's thumbnail image.
+ *
+ * @param picture Borrowed picture handle.
+ * @param destination Buffer receiving the image bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_picture_copy_thumbnail(
+    CNA_PictureHandle picture,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a picture has been disposed.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_disposed Receives `CNA_TRUE` when the picture has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_is_disposed(
+    CNA_PictureHandle picture,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Disposes a picture without releasing its handle.
+ *
+ * @param picture Borrowed picture handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical disposal only sets a flag, so every other member keeps answering and disposing
+ * twice is a successful no-op.
+ */
+CNA_C_API CNA_Result cna_picture_dispose(CNA_PictureHandle picture);
+
+/**
+ * @brief Releases a picture handle.
+ *
+ * @param picture Borrowed picture handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_destroy(CNA_PictureHandle picture);
+
+/**
+ * @brief Compares two pictures.
+ *
+ * @param left First picture handle.
+ * @param right Second picture handle.
+ * @param out_equal Receives `CNA_TRUE` when both pictures name the same file.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Equality is the resolved file path — the same string the token routes return. The canonical `==`
+ * operator is this comparison and `!=` is its negation.
+ */
+CNA_C_API CNA_Result cna_picture_equals(
+    CNA_PictureHandle left,
+    CNA_PictureHandle right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Returns a picture's hash code.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_hash Receives the hash code.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_hash_code(CNA_PictureHandle picture, int32_t* out_hash);
+
+/**
+ * @brief Returns the byte count of the picture type's fully-qualified .NET type name.
+ *
+ * @param picture Borrowed picture handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_get_type_name_size(
+    CNA_PictureHandle picture,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the picture type's fully-qualified .NET type name.
+ *
+ * @param picture Borrowed picture handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_copy_type_name(
+    CNA_PictureHandle picture,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of a picture album's display name.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical string conversion returns this same name, so it needs no route of its own.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_name_size(
+    CNA_PictureAlbumHandle album,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a picture album's display name.
+ *
+ * @param album Borrowed picture album handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_copy_name(
+    CNA_PictureAlbumHandle album,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns a picture album's parent album.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_parent Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param out_available Receives `CNA_TRUE` when the album has a parent.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Picture albums form a tree, and the root has no parent: that reports `CNA_FALSE` rather than
+ * failing, which is how a caller walks upwards to the root.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_parent(
+    CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumHandle* out_parent,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Returns a picture album's child albums.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_albums Receives a borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_albums(
+    CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumCollectionHandle* out_albums);
+
+/**
+ * @brief Returns the pictures directly in a picture album.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_pictures Receives a borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_pictures(
+    CNA_PictureAlbumHandle album,
+    CNA_PictureCollectionHandle* out_pictures);
+
+/**
+ * @brief Reports whether a picture album has been disposed.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_disposed Receives `CNA_TRUE` when the album has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_is_disposed(
+    CNA_PictureAlbumHandle album,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Disposes a picture album without releasing its handle.
+ *
+ * @param album Borrowed picture album handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_dispose(CNA_PictureAlbumHandle album);
+
+/**
+ * @brief Releases a picture album handle.
+ *
+ * @param album Borrowed picture album handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_destroy(CNA_PictureAlbumHandle album);
+
+/**
+ * @brief Compares two picture albums.
+ *
+ * @param left First album handle.
+ * @param right Second album handle.
+ * @param out_equal Receives `CNA_TRUE` when both albums are the same album.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical `==` operator is this comparison and `!=` is its negation.
+ */
+CNA_C_API CNA_Result cna_picture_album_equals(
+    CNA_PictureAlbumHandle left,
+    CNA_PictureAlbumHandle right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Returns a picture album's hash code.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_hash Receives the hash code.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_hash_code(
+    CNA_PictureAlbumHandle album,
+    int32_t* out_hash);
+
+/**
+ * @brief Returns the byte count of the picture-album type's fully-qualified .NET type name.
+ *
+ * @param album Borrowed picture album handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_get_type_name_size(
+    CNA_PictureAlbumHandle album,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the picture-album type's fully-qualified .NET type name.
+ *
+ * @param album Borrowed picture album handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_copy_type_name(
+    CNA_PictureAlbumHandle album,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns every picture in a library.
+ *
+ * @param library Owned library handle.
+ * @param out_pictures Receives a borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_media_library_get_pictures(
+    CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* out_pictures);
+
+/**
+ * @brief Returns the pictures this application saved into the library.
+ *
+ * @param library Owned library handle.
+ * @param out_pictures Receives a borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_media_library_get_saved_pictures(
+    CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* out_pictures);
+
+/**
+ * @brief Returns the root of a library's picture-album tree.
+ *
+ * @param library Owned library handle.
+ * @param out_album Receives a borrowed album handle when one is available; untouched otherwise.
+ * @param out_available Receives `CNA_TRUE` when the library built a picture tree.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A device with no readable picture location has no root album, which is an ordinary answer rather
+ * than a failure.
+ */
+CNA_C_API CNA_Result cna_media_library_get_root_picture_album(
+    CNA_MediaLibraryHandle library,
+    CNA_PictureAlbumHandle* out_album,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Finds a picture by its library token.
+ *
+ * @param library Owned library handle.
+ * @param token UTF-8 token, as returned by `cna_picture_copy_token_ext`.
+ * @param out_picture Receives a borrowed picture handle when one matches; untouched otherwise.
+ * @param out_available Receives `CNA_TRUE` when a picture matched.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_ENCODING` for a token that is not valid UTF-8, or a
+ *         documented argument/handle/thread failure.
+ *
+ * An unknown token is an ordinary answer, not a failure, because the canonical lookup returns null
+ * for one.
+ */
+CNA_C_API CNA_Result cna_media_library_get_picture_from_token(
+    CNA_MediaLibraryHandle library,
+    CNA_StringView token,
+    CNA_PictureHandle* out_picture,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Saves an image buffer into the library as a new picture.
+ *
+ * @param library Owned library handle.
+ * @param name UTF-8 display name for the new picture.
+ * @param image_data Image bytes; may be null only when @p image_byte_count is zero.
+ * @param image_byte_count Number of bytes in @p image_data.
+ * @param out_picture Receives a borrowed handle to the saved picture.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO` when the picture could not be written,
+ *         `CNA_RESULT_ENCODING`, or a documented argument/handle/thread failure.
+ *
+ * The bytes are written into the device's picture location and the saved picture joins the
+ * library's saved-picture collection. An image the loader cannot measure is still saved; its width
+ * and height are then zero, exactly as the canonical operation records them.
+ */
+CNA_C_API CNA_Result cna_media_library_save_picture(
+    CNA_MediaLibraryHandle library,
+    CNA_StringView name,
+    const uint8_t* image_data,
+    uint64_t image_byte_count,
+    CNA_PictureHandle* out_picture);
+
+/**
+ * @brief Saves the remaining contents of an open storage stream as a new picture.
+ *
+ * @param library Owned library handle.
+ * @param name UTF-8 display name for the new picture.
+ * @param source Open storage stream handle to read the image from.
+ * @param out_picture Receives a borrowed handle to the saved picture.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_IO`, `CNA_RESULT_ENCODING`, or a documented
+ *         argument/handle/thread failure.
+ *
+ * A storage stream is the only byte source this ABI owns, so it is what the canonical
+ * stream-taking overload accepts. The stream is borrowed for the call and stays the caller's to
+ * close.
+ */
+CNA_C_API CNA_Result cna_media_library_save_picture_from_stream(
+    CNA_MediaLibraryHandle library,
+    CNA_StringView name,
+    CNA_Handle source,
+    CNA_PictureHandle* out_picture);
+
+/**
+ * @brief Returns how many pictures a collection holds.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_count Receives the element count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_get_count(
+    CNA_PictureCollectionHandle collection,
+    int32_t* out_count);
+
+/**
+ * @brief Returns a handle to the picture at an index.
+ *
+ * @param collection Borrowed collection handle.
+ * @param index Zero-based index below the current count.
+ * @param out_picture Receives a borrowed picture handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
+ *         past the count, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_get_at(
+    CNA_PictureCollectionHandle collection,
+    int32_t index,
+    CNA_PictureHandle* out_picture);
+
+/**
+ * @brief Reports whether a picture collection has been disposed.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_get_is_disposed(
+    CNA_PictureCollectionHandle collection,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Disposes a picture collection without releasing its handle.
+ *
+ * @param collection Borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Canonical disposal **empties** the collection while its pictures keep answering.
+ */
+CNA_C_API CNA_Result cna_picture_collection_dispose(CNA_PictureCollectionHandle collection);
+
+/**
+ * @brief Releases a picture collection handle.
+ *
+ * @param collection Borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_destroy(CNA_PictureCollectionHandle collection);
+
+/**
+ * @brief Returns the byte count of the picture-collection type's fully-qualified .NET type name.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_get_type_name_size(
+    CNA_PictureCollectionHandle collection,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the picture-collection type's fully-qualified .NET type name.
+ *
+ * @param collection Borrowed collection handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_collection_copy_type_name(
+    CNA_PictureCollectionHandle collection,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns how many albums a picture-album collection holds.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_count Receives the element count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_get_count(
+    CNA_PictureAlbumCollectionHandle collection,
+    int32_t* out_count);
+
+/**
+ * @brief Returns a handle to the picture album at an index.
+ *
+ * @param collection Borrowed collection handle.
+ * @param index Zero-based index below the current count.
+ * @param out_album Receives a borrowed album handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output or an index at or
+ *         past the count, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_get_at(
+    CNA_PictureAlbumCollectionHandle collection,
+    int32_t index,
+    CNA_PictureAlbumHandle* out_album);
+
+/**
+ * @brief Reports whether a picture-album collection has been disposed.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_disposed Receives `CNA_TRUE` when the collection has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_get_is_disposed(
+    CNA_PictureAlbumCollectionHandle collection,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Disposes a picture-album collection without releasing its handle.
+ *
+ * @param collection Borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_dispose(
+    CNA_PictureAlbumCollectionHandle collection);
+
+/**
+ * @brief Releases a picture-album collection handle.
+ *
+ * @param collection Borrowed collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_destroy(
+    CNA_PictureAlbumCollectionHandle collection);
+
+/**
+ * @brief Returns the byte count of the picture-album-collection type's .NET type name.
+ *
+ * @param collection Borrowed collection handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_get_type_name_size(
+    CNA_PictureAlbumCollectionHandle collection,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the picture-album-collection type's fully-qualified .NET type name.
+ *
+ * @param collection Borrowed collection handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_picture_album_collection_copy_type_name(
+    CNA_PictureAlbumCollectionHandle collection,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

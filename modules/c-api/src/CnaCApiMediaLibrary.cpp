@@ -4,6 +4,7 @@
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiMediaDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiStorageDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Media/Album.hpp"
 #include "Microsoft/Xna/Framework/Media/AlbumCollection.hpp"
@@ -13,12 +14,17 @@
 #include "Microsoft/Xna/Framework/Media/GenreCollection.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaLibrary.hpp"
 #include "Microsoft/Xna/Framework/Media/MediaSource.hpp"
+#include "Microsoft/Xna/Framework/Media/Picture.hpp"
+#include "Microsoft/Xna/Framework/Media/PictureAlbum.hpp"
+#include "Microsoft/Xna/Framework/Media/PictureAlbumCollection.hpp"
+#include "Microsoft/Xna/Framework/Media/PictureCollection.hpp"
 #include "Microsoft/Xna/Framework/Media/Playlist.hpp"
 #include "Microsoft/Xna/Framework/Media/PlaylistCollection.hpp"
 #include "Microsoft/Xna/Framework/Media/Song.hpp"
 #include "Microsoft/Xna/Framework/Media/SongCollection.hpp"
 #include "System/IO/Stream.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <memory>
@@ -48,6 +54,10 @@ using Microsoft::Xna::Framework::Media::Genre;
 using Microsoft::Xna::Framework::Media::GenreCollection;
 using Microsoft::Xna::Framework::Media::MediaLibrary;
 using Microsoft::Xna::Framework::Media::MediaSource;
+using Microsoft::Xna::Framework::Media::Picture;
+using Microsoft::Xna::Framework::Media::PictureAlbum;
+using Microsoft::Xna::Framework::Media::PictureAlbumCollection;
+using Microsoft::Xna::Framework::Media::PictureCollection;
 using Microsoft::Xna::Framework::Media::Playlist;
 using Microsoft::Xna::Framework::Media::PlaylistCollection;
 using Microsoft::Xna::Framework::Media::Song;
@@ -129,6 +139,13 @@ CNA_C_API_MEDIA_TRAITS(PlaylistCollection, PlaylistCollection,
 CNA_C_API_MEDIA_TRAITS(Song, Song, "The song handle is invalid for this call.");
 CNA_C_API_MEDIA_TRAITS(SongCollection, SongCollection,
                        "The song collection handle is invalid for this call.");
+CNA_C_API_MEDIA_TRAITS(Picture, Picture, "The picture handle is invalid for this call.");
+CNA_C_API_MEDIA_TRAITS(PictureCollection, PictureCollection,
+                       "The picture collection handle is invalid for this call.");
+CNA_C_API_MEDIA_TRAITS(PictureAlbum, PictureAlbum,
+                       "The picture album handle is invalid for this call.");
+CNA_C_API_MEDIA_TRAITS(PictureAlbumCollection, PictureAlbumCollection,
+                       "The picture album collection handle is invalid for this call.");
 
 #undef CNA_C_API_MEDIA_TRAITS
 
@@ -1772,5 +1789,876 @@ CNA_Result cna_song_get_genre(
             outGenre,
             outAvailable,
             [](const Song& value) { return value.getGenreProperty(); });
+    });
+}
+
+CNA_Result cna_picture_get_name_size(const CNA_PictureHandle handle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture name byte-count output is null.");
+        }
+        return Read<Picture>(handle, [&](const Picture& value) {
+            *outBytes = value.getNameProperty().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_copy_name(
+    const CNA_PictureHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<Picture>(handle, [&](const Picture& value) {
+            // The canonical string conversion returns the name unchanged, so one route is both.
+            return CopyText(value.ToString(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_get_is_disposed(const CNA_PictureHandle handle, CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return InvalidInput("The picture disposal-state output is null.");
+        }
+        return Read<Picture>(handle, [&](const Picture& value) {
+            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_dispose(const CNA_PictureHandle handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> resource;
+        if (const CNA_Result result = Borrow<Picture>(handle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_destroy(const CNA_PictureHandle handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<Picture>(handle, "The picture handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_equals(
+    const CNA_PictureHandle left,
+    const CNA_PictureHandle right,
+    CNA_Bool* const outEqual)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEqual == nullptr) {
+            return InvalidInput("The picture comparison output is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> nativeLeft;
+        std::shared_ptr<MediaChildResource<Picture>> nativeRight;
+        if (const CNA_Result result = Borrow<Picture>(left, &nativeLeft);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = Borrow<Picture>(right, &nativeRight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_get_hash_code(const CNA_PictureHandle handle, int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The picture hash output is null.");
+        }
+        return Read<Picture>(handle, [&](const Picture& value) {
+            *outHash = static_cast<int32_t>(value.GetHashCode());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_get_type_name_size(const CNA_PictureHandle handle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture type-name byte-count output is null.");
+        }
+        return Read<Picture>(handle, [&](const Picture& value) {
+            *outBytes = value.GetTypeName().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_copy_type_name(
+    const CNA_PictureHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<Picture>(handle, [&](const Picture& value) {
+            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_album_get_name_size(const CNA_PictureAlbumHandle handle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture album name byte-count output is null.");
+        }
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            *outBytes = value.getNameProperty().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_copy_name(
+    const CNA_PictureAlbumHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            // The canonical string conversion returns the name unchanged, so one route is both.
+            return CopyText(value.ToString(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_album_get_is_disposed(const CNA_PictureAlbumHandle handle, CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return InvalidInput("The picture album disposal-state output is null.");
+        }
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_dispose(const CNA_PictureAlbumHandle handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
+        if (const CNA_Result result = Borrow<PictureAlbum>(handle, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_destroy(const CNA_PictureAlbumHandle handle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureAlbum>(handle, "The picture album handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_album_equals(
+    const CNA_PictureAlbumHandle left,
+    const CNA_PictureAlbumHandle right,
+    CNA_Bool* const outEqual)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEqual == nullptr) {
+            return InvalidInput("The picture album comparison output is null.");
+        }
+        std::shared_ptr<MediaChildResource<PictureAlbum>> nativeLeft;
+        std::shared_ptr<MediaChildResource<PictureAlbum>> nativeRight;
+        if (const CNA_Result result = Borrow<PictureAlbum>(left, &nativeLeft);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = Borrow<PictureAlbum>(right, &nativeRight);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEqual = nativeLeft->value->Equals(nativeRight->value) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_get_hash_code(const CNA_PictureAlbumHandle handle, int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The picture album hash output is null.");
+        }
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            *outHash = static_cast<int32_t>(value.GetHashCode());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_get_type_name_size(const CNA_PictureAlbumHandle handle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture album type-name byte-count output is null.");
+        }
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            *outBytes = value.GetTypeName().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_copy_type_name(
+    const CNA_PictureAlbumHandle handle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<PictureAlbum>(handle, [&](const PictureAlbum& value) {
+            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_collection_get_count(const CNA_PictureCollectionHandle collection, int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The collection count output is null.");
+        }
+        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
+            *outCount = static_cast<int32_t>(value.getCountProperty());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_collection_get_at(
+    const CNA_PictureCollectionHandle collection,
+    const int32_t index,
+    CNA_PictureHandle* const outPicture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CollectionElementAt<PictureCollection, Picture>(collection, index, outPicture);
+    });
+}
+
+CNA_Result cna_picture_collection_get_is_disposed(
+    const CNA_PictureCollectionHandle collection,
+    CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return InvalidInput("The collection disposal-state output is null.");
+        }
+        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
+            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_collection_dispose(const CNA_PictureCollectionHandle collection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureCollection>> resource;
+        if (const CNA_Result result = Borrow<PictureCollection>(collection, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_collection_destroy(const CNA_PictureCollectionHandle collection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureCollection>(collection, "The collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_collection_get_type_name_size(
+    const CNA_PictureCollectionHandle collection,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The collection type-name byte-count output is null.");
+        }
+        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
+            *outBytes = value.GetTypeName().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_collection_copy_type_name(
+    const CNA_PictureCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<PictureCollection>(collection, [&](const PictureCollection& value) {
+            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_count(const CNA_PictureAlbumCollectionHandle collection, int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The collection count output is null.");
+        }
+        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
+            *outCount = static_cast<int32_t>(value.getCountProperty());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_at(
+    const CNA_PictureAlbumCollectionHandle collection,
+    const int32_t index,
+    CNA_PictureAlbumHandle* const outPictureAlbum)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return CollectionElementAt<PictureAlbumCollection, PictureAlbum>(collection, index, outPictureAlbum);
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_is_disposed(
+    const CNA_PictureAlbumCollectionHandle collection,
+    CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return InvalidInput("The collection disposal-state output is null.");
+        }
+        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
+            *outDisposed = value.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_collection_dispose(const CNA_PictureAlbumCollectionHandle collection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<PictureAlbumCollection>> resource;
+        if (const CNA_Result result = Borrow<PictureAlbumCollection>(collection, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_album_collection_destroy(const CNA_PictureAlbumCollectionHandle collection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return ReleaseHandle<PictureAlbumCollection>(collection, "The collection handle could not be released.");
+    });
+}
+
+CNA_Result cna_picture_album_collection_get_type_name_size(
+    const CNA_PictureAlbumCollectionHandle collection,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The collection type-name byte-count output is null.");
+        }
+        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
+            *outBytes = value.GetTypeName().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_album_collection_copy_type_name(
+    const CNA_PictureAlbumCollectionHandle collection,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<PictureAlbumCollection>(collection, [&](const PictureAlbumCollection& value) {
+            return CopyText(value.GetTypeName(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_get_token_size_ext(
+    const CNA_PictureHandle picture,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture token byte-count output is null.");
+        }
+        return Read<Picture>(picture, [&](const Picture& value) {
+            *outBytes = value.getTokenEXT().size();
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_copy_token_ext(
+    const CNA_PictureHandle picture,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return Read<Picture>(picture, [&](const Picture& value) {
+            return CopyText(value.getTokenEXT(), destination, capacity, outBytes);
+        });
+    });
+}
+
+CNA_Result cna_picture_get_album(
+    const CNA_PictureHandle picture,
+    CNA_PictureAlbumHandle* const outAlbum,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return OptionalChild<Picture, PictureAlbum>(
+            picture,
+            outAlbum,
+            outAvailable,
+            [](const Picture& value) { return value.getAlbumProperty(); });
+    });
+}
+
+CNA_Result cna_picture_get_date_unix_ticks(
+    const CNA_PictureHandle picture,
+    int64_t* const outUnixTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outUnixTicks == nullptr) {
+            return InvalidInput("The picture date output is null.");
+        }
+        return Read<Picture>(picture, [&](const Picture& value) {
+            // A point in time, not a duration: the ABI's 100-nanosecond tick counted from the Unix
+            // epoch, which is exactly what the canonical clock's own epoch already is.
+            const auto since =
+                value.getDateProperty().time_since_epoch();
+            *outUnixTicks = static_cast<int64_t>(
+                std::chrono::duration_cast<std::chrono::duration<int64_t, std::ratio<1, 10000000>>>(
+                    since)
+                    .count());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_get_width(const CNA_PictureHandle picture, int32_t* const outWidth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWidth == nullptr) {
+            return InvalidInput("The picture width output is null.");
+        }
+        return Read<Picture>(picture, [&](const Picture& value) {
+            *outWidth = static_cast<int32_t>(value.getWidthProperty());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_get_height(const CNA_PictureHandle picture, int32_t* const outHeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeight == nullptr) {
+            return InvalidInput("The picture height output is null.");
+        }
+        return Read<Picture>(picture, [&](const Picture& value) {
+            *outHeight = static_cast<int32_t>(value.getHeightProperty());
+            return CNA_RESULT_SUCCESS;
+        });
+    });
+}
+
+CNA_Result cna_picture_get_image_size(const CNA_PictureHandle picture, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture image byte-count output is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> resource;
+        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<uint8_t> bytes;
+        if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(bytes.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_copy_image(
+    const CNA_PictureHandle picture,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> resource;
+        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<uint8_t> bytes;
+        if (const CNA_Result result = ReadStreamBytes(resource->value->GetImage(), &bytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyBytes(bytes, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_picture_get_thumbnail_size(
+    const CNA_PictureHandle picture,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The picture thumbnail byte-count output is null.");
+        }
+        std::shared_ptr<MediaChildResource<Picture>> resource;
+        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<uint8_t> bytes;
+        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(bytes.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_picture_copy_thumbnail(
+    const CNA_PictureHandle picture,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MediaChildResource<Picture>> resource;
+        if (const CNA_Result result = Borrow<Picture>(picture, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<uint8_t> bytes;
+        if (const CNA_Result result = ReadStreamBytes(resource->value->GetThumbnail(), &bytes);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyBytes(bytes, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_picture_album_get_parent(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumHandle* const outParent,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return OptionalChild<PictureAlbum, PictureAlbum>(
+            album,
+            outParent,
+            outAvailable,
+            [](const PictureAlbum& value) { return value.getParentProperty(); });
+    });
+}
+
+CNA_Result cna_picture_album_get_albums(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureAlbumCollectionHandle* const outAlbums)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAlbums == nullptr) {
+            return InvalidInput("The picture album collection output is null.");
+        }
+        *outAlbums = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
+        if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        PictureAlbumCollection* const children = resource->value->getAlbumsProperty();
+        if (children == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The picture album has no child album collection.");
+        }
+        return PublishChildOf<PictureAlbumCollection, PictureAlbum>(resource, children, outAlbums);
+    });
+}
+
+CNA_Result cna_picture_album_get_pictures(
+    const CNA_PictureAlbumHandle album,
+    CNA_PictureCollectionHandle* const outPictures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPictures == nullptr) {
+            return InvalidInput("The picture collection output is null.");
+        }
+        *outPictures = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaChildResource<PictureAlbum>> resource;
+        if (const CNA_Result result = Borrow<PictureAlbum>(album, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        PictureCollection* const pictures = resource->value->getPicturesProperty();
+        if (pictures == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The picture album has no picture collection.");
+        }
+        return PublishChildOf<PictureCollection, PictureAlbum>(resource, pictures, outPictures);
+    });
+}
+
+CNA_Result cna_media_library_get_pictures(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* const outPictures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LibraryCollection<PictureCollection>(
+            library,
+            outPictures,
+            [](const MediaLibrary& value) { return value.getPicturesProperty(); },
+            "The picture collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_saved_pictures(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureCollectionHandle* const outPictures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        return LibraryCollection<PictureCollection>(
+            library,
+            outPictures,
+            [](const MediaLibrary& value) { return value.getSavedPicturesProperty(); },
+            "The saved picture collection output is null.");
+    });
+}
+
+CNA_Result cna_media_library_get_root_picture_album(
+    const CNA_MediaLibraryHandle library,
+    CNA_PictureAlbumHandle* const outAlbum,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAlbum == nullptr || outAvailable == nullptr) {
+            return InvalidInput("The root picture album output is null.");
+        }
+        std::shared_ptr<MediaLibraryResource> resource;
+        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        PictureAlbum* const root = resource->value->getRootPictureAlbumProperty();
+        if (root == nullptr) {
+            *outAvailable = CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = PublishLibraryChild<PictureAlbum>(
+                ObjectKind::PictureAlbum,
+                resource,
+                root,
+                "The picture album handle could not be created.",
+                outAlbum);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAvailable = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_media_library_get_picture_from_token(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView token,
+    CNA_PictureHandle* const outPicture,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPicture == nullptr || outAvailable == nullptr) {
+            return InvalidInput("The picture lookup output is null.");
+        }
+        std::shared_ptr<MediaLibraryResource> resource;
+        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string nativeToken;
+        if (const CNA_Result result =
+                CNA::C::Detail::CopyStringView(token, false, &nativeToken);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The picture token is not valid UTF-8.");
+        }
+        Picture* const picture = resource->value->GetPictureFromToken(nativeToken);
+        if (picture == nullptr) {
+            *outAvailable = CNA_FALSE;
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = PublishLibraryChild<Picture>(
+                ObjectKind::Picture,
+                resource,
+                picture,
+                "The picture handle could not be created.",
+                outPicture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAvailable = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result PublishSavedPicture(
+    const std::shared_ptr<MediaLibraryResource>& library,
+    Picture* const picture,
+    CNA_PictureHandle* const outPicture)
+{
+    if (picture == nullptr) {
+        return Fail(
+            CNA_RESULT_IO,
+            CNA_ERROR_CATEGORY_IO,
+            "The picture could not be saved.");
+    }
+    return PublishLibraryChild<Picture>(
+        ObjectKind::Picture,
+        library,
+        picture,
+        "The picture handle could not be created.",
+        outPicture);
+}
+
+} // namespace
+
+CNA_Result cna_media_library_save_picture(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView name,
+    const uint8_t* const imageData,
+    const uint64_t imageByteCount,
+    CNA_PictureHandle* const outPicture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPicture == nullptr) {
+            return InvalidInput("The saved picture output is null.");
+        }
+        *outPicture = CNA_INVALID_HANDLE;
+        if (imageData == nullptr && imageByteCount != UINT64_C(0)) {
+            return InvalidInput("The image buffer is null.");
+        }
+        std::shared_ptr<MediaLibraryResource> resource;
+        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string nativeName;
+        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &nativeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The picture name is not valid UTF-8.");
+        }
+        const std::vector<uint8_t> bytes(
+            imageData,
+            imageData + static_cast<std::size_t>(imageByteCount));
+        return PublishSavedPicture(
+            resource,
+            resource->value->SavePicture(std::move(nativeName), bytes),
+            outPicture);
+    });
+}
+
+CNA_Result cna_media_library_save_picture_from_stream(
+    const CNA_MediaLibraryHandle library,
+    const CNA_StringView name,
+    const CNA_Handle source,
+    CNA_PictureHandle* const outPicture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPicture == nullptr) {
+            return InvalidInput("The saved picture output is null.");
+        }
+        *outPicture = CNA_INVALID_HANDLE;
+        std::shared_ptr<MediaLibraryResource> resource;
+        if (const CNA_Result result = BorrowLibraryResource(library, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string nativeName;
+        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &nativeName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The picture name is not valid UTF-8.");
+        }
+        // A storage stream is the only byte source this ABI owns, so it is what the canonical
+        // stream overload accepts. The borrow keeps it open for the call and hands it straight
+        // back afterwards -- the stream stays the caller's to close.
+        CNA::C::Detail::BorrowedStorageStream stream;
+        if (const CNA_Result result = CNA::C::Detail::AcquireStorageStream(source, &stream);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The storage stream handle is invalid for this call.");
+        }
+        CNA_Result result = CNA_RESULT_SUCCESS;
+        try {
+            result = PublishSavedPicture(
+                resource,
+                resource->value->SavePicture(std::move(nativeName), stream.value),
+                outPicture);
+        } catch (...) {
+            CNA::C::Detail::ReleaseStorageStream(stream);
+            throw;
+        }
+        CNA::C::Detail::ReleaseStorageStream(stream);
+        return result;
     });
 }

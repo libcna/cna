@@ -591,6 +591,23 @@
 > partial, 1,578 planned and 161 N/A; all four trees green at 56/56. **Next: CBIND-037C4**, the
 > 60-row picture surface, whose one new shape is that `PictureAlbum` is a tree.
 >
+> CBIND-037C4 then lands that picture surface. Two shapes are genuinely new. The **picture-album
+> tree** is walkable because the root's absent parent is an availability answer rather than a
+> failure — a caller climbs until the flag turns false — and the library's root-album route answers
+> the same way, since a device with no readable picture location has no tree at all. And a picture's
+> date is the **ABI's first point in time**: durations elsewhere are 100-nanosecond ticks from zero,
+> so the date uses the same tick counted from the Unix epoch rather than introducing a second time
+> unit. Everything else reuses settled shapes — image and thumbnail bytes follow the album-art
+> contract (caller-owned stream read to its end and destroyed inside the call, thumbnail identical
+> to the full-size image), the two collections are the same six-route shape, and
+> `cna_media_library_save_picture_from_stream` accepts a **storage stream handle** because a storage
+> stream is the only byte source this ABI owns. The fixture gained a one-pixel BMP, so the picture
+> side is as deterministic as the music side: measured 1×1 dimensions, a nonzero date, and image
+> bytes that must match the fixture file byte for byte. The suite deletes the picture it saves so
+> repeated runs start from the same state. The inventory is now 4,694 implemented, 30 partial, 1,518
+> planned and 173 N/A; all four trees green at 56/56. **Next: CBIND-037C6**, `MediaPlayer` and
+> `MediaQueue` (44 rows) — a static event surface, so the process-wide registration shape applies.
+>
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
 > TextureCube, input events and other families that later slices implemented. It belongs to

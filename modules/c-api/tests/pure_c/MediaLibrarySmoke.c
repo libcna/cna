@@ -10,6 +10,10 @@
 #error "CNA_C_API_MEDIA_FIXTURE_MUSIC must name the fixture music directory"
 #endif
 
+#ifndef CNA_C_API_MEDIA_FIXTURE_PICTURES
+#error "CNA_C_API_MEDIA_FIXTURE_PICTURES must name the fixture picture directory"
+#endif
+
 typedef struct LibrarySmokeState {
     int validated;
 } LibrarySmokeState;
@@ -110,16 +114,52 @@ static int write_cover(const char* const path)
     return fclose(file) == 0 && written == sizeof(CoverBytes);
 }
 
-static int join_fixture_path(char* const buffer, const size_t capacity, const char* const name)
+static int join_path(
+    char* const buffer,
+    const size_t capacity,
+    const char* const root,
+    const char* const name)
 {
-    const size_t root = strlen(CNA_C_API_MEDIA_FIXTURE_MUSIC);
-    if (root + strlen(name) + 2U > capacity) {
+    if (strlen(root) + strlen(name) + 2U > capacity) {
         return 0;
     }
-    strcpy(buffer, CNA_C_API_MEDIA_FIXTURE_MUSIC);
+    strcpy(buffer, root);
     strcat(buffer, "/");
     strcat(buffer, name);
     return 1;
+}
+
+static int join_fixture_path(char* const buffer, const size_t capacity, const char* const name)
+{
+    return join_path(buffer, capacity, CNA_C_API_MEDIA_FIXTURE_MUSIC, name);
+}
+
+/* A one-pixel BMP: small enough to embed, real enough for the image loader to measure. */
+static const uint8_t FixtureBmp[58] = {
+    0x42U, 0x4DU, 0x3AU, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U,
+    0x00U, 0x00U, 0x36U, 0x00U, 0x00U, 0x00U, 0x28U, 0x00U,
+    0x00U, 0x00U, 0x01U, 0x00U, 0x00U, 0x00U, 0x01U, 0x00U,
+    0x00U, 0x00U, 0x01U, 0x00U, 0x18U, 0x00U, 0x00U, 0x00U,
+    0x00U, 0x00U, 0x04U, 0x00U, 0x00U, 0x00U, 0x13U, 0x0BU,
+    0x00U, 0x00U, 0x13U, 0x0BU, 0x00U, 0x00U, 0x00U, 0x00U,
+    0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U, 0x1EU, 0x14U,
+    0x0AU, 0x00U
+};
+
+static int write_picture_fixture(void)
+{
+    char path[1024];
+    FILE* file = 0;
+    size_t written = 0U;
+    if (!join_path(path, sizeof(path), CNA_C_API_MEDIA_FIXTURE_PICTURES, "fixture_picture.bmp")) {
+        return 0;
+    }
+    file = fopen(path, "wb");
+    if (file == 0) {
+        return 0;
+    }
+    written = fwrite(FixtureBmp, 1U, sizeof(FixtureBmp), file);
+    return fclose(file) == 0 && written == sizeof(FixtureBmp);
 }
 
 static int create_fixture(void)
@@ -133,7 +173,8 @@ static int create_fixture(void)
         return 0;
     }
     return write_tagged_song(first, FirstTitle, "3") &&
-        write_tagged_song(second, SecondTitle, "1") && write_cover(cover);
+        write_tagged_song(second, SecondTitle, "1") && write_cover(cover) &&
+        write_picture_fixture();
 }
 
 static int text_equals(
@@ -291,6 +332,231 @@ static int validate_song_back_pointers(const CNA_SongHandle song)
         cna_genre_destroy(genre) == CNA_RESULT_SUCCESS;
 }
 
+static int validate_picture(const CNA_PictureHandle picture, const char* const expected_name)
+{
+    CNA_PictureAlbumHandle album = CNA_INVALID_HANDLE;
+    CNA_Bool flag = UINT8_C(9);
+    int64_t ticks = INT64_C(-1);
+    int32_t number = -1;
+    uint64_t bytes = UINT64_C(9);
+    uint8_t image[128];
+    char text[1024];
+
+    memset(text, 0, sizeof(text));
+    if (cna_picture_get_name_size(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_copy_name(picture, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        (expected_name != 0 && strcmp(text, expected_name) != 0)) {
+        return 0;
+    }
+    /* The scan measured the fixture image, so the dimensions are the real ones. */
+    if (cna_picture_get_width(picture, &number) != CNA_RESULT_SUCCESS || number != 1 ||
+        cna_picture_get_height(picture, &number) != CNA_RESULT_SUCCESS || number != 1) {
+        return 0;
+    }
+    /* The date is a point in time counted from the Unix epoch, and a real file has a real one. */
+    if (cna_picture_get_date_unix_ticks(picture, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks <= INT64_C(0)) {
+        return 0;
+    }
+    /* The token is the picture's own path, and it round-trips through the library lookup. */
+    memset(text, 0, sizeof(text));
+    if (cna_picture_get_token_size_ext(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes == UINT64_C(0) || bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_copy_token_ext(picture, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        (uint64_t)strlen(text) != bytes) {
+        return 0;
+    }
+    /* The image bytes are exactly the fixture's, and the thumbnail is the same image. */
+    memset(image, 0, sizeof(image));
+    if (cna_picture_get_image_size(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)sizeof(FixtureBmp) ||
+        cna_picture_copy_image(picture, image, (uint64_t)sizeof(image), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        memcmp(image, FixtureBmp, sizeof(FixtureBmp)) != 0) {
+        return 0;
+    }
+    memset(image, 0, sizeof(image));
+    if (cna_picture_get_thumbnail_size(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != (uint64_t)sizeof(FixtureBmp) ||
+        cna_picture_copy_thumbnail(picture, image, (uint64_t)sizeof(image), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        memcmp(image, FixtureBmp, sizeof(FixtureBmp)) != 0) {
+        return 0;
+    }
+    {
+        uint8_t guard[4];
+        memset(guard, 0x7FU, sizeof(guard));
+        if (cna_picture_copy_image(picture, guard, UINT64_C(2), &bytes) !=
+                CNA_RESULT_BUFFER_TOO_SMALL ||
+            guard[0] != 0x7FU) {
+            return 0;
+        }
+    }
+    /* Every scanned picture belongs to an album. */
+    if (cna_picture_get_album(picture, &album, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_picture_album_get_name_size(album, &bytes) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return cna_picture_album_destroy(album) == CNA_RESULT_SUCCESS;
+}
+
+static int validate_picture_family(const CNA_Handle game, const CNA_MediaLibraryHandle library)
+{
+    CNA_PictureCollectionHandle pictures = CNA_INVALID_HANDLE;
+    CNA_PictureCollectionHandle saved = CNA_INVALID_HANDLE;
+    CNA_PictureAlbumHandle root = CNA_INVALID_HANDLE;
+    CNA_PictureAlbumHandle parent = CNA_INVALID_HANDLE;
+    CNA_PictureAlbumCollectionHandle child_albums = CNA_INVALID_HANDLE;
+    CNA_PictureHandle picture = CNA_INVALID_HANDLE;
+    CNA_PictureHandle found = CNA_INVALID_HANDLE;
+    CNA_PictureHandle rejected = CNA_INVALID_HANDLE;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t count = 9;
+    int32_t hash = 0;
+    int32_t other_hash = 0;
+    uint64_t bytes = UINT64_C(9);
+    char token[1024];
+    char text[256];
+
+    (void)game;
+    if (cna_media_library_get_pictures(library, &pictures) != CNA_RESULT_SUCCESS ||
+        cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_SUCCESS || count < 1 ||
+        cna_media_library_get_saved_pictures(library, &saved) != CNA_RESULT_SUCCESS ||
+        cna_picture_collection_get_count(saved, &count) != CNA_RESULT_SUCCESS || count < 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_picture_collection_get_type_name_size(pictures, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_collection_copy_type_name(pictures, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.Media.PictureCollection") != 0) {
+        return 0;
+    }
+
+    /* The picture tree has a root, and the root is the one album with no parent. */
+    if (cna_media_library_get_root_picture_album(library, &root, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_picture_album_get_parent(root, &parent, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE || parent != CNA_INVALID_HANDLE ||
+        cna_picture_album_get_albums(root, &child_albums) != CNA_RESULT_SUCCESS ||
+        cna_picture_album_collection_get_count(child_albums, &count) != CNA_RESULT_SUCCESS ||
+        count < 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_picture_album_get_type_name_size(root, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_picture_album_copy_type_name(root, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.Media.PictureAlbum") != 0) {
+        return 0;
+    }
+
+    /* The fixture picture is reachable both through the collection and through its own token. */
+    if (cna_picture_collection_get_at(pictures, 0, &picture) != CNA_RESULT_SUCCESS ||
+        !validate_picture(picture, 0)) {
+        return 0;
+    }
+    memset(token, 0, sizeof(token));
+    if (cna_picture_get_token_size_ext(picture, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(token) ||
+        cna_picture_copy_token_ext(picture, token, (uint64_t)sizeof(token), &bytes) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        CNA_StringView token_view;
+        token_view.data = token;
+        token_view.byte_length = bytes;
+        if (cna_media_library_get_picture_from_token(library, token_view, &found, &flag) !=
+                CNA_RESULT_SUCCESS ||
+            flag != CNA_TRUE ||
+            cna_picture_equals(picture, found, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+            cna_picture_get_hash_code(picture, &hash) != CNA_RESULT_SUCCESS ||
+            cna_picture_get_hash_code(found, &other_hash) != CNA_RESULT_SUCCESS ||
+            hash != other_hash) {
+            return 0;
+        }
+    }
+    /* An unknown token is an ordinary answer, not a failure. */
+    {
+        CNA_PictureHandle absent = CNA_INVALID_HANDLE;
+        if (cna_media_library_get_picture_from_token(
+                library, view("no such token"), &absent, &flag) != CNA_RESULT_SUCCESS ||
+            flag != CNA_FALSE || absent != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+
+    /* Saving writes a real file, indexes it, and hands back a live picture. */
+    {
+        CNA_PictureHandle saved_picture = CNA_INVALID_HANDLE;
+        char saved_token[1024];
+        if (cna_media_library_save_picture(
+                library, view("cna_saved"), FixtureBmp, (uint64_t)sizeof(FixtureBmp),
+                &saved_picture) != CNA_RESULT_SUCCESS ||
+            saved_picture == CNA_INVALID_HANDLE ||
+            cna_media_library_save_picture(
+                library, view("cna_saved"), 0, (uint64_t)sizeof(FixtureBmp), &rejected) !=
+                CNA_RESULT_INVALID_ARGUMENT ||
+            cna_media_library_save_picture(
+                library, view("cna_saved"), FixtureBmp, (uint64_t)sizeof(FixtureBmp), 0) !=
+                CNA_RESULT_INVALID_ARGUMENT) {
+            return 0;
+        }
+        memset(saved_token, 0, sizeof(saved_token));
+        if (cna_picture_get_token_size_ext(saved_picture, &bytes) != CNA_RESULT_SUCCESS ||
+            bytes >= (uint64_t)sizeof(saved_token) ||
+            cna_picture_copy_token_ext(
+                saved_picture, saved_token, (uint64_t)sizeof(saved_token), &bytes) !=
+                CNA_RESULT_SUCCESS ||
+            !validate_picture(saved_picture, "cna_saved")) {
+            return 0;
+        }
+        /* The saved picture joined the saved-picture collection. */
+        if (cna_media_library_get_saved_pictures(library, &saved) != CNA_RESULT_SUCCESS ||
+            cna_picture_collection_get_count(saved, &count) != CNA_RESULT_SUCCESS || count < 1 ||
+            cna_picture_destroy(saved_picture) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+        /* The suite owns this file, so it does not leave it behind for the next run. */
+        (void)remove(saved_token);
+    }
+
+    /* Disposal marks a picture and empties a collection, and every index is then refused. */
+    if (cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
+        cna_picture_dispose(picture) != CNA_RESULT_SUCCESS ||
+        cna_picture_get_is_disposed(picture, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE ||
+        cna_picture_get_name_size(picture, &bytes) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_picture_album_dispose(root) != CNA_RESULT_SUCCESS ||
+        cna_picture_album_get_is_disposed(root, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_picture_collection_dispose(pictures) != CNA_RESULT_SUCCESS ||
+        cna_picture_collection_get_count(pictures, &count) != CNA_RESULT_SUCCESS || count != 0 ||
+        cna_picture_collection_get_at(pictures, 0, &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_picture_album_collection_dispose(child_albums) != CNA_RESULT_SUCCESS ||
+        cna_picture_album_collection_get_count(child_albums, &count) != CNA_RESULT_SUCCESS ||
+        count != 0) {
+        return 0;
+    }
+
+    return cna_picture_destroy(picture) == CNA_RESULT_SUCCESS &&
+        cna_picture_destroy(found) == CNA_RESULT_SUCCESS &&
+        cna_picture_album_destroy(root) == CNA_RESULT_SUCCESS &&
+        cna_picture_album_collection_destroy(child_albums) == CNA_RESULT_SUCCESS &&
+        cna_picture_collection_destroy(pictures) == CNA_RESULT_SUCCESS &&
+        cna_picture_collection_destroy(saved) == CNA_RESULT_SUCCESS &&
+        cna_picture_get_name_size(rejected, &bytes) == CNA_RESULT_INVALID_HANDLE &&
+        cna_picture_album_get_hash_code(rejected, &count) == CNA_RESULT_INVALID_HANDLE &&
+        cna_picture_collection_get_count(rejected, &count) == CNA_RESULT_INVALID_HANDLE;
+}
+
 static int validate_library_graph(const CNA_Handle game)
 {
     CNA_MediaLibraryHandle library = CNA_INVALID_HANDLE;
@@ -406,6 +672,10 @@ static int validate_library_graph(const CNA_Handle game)
         return 0;
     }
 
+    if (!validate_picture_family(game, library)) {
+        return 0;
+    }
+
     /* Releasing the library handle first is safe: the entity handles keep the library alive. */
     if (cna_media_library_destroy(library) != CNA_RESULT_SUCCESS ||
         cna_media_library_destroy(library) != CNA_RESULT_INVALID_HANDLE ||
@@ -471,6 +741,7 @@ static int validate_library_graph(const CNA_Handle game)
         cna_playlist_get_duration(rejected, 0) == CNA_RESULT_INVALID_ARGUMENT &&
         cna_album_collection_get_count(rejected, &count) == CNA_RESULT_INVALID_HANDLE;
 }
+
 
 static CNA_Result on_update(
     const CNA_Handle game,

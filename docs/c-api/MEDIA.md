@@ -137,3 +137,31 @@ The four entity collections share one C shape because the four canonical types a
 identical. Canonical disposal empties a collection — count zero, every index refused — while its
 elements keep answering, since a collection never owned them. Their iterators and type aliases are
 recorded as not-applicable, like every other collection in this ABI.
+
+## Pictures
+
+Pictures and picture albums are borrowed views like the music entities, with two shapes of their
+own.
+
+**The picture-album tree is the only tree in this family.** `cna_picture_album_get_parent` reports
+availability rather than failing, and the root album is the one whose flag comes back `CNA_FALSE` —
+that is how a caller walks upwards and knows when to stop. `cna_media_library_get_root_picture_album`
+likewise reports availability, because a device with no readable picture location has no tree at
+all.
+
+**A picture's date is the ABI's first point in time.** Durations elsewhere are 100-nanosecond ticks
+counted from zero; `cna_picture_get_date_unix_ticks` uses the same tick counted from the Unix epoch,
+which is the canonical clock's own epoch. A picture whose file carries no timestamp reports whatever
+the scan recorded.
+
+Image and thumbnail bytes follow the album-art contract exactly: the canonical members hand back a
+caller-owned stream, C reads it to its end and destroys it inside the call, and the image crosses as
+bytes. The thumbnail is the same image as the full-size one — canonical, not a C limitation.
+
+`cna_media_library_save_picture` takes bytes; `cna_media_library_save_picture_from_stream` takes a
+**storage stream handle**, because a storage stream is the only byte source this ABI owns. The
+stream is borrowed for the call and stays the caller's to close. An image the loader cannot measure
+is still saved, with zero width and height, exactly as the canonical operation records it. A saved
+picture joins the library's saved-picture collection and can be found again by its token —
+`cna_media_library_get_picture_from_token`, where an unknown token is a successful "not found"
+rather than a failure.
