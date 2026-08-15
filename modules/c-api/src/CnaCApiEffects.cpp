@@ -2,15 +2,24 @@
 
 #include "CNA/C/effects.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotation.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectAnnotationCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EffectParameterCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,16 +30,29 @@ using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetOwnedTexture;
+using CNA::C::Detail::GetOwnedTexture2D;
+using CNA::C::Detail::GetOwnedTexture3D;
+using CNA::C::Detail::GetOwnedTextureCube;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::TextureResourceView;
+using CNA::C::Detail::TextureCubeResourceView;
 using Microsoft::Xna::Framework::Matrix;
+using Microsoft::Xna::Framework::Quaternion;
 using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Vector4;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotation;
 using Microsoft::Xna::Framework::Graphics::EffectAnnotationCollection;
+using Microsoft::Xna::Framework::Graphics::EffectParameter;
 using Microsoft::Xna::Framework::Graphics::EffectParameterClass;
+using Microsoft::Xna::Framework::Graphics::EffectParameterCollection;
 using Microsoft::Xna::Framework::Graphics::EffectParameterType;
+using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Graphics::Texture2D;
+using Microsoft::Xna::Framework::Graphics::Texture3D;
+using Microsoft::Xna::Framework::Graphics::TextureCube;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
 
@@ -40,6 +62,74 @@ struct AnnotationResource final {
 
 struct AnnotationCollectionResource final {
     std::shared_ptr<EffectAnnotationCollection> value;
+};
+
+struct RetainedTextureSlot final {
+    CNA_Handle handle = CNA_INVALID_HANDLE;
+    std::shared_ptr<Texture> value;
+    std::shared_ptr<void> owner;
+    uint64_t* referenceCount = nullptr;
+
+    RetainedTextureSlot() = default;
+    RetainedTextureSlot(const RetainedTextureSlot&) = delete;
+    RetainedTextureSlot& operator=(const RetainedTextureSlot&) = delete;
+
+    ~RetainedTextureSlot()
+    {
+        Reset();
+    }
+
+    void Reset() noexcept
+    {
+        if (referenceCount != nullptr) {
+            --*referenceCount;
+        }
+        handle = CNA_INVALID_HANDLE;
+        value.reset();
+        owner.reset();
+        referenceCount = nullptr;
+    }
+
+    void Set(
+        const CNA_Handle newHandle,
+        std::shared_ptr<Texture> newValue,
+        std::shared_ptr<void> newOwner,
+        uint64_t* const newReferenceCount)
+    {
+        Reset();
+        handle = newHandle;
+        value = std::move(newValue);
+        owner = std::move(newOwner);
+        referenceCount = newReferenceCount;
+        if (referenceCount != nullptr) {
+            ++*referenceCount;
+        }
+    }
+};
+
+struct ParameterCollectionState;
+
+struct ParameterState final {
+    RetainedTextureSlot baseTexture;
+    RetainedTextureSlot texture2D;
+    RetainedTextureSlot texture3D;
+    RetainedTextureSlot textureCube;
+    std::shared_ptr<ParameterCollectionState> elements;
+    std::shared_ptr<ParameterCollectionState> members;
+};
+
+struct ParameterCollectionState final {
+    std::shared_ptr<EffectParameterCollection> value;
+    std::unordered_map<EffectParameter*, std::shared_ptr<ParameterState>> elementStates;
+};
+
+struct ParameterResource final {
+    std::shared_ptr<EffectParameter> value;
+    std::shared_ptr<ParameterState> state;
+};
+
+struct ParameterCollectionResource final {
+    std::shared_ptr<ParameterCollectionState> state;
 };
 
 [[nodiscard]] CNA_Result InvalidArgument(const char* const message)
@@ -153,6 +243,245 @@ template<typename TCallable>
         value.M21, value.M22, value.M23, value.M24,
         value.M31, value.M32, value.M33, value.M34,
         value.M41, value.M42, value.M43, value.M44};
+}
+
+[[nodiscard]] CNA_Quaternion ToC(const Quaternion value) noexcept
+{
+    return CNA_Quaternion{value.X, value.Y, value.Z, value.W};
+}
+
+[[nodiscard]] Matrix ToNative(const CNA_Matrix value) noexcept
+{
+    return Matrix{
+        value.m11, value.m12, value.m13, value.m14,
+        value.m21, value.m22, value.m23, value.m24,
+        value.m31, value.m32, value.m33, value.m34,
+        value.m41, value.m42, value.m43, value.m44};
+}
+
+[[nodiscard]] Quaternion ToNative(const CNA_Quaternion value) noexcept
+{
+    return Quaternion{value.x, value.y, value.z, value.w};
+}
+
+[[nodiscard]] Vector2 ToNative(const CNA_Vector2 value) noexcept
+{
+    return Vector2{value.x, value.y};
+}
+
+[[nodiscard]] Vector3 ToNative(const CNA_Vector3 value) noexcept
+{
+    return Vector3{value.x, value.y, value.z};
+}
+
+[[nodiscard]] Vector4 ToNative(const CNA_Vector4 value) noexcept
+{
+    return Vector4{value.x, value.y, value.z, value.w};
+}
+
+[[nodiscard]] CNA_Result GetParameter(
+    const CNA_EffectParameterHandle handle,
+    std::shared_ptr<ParameterResource>* const outParameter)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectParameter, outParameter);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The EffectParameter handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetParameterCollection(
+    const CNA_EffectParameterCollectionHandle handle,
+    std::shared_ptr<ParameterCollectionResource>* const outCollection)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::EffectParameterCollection, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The EffectParameterCollection handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateParameterHandle(
+    std::shared_ptr<EffectParameter> value,
+    std::shared_ptr<ParameterState> state,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    const auto resource = std::make_shared<ParameterResource>(
+        ParameterResource{std::move(value), std::move(state)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectParameter, resource, outParameter);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned EffectParameter handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateParameterCollectionHandle(
+    std::shared_ptr<ParameterCollectionState> state,
+    CNA_EffectParameterCollectionHandle* const outCollection)
+{
+    const auto resource = std::make_shared<ParameterCollectionResource>(
+        ParameterCollectionResource{std::move(state)});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::EffectParameterCollection, resource, outCollection);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The owned EffectParameterCollection handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result CreateNativeParameter(
+    const CNA_EffectParameterCreateInfo* const createInfo,
+    std::unique_ptr<EffectParameter>* const outParameter)
+{
+    if (createInfo == nullptr || outParameter == nullptr ||
+        createInfo->struct_size < sizeof(CNA_EffectParameterCreateInfo) ||
+        createInfo->struct_version != StructureVersion ||
+        createInfo->parameter_class > CNA_EFFECT_PARAMETER_CLASS_STRUCT ||
+        createInfo->parameter_type > CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE) {
+        return InvalidArgument("The EffectParameter creation configuration is invalid.");
+    }
+    std::string name;
+    std::string semantic;
+    if (const CNA_Result result = CopyStringView(createInfo->name, true, &name);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The EffectParameter name is not valid UTF-8 text.");
+    }
+    if (const CNA_Result result = CopyStringView(createInfo->semantic, true, &semantic);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The EffectParameter semantic is not valid UTF-8 text.");
+    }
+    *outParameter = std::make_unique<EffectParameter>(
+        std::move(name),
+        std::move(semantic),
+        createInfo->row_count,
+        createInfo->column_count,
+        static_cast<EffectParameterClass>(createInfo->parameter_class),
+        static_cast<EffectParameterType>(createInfo->parameter_type));
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] std::shared_ptr<ParameterState> GetElementState(
+    const std::shared_ptr<ParameterCollectionState>& collection,
+    EffectParameter* const parameter)
+{
+    auto [iterator, inserted] = collection->elementStates.try_emplace(parameter);
+    if (inserted || iterator->second == nullptr) {
+        iterator->second = std::make_shared<ParameterState>();
+    }
+    return iterator->second;
+}
+
+[[nodiscard]] CNA_Result CreateCollectionElementHandle(
+    const std::shared_ptr<ParameterCollectionState>& collection,
+    EffectParameter* const parameter,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CreateParameterHandle(
+        std::shared_ptr<EffectParameter>(collection->value, parameter),
+        GetElementState(collection, parameter),
+        outParameter);
+}
+
+template<typename TValue>
+void LoadValue(const void* const source, TValue* const outValue) noexcept
+{
+    std::memcpy(outValue, source, sizeof(TValue));
+}
+
+template<typename TValue>
+[[nodiscard]] CNA_Result LoadValues(
+    const void* const source,
+    const uint64_t count,
+    std::vector<TValue>* const outValues)
+{
+    std::size_t byteCount = 0U;
+    const CNA_Result result = CheckedElementByteCount(
+        source, count, sizeof(TValue), &byteCount);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The EffectParameter value array is invalid.");
+    }
+    outValues->resize(static_cast<std::size_t>(count));
+    if (byteCount != 0U) {
+        std::memcpy(outValues->data(), source, byteCount);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TValue>
+[[nodiscard]] CNA_Result CopyValues(
+    const std::vector<TValue>& values,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The EffectParameter value-array output is invalid.");
+    }
+    *outCount = static_cast<uint64_t>(values.size());
+    if (capacity < values.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination cannot hold the complete EffectParameter value array.");
+    }
+    if (!values.empty()) {
+        std::memcpy(destination, values.data(), values.size() * sizeof(TValue));
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TNative, typename TC, typename TConvert>
+[[nodiscard]] CNA_Result CopyConvertedValues(
+    const std::vector<TNative>& nativeValues,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount,
+    TConvert&& convert)
+{
+    std::vector<TC> values;
+    values.reserve(nativeValues.size());
+    for (const TNative& value : nativeValues) {
+        values.push_back(std::forward<TConvert>(convert)(value));
+    }
+    return CopyValues(values, destination, capacity, outCount);
+}
+
+[[nodiscard]] CNA_Result RequestedCountToInt(
+    const uint64_t count,
+    int* const outCount)
+{
+    if (count > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The requested EffectParameter value count exceeds the native range.");
+    }
+    *outCount = static_cast<int>(count);
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -643,6 +972,1012 @@ CNA_Result cna_effect_annotation_collection_find(
             return CNA_RESULT_SUCCESS;
         }
         const CNA_Result result = CreateAnnotationHandle(*annotation, outAnnotation);
+        if (result == CNA_RESULT_SUCCESS) {
+            *outFound = CNA_TRUE;
+        }
+        return result;
+    });
+}
+
+CNA_Result cna_effect_parameter_create(
+    const CNA_EffectParameterCreateInfo* const createInfo,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outParameter == nullptr) {
+            return InvalidArgument("The EffectParameter output handle is null.");
+        }
+        *outParameter = CNA_INVALID_HANDLE;
+        std::unique_ptr<EffectParameter> parameter;
+        if (const CNA_Result result = CreateNativeParameter(createInfo, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateParameterHandle(
+            std::shared_ptr<EffectParameter>(std::move(parameter)),
+            std::make_shared<ParameterState>(),
+            outParameter);
+    });
+}
+
+CNA_Result cna_effect_parameter_destroy(const CNA_EffectParameterHandle parameterHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(parameterHandle);
+        if (result == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned EffectParameter handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_parameter_get_info(
+    const CNA_EffectParameterHandle parameterHandle,
+    CNA_EffectParameterInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr ||
+            outInfo->struct_size < sizeof(CNA_EffectParameterInfo) ||
+            outInfo->struct_version != StructureVersion) {
+            return InvalidArgument("The EffectParameter info output structure is invalid.");
+        }
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outInfo = CNA_EffectParameterInfo{
+            sizeof(CNA_EffectParameterInfo),
+            StructureVersion,
+            parameter->value->getRowCountProperty(),
+            parameter->value->getColumnCountProperty(),
+            static_cast<CNA_EffectParameterClass>(
+                parameter->value->getParameterClassProperty()),
+            static_cast<CNA_EffectParameterType>(
+                parameter->value->getParameterTypeProperty())};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_parameter_get_name_byte_count(
+    const CNA_EffectParameterHandle parameterHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetStringByteCount(outByteCount, [&]() {
+            return parameter->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_copy_name(
+    const CNA_EffectParameterHandle parameterHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyString(destination, capacity, outByteCount, [&]() {
+            return parameter->value->getNameProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_get_semantic_byte_count(
+    const CNA_EffectParameterHandle parameterHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetStringByteCount(outByteCount, [&]() {
+            return parameter->value->getSemanticProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_copy_semantic(
+    const CNA_EffectParameterHandle parameterHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyString(destination, capacity, outByteCount, [&]() {
+            return parameter->value->getSemanticProperty();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_get_elements(
+    const CNA_EffectParameterHandle parameterHandle,
+    CNA_EffectParameterCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectParameter elements output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (parameter->state->elements == nullptr) {
+            auto state = std::make_shared<ParameterCollectionState>();
+            state->value = std::shared_ptr<EffectParameterCollection>(
+                parameter->value, &parameter->value->getElementsProperty());
+            parameter->state->elements = std::move(state);
+        }
+        return CreateParameterCollectionHandle(parameter->state->elements, outCollection);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_structure_members(
+    const CNA_EffectParameterHandle parameterHandle,
+    CNA_EffectParameterCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectParameter members output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (parameter->state->members == nullptr) {
+            auto state = std::make_shared<ParameterCollectionState>();
+            state->value = std::shared_ptr<EffectParameterCollection>(
+                parameter->value, &parameter->value->getStructureMembersProperty());
+            parameter->state->members = std::move(state);
+        }
+        return CreateParameterCollectionHandle(parameter->state->members, outCollection);
+    });
+}
+
+CNA_Result cna_effect_parameter_get_annotations(
+    const CNA_EffectParameterHandle parameterHandle,
+    CNA_EffectAnnotationCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectParameter annotations output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto resource = std::make_shared<AnnotationCollectionResource>(
+            AnnotationCollectionResource{std::shared_ptr<EffectAnnotationCollection>(
+                parameter->value, &parameter->value->getAnnotationsProperty())});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::EffectAnnotationCollection, resource, outCollection);
+        if (result == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The EffectParameter annotation-collection view could not be created.");
+    });
+}
+
+CNA_Result cna_effect_parameter_get_value(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectValueType valueType,
+    void* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EffectParameter scalar output is null.");
+        }
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        switch (valueType) {
+        case CNA_EFFECT_VALUE_BOOLEAN: {
+            const CNA_Bool value = parameter->value->GetValueBoolean() ? CNA_TRUE : CNA_FALSE;
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_INT32: {
+            const int32_t value = static_cast<int32_t>(parameter->value->GetValueInt32());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_SINGLE: {
+            const float value = parameter->value->GetValueSingle();
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_MATRIX: {
+            const CNA_Matrix value = ToC(parameter->value->GetValueMatrix());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+            const CNA_Matrix value = ToC(parameter->value->GetValueMatrixTranspose());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_QUATERNION: {
+            const CNA_Quaternion value = ToC(parameter->value->GetValueQuaternion());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR2: {
+            const CNA_Vector2 value = ToC(parameter->value->GetValueVector2());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR3: {
+            const CNA_Vector3 value = ToC(parameter->value->GetValueVector3());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR4: {
+            const CNA_Vector4 value = ToC(parameter->value->GetValueVector4());
+            std::memcpy(outValue, &value, sizeof(value));
+            return CNA_RESULT_SUCCESS;
+        }
+        default:
+            return InvalidArgument("The EffectParameter scalar value type is invalid.");
+        }
+    });
+}
+
+CNA_Result cna_effect_parameter_get_values(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectValueType valueType,
+    const uint64_t requestedCount,
+    void* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The EffectParameter value-array output is invalid.");
+        }
+        *outCount = 0U;
+        int nativeCount = 0;
+        if (const CNA_Result result = RequestedCountToInt(requestedCount, &nativeCount);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        switch (valueType) {
+        case CNA_EFFECT_VALUE_BOOLEAN: {
+            const std::vector<bool> nativeValues =
+                parameter->value->GetValueBooleanArray(nativeCount);
+            std::vector<CNA_Bool> values;
+            values.reserve(nativeValues.size());
+            for (const bool value : nativeValues) {
+                values.push_back(value ? CNA_TRUE : CNA_FALSE);
+            }
+            return CopyValues(values, destination, capacity, outCount);
+        }
+        case CNA_EFFECT_VALUE_INT32:
+            return CopyConvertedValues<int, int32_t>(
+                parameter->value->GetValueInt32Array(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const int value) { return static_cast<int32_t>(value); });
+        case CNA_EFFECT_VALUE_SINGLE:
+            return CopyValues(
+                parameter->value->GetValueSingleArray(nativeCount),
+                destination,
+                capacity,
+                outCount);
+        case CNA_EFFECT_VALUE_MATRIX:
+            return CopyConvertedValues<Matrix, CNA_Matrix>(
+                parameter->value->GetValueMatrixArray(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Matrix& value) { return ToC(value); });
+        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE:
+            return CopyConvertedValues<Matrix, CNA_Matrix>(
+                parameter->value->GetValueMatrixTransposeArray(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Matrix& value) { return ToC(value); });
+        case CNA_EFFECT_VALUE_QUATERNION:
+            return CopyConvertedValues<Quaternion, CNA_Quaternion>(
+                parameter->value->GetValueQuaternionArray(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Quaternion& value) { return ToC(value); });
+        case CNA_EFFECT_VALUE_VECTOR2:
+            return CopyConvertedValues<Vector2, CNA_Vector2>(
+                parameter->value->GetValueVector2Array(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Vector2& value) { return ToC(value); });
+        case CNA_EFFECT_VALUE_VECTOR3:
+            return CopyConvertedValues<Vector3, CNA_Vector3>(
+                parameter->value->GetValueVector3Array(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Vector3& value) { return ToC(value); });
+        case CNA_EFFECT_VALUE_VECTOR4:
+            return CopyConvertedValues<Vector4, CNA_Vector4>(
+                parameter->value->GetValueVector4Array(nativeCount),
+                destination,
+                capacity,
+                outCount,
+                [](const Vector4& value) { return ToC(value); });
+        default:
+            return InvalidArgument("The EffectParameter array value type is invalid.");
+        }
+    });
+}
+
+CNA_Result cna_effect_parameter_set_value(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectValueType valueType,
+    const void* const value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value == nullptr) {
+            return InvalidArgument("The EffectParameter scalar input is null.");
+        }
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        switch (valueType) {
+        case CNA_EFFECT_VALUE_BOOLEAN: {
+            CNA_Bool copied = CNA_FALSE;
+            LoadValue(value, &copied);
+            if (copied != CNA_FALSE && copied != CNA_TRUE) {
+                return InvalidArgument("The EffectParameter Boolean value is invalid.");
+            }
+            parameter->value->SetValue(copied == CNA_TRUE);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_INT32: {
+            int32_t copied = 0;
+            LoadValue(value, &copied);
+            parameter->value->SetValue(static_cast<int>(copied));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_SINGLE: {
+            float copied = 0.0F;
+            LoadValue(value, &copied);
+            parameter->value->SetValue(copied);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_MATRIX:
+        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+            CNA_Matrix copied{};
+            LoadValue(value, &copied);
+            const Matrix native = ToNative(copied);
+            if (valueType == CNA_EFFECT_VALUE_MATRIX) {
+                parameter->value->SetValue(native);
+            } else {
+                parameter->value->SetValueTranspose(native);
+            }
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_QUATERNION: {
+            CNA_Quaternion copied{};
+            LoadValue(value, &copied);
+            parameter->value->SetValue(ToNative(copied));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR2: {
+            CNA_Vector2 copied{};
+            LoadValue(value, &copied);
+            parameter->value->SetValue(ToNative(copied));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR3: {
+            CNA_Vector3 copied{};
+            LoadValue(value, &copied);
+            parameter->value->SetValue(ToNative(copied));
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR4: {
+            CNA_Vector4 copied{};
+            LoadValue(value, &copied);
+            parameter->value->SetValue(ToNative(copied));
+            return CNA_RESULT_SUCCESS;
+        }
+        default:
+            return InvalidArgument("The EffectParameter scalar value type is invalid.");
+        }
+    });
+}
+
+CNA_Result cna_effect_parameter_set_values(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectValueType valueType,
+    const void* const values,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        switch (valueType) {
+        case CNA_EFFECT_VALUE_BOOLEAN: {
+            std::vector<CNA_Bool> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<bool> native;
+            native.reserve(copied.size());
+            for (const CNA_Bool value : copied) {
+                if (value != CNA_FALSE && value != CNA_TRUE) {
+                    return InvalidArgument(
+                        "The EffectParameter Boolean value array is invalid.");
+                }
+                native.push_back(value == CNA_TRUE);
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_INT32: {
+            std::vector<int32_t> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<int> native;
+            native.reserve(copied.size());
+            for (const int32_t value : copied) {
+                native.push_back(static_cast<int>(value));
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_SINGLE: {
+            std::vector<float> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            parameter->value->SetValue(copied);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_MATRIX:
+        case CNA_EFFECT_VALUE_MATRIX_TRANSPOSE: {
+            std::vector<CNA_Matrix> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<Matrix> native;
+            native.reserve(copied.size());
+            for (const CNA_Matrix value : copied) {
+                native.push_back(ToNative(value));
+            }
+            if (valueType == CNA_EFFECT_VALUE_MATRIX) {
+                parameter->value->SetValue(native);
+            } else {
+                parameter->value->SetValueTranspose(native);
+            }
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_QUATERNION: {
+            std::vector<CNA_Quaternion> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<Quaternion> native;
+            native.reserve(copied.size());
+            for (const CNA_Quaternion value : copied) {
+                native.push_back(ToNative(value));
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR2: {
+            std::vector<CNA_Vector2> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<Vector2> native;
+            native.reserve(copied.size());
+            for (const CNA_Vector2 value : copied) {
+                native.push_back(ToNative(value));
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR3: {
+            std::vector<CNA_Vector3> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<Vector3> native;
+            native.reserve(copied.size());
+            for (const CNA_Vector3 value : copied) {
+                native.push_back(ToNative(value));
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        case CNA_EFFECT_VALUE_VECTOR4: {
+            std::vector<CNA_Vector4> copied;
+            if (const CNA_Result result = LoadValues(values, count, &copied);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            std::vector<Vector4> native;
+            native.reserve(copied.size());
+            for (const CNA_Vector4 value : copied) {
+                native.push_back(ToNative(value));
+            }
+            parameter->value->SetValue(native);
+            return CNA_RESULT_SUCCESS;
+        }
+        default:
+            return InvalidArgument("The EffectParameter array value type is invalid.");
+        }
+    });
+}
+
+CNA_Result cna_effect_parameter_get_value_string_byte_count(
+    const CNA_EffectParameterHandle parameterHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetStringByteCount(outByteCount, [&]() {
+            return parameter->value->GetValueString();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_copy_value_string(
+    const CNA_EffectParameterHandle parameterHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyString(destination, capacity, outByteCount, [&]() {
+            return parameter->value->GetValueString();
+        });
+    });
+}
+
+CNA_Result cna_effect_parameter_set_value_string(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_StringView value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copied;
+        if (const CNA_Result result = CopyStringView(value, true, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The EffectParameter string value is not valid UTF-8 text.");
+        }
+        parameter->value->SetValue(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_parameter_get_value_texture(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectTextureType textureType,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTexture == nullptr) {
+            return InvalidArgument("The EffectParameter texture output is null.");
+        }
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_2D:
+            if (parameter->value->GetValueTexture2D() != nullptr) {
+                *outTexture = parameter->state->texture2D.handle;
+            }
+            return CNA_RESULT_SUCCESS;
+        case CNA_EFFECT_TEXTURE_3D:
+            if (parameter->value->GetValueTexture3D() != nullptr) {
+                *outTexture = parameter->state->texture3D.handle;
+            }
+            return CNA_RESULT_SUCCESS;
+        case CNA_EFFECT_TEXTURE_CUBE:
+            if (parameter->value->GetValueTextureCube() != nullptr) {
+                *outTexture = parameter->state->textureCube.handle;
+            }
+            return CNA_RESULT_SUCCESS;
+        case CNA_EFFECT_TEXTURE_BASE:
+            return InvalidArgument(
+                "The base Texture EffectParameter overload has no native getter.");
+        default:
+            return InvalidArgument("The EffectParameter texture type is invalid.");
+        }
+    });
+}
+
+CNA_Result cna_effect_parameter_set_value_texture(
+    const CNA_EffectParameterHandle parameterHandle,
+    const CNA_EffectTextureType textureType,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterResource> parameter;
+        if (const CNA_Result result = GetParameter(parameterHandle, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (textureType > CNA_EFFECT_TEXTURE_CUBE) {
+            return InvalidArgument("The EffectParameter texture type is invalid.");
+        }
+        RetainedTextureSlot* slot = nullptr;
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_BASE:
+            slot = &parameter->state->baseTexture;
+            break;
+        case CNA_EFFECT_TEXTURE_2D:
+            slot = &parameter->state->texture2D;
+            break;
+        case CNA_EFFECT_TEXTURE_3D:
+            slot = &parameter->state->texture3D;
+            break;
+        case CNA_EFFECT_TEXTURE_CUBE:
+            slot = &parameter->state->textureCube;
+            break;
+        default:
+            break;
+        }
+        if (textureHandle == CNA_INVALID_HANDLE) {
+            switch (textureType) {
+            case CNA_EFFECT_TEXTURE_BASE:
+                parameter->value->SetValue(static_cast<Texture*>(nullptr));
+                break;
+            case CNA_EFFECT_TEXTURE_2D:
+                parameter->value->SetValue(static_cast<Texture2D*>(nullptr));
+                break;
+            case CNA_EFFECT_TEXTURE_3D:
+                parameter->value->SetValue(static_cast<Texture3D*>(nullptr));
+                break;
+            case CNA_EFFECT_TEXTURE_CUBE:
+                parameter->value->SetValue(static_cast<TextureCube*>(nullptr));
+                break;
+            default:
+                break;
+            }
+            slot->Reset();
+            return CNA_RESULT_SUCCESS;
+        }
+
+        std::shared_ptr<Texture> texture;
+        std::shared_ptr<void> owner;
+        uint64_t* referenceCount = nullptr;
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_BASE: {
+            TextureResourceView view;
+            if (const CNA_Result result = GetOwnedTexture(textureHandle, &view);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::move(view.value);
+            owner = std::move(view.retentionOwner);
+            referenceCount = view.activeEffectReferenceCount;
+            break;
+        }
+        case CNA_EFFECT_TEXTURE_2D: {
+            std::shared_ptr<CNA::C::Detail::Texture2DResource> resource;
+            if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(resource->value);
+            owner = resource;
+            referenceCount = &resource->activeEffectReferenceCount;
+            break;
+        }
+        case CNA_EFFECT_TEXTURE_3D: {
+            std::shared_ptr<CNA::C::Detail::Texture3DResource> resource;
+            if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(resource->value);
+            owner = resource;
+            referenceCount = &resource->activeEffectReferenceCount;
+            break;
+        }
+        case CNA_EFFECT_TEXTURE_CUBE: {
+            TextureCubeResourceView view;
+            if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &view);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            texture = std::static_pointer_cast<Texture>(view.value);
+            owner = std::move(view.retentionOwner);
+            referenceCount = view.activeEffectReferenceCount;
+            break;
+        }
+        default:
+            break;
+        }
+        if (texture->getIsDisposedProperty()) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "A disposed texture cannot be assigned to an EffectParameter.");
+        }
+        if (referenceCount == nullptr || *referenceCount == UINT64_MAX) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The EffectParameter texture retention count cannot be increased.");
+        }
+
+        switch (textureType) {
+        case CNA_EFFECT_TEXTURE_BASE:
+            parameter->value->SetValue(texture.get());
+            break;
+        case CNA_EFFECT_TEXTURE_2D:
+            parameter->value->SetValue(static_cast<Texture2D*>(texture.get()));
+            break;
+        case CNA_EFFECT_TEXTURE_3D:
+            parameter->value->SetValue(static_cast<Texture3D*>(texture.get()));
+            break;
+        case CNA_EFFECT_TEXTURE_CUBE:
+            parameter->value->SetValue(static_cast<TextureCube*>(texture.get()));
+            break;
+        default:
+            break;
+        }
+        slot->Set(textureHandle, std::move(texture), std::move(owner), referenceCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_create(
+    CNA_EffectParameterCollectionHandle* const outCollection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCollection == nullptr) {
+            return InvalidArgument("The EffectParameterCollection output handle is null.");
+        }
+        *outCollection = CNA_INVALID_HANDLE;
+        auto state = std::make_shared<ParameterCollectionState>();
+        state->value = std::make_shared<EffectParameterCollection>();
+        return CreateParameterCollectionHandle(std::move(state), outCollection);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_destroy(
+    const CNA_EffectParameterCollectionHandle collectionHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(collectionHandle);
+        if (result == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned EffectParameterCollection handle could not be released.");
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_get_count(
+    const CNA_EffectParameterCollectionHandle collectionHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The EffectParameterCollection count output is null.");
+        }
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(collection->state->value->getCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_add_create(
+    const CNA_EffectParameterCollectionHandle collectionHandle,
+    const CNA_EffectParameterCreateInfo* const createInfo,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outParameter == nullptr) {
+            return InvalidArgument("The EffectParameter element output handle is null.");
+        }
+        *outParameter = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::unique_ptr<EffectParameter> parameter;
+        if (const CNA_Result result = CreateNativeParameter(createInfo, &parameter);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        collection->state->value->Add(std::move(*parameter));
+        const int index = collection->state->value->getCountProperty() - 1;
+        EffectParameter* const added = &(*collection->state->value)[index];
+        return CreateCollectionElementHandle(collection->state, added, outParameter);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_get_at(
+    const CNA_EffectParameterCollectionHandle collectionHandle,
+    const uint64_t index,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outParameter == nullptr) {
+            return InvalidArgument("The EffectParameter element output handle is null.");
+        }
+        *outParameter = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (index >= static_cast<uint64_t>(collection->state->value->getCountProperty()) ||
+            index > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The EffectParameterCollection index is outside the collection.");
+        }
+        EffectParameter* const parameter =
+            &(*collection->state->value)[static_cast<int>(index)];
+        return CreateCollectionElementHandle(
+            collection->state, parameter, outParameter);
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_find_name(
+    const CNA_EffectParameterCollectionHandle collectionHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outParameter == nullptr) {
+            return InvalidArgument("The EffectParameterCollection find output is null.");
+        }
+        *outFound = CNA_FALSE;
+        *outParameter = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The EffectParameter lookup name is not valid UTF-8 text.");
+        }
+        EffectParameter* const parameter = (*collection->state->value)[copiedName];
+        if (parameter == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const CNA_Result result = CreateCollectionElementHandle(
+            collection->state, parameter, outParameter);
+        if (result == CNA_RESULT_SUCCESS) {
+            *outFound = CNA_TRUE;
+        }
+        return result;
+    });
+}
+
+CNA_Result cna_effect_parameter_collection_find_semantic(
+    const CNA_EffectParameterCollectionHandle collectionHandle,
+    const CNA_StringView semantic,
+    CNA_Bool* const outFound,
+    CNA_EffectParameterHandle* const outParameter)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outParameter == nullptr) {
+            return InvalidArgument("The EffectParameterCollection find output is null.");
+        }
+        *outFound = CNA_FALSE;
+        *outParameter = CNA_INVALID_HANDLE;
+        std::shared_ptr<ParameterCollectionResource> collection;
+        if (const CNA_Result result = GetParameterCollection(collectionHandle, &collection);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string copiedSemantic;
+        if (const CNA_Result result = CopyStringView(semantic, true, &copiedSemantic);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The EffectParameter lookup semantic is not valid UTF-8 text.");
+        }
+        EffectParameter* const parameter =
+            collection->state->value->GetParameterBySemantic(copiedSemantic);
+        if (parameter == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const CNA_Result result = CreateCollectionElementHandle(
+            collection->state, parameter, outParameter);
         if (result == CNA_RESULT_SUCCESS) {
             *outFound = CNA_TRUE;
         }

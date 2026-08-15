@@ -18,7 +18,9 @@ vertex declarations, owned static/dynamic vertex buffers with complete typed/raw
 fixed vertex-buffer binding descriptors, owned static/dynamic 16/32-bit index buffers with
 complete transfer semantics, the common graphics-resource
 name/tag/device/disposal/event contract, core draw/buffer/vertex
-identities, plus
+identities, effect parameter class/type and value/texture identities, immutable annotation
+metadata/collections, mutable parameters with all scalar/array/string/texture overloads and stable
+nested collection views, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability

@@ -25,21 +25,25 @@ struct Texture2DResource final {
     CNA_Handle parentGame;
     uint64_t activeBatchReferenceCount;
     uint64_t activeFontReferenceCount;
+    uint64_t activeEffectReferenceCount;
 };
 
 struct RenderTargetCubeResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::RenderTargetCube> value;
     CNA_Handle parentGame;
+    uint64_t activeEffectReferenceCount;
 };
 
 struct Texture3DResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture3D> value;
     CNA_Handle parentGame;
+    uint64_t activeEffectReferenceCount;
 };
 
 struct TextureCubeResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> value;
     CNA_Handle parentGame;
+    uint64_t activeEffectReferenceCount;
 };
 
 struct VertexBufferResource final {
@@ -56,12 +60,16 @@ struct IndexBufferResource final {
 
 struct TextureResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture> value;
+    std::shared_ptr<void> retentionOwner;
     CNA_Handle parentGame;
+    uint64_t* activeEffectReferenceCount;
 };
 
 struct TextureCubeResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> value;
+    std::shared_ptr<void> retentionOwner;
     CNA_Handle parentGame;
+    uint64_t* activeEffectReferenceCount;
 };
 
 [[nodiscard]] CNA_Result CreateOwnedTexture2D(

@@ -50,6 +50,8 @@ enum class ObjectKind : uint32_t {
     IndexBufferEventRegistration = 21,
     EffectAnnotation = 22,
     EffectAnnotationCollection = 23,
+    EffectParameter = 24,
+    EffectParameterCollection = 25,
     Test = UINT32_MAX
 };
 

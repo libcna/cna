@@ -119,7 +119,7 @@ std::unordered_map<GraphicsDevice*, std::vector<CNA_RenderTargetBinding>> active
     CNA_Handle* const outTarget)
 {
     const auto resource = std::make_shared<RenderTargetCubeResource>(
-        RenderTargetCubeResource{std::move(target), parentGame});
+        RenderTargetCubeResource{std::move(target), parentGame, 0U});
     const CNA_Result result = GetRuntimeHandles().Create(
         ObjectKind::RenderTargetCube, resource, outTarget);
     if (result != CNA_RESULT_SUCCESS) {
@@ -548,6 +548,12 @@ CNA_Result cna_render_target_destroy(const CNA_Handle renderTargetHandle)
         if (const CNA_Result result = GetRenderTargetCube(renderTargetHandle, &resource);
             result != CNA_RESULT_SUCCESS) {
             return result;
+        }
+        if (resource->activeEffectReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The RenderTargetCube is retained by an EffectParameter.");
         }
         resource->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(renderTargetHandle);

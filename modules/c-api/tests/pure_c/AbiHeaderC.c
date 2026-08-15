@@ -63,6 +63,36 @@ _Static_assert(sizeof(CNA_EffectAnnotationCreateInfo) == 88U &&
 _Static_assert(sizeof(CNA_EffectAnnotationInfo) == 24U &&
                    _Alignof(CNA_EffectAnnotationInfo) == 4U,
                "CNA_EffectAnnotationInfo layout must remain stable");
+_Static_assert(sizeof(CNA_EffectValueType) == sizeof(uint32_t) &&
+                   CNA_EFFECT_VALUE_BOOLEAN == UINT32_C(0) &&
+                   CNA_EFFECT_VALUE_INT32 == UINT32_C(1) &&
+                   CNA_EFFECT_VALUE_SINGLE == UINT32_C(2) &&
+                   CNA_EFFECT_VALUE_MATRIX == UINT32_C(3) &&
+                   CNA_EFFECT_VALUE_MATRIX_TRANSPOSE == UINT32_C(4) &&
+                   CNA_EFFECT_VALUE_QUATERNION == UINT32_C(5) &&
+                   CNA_EFFECT_VALUE_VECTOR2 == UINT32_C(6) &&
+                   CNA_EFFECT_VALUE_VECTOR3 == UINT32_C(7) &&
+                   CNA_EFFECT_VALUE_VECTOR4 == UINT32_C(8),
+               "CNA effect-value identities must remain stable");
+_Static_assert(sizeof(CNA_EffectTextureType) == sizeof(uint32_t) &&
+                   CNA_EFFECT_TEXTURE_BASE == UINT32_C(0) &&
+                   CNA_EFFECT_TEXTURE_2D == UINT32_C(1) &&
+                   CNA_EFFECT_TEXTURE_3D == UINT32_C(2) &&
+                   CNA_EFFECT_TEXTURE_CUBE == UINT32_C(3),
+               "CNA effect-texture identities must remain stable");
+_Static_assert(sizeof(CNA_EffectParameterHandle) == 8U &&
+                   sizeof(CNA_EffectParameterCollectionHandle) == 8U,
+               "CNA effect-parameter handles must remain stable");
+_Static_assert(sizeof(CNA_EffectParameterCreateInfo) == 56U &&
+                   _Alignof(CNA_EffectParameterCreateInfo) == 8U &&
+                   offsetof(CNA_EffectParameterCreateInfo, name) == 8U &&
+                   offsetof(CNA_EffectParameterCreateInfo, semantic) == 24U &&
+                   offsetof(CNA_EffectParameterCreateInfo, row_count) == 40U &&
+                   offsetof(CNA_EffectParameterCreateInfo, parameter_type) == 52U,
+               "CNA_EffectParameterCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_EffectParameterInfo) == 24U &&
+                   _Alignof(CNA_EffectParameterInfo) == 4U,
+               "CNA_EffectParameterInfo layout must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

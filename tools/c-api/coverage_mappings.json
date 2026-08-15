@@ -306,6 +306,16 @@
       "task": "CBIND-035D2"
     },
     {
+      "id": "effect-parameter-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectParameter(?:Collection)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "mapping": "owned mutable `CNA_EffectParameterHandle` values and stable collection-element aliases plus owned `CNA_EffectParameterCollectionHandle` views; versioned copied metadata, exact strings, tagged scalar/array values, distinct matrix-transpose and texture overload identities, retained texture handles, nested element/member/annotation views and count/index/name/semantic operations replace native pointers, references, vectors and iterators",
+      "tests": "all scalar and array overloads including matrix transpose, empty defaults, metadata/strings, nested collections and annotations, stable aliases across growth/destruction, all texture overload dispatch plus Texture2D retention, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectParameterSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D3"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

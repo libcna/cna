@@ -328,6 +328,19 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_effect_annotation_smoke)
     add_test(NAME CApi_EffectAnnotationSmoke COMMAND cna_c_api_effect_annotation_smoke)
 
+    add_executable(cna_c_api_effect_parameter_smoke
+        tests/pure_c/EffectParameterSmoke.c
+    )
+    set_target_properties(cna_c_api_effect_parameter_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_effect_parameter_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_effect_parameter_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_effect_parameter_smoke)
+    add_test(NAME CApi_EffectParameterSmoke COMMAND cna_c_api_effect_parameter_smoke)
+
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c
     )

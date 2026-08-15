@@ -33,8 +33,46 @@ absence is a successful false result with an invalid output handle. This collaps
 native index overloads and begin/end iterators into stable count/lookup operations. Returned copies
 remain valid after the source annotation or collection is destroyed.
 
+## Parameters and values
+
+`CNA_EffectParameterHandle` owns either a standalone mutable parameter or a stable alias to a
+parameter stored in a collection. Creation copies UTF-8 name/semantic metadata and preserves row,
+column, class and type values. Exact count/copy operations expose the immutable strings without a
+terminator or partial writes.
+
+`CNA_EffectValueType` selects each native scalar and vector-array overload without placing a C++
+variant or container in the ABI. Boolean arrays use validated `CNA_Bool` elements; every other
+array uses its documented fixed C value. Get operations accept a requested native count and use
+capacity plus `out_count` for atomic caller-buffer transfer. Ordinary and transposed Matrix tags
+dispatch the distinct native overloads while keeping `CNA_Matrix` row-major. String values use the
+same exact count/copy contract as metadata. Missing values retain the native false, zero, identity,
+unit-W Quaternion/Vector4 and empty-array defaults.
+
+Texture tags preserve all four native setter overloads and the three typed getters. Assigned C
+texture handles are retained against disposal or destruction until the corresponding overload slot
+is cleared, replaced or its parameter hierarchy is released. The base `Texture*` overload is
+setter-only, matching the native API. The typed Texture2D, Texture3D and TextureCube slots remain
+independent.
+
+## Parameter collections and nested views
+
+`CNA_EffectParameterCollectionHandle` owns an empty collection or a mutable view of a parameter's
+elements/members. `add_create` constructs directly in native unique-pointer storage; index, exact
+name and exact semantic lookup return owned aliases to stable elements. These aliases share
+mutation state and remain valid across later collection growth and after the collection-view handle
+is destroyed. Nested element/member collections and annotation collections similarly retain their
+native owner. Native mutable/const indexers and iterator types collapse into count and lookup
+operations because C has no reference or iterator ABI.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
 SDL_RENDERER, while a focused HEADLESS run is checked with ASan+UBSan. C17/C++23 translation tests
 freeze both handles and the version-one descriptor layouts.
+
+`EffectParameterSmoke.c` covers every scalar and array overload, ordinary/transposed matrices,
+strings, defaults, metadata, nested parameter/annotation collections, collection stability,
+texture overload dispatch and Texture2D retention. It also exercises atomic capacity failures and
+invalid, stale, wrong-kind and wrong-thread handles under both tested renderers, with a focused
+ASan+UBSan run. C17/C++23 assertions freeze value/texture tag ordinals plus handle and descriptor
+layouts.

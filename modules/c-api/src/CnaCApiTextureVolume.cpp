@@ -70,7 +70,11 @@ CNA_Result GetOwnedTextureCube(
                 ErrorCategoryForResult(result),
                 "The owned TextureCube handle is invalid for this call.");
         }
-        *outTexture = TextureCubeResourceView{texture->value, texture->parentGame};
+        *outTexture = TextureCubeResourceView{
+            texture->value,
+            texture,
+            texture->parentGame,
+            &texture->activeEffectReferenceCount};
         return CNA_RESULT_SUCCESS;
     }
     if (kind == ObjectKind::RenderTargetCube) {
@@ -86,7 +90,9 @@ CNA_Result GetOwnedTextureCube(
         *outTexture = TextureCubeResourceView{
             std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::TextureCube>(
                 target->value),
-            target->parentGame};
+            target,
+            target->parentGame,
+            &target->activeEffectReferenceCount};
         return CNA_RESULT_SUCCESS;
     }
     return Fail(
@@ -121,7 +127,9 @@ CNA_Result GetOwnedTexture(
         }
         *outTexture = TextureResourceView{
             std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture>(texture->value),
-            texture->parentGame};
+            texture,
+            texture->parentGame,
+            &texture->activeEffectReferenceCount};
         return CNA_RESULT_SUCCESS;
     }
     if (kind == ObjectKind::Texture3D) {
@@ -132,7 +140,9 @@ CNA_Result GetOwnedTexture(
         }
         *outTexture = TextureResourceView{
             std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture>(texture->value),
-            texture->parentGame};
+            texture,
+            texture->parentGame,
+            &texture->activeEffectReferenceCount};
         return CNA_RESULT_SUCCESS;
     }
     TextureCubeResourceView cube;
@@ -143,7 +153,9 @@ CNA_Result GetOwnedTexture(
         }
         *outTexture = TextureResourceView{
             std::static_pointer_cast<Microsoft::Xna::Framework::Graphics::Texture>(cube.value),
-            cube.parentGame};
+            cube.retentionOwner,
+            cube.parentGame,
+            cube.activeEffectReferenceCount};
         return CNA_RESULT_SUCCESS;
     }
     return Fail(
@@ -386,7 +398,7 @@ template<typename TResource>
     CNA_Handle* const outTexture)
 {
     const auto resource = std::make_shared<Texture3DResource>(
-        Texture3DResource{std::move(texture), parentGame});
+        Texture3DResource{std::move(texture), parentGame, 0U});
     const CNA_Result result = GetRuntimeHandles().Create(
         ObjectKind::Texture3D, resource, outTexture);
     if (result != CNA_RESULT_SUCCESS) {
@@ -405,7 +417,7 @@ template<typename TResource>
     CNA_Handle* const outTexture)
 {
     const auto resource = std::make_shared<TextureCubeResource>(
-        TextureCubeResource{std::move(texture), parentGame});
+        TextureCubeResource{std::move(texture), parentGame, 0U});
     const CNA_Result result = GetRuntimeHandles().Create(
         ObjectKind::TextureCube, resource, outTexture);
     if (result != CNA_RESULT_SUCCESS) {
@@ -503,6 +515,12 @@ CNA_Result cna_texture3d_destroy(const CNA_Handle textureHandle)
         if (const CNA_Result result = GetOwnedTexture3D(textureHandle, &texture);
             result != CNA_RESULT_SUCCESS) {
             return result;
+        }
+        if (texture->activeEffectReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The Texture3D is retained by an EffectParameter.");
         }
         if (const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
             result != CNA_RESULT_SUCCESS) {
@@ -775,6 +793,12 @@ CNA_Result cna_texturecube_destroy(const CNA_Handle textureHandle)
                 result,
                 ErrorCategoryForResult(result),
                 "The owned TextureCube handle is invalid for destruction.");
+        }
+        if (texture->activeEffectReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The TextureCube is retained by an EffectParameter.");
         }
         if (const CNA_Result result = GetRuntimeHandles().Release(textureHandle);
             result != CNA_RESULT_SUCCESS) {

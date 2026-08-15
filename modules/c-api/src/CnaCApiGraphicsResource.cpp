@@ -50,6 +50,7 @@ struct GraphicsResourceView final {
     std::shared_ptr<GraphicsResource> value;
     CNA_Handle parentGame = CNA_INVALID_HANDLE;
     std::shared_ptr<Texture2DResource> texture;
+    uint64_t* activeEffectReferenceCount = nullptr;
 };
 
 class DisposingRegistration final {
@@ -116,6 +117,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
         result.parentGame = texture->parentGame;
+        result.activeEffectReferenceCount = &texture->activeEffectReferenceCount;
         result.texture = std::move(texture);
     } else if (kind == ObjectKind::Texture3D) {
         std::shared_ptr<Texture3DResource> texture;
@@ -126,6 +128,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
         result.parentGame = texture->parentGame;
+        result.activeEffectReferenceCount = &texture->activeEffectReferenceCount;
     } else if (kind == ObjectKind::TextureCube) {
         std::shared_ptr<TextureCubeResource> texture;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -135,6 +138,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
         result.parentGame = texture->parentGame;
+        result.activeEffectReferenceCount = &texture->activeEffectReferenceCount;
     } else if (kind == ObjectKind::RenderTargetCube) {
         std::shared_ptr<RenderTargetCubeResource> target;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -144,6 +148,7 @@ private:
         }
         result.value = std::static_pointer_cast<GraphicsResource>(target->value);
         result.parentGame = target->parentGame;
+        result.activeEffectReferenceCount = &target->activeEffectReferenceCount;
     } else if (kind == ObjectKind::VertexDeclaration) {
         std::shared_ptr<VertexDeclaration> declaration;
         const CNA_Result getResult = GetRuntimeHandles().Get(
@@ -179,13 +184,15 @@ private:
 
 [[nodiscard]] CNA_Result EnsureDisposable(const GraphicsResourceView& resource)
 {
-    if (resource.texture != nullptr &&
-        (resource.texture->activeBatchReferenceCount != 0U ||
-         resource.texture->activeFontReferenceCount != 0U)) {
+    if ((resource.texture != nullptr &&
+         (resource.texture->activeBatchReferenceCount != 0U ||
+          resource.texture->activeFontReferenceCount != 0U)) ||
+        (resource.activeEffectReferenceCount != nullptr &&
+         *resource.activeEffectReferenceCount != 0U)) {
         return Fail(
             CNA_RESULT_INVALID_STATE,
             CNA_ERROR_CATEGORY_STATE,
-            "The texture is retained by an active SpriteBatch interval or SpriteFont.");
+            "The texture is retained by an active SpriteBatch, SpriteFont or EffectParameter.");
     }
     return CNA_RESULT_SUCCESS;
 }
