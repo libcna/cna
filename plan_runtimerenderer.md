@@ -778,7 +778,7 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-1 | ✅ | Decide and document the conversion idiom: a runtime `SkipIfNotRenderer(GraphicsRendererType)` GTest helper replacing `#ifdef` where the test body is renderer-agnostic. |
 | RTR-P9-2 | ✅ | Add that helper plus its multi-mode-aware counterpart to the shared test fixture headers. |
 | RTR-P9-3 | ✅ | **Audit published.** Classified every renderer-gated site by whether its file also includes a renderer-family header (which makes a runtime gate impossible). Counts below. |
-| RTR-P9-4 | ⬜ | Convert class (a) in `modules/graphics/tests` — batch 1: capability/format suites. |
+| RTR-P9-4 | 🟨 | Convert class (a) in `modules/graphics/tests` — batch 1: capability/format suites. |
 | RTR-P9-5 | ⬜ | Convert class (a) — batch 2: draw/indexed-draw suites. |
 | RTR-P9-6 | ⬜ | Convert class (a) — batch 3: vertex-layout/declaration suites. |
 | RTR-P9-7 | ⬜ | Convert class (a) — batch 4: render-target/readback suites. |

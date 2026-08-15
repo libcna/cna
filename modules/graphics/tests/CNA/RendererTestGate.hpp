@@ -81,6 +81,28 @@ namespace CNA::Testing
     }
 }
 
+/**
+ * @brief Whether the active renderer is one of the named identities.
+ *
+ * The runtime form of `#if defined(CNA_RENDERER_A) || defined(CNA_RENDERER_B)`. Written as a macro
+ * taking bare identity names so a converted guard reads almost exactly like the one it replaces:
+ *
+ *     #if defined(CNA_RENDERER_STUB) || defined(CNA_RENDERER_OPENVG)   ->   CNA_RENDERER_IS(Stub, OpenVg)
+ *
+ * Worth doing beyond tidiness: these guards select the EXPECTED OUTCOME of a test, not whether it
+ * compiles. A compile-time guard bakes in the build default's expectation, so in a multi-renderer
+ * build a test asserts the wrong renderer's contract as soon as another one is selected. Evaluated
+ * at runtime, the same table asserts the right contract for whichever renderer is active.
+ */
+#define CNA_RENDERER_IS(...)                                                                     \
+    (::CNA::Testing::ActiveRendererIsAnyOf({__VA_ARGS__}))
+
+/** @brief Convenience for naming identities inside CNA_RENDERER_IS without the enum prefix. */
+namespace CNA::Testing::Renderers
+{
+    using enum ::CNA::GraphicsRendererType;
+}
+
 /** @brief Skips the current test unless @p type is the active renderer. */
 #define CNA_SKIP_IF_RENDERER_IS_NOT(type)                                                        \
     do {                                                                                         \

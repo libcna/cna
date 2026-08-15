@@ -215,6 +215,10 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(CnaTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+            # plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
+            # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
+            # are spelled.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
     )
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
