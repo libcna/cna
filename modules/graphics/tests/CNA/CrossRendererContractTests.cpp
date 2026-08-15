@@ -20,6 +20,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
+#include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -41,18 +43,58 @@ namespace
             return std::vector<GraphicsRendererType>(span.begin(), span.end());
         }
 
-        /// Runs @p body against a live device on every compiled-in renderer in turn.
+        /// Runs @p body against a live device on every compiled-in renderer that can actually
+        /// create one in this environment.
+        ///
+        /// Being compiled in and being USABLE HERE are different things, and conflating them was a
+        /// real defect in the first version of this fixture: OPENGLES1 needs an ES 1.1-capable Mesa
+        /// (Debian builds Mesa with -Dgles1=disabled, see scripts/opengles1-test-env.sh), and LLGL
+        /// and DILIGENT need SDL's x11 video driver, so on a stock Wayland session each of them
+        /// throws from its constructor. Treating that as a contract violation made this suite fail
+        /// for reasons that have nothing to do with the contract it exists to check.
+        ///
+        /// A renderer that cannot be constructed here is skipped and NAMED, so a run always says
+        /// which renderers it actually covered rather than quietly covering fewer.
         template <typename Body>
         static void ForEachRenderer(Body&& body)
         {
+            std::vector<std::string> covered;
+            std::vector<std::string> unavailable;
+
             for (const GraphicsRendererType type : Available())
             {
                 GraphicsRendererSelection::ResetForTestingEXT();
                 GraphicsRendererSelection::SetPreferred(type);
-                GraphicsDevice device;
+
+                std::unique_ptr<GraphicsDevice> device;
+                try
+                {
+                    device = std::make_unique<GraphicsDevice>();
+                }
+                catch (const std::exception& e)
+                {
+                    unavailable.emplace_back(std::string(CNA::getGraphicsRendererName(type)) +
+                                             " (" + e.what() + ")");
+                    continue;
+                }
+
+                covered.emplace_back(CNA::getGraphicsRendererName(type));
                 SCOPED_TRACE(std::string("renderer: ") +
                              std::string(CNA::getGraphicsRendererName(type)));
-                body(device, type);
+                body(*device, type);
+            }
+
+            // A pass that covered nothing is not a pass.
+            ASSERT_FALSE(covered.empty())
+                << "no compiled-in renderer could create a device in this environment";
+
+            if (!unavailable.empty())
+            {
+                std::string message;
+                for (const std::string& entry : unavailable)
+                    message += "\n    - " + entry;
+                GTEST_LOG_(INFO) << "covered " << covered.size() << " renderer(s); skipped "
+                                 << unavailable.size() << " that cannot run here:" << message;
             }
         }
     };

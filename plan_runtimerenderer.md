@@ -800,8 +800,8 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-4 | ✅ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
 | RTR-P10-5 | ✅ | `+ SDL_GPU`. |
 | RTR-P10-6 | ⬜ | `+ SKIA` — first heavy external artifact in a multi build. |
-| RTR-P10-7 | ⬜ | `+ BLEND2D`. |
-| RTR-P10-8 | ⬜ | `+ OPENVG` — ShivaVG's own GL context alongside another GL renderer in the same binary. |
+| RTR-P10-7 | ✅ | `+ BLEND2D`. |
+| RTR-P10-8 | ✅ | `+ OPENVG` — ShivaVG's own GL context alongside another GL renderer in the same binary. |
 | RTR-P10-9 | ⬜ | `+ BGFX` — its runtime `ResolveRendererType()` must not fight CNA's own selection. |
 | RTR-P10-10 | ✅ | `+ LLGL` — likewise for `ResolveRendererModule()`. |
 | RTR-P10-11 | ✅ | `+ DILIGENT` — a runtime-dispatching renderer inside a runtime-dispatching framework; document the two-level selection clearly. |
@@ -811,7 +811,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-15 | ✅ | `+ SOKOL` (GL). |
 | RTR-P10-16 | ⬜ | `+ WEBGPU` (native wgpu-native). |
 | RTR-P10-17 | ✅ | `+ OPENGL1 + OPENGL2 + OPENGL4` — three native GL renderers coexisting; verify no loader/symbol conflict. |
-| RTR-P10-18 | ⬜ | `+ OPENGLES1`. |
+| RTR-P10-18 | ✅ | `+ OPENGLES1`. |
 | RTR-P10-19 | ⬜ | Windows/MinGW multi set: `DIRECTX9 + DIRECTX11 + DIRECTX12`. |
 | RTR-P10-20 | ⬜ | Windows legacy multi set: `DIRECTX1 + DIRECTX2 + DIRECTX3 + DIRECTX5 + DIRECTX6 + DIRECTX7 + DIRECTX8` — seven families sharing DirectDraw-era headers. |
 | RTR-P10-21 | ⬜ | `+ DIRECT2D + GDI + FREEDIRECT` on Windows (`GDI` excludes `SOFTWARE`, per the conflict matrix). |

@@ -23,6 +23,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -91,10 +92,45 @@ namespace
             return nullptr;
         }
 
-        [[nodiscard]] static std::vector<GraphicsRendererType> Available()
+        [[nodiscard]] static std::vector<GraphicsRendererType> AllCompiledIn()
         {
             const auto span = GraphicsRendererSelection::GetAvailable();
             return std::vector<GraphicsRendererType>(span.begin(), span.end());
+        }
+
+        /// The compiled-in renderers that can actually create a device in THIS environment.
+        ///
+        /// Compiled in and usable here are different things, and these tests care about the second.
+        /// OPENGLES1 needs an ES 1.1-capable Mesa (Debian ships Mesa with -Dgles1=disabled, see
+        /// scripts/opengles1-test-env.sh); LLGL and DILIGENT need SDL's x11 video driver. Each
+        /// throws from its constructor otherwise, which says nothing about renderer SELECTION --
+        /// the thing under test -- so a fallback test that indexed blindly into the compiled-in
+        /// list was testing the machine, not the code.
+        ///
+        /// Probed once per process: constructing a device is not free, and the answer cannot change
+        /// within a run.
+        [[nodiscard]] static const std::vector<GraphicsRendererType>& Available()
+        {
+            static const std::vector<GraphicsRendererType> usable = [] {
+                std::vector<GraphicsRendererType> result;
+                for (const GraphicsRendererType type : AllCompiledIn())
+                {
+                    GraphicsRendererSelection::ResetForTestingEXT();
+                    GraphicsRendererSelection::SetPreferred(type);
+                    try
+                    {
+                        Microsoft::Xna::Framework::Graphics::GraphicsDevice probe;
+                        result.push_back(type);
+                    }
+                    catch (const std::exception&)
+                    {
+                        // Not usable here; deliberately not a failure.
+                    }
+                }
+                GraphicsRendererSelection::ResetForTestingEXT();
+                return result;
+            }();
+            return usable;
         }
     };
 }
@@ -103,8 +139,12 @@ TEST_F(MultiRendererFallbackTest, ThisBuildGenuinelyContainsSeveralRenderers)
 {
     // Guards the rest of the file: if this ever reports one renderer, every test below would be
     // vacuously true rather than failing.
-    ASSERT_GT(Available().size(), 1u)
+    ASSERT_GT(AllCompiledIn().size(), 1u)
         << "CNA_MULTI_RENDERER is defined but only one renderer is compiled in";
+    ASSERT_GT(Available().size(), 1u)
+        << "this build compiles in " << AllCompiledIn().size()
+        << " renderers but fewer than two can create a device in this environment, so the "
+           "fallback tests below would be testing the machine rather than the code";
 }
 
 TEST_F(MultiRendererFallbackTest, AnUnavailablePreferredRendererIsSubstituted)
@@ -171,7 +211,12 @@ TEST_F(MultiRendererFallbackTest, WithoutAChainAnUnavailableRendererIsAHardFailu
 TEST_F(MultiRendererFallbackTest, EveryRendererUnavailableExhaustsTheChainAndThrows)
 {
     // RTR-P8-7.
-    const auto available = Available();
+    //
+    // Automatic fallback chains over every COMPILED-IN renderer, not only the ones usable here, so
+    // every one of them has to be forced unavailable -- otherwise a renderer that is merely absent
+    // from this environment would be reached, fail on its own terms, and land in the history under
+    // a different reason than the one this test is about.
+    const auto available = AllCompiledIn();
     GraphicsRendererSelection::EnableAutomaticFallback(true);
     ForceUnavailable(available);
 
@@ -285,7 +330,19 @@ TEST_F(MultiRendererFallbackTest, FallingBackAcrossWindowKindsRecreatesTheWindow
     const auto available = Available();
     const auto* crossing = FindDifferentWindowKind(available[0]);
     if (crossing == nullptr)
-        GTEST_SKIP() << "this build has no two renderers with different window kinds";
+    {
+        // Say WHICH kinds were seen. A bare "no two differ" is unfalsifiable: on a build that
+        // visibly contains both an OpenGL and a Plain renderer it looks like a harness bug, and
+        // there is no way to tell from the message whether the registry, the descriptors or the
+        // search is at fault.
+        std::string seen;
+        for (const auto& descriptor : CNA::Internal::Renderers::GraphicsRendererRegistry::All())
+        {
+            seen += std::string(descriptor.name) + "=" +
+                    std::to_string(static_cast<int>(descriptor.windowKind)) + " ";
+        }
+        GTEST_SKIP() << "no two renderers with different window kinds; registry reports: " << seen;
+    }
 
     GraphicsRendererSelection::SetFallbackChain(
         std::vector<GraphicsRendererType>{crossing->type});
