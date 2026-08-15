@@ -261,12 +261,27 @@ MSVC-STL-only strictness like the `file_clock` case, `windows.h` macro collision
 do not define `min`/`max` the same way), and C4127.
 
 **Watch item, not yet a failure.** The Windows-target census rejects `CNA::Internal::JsonValue`
-(`modules/content/include/CNA/Internal/Json.hpp:37`): its `std::vector<std::pair<std::string,
-JsonValue>>` member instantiates `~vector` while `JsonValue` is still incomplete. GCC and
-clang/libc++ accept it, clang/libstdc++ does not, and MSVC is unknown — Windows has not compiled
-any CNA translation unit yet. If MSVC rejects it, the fix is a user-declared destructor defined
-out of line in a `.cpp`, so the implicit one is not instantiated at class-definition time. Do not
-change it speculatively: the header is included widely and a rebuild is expensive.
+(`modules/content/include/CNA/Internal/Json.hpp:37`) in 56 places across the CI closure, all one
+root cause: its `objectValue` member is a `std::vector<std::pair<std::string, JsonValue>>`, and
+`~vector` is instantiated while `JsonValue` is still incomplete. The sibling `arrayValue` is fine
+— `std::vector` is one of the three containers the standard explicitly allows over an incomplete
+type — but `std::pair` carries no such allowance, so this one really is non-conforming rather than
+merely unusual. GCC and clang/libc++ accept it, clang/libstdc++ rejects it, MSVC is unknown.
+`cna_content` is linked by every TinyGL test, so `ContentManager.cpp` is on the Windows path.
+
+If MSVC rejects it, the smaller fix is user-declared special members (destructor, copy/move) that
+are *defined out of line* in `Json.cpp`, deferring the instantiation to where `JsonValue` is
+complete; it changes no API. The conforming fix replaces the pair with a `JsonMember` struct
+forward-declared before `JsonValue` and defined after it, which does change `.first`/`.second`
+into `.name`/`.value` at every use. Do not change either speculatively — GCC and libc++ both
+accept the current code, and the header is included widely.
+
+When reading that census, three error groups are **false positives** of running it over every
+`.cpp` in a module rather than over what CMake actually builds: `termios.h`, `poll.h`, `SIGWINCH`
+and `struct sigaction` come from `src/Terminal/`, which is gated `if(NOT WIN32)`; `SDL.h` and
+`SDL2/SDL_audio.h` come from the SDL2 backends this configuration never builds; and
+`libavformat/avformat.h` appears only because the census reuses Linux flags carrying
+`CNA_FFMPEG_AVAILABLE`, which the Windows job does not set (it installs zlib only).
 
 The `4df333e6` cycle bundled four fixes because they were found *without* CI: compiling all 217
 SharpRuntime translation units with `clang++ -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion
