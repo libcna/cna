@@ -42,6 +42,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiVideo.cpp
     src/CnaCApiSensors.cpp
     src/CnaCApiDevices.cpp
+    src/CnaCApiGameComponents.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
     src/CnaCApiNet.cpp
@@ -958,6 +959,23 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_SensorDeviceSmoke COMMAND cna_c_api_sensor_device_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_SensorDeviceSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_runtime_components_smoke
+        tests/pure_c/RuntimeComponentsSmoke.c
+    )
+    set_target_properties(cna_c_api_runtime_components_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_runtime_components_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_runtime_components_smoke)
+    add_test(NAME CApi_RuntimeComponentsSmoke COMMAND cna_c_api_runtime_components_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_RuntimeComponentsSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()

@@ -372,7 +372,10 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037B | 599 | Complete the input module | ✅ | `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration) are mapped. Decomposed into CBIND-037B1–B7 below; **closed by CBIND-037B7b**, after which the `input` module records 834 implemented, 0 partial, 0 planned and 27 not applicable. |
 | CBIND-037C | 325 | Complete the media module | ✅ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; **closed by CBIND-037C7**, after which the `media` module records 276 implemented, 0 partial, 0 planned and 52 not applicable. |
 | CBIND-037D | 289 | Complete the devices and devices-ext modules | 🟨 | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). Decomposed into CBIND-037D1–D4 below; the parent becomes complete only when all four rows and every `devices`/`devices-ext` inventory row are closed. |
-| CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
+| CBIND-037E1 | 93 | Establish the component model and the service container | ✅ | `runtime_components.h` and `CnaCApiGameComponents.cpp` map `IGameComponent`, `IUpdateable`, `IDrawable`, `GameComponent`, `DrawableGameComponent`, the component collection with its event argument, and `GameServiceContainer`. This is the slice where the ABI's direction reverses: **a component is behavior the caller supplies**, and since C cannot implement a C++ interface, a component is a callback set this ABI wraps in a derived object. That derivation is also why the canonical **protected** content hooks are mapped here while a sensor's protected members were not — the deciding question is whether this ABI has a derived class to hang them on. The service container is the one canonical type C cannot fully have: it is keyed by C++ type identity, so lookup and removal are exposed over a named-identity subset (recorded `partial`) and **registration has no C form at all** (recorded `not-applicable`). Canonical behaviors reported rather than corrected: the comparison is inverted, a second disposal is a no-op, adding the same component twice is allowed, and a missing component answers -1. One deliberate addition with no canonical counterpart: releasing a component removes it from the collection first, because a handle-based ABI must not leave the runtime holding a released pointer. Strict-C `RuntimeComponentsSmoke.c`; green in all four trees (63/63) and under ASan+UBSan with leak detection on. |
+| CBIND-037E2 | 57 | Complete the game object and the frame | ⬜ | Map the rest of `Game` — the run/tick/exit surface, `SuppressDraw`, the timing properties, `IsFixedTimeStep`, `TargetElapsedTime`, `InactiveSleepTime`, the content manager and window accessors and every remaining event — plus `GameTime`, `LaunchParameters`, `ExitingEventArgs`, `FrameworkDispatcher`, `TitleContainer` and `TitleLocation`. Expect overlap with what `CBIND-032` already mapped through `cna_game_*`: check each row against the existing routes before naming a new one, and record the ones that are already covered rather than duplicating them. |
+| CBIND-037E3 | 31 | Complete the game window | ⬜ | Map `GameWindow` and its two type aliases. Expect a decision this ABI has so far avoided: whether a window earns a handle of its own or stays addressed through the game, as `CBIND-037D3`'s display queries and `CBIND-037E1`'s collection routes both chose. Whichever way it goes, the reason belongs in the docs, because the same question returns for every one-per-game object. |
+| CBIND-037E4 | 80 | Complete the graphics device manager | ⬜ | Map `GraphicsDeviceManager`, `GraphicsDeviceInformation`, `IGraphicsDeviceManager`, `PreparingDeviceSettingsEventArgs` and `PresentationMode`. Expect heavy overlap with `CBIND-034`'s graphics-device surface and with `CBIND-037E1`'s service identities — the manager is what registers both services — so check before naming. `IGraphicsDeviceManager` is an interface a caller could in principle implement, which raises the same question `CBIND-037E1` answered for components; the answer may differ, since the runtime creates the manager itself. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
 
@@ -594,7 +597,7 @@ later one composes the earlier ones:
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
 | 1 | `CBIND-037D` devices and devices-ext | 219 (after `D1`) | sub-partitioned into `D1`–`D4`; `D1` is done, `D2` sensor devices is next. `sdlrenderer` and `asan` now build with `CNA_DEVICES=ON` |
-| 2 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
+| 2 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services (split into `E1`–`E4`) |
 | 3 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
 | 4 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
 
@@ -994,7 +997,14 @@ applicable. CBIND-037D4 then **closes the devices module** with the camera, deci
 lands in a texture the caller owns and keeps rather than in a lent one, because that is what the
 canonical signature says — and preserving the canonical refusal that a mismatched texture size looks
 exactly like no frame at all. The snapshot is now 5,040 implemented, 30 partial, 1,143 planned and
-202 not applicable, with `devices` and `devices-ext` fully mapped.
+202 not applicable, with `devices` and `devices-ext` fully mapped. CBIND-037E1 then opens the runtime
+module with the component model, the slice where the ABI's direction reverses: a component is
+behavior the caller supplies, and since C cannot implement a C++ interface it is a callback set this
+ABI wraps in a derived object. That derivation is also the reason the canonical protected content
+hooks are mapped here while a sensor's protected members were not. The service container is the one
+canonical type C cannot fully have — keyed by C++ type identity, so lookup is a named-identity subset
+and registration has no C form at all. The snapshot is now 5,106 implemented, 34 partial, 1,050
+planned and 225 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1003,26 +1013,24 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037D4` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037E1` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037E`, the runtime module — **273 rows**: the remaining `Game`,
-  `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events,
-  the service container, and the drawable/updateable contracts. **The whole devices module is
-  closed**: `Microsoft::Devices`, `Microsoft::Devices::Sensors` and `CNA::Devices` have no planned
-  row left, as with `input`, `media`, `storage`, `content`, `net` and `core`.
+- **Next task:** `CBIND-037E2`, the game object and the frame — **57 rows**: the rest of `Game`
+  plus `GameTime`, `LaunchParameters`, `ExitingEventArgs`, `FrameworkDispatcher`, `TitleContainer`
+  and `TitleLocation`. `E1` is done, so `runtime_components.h`, `CnaCApiGameComponents.cpp` and
+  `RuntimeComponentsSmoke.c` exist, and `CnaCApiRuntimeDetail.hpp` already exposes `GetGameObject`,
+  `GetGameWindow` and the owned-component gate.
 
-  Four things are already known and should not be rediscovered: the C API's game object is a
-  `Game` subclass in `CnaCApiRuntime.cpp`, so protected canonical surface is reachable from inside
-  it rather than needing a new seam — `CBIND-037D3` already added `GetGameWindow` there for the
-  display queries, and that is the pattern to extend; a game handle is **thread-affine and
-  callback-scoped in part**, so any new route must say which of the two it is; the component and
-  service collections are the first canonical *containers of caller-implemented objects* this ABI
-  has had to map, and C cannot implement an interface — decide early whether a component becomes a
-  callback set registered by the caller or is simply not mappable, and write the reason down; and
-  `GraphicsDeviceManager` overlaps surface `CBIND-034` already mapped through the graphics device,
-  so check for duplication before naming anything.
+  Four things are already known and should not be rediscovered: `CBIND-032` already mapped a large
+  part of `Game` as `cna_game_*`, so **check every row against the existing routes before naming a
+  new one** — some rows will be closed by pointing at what exists rather than by adding surface; the
+  C API's game object is a `Game` subclass in `CnaCApiRuntime.cpp`, so protected canonical surface is
+  reachable from inside it, which is the seam `E1` used for the component collection and the display
+  queries used before that; a game handle is thread-affine and partly callback-scoped, so each new
+  route must say which; and the same one-per-game question `E3` faces for the window applies to the
+  content manager and the launch parameters here — answer it once, consistently.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

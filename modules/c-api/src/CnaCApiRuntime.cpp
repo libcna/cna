@@ -40,6 +40,7 @@ struct RuntimeState final {
     uint64_t ownedGraphicsResourceCount = 0U;
     uint64_t ownedContentManagerCount = 0U;
     uint64_t ownedAudioResourceCount = 0U;
+    uint64_t ownedGameComponentCount = 0U;
 };
 
 [[nodiscard]] RuntimeState& GetRuntimeState()
@@ -316,6 +317,16 @@ CNA_Result ValidateActiveGameHandle(const CNA_Handle handle)
     return GetGame(handle, &game);
 }
 
+CNA_Result GetGameObject(const CNA_Handle handle, Microsoft::Xna::Framework::Game** const outGame)
+{
+    std::shared_ptr<CGame> game;
+    if (const CNA_Result result = GetGame(handle, &game); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outGame = game.get();
+    return CNA_RESULT_SUCCESS;
+}
+
 CNA_Result GetGameWindow(
     const CNA_Handle handle,
     Microsoft::Xna::Framework::GameWindow** const outWindow)
@@ -377,6 +388,29 @@ bool HasOwnedGraphicsResources() noexcept
     RuntimeState& state = GetRuntimeState();
     std::lock_guard lock(state.mutex);
     return state.ownedGraphicsResourceCount != 0U;
+}
+
+void AddOwnedGameComponent() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    ++state.ownedGameComponentCount;
+}
+
+void RemoveOwnedGameComponent() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    if (state.ownedGameComponentCount != 0U) {
+        --state.ownedGameComponentCount;
+    }
+}
+
+bool HasOwnedGameComponents() noexcept
+{
+    RuntimeState& state = GetRuntimeState();
+    std::lock_guard lock(state.mutex);
+    return state.ownedGameComponentCount != 0U;
 }
 
 void AddOwnedContentManager() noexcept
@@ -566,7 +600,8 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
             return result;
         }
         if (HasOwnedGraphicsResources() || CNA::C::Detail::HasOwnedContentManagers() ||
-            CNA::C::Detail::HasOwnedAudioResources()) {
+            CNA::C::Detail::HasOwnedAudioResources() ||
+            CNA::C::Detail::HasOwnedGameComponents()) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,

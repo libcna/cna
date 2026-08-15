@@ -771,7 +771,40 @@
 > papered over with a test that would misbehave on a developer's laptop. The inventory is now 5,040
 > implemented, 30 partial, 1,143 planned and 202 N/A, with the **whole devices module closed**; all
 > four trees green at 62/62, ASan+UBSan with leak detection clean.
-> **Next: CBIND-037E**, the 273-row runtime module.
+> CBIND-037E1 then opens the runtime module with the component model, 93 rows, and it is the slice
+> where this ABI's direction reverses. Everywhere else a caller consumes canonical behavior; a
+> component **is** behavior the caller supplies. The canonical types are C++ interfaces and C cannot
+> implement one, so a component is a `CNA_GameComponentCallbacks` set plus a context, and this ABI
+> supplies the derived object that implements the interfaces and forwards to it. A null callback
+> member is simply not called, which is how a component opts out of a step.
+>
+> That derivation also settles a question `CBIND-037D2a` answered the other way: the canonical
+> **protected** `LoadContent`/`UnloadContent` hooks are mapped here, while a sensor's protected
+> members were recorded not-applicable. The deciding question is not "is it protected" but **"does
+> this ABI have a derived class to hang it on"** — a component does, a sensor did not.
+>
+> `GameServiceContainer` is the one canonical type C cannot fully have: it is keyed by C++ type
+> identity, and C can neither name a type nor author an object implementing a C++ interface. So
+> lookup and removal are exposed over a named-identity subset covering the two services the runtime
+> actually registers — recorded **partial**, which is what that status is for — and **registration
+> has no C form at all**, recorded not-applicable. A consumer's own services belong in the context
+> pointer every callback here already carries.
+>
+> Canonical behaviors reported rather than corrected: `CompareTo` subtracts this component's order
+> from the other's, so the component that updates earlier compares greater; a second disposal is a
+> no-op, the opposite of a sensor's refusal; adding the same component twice is allowed; and a
+> component that is not in the collection answers -1. One deliberate addition with no canonical
+> counterpart: **releasing a component removes it from the collection first**, because a handle-based
+> ABI must never leave the runtime holding a pointer to something it has released — and a game now
+> refuses to be destroyed while any component handle is alive, exactly as it already did for graphics
+> resources, content managers and audio resources. The inventory is now 5,106 implemented, 34
+> partial, 1,050 planned and 225 N/A; all four trees green at 63/63, ASan+UBSan clean.
+> **Next: CBIND-037E2**, the 57-row game-and-frame slice.
+>
+> A trap worth naming, because it cost three debugging cycles in this slice: **a refused subscribe
+> route clears its out-handle before validating anything else**, so a test that reuses a live
+> registration variable for its refusal checks silently destroys the handle it is about to
+> unsubscribe. Give the refusal checks a variable of their own.
 >
 > Discovered while reading the canonical source, not fixed here: `AccelerometerReadingEventArgs.hpp`'s
 > class comment says the type "is not raised by that implementation", but

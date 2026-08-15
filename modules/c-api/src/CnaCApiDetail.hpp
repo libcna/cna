@@ -141,6 +141,8 @@ enum class ObjectKind : uint32_t {
     Motion = 95,
     SystemTray = 96,
     Camera = 97,
+    GameComponent = 98,
+    GameComponentEventRegistration = 99,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

@@ -8,6 +8,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework {
+class Game;
 class GameWindow;
 }
 
@@ -39,6 +40,18 @@ struct BorrowedGraphicsDevice final {
 [[nodiscard]] CNA_Result GetGameWindow(
     CNA_Handle game,
     Microsoft::Xna::Framework::GameWindow** outWindow);
+
+// The canonical game object behind a game handle. Its component collection and service container are
+// reached through it, so they need no handle of their own: a game owns exactly one of each.
+[[nodiscard]] CNA_Result GetGameObject(
+    CNA_Handle game,
+    Microsoft::Xna::Framework::Game** outGame);
+
+void AddOwnedGameComponent() noexcept;
+
+void RemoveOwnedGameComponent() noexcept;
+
+[[nodiscard]] bool HasOwnedGameComponents() noexcept;
 
 // Drops the C-side state that outlives a single graphics device: live event subscriptions and the
 // recorded sampler-slot bindings. The game-destroy path calls this once the canonical device has

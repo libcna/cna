@@ -1260,6 +1260,30 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_GameComponentEvent) == sizeof(uint32_t) &&
+                   CNA_GAME_COMPONENT_EVENT_ENABLED_CHANGED == UINT32_C(0) &&
+                   CNA_GAME_COMPONENT_EVENT_UPDATE_ORDER_CHANGED == UINT32_C(1) &&
+                   CNA_GAME_COMPONENT_EVENT_DRAW_ORDER_CHANGED == UINT32_C(2) &&
+                   CNA_GAME_COMPONENT_EVENT_VISIBLE_CHANGED == UINT32_C(3) &&
+                   CNA_GAME_COMPONENT_EVENT_DISPOSED == UINT32_C(4) &&
+                   CNA_GAME_COMPONENT_EVENT_MAXIMUM == UINT32_C(4) &&
+                   sizeof(CNA_GameServiceType) == sizeof(uint32_t) &&
+                   CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_MANAGER == UINT32_C(0) &&
+                   CNA_GAME_SERVICE_TYPE_GRAPHICS_DEVICE_SERVICE == UINT32_C(1) &&
+                   CNA_GAME_SERVICE_TYPE_MAXIMUM == UINT32_C(1),
+               "CNA game component and service identities must remain stable");
+
+_Static_assert(sizeof(CNA_GameComponentCallbacks) == 64U &&
+                   _Alignof(CNA_GameComponentCallbacks) == 8U &&
+                   offsetof(CNA_GameComponentCallbacks, initialize) == 8U &&
+                   offsetof(CNA_GameComponentCallbacks, update) == 16U &&
+                   offsetof(CNA_GameComponentCallbacks, draw) == 24U &&
+                   offsetof(CNA_GameComponentCallbacks, load_content) == 32U &&
+                   offsetof(CNA_GameComponentCallbacks, unload_content) == 40U &&
+                   offsetof(CNA_GameComponentCallbacks, dispose) == 48U &&
+                   offsetof(CNA_GameComponentCallbacks, context) == 56U,
+               "CNA_GameComponentCallbacks layout must remain stable");
+
 _Static_assert(sizeof(CNA_CameraState) == sizeof(uint32_t) &&
                    CNA_CAMERA_STATE_NOT_SUPPORTED == UINT32_C(0) &&
                    CNA_CAMERA_STATE_CLOSED == UINT32_C(1) &&

@@ -4814,6 +4814,181 @@
       "tests": "`DevicesSmoke.c` enumerates whatever this host reports and refuses the first index past the count, then runs the whole lifecycle on the test backend: closed with no frame, the refused state, a published frame reporting ready and fixing the frame size, the frame arriving in a matching texture and read back pixel-for-pixel, the size-mismatched texture answering false, the cleared frame closing the camera again, the mismatched-count and negative-dimension refusals, and the released-handle refusals. **The real camera is never opened by any test**: on a machine that has one, creating it would switch on the user's webcam",
       "status": "implemented",
       "task": "CBIND-037D4"
+    },
+    {
+      "id": "game-component-interfaces",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(IGameComponent(::Initialize)?|IUpdateable(::(getEnabledProperty|getUpdateOrderProperty|getEnabledChangedEvent|getUpdateOrderChangedEvent|Update))?|IDrawable(::(getDrawOrderProperty|getVisibleProperty|getDrawOrderChangedEvent|getVisibleChangedEvent|Draw))?)$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "not types in C, and the one place in this ABI where the caller **provides** behavior rather than consuming it: C cannot implement a C++ interface, so a component is a `CNA_GameComponentCallbacks` set plus a context, and this ABI supplies the object that implements all three interfaces and forwards to it. Each interface operation is one member of that set or one route — initialization, the per-frame update and draw, the enabled, update-order, draw-order and visibility queries, and the four change events reached through `cna_game_component_subscribe`. A null callback member is simply not called, which is how a C component opts out of a step",
+      "tests": "`RuntimeComponentsSmoke.c` builds one component of each kind, drives initialization, update and draw through the C routes and asserts each handler ran with the frame's own time, reads every interface query back, and covers the refusals a component that does not draw returns for every drawing route",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-interface-destructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(IGameComponent|IUpdateable|IDrawable)::~(IGameComponent|IUpdateable|IDrawable)$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "No C mapping: a virtual destructor exists so C++ can delete through the interface, and C neither holds an interface pointer nor deletes one — a component is released through `cna_game_component_destroy`, which owns the object it created",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponent(::(GameComponent|~GameComponent|Disposed|EnabledChanged|UpdateOrderChanged|getGameProperty|getEnabledProperty|setEnabledProperty|getUpdateOrderProperty|setUpdateOrderProperty|getEnabledChangedEvent|getUpdateOrderChangedEvent|Dispose|Initialize|Update|CompareTo|GetTypeName))?$",
+      "signature_regex": "^(?!\\(bool disposing\\)).*$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "event"
+      ],
+      "mapping": "an owned `CNA_GameComponentHandle` from `cna_game_component_create`, with the enabled and update-order pairs, `cna_game_component_initialize`/`_update`/`_dispose`/`_compare_to`, the type-name pair, `cna_game_component_subscribe` for all three events and `cna_game_component_destroy`. Two canonical behaviors are preserved rather than corrected: **the comparison subtracts this component's order from the other's**, so the component that updates earlier compares greater, and a **second disposal is a no-op** — the opposite of a sensor's refusal, and this type's own idempotence. Releasing a component removes it from the game's collection first, which the canonical destructor does not do: a handle-based ABI must not leave the runtime holding a pointer to something it has released",
+      "tests": "`RuntimeComponentsSmoke.c` asserts the canonical defaults, round-trips both properties, proves each setter raises its event on a change and stays silent when the value does not change, checks both directions and the equal case of the inverted comparison, proves disposal reaches the C handler and raises the event exactly once across two disposals, checks the exact type name and its buffer-too-small case, and covers the released-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "drawable-game-component",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::DrawableGameComponent(::(DrawableGameComponent|getGraphicsDeviceProperty|getDrawOrderProperty|setDrawOrderProperty|getVisibleProperty|setVisibleProperty|getDrawOrderChangedEvent|getVisibleChangedEvent|DrawOrderChanged|VisibleChanged|GetTypeName|Initialize|Draw|LoadContent|UnloadContent))?$",
+      "signature_regex": "^(?!\\(bool disposing\\)).*$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "event"
+      ],
+      "mapping": "the same owned handle from `cna_drawable_game_component_create`, plus the draw-order and visibility pairs, `cna_drawable_game_component_draw`, the borrowed graphics device and the two drawing events. **The protected content hooks are mapped rather than dropped**, unlike a sensor's protected members: the difference is that this ABI supplies the derived class, so `LoadContent` and `UnloadContent` are callback members a C component can implement, while a sensor had no derived class to hang them on. Every route on a component that does not draw reports `CNA_RESULT_INVALID_STATE` rather than answering a default",
+      "tests": "`RuntimeComponentsSmoke.c` proves initializing a drawable component loads its content exactly once however often it is initialized, that disposing it unloads that content, that drawing reaches the C handler, that the borrowed device is the game's, and that every drawing route refuses a component that does not draw",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-protected-hooks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(GameComponent|DrawableGameComponent)::(OnUpdateOrderChanged|OnEnabledChanged|OnVisibleChanged|OnDrawOrderChanged)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: the protected raise hooks exist so a derived class can observe or replace a notification the object has already published. This ABI's own derived component does not intercept them, and a C consumer observes the same change through the event subscription, which is raised immediately before each hook",
+      "tests": "Doxygen declaration inventory; the observable half is the event coverage in `RuntimeComponentsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-protected-dispose",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::(GameComponent|DrawableGameComponent)::Dispose$",
+      "signature_regex": "\\(bool disposing\\).*",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: the protected disposal overload is the C++ dispose pattern's derived-class hook, and this ABI's own derived component is what implements it — that implementation is where the caller's dispose callback and the canonical unload step are invoked. The public parameterless disposal is what `cna_game_component_dispose` maps",
+      "tests": "Doxygen declaration inventory; the observable disposal behavior is covered in `RuntimeComponentsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-collection",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection(::(size_type|ComponentAdded|ComponentRemoved|getCountProperty|Contains|Add|Insert|Remove|RemoveAt|Clear|IndexOf|operator\\[\\]|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "alias",
+        "event",
+        "method",
+        "operator"
+      ],
+      "mapping": "routes on the game's own collection rather than a handle of its own, because a game owns exactly one: `cna_game_components_get_count`, `_get_at`, `_add`, `_insert`, `_remove`, `_remove_at`, `_clear`, `_contains`, `_index_of`, the type-name pair and the two change subscriptions. The canonical index type becomes `uint64_t`. The canonical **-1 for a component that is not present** is preserved rather than replaced by a presence flag, and adding the same component twice is allowed exactly as canonically rather than refused. A component the collection holds but this ABI did not create answers as an invalid handle, since there is no handle to give",
+      "tests": "`RuntimeComponentsSmoke.c` adds, inserts, removes by value and by index, clears, and asserts the count, containment, index and handle identity after each; it proves a removal neither disposes nor releases the component by adding it again, covers the -1 answer and the out-of-range refusals on the indexer, the insert and the removal, and checks the exact type name",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-collection-iteration",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::(iterator|const_iterator|begin|end)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "No C mapping: a C++ iterator pair and its two type aliases have no C counterpart, and C reads the collection through its count and its indexer instead — the same decision the song, touch and media collections already record",
+      "tests": "Doxygen declaration inventory; the equivalent C traversal is covered in `RuntimeComponentsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-collection-lifetime",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollection::(GameComponentCollection|~GameComponentCollection)$",
+      "kinds": [
+        "constructor",
+        "destructor"
+      ],
+      "mapping": "No C mapping: the only collection that means anything is the one a game owns and drives, and the runtime creates and destroys it with the game. A standalone collection would be a container nothing updates or draws",
+      "tests": "Doxygen declaration inventory; no callable native operation exists for C",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-component-collection-event-arguments",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameComponentCollectionEventArgs(::(GameComponentCollectionEventArgs|getGameComponentProperty))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "flattened into the callback: the canonical argument carries one component and nothing else, so `CNA_GameComponentCollectionCallback` receives the component **handle** directly rather than a description of one. C never constructs the argument object",
+      "tests": "`RuntimeComponentsSmoke.c` subscribes to both collection events and asserts each fires with the handle of the component that was added or removed, that clearing raises one removal per component, and that a detached registration stops delivery",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-service-container",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameServiceContainer$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "routes on the game's own container — `cna_game_services_contains_ext` and `cna_game_services_remove_ext` — keyed by a fixed `CNA_GameServiceType` identity naming the services the runtime actually registers",
+      "tests": "`RuntimeComponentsSmoke.c` queries both identities, removes one and asserts the query then reports it absent, and covers the undefined-identity and null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-service-container-lookup",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameServiceContainer::(GetService|RemoveService)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_game_services_contains_ext` and `cna_game_services_remove_ext`, **covering the two services the runtime registers and no others**. The canonical container is keyed by C++ type identity, which has no C expression: a caller cannot name a type, so the ABI names the types instead. Removing is exposed because the canonical operation permits it and cannot be undone from C; removing what is not registered is an ordinary success",
+      "tests": "`RuntimeComponentsSmoke.c` covers both identities, the repeated removal, and the undefined-identity refusal",
+      "status": "partial",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-service-container-add",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameServiceContainer::AddService$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: registering a service means supplying an object that implements a C++ interface under a C++ type key, and C can author neither. A C consumer's own services belong in the context pointer every callback in this ABI already carries; inventing a parallel key space would make the container mean something different from the canonical one",
+      "tests": "Doxygen declaration inventory; no C-expressible form of this operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
+    },
+    {
+      "id": "game-service-container-lifetime",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameServiceContainer::(GameServiceContainer|~GameServiceContainer|operator=)$",
+      "kinds": [
+        "constructor",
+        "destructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: a game owns exactly one container, created and destroyed with it, and C never moves one. The deleted copy operations have no callable behavior at all",
+      "tests": "Doxygen declaration inventory; no callable native operation exists for C",
+      "status": "not-applicable",
+      "task": "CBIND-037E1"
     }
   ]
 }

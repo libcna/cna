@@ -75,8 +75,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > exported in both build states and reporting `NOT_SUPPORTED` where the extension layer is compiled
 > out, and `CBIND-037D4` closes the devices module with the camera: the driver probe, the camera
 > enumeration, frame acquisition into a caller-owned texture, and this ABI's own installable camera
-> backend. The
-> generated inventory currently records 5,040 implemented, 30 partial, 1,143 planned and 202
+> backend, and `CBIND-037E1` opens the runtime module with the component model: components of both
+> kinds built from a C callback set, the game's component collection with both change events, and a
+> named-identity view of the service container. The
+> generated inventory currently records 5,106 implemented, 34 partial, 1,050 planned and 225
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

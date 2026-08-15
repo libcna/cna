@@ -59,5 +59,6 @@
 #include "CNA/C/video.h"
 #include "CNA/C/sensors.h"
 #include "CNA/C/devices.h"
+#include "CNA/C/runtime_components.h"
 
 #endif
