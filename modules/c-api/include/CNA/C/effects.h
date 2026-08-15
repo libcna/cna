@@ -53,6 +53,28 @@ typedef CNA_Handle CNA_EffectHandle;
 /** @brief Maximum number of matrices in a SkinnedEffect bone palette. */
 #define CNA_SKINNED_EFFECT_MAX_BONES UINT32_C(72)
 
+/** @brief Maximum number of matrices in a SkinnedPbrEffect bone palette. */
+#define CNA_SKINNED_PBR_EFFECT_MAX_BONES UINT32_C(72)
+
+/** @brief Row-major 4-by-4 color transform used by ColorMatrixEffect. */
+typedef struct CNA_ColorMatrix4x4 {
+    /** @brief Sixteen row-major matrix elements. */
+    float values[16];
+} CNA_ColorMatrix4x4;
+
+/** @brief Fixed-width PBR Texture2D slot identity. */
+typedef uint32_t CNA_PbrTextureSlot;
+/** @brief Base-color (albedo) texture slot. */
+#define CNA_PBR_TEXTURE_BASE_COLOR UINT32_C(0)
+/** @brief Tangent-space normal-map texture slot. */
+#define CNA_PBR_TEXTURE_NORMAL UINT32_C(1)
+/** @brief glTF metallic-roughness texture slot. */
+#define CNA_PBR_TEXTURE_METALLIC_ROUGHNESS UINT32_C(2)
+/** @brief Emissive texture slot. */
+#define CNA_PBR_TEXTURE_EMISSIVE UINT32_C(3)
+/** @brief Occlusion texture slot. */
+#define CNA_PBR_TEXTURE_OCCLUSION UINT32_C(4)
+
 /** @brief Owned standalone or stable effect-member view of a DirectionalLight. */
 typedef CNA_Handle CNA_DirectionalLightHandle;
 
@@ -1977,6 +1999,176 @@ CNA_C_API CNA_Result cna_skinned_effect_get_vertex_color_enabled(
 CNA_C_API CNA_Result cna_skinned_effect_set_vertex_color_enabled(
     CNA_EffectHandle effect,
     CNA_Bool value);
+
+/**
+ * @brief Creates an owned ColorMatrixEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_color_matrix_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the ColorMatrixEffect row-major transform matrix. */
+CNA_C_API CNA_Result cna_color_matrix_effect_get_matrix(
+    CNA_EffectHandle effect,
+    CNA_ColorMatrix4x4* out_value);
+
+/** @brief Sets a finite row-major ColorMatrixEffect transform matrix. */
+CNA_C_API CNA_Result cna_color_matrix_effect_set_matrix(
+    CNA_EffectHandle effect,
+    CNA_ColorMatrix4x4 value);
+
+/** @brief Gets the ColorMatrixEffect post-transform RGBA offset. */
+CNA_C_API CNA_Result cna_color_matrix_effect_get_offset(
+    CNA_EffectHandle effect,
+    CNA_Vector4* out_value);
+
+/** @brief Sets a finite ColorMatrixEffect post-transform RGBA offset. */
+CNA_C_API CNA_Result cna_color_matrix_effect_set_offset(
+    CNA_EffectHandle effect,
+    CNA_Vector4 value);
+
+/** @brief Selects the Rec. 709 grayscale transform and zero offset. */
+CNA_C_API CNA_Result cna_color_matrix_effect_set_grayscale(CNA_EffectHandle effect);
+
+/** @brief Restores the identity color transform and zero offset. */
+CNA_C_API CNA_Result cna_color_matrix_effect_reset(CNA_EffectHandle effect);
+
+/**
+ * @brief Creates an owned PbrEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/**
+ * @brief Creates an owned SkinnedPbrEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the base-color factor from a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the base-color factor on a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets material opacity from a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets material opacity without clamping on a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/**
+ * @brief Gets one retained PBR Texture2D handle.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the five `CNA_PBR_TEXTURE_*` identities.
+ * @param out_has_texture Receives whether the slot has a texture.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_get_texture(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains one same-device PBR Texture2D, or clears it.
+ * @param effect PbrEffect or SkinnedPbrEffect handle.
+ * @param slot One of the five `CNA_PBR_TEXTURE_*` identities.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_pbr_effect_set_texture(
+    CNA_EffectHandle effect,
+    CNA_PbrTextureSlot slot,
+    CNA_Handle texture);
+
+/** @brief Gets the metallic factor from a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_get_metallic_factor(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the metallic factor without clamping. */
+CNA_C_API CNA_Result cna_pbr_effect_set_metallic_factor(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the roughness factor from a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_get_roughness_factor(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the roughness factor without clamping. */
+CNA_C_API CNA_Result cna_pbr_effect_set_roughness_factor(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the emissive factor from a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_get_emissive_factor(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the emissive factor on a PbrEffect or SkinnedPbrEffect. */
+CNA_C_API CNA_Result cna_pbr_effect_set_emissive_factor(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the SkinnedPbrEffect weights-per-vertex value. */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
+    CNA_EffectHandle effect,
+    int32_t* out_value);
+
+/** @brief Sets SkinnedPbrEffect weights per vertex to one, two, or four. */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
+    CNA_EffectHandle effect,
+    int32_t value);
+
+/**
+ * @brief Replaces the leading SkinnedPbrEffect bone transforms from a copied array.
+ * @param effect SkinnedPbrEffect handle.
+ * @param transforms Caller-owned row-major matrices.
+ * @param transform_count Matrix count in the inclusive range 1 through 72.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_set_bone_transforms(
+    CNA_EffectHandle effect,
+    const CNA_Matrix* transforms,
+    uint64_t transform_count);
+
+/**
+ * @brief Copies the requested leading SkinnedPbrEffect bone transforms atomically.
+ * @param effect SkinnedPbrEffect handle.
+ * @param requested_count Number of transforms in the inclusive range 1 through 72.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination capacity in matrices.
+ * @param out_count Receives the requested count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
+    CNA_EffectHandle effect,
+    uint64_t requested_count,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
 
 #ifdef __cplusplus
 }

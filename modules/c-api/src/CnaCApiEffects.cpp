@@ -18,6 +18,7 @@
 #include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
+#include "Microsoft/Xna/Framework/Graphics/ColorMatrixEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
@@ -25,8 +26,10 @@
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
+#include "Microsoft/Xna/Framework/Graphics/PbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedPbrEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -34,6 +37,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -83,6 +87,7 @@ using Microsoft::Xna::Framework::Graphics::EffectTechniqueCollection;
 using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
 using Microsoft::Xna::Framework::Graphics::CompareFunction;
+using Microsoft::Xna::Framework::Graphics::ColorMatrixEffect;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
 using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
 using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
@@ -90,8 +95,10 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IEffectFog;
 using Microsoft::Xna::Framework::Graphics::IEffectLights;
 using Microsoft::Xna::Framework::Graphics::IEffectMatrices;
+using Microsoft::Xna::Framework::Graphics::PbrEffect;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
 using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
+using Microsoft::Xna::Framework::Graphics::SkinnedPbrEffect;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -266,6 +273,7 @@ struct EffectLifetime final {
     RetainedTextureSlot stockTexture0;
     RetainedTextureSlot stockTexture1;
     RetainedTextureSlot environmentMap;
+    std::array<RetainedTextureSlot, 5> pbrTextures;
 };
 
 struct EffectState final {
@@ -930,6 +938,34 @@ template<typename TEffect>
         *outResource = std::move(effect);
     }
     *outStockEffect = stockEffect;
+    return CNA_RESULT_SUCCESS;
+}
+
+struct PbrEffectView final {
+    std::shared_ptr<EffectResource> resource;
+    PbrEffect* pbr = nullptr;
+    SkinnedPbrEffect* skinned = nullptr;
+};
+
+[[nodiscard]] CNA_Result GetPbrEffect(
+    const CNA_EffectHandle handle,
+    PbrEffectView* const outView)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    PbrEffect* const pbr = dynamic_cast<PbrEffect*>(effect->value.get());
+    SkinnedPbrEffect* const skinned =
+        dynamic_cast<SkinnedPbrEffect*>(effect->value.get());
+    if (pbr == nullptr && skinned == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            "The Effect handle does not refer to a PbrEffect or SkinnedPbrEffect.");
+    }
+    *outView = PbrEffectView{std::move(effect), pbr, skinned};
     return CNA_RESULT_SUCCESS;
 }
 
@@ -3445,6 +3481,11 @@ CNA_Result cna_effect_clone(
         copyRetained(sourceLifetime->stockTexture0, cloneLifetime->stockTexture0);
         copyRetained(sourceLifetime->stockTexture1, cloneLifetime->stockTexture1);
         copyRetained(sourceLifetime->environmentMap, cloneLifetime->environmentMap);
+        for (std::size_t index = 0U; index < sourceLifetime->pbrTextures.size(); ++index) {
+            copyRetained(
+                sourceLifetime->pbrTextures[index],
+                cloneLifetime->pbrTextures[index]);
+        }
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4712,7 +4753,9 @@ CNA_Result cna_effect_lights_set_enabled(
         }
         if (value == CNA_FALSE &&
             (dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr ||
-             dynamic_cast<SkinnedEffect*>(lights) != nullptr)) {
+             dynamic_cast<SkinnedEffect*>(lights) != nullptr ||
+             dynamic_cast<PbrEffect*>(lights) != nullptr ||
+             dynamic_cast<SkinnedPbrEffect*>(lights) != nullptr)) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
@@ -6269,6 +6312,536 @@ CNA_Result cna_skinned_effect_set_vertex_color_enabled(
             return result;
         }
         skinned->VertexColorEnabled = value == CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The ColorMatrixEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<ColorMatrixEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_color_matrix_effect_get_matrix(
+    const CNA_EffectHandle effectHandle,
+    CNA_ColorMatrix4x4* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ColorMatrixEffect matrix output is null.");
+        }
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::array<float, 16>& native = colorMatrix->GetColorMatrix();
+        std::copy(native.begin(), native.end(), std::begin(outValue->values));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_set_matrix(
+    const CNA_EffectHandle effectHandle,
+    const CNA_ColorMatrix4x4 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::array<float, 16> native{};
+        std::copy(std::begin(value.values), std::end(value.values), native.begin());
+        colorMatrix->SetColorMatrix(native);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_get_offset(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector4* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The ColorMatrixEffect offset output is null.");
+        }
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(colorMatrix->GetColorOffset());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_set_offset(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector4 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        colorMatrix->SetColorOffset(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_set_grayscale(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        colorMatrix->SetGrayscale();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_color_matrix_effect_reset(const CNA_EffectHandle effectHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        ColorMatrixEffect* colorMatrix = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &colorMatrix, "ColorMatrixEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        colorMatrix->Reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The PbrEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<PbrEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The SkinnedPbrEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<SkinnedPbrEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_pbr_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR diffuse-color output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(view.pbr != nullptr
+            ? view.pbr->getDiffuseColorProperty()
+            : view.skinned->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setDiffuseColorProperty(ToNative(value));
+        } else {
+            view.skinned->setDiffuseColorProperty(ToNative(value));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR alpha output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getAlphaProperty()
+            : view.skinned->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setAlphaProperty(value);
+        } else {
+            view.skinned->setAlphaProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (slot > CNA_PBR_TEXTURE_OCCLUSION) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return GetRetainedEffectTexture(
+            GetEffectState(view.resource)->lifetime->pbrTextures[slot],
+            outHasTexture,
+            outTexture,
+            "The PBR texture outputs are null.");
+    });
+}
+
+CNA_Result cna_pbr_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_PbrTextureSlot slot,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (slot > CNA_PBR_TEXTURE_OCCLUSION) {
+            return InvalidArgument("The PBR texture slot is outside the valid range.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return SetRetainedEffectTexture2D(
+            view.resource,
+            GetEffectState(view.resource)->lifetime->pbrTextures[slot],
+            textureHandle,
+            [&view, slot](std::shared_ptr<Texture2D> texture) {
+                if (view.pbr != nullptr) {
+                    switch (slot) {
+                    case CNA_PBR_TEXTURE_BASE_COLOR: view.pbr->SetOwnedTexture(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_NORMAL: view.pbr->SetOwnedNormalMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.pbr->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_EMISSIVE: view.pbr->SetOwnedEmissiveMap(std::move(texture)); break;
+                    default: view.pbr->SetOwnedOcclusionMap(std::move(texture)); break;
+                    }
+                } else {
+                    switch (slot) {
+                    case CNA_PBR_TEXTURE_BASE_COLOR: view.skinned->SetOwnedTexture(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_NORMAL: view.skinned->SetOwnedNormalMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_METALLIC_ROUGHNESS: view.skinned->SetOwnedMetallicRoughnessMap(std::move(texture)); break;
+                    case CNA_PBR_TEXTURE_EMISSIVE: view.skinned->SetOwnedEmissiveMap(std::move(texture)); break;
+                    default: view.skinned->SetOwnedOcclusionMap(std::move(texture)); break;
+                    }
+                }
+            });
+    });
+}
+
+CNA_Result cna_pbr_effect_get_metallic_factor(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR metallic-factor output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getMetallicFactorProperty()
+            : view.skinned->getMetallicFactorProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_metallic_factor(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setMetallicFactorProperty(value);
+        } else {
+            view.skinned->setMetallicFactorProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_roughness_factor(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR roughness-factor output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = view.pbr != nullptr
+            ? view.pbr->getRoughnessFactorProperty()
+            : view.skinned->getRoughnessFactorProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_roughness_factor(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setRoughnessFactorProperty(value);
+        } else {
+            view.skinned->setRoughnessFactorProperty(value);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_get_emissive_factor(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The PBR emissive-factor output is null.");
+        }
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(view.pbr != nullptr
+            ? view.pbr->getEmissiveFactorProperty()
+            : view.skinned->getEmissiveFactorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_pbr_effect_set_emissive_factor(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        PbrEffectView view;
+        if (const CNA_Result result = GetPbrEffect(effectHandle, &view);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (view.pbr != nullptr) {
+            view.pbr->setEmissiveFactorProperty(ToNative(value));
+        } else {
+            view.skinned->setEmissiveFactorProperty(ToNative(value));
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_get_weights_per_vertex(
+    const CNA_EffectHandle effectHandle,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedPbrEffect weights-per-vertex output is null.");
+        }
+        SkinnedPbrEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<int32_t>(skinned->getWeightsPerVertexProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_set_weights_per_vertex(
+    const CNA_EffectHandle effectHandle,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value != 1 && value != 2 && value != 4) {
+            return InvalidArgument(
+                "SkinnedPbrEffect weights per vertex must be one, two, or four.");
+        }
+        SkinnedPbrEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setWeightsPerVertexProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_set_bone_transforms(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix* const transforms,
+    const uint64_t transformCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t byteCount = 0U;
+        if (transformCount == 0U || transformCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES ||
+            CheckedElementByteCount(
+                transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
+                CNA_RESULT_SUCCESS) {
+            return InvalidArgument(
+                "The SkinnedPbrEffect bone-transform array must contain one through 72 matrices.");
+        }
+        (void)byteCount;
+        SkinnedPbrEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<Matrix> copied;
+        copied.reserve(static_cast<std::size_t>(transformCount));
+        for (uint64_t index = 0U; index < transformCount; ++index) {
+            copied.push_back(ToNative(transforms[index]));
+        }
+        skinned->SetBoneTransforms(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
+    const CNA_EffectHandle effectHandle,
+    const uint64_t requestedCount,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U) ||
+            requestedCount == 0U || requestedCount > CNA_SKINNED_PBR_EFFECT_MAX_BONES) {
+            return InvalidArgument(
+                "The SkinnedPbrEffect bone-transform copy request is invalid.");
+        }
+        *outCount = requestedCount;
+        if (capacity < requestedCount) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the requested bone transforms.");
+        }
+        SkinnedPbrEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedPbrEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<Matrix> bones = skinned->GetBoneTransforms(
+            static_cast<int>(requestedCount));
+        for (uint64_t index = 0U; index < requestedCount; ++index) {
+            destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

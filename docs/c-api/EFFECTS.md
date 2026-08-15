@@ -156,6 +156,26 @@ capacity. Insufficient capacity reports the required count without a partial wri
 initialize all 72 entries to identity, and native cloning copies both the palette and retained
 texture ownership.
 
+## Color-matrix and PBR extensions
+
+`cna_color_matrix_effect_create` exposes CNA's extension-only fixed CPU color transform as an
+ordinary owned effect. `CNA_ColorMatrix4x4` stores the native row-major 4-by-4 transform without a
+C++ array type; offset, Rec. 709 grayscale and reset operations complete its public state. Matrix
+and offset setters reject every non-finite component. Clone preserves both values, while renderer
+draw parameters remain private behind Apply and SpriteBatch routing.
+
+`cna_pbr_effect_create` and `cna_skinned_pbr_effect_create` share the `cna_pbr_effect_*` material
+surface: base-color factor, alpha, metallic, roughness, emissive and five indexed Texture2D slots.
+The fixed `CNA_PBR_TEXTURE_*` identities select base color, normal, metallic-roughness, emissive
+and occlusion maps. Each slot requires the same graphics device, retains its assigned C resource
+and is copied independently by clones. Both types reuse the generic matrix, fog and lighting
+functions; lighting is always enabled and a false setter returns `CNA_RESULT_INVALID_STATE`.
+
+SkinnedPbrEffect additionally exposes weights per vertex and the same copied palette contract as
+SkinnedEffect. `CNA_SKINNED_PBR_EFFECT_MAX_BONES` is 72; set accepts one through 72 matrices and
+copy uses requested count plus capacity with no partial write. These three classes are explicitly
+CNA extensions and are not presented as XNA-origin APIs.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -201,3 +221,10 @@ weights-per-vertex values, every material/interface/extension property, always-o
 Texture2D clone retention, stable nested-light lifetime, Apply and stale, wrong-kind and
 wrong-thread handles. It runs unchanged under HEADLESS and SDL_RENDERER plus focused ASan+UBSan;
 C17/C++23 assertions freeze the maximum.
+
+`PbrEffectSmoke.c` covers ColorMatrixEffect identity, finite validation, grayscale, reset and
+clone behavior; exact PbrEffect and SkinnedPbrEffect defaults; all shared matrix/fog/light/material
+operations; all five texture slots and clone-aware retention; all 72 identity bones, bounded
+palette transfer and weights; Apply, nested-light lifetime and invalid/stale/wrong-kind/
+wrong-thread paths. It runs unchanged under HEADLESS and SDL_RENDERER plus focused ASan+UBSan;
+C17/C++23 assertions freeze the color-matrix layout, slot identities and SkinnedPbr maximum.

@@ -366,6 +366,16 @@
       "task": "CBIND-035D8"
     },
     {
+      "id": "color-matrix-and-pbr-effects-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:ColorMatrixEffect|PbrEffect|SkinnedPbrEffect)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned `CNA_EffectHandle` ColorMatrixEffect, PbrEffect and SkinnedPbrEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed-layout finite color matrix and offset operations; complete PBR base-color/alpha/metallic/roughness/emissive state and five fixed retained Texture2D slots shared by both PBR variants; fixed 72-bone maximum plus bounded copied set and atomic count/capacity copy operations for SkinnedPbrEffect. Always-on PBR lighting maps false to INVALID_STATE, while renderer-only draw parameters remain private behind Apply/draw",
+      "tests": "exact defaults and type identities for all three extensions, finite matrix/offset validation, grayscale/reset/clone, every generic PBR matrix/fog/light/material property, fixed texture-slot identities, same-device ownership and five-slot clone retention, all valid and invalid weights, all 72 identity bones, bone bounds/round-trip/capacity atomicity, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `PbrEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze POD layout, texture slots and MaxBones",
+      "status": "implemented",
+      "task": "CBIND-035D9"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

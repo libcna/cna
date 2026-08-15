@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D8 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D9 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -246,7 +246,7 @@ mechanical wrapper.
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
 | CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ✅ | `texture.h`, `texture_volume.h`, `vertex_values.h`, `vertex_resources.h`, `index_resources.h` and the common `graphics_resource.h` map all 402 owned rows through fixed values, generation/type/thread-validated handles, caller-window transfers and explicit backend limits. Decomposed into and completed as CBIND-035C1–C7. |
-| CBIND-035D | Add effects, shaders and parameter coverage | 🟨 | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. Decomposed into CBIND-035D1–D9; D1–D4 are complete. |
+| CBIND-035D | Add effects, shaders and parameter coverage | ✅ | All 653 Effect/technique/pass/parameter/annotation, stock/custom effect and shader/material rows are mapped without exposing bytecode objects, C++ containers or backend pointers. Completed by CBIND-035D1–D9 with strict-C HEADLESS/SDL_RENDERER and focused sanitizer evidence. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
 | CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
@@ -295,7 +295,7 @@ containers, shader objects or renderer pointers.
 | CBIND-035D6 | 90 | Complete BasicEffect, DirectionalLight and effect interfaces | ✅ | `effects.h` maps all 90 BasicEffect, DirectionalLight and IEffectMatrices/Fog/Lights rows through owned BasicEffect handles, standalone or stable nested directional-light handles and generic interface operations reusable by later stock effects. All transform, fog, lighting, vertex-color, material, alpha, texture and per-pixel properties plus exact three-light/default-lighting behavior are exposed. Same-device Texture2D assignments are retained and cloned safely; live nested light aliases transitively retain their effect and game after the parent handle is destroyed. Renderer-only GpuDrawParams stays behind Apply/draw. Strict-C tests cover exact defaults/preset constants, every operation, clone/retention/lifetime and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze the light handle. |
 | CBIND-035D7 | 114 | Complete AlphaTest, DualTexture and EnvironmentMap effects | ✅ | `effects.h` maps all 114 AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect rows through owned game-child effect handles, shared lifecycle/type/matrix/fog/light routes and complete concrete material, alpha-test, two-layer and environment-map state. Texture2D and TextureCube assignments require the same graphics device, retain their C resources per slot and are copied independently into native clones; invalid enums/bools/indices are rejected while native unclamped signed ReferenceAlpha and stock scalar behavior are preserved. EnvironmentMapEffect's always-on lighting maps a false setter to `INVALID_STATE`, and renderer-only GpuDrawParams stays behind Apply/draw. Strict-C tests cover exact defaults, every operation, clone/retention/lifetime, cross-owner refusal and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan. |
 | CBIND-035D8 | 52 | Complete SkinnedEffect | ✅ | `effects.h` maps all 52 SkinnedEffect rows through an owned game-child effect, the shared lifecycle/type/matrix/fog/light routes and complete material, per-pixel, texture, weights and CNA vertex-color state. `CNA_SKINNED_EFFECT_MAX_BONES` freezes the native 72-matrix maximum; copied set and atomic count/capacity copy operations preserve the native one-through-72 bounds and identity defaults without exposing vectors. Texture2D assignments require the same graphics device and retain independently across clones; always-on lighting maps false to `INVALID_STATE`, while GpuDrawParams remains behind Apply/draw. Strict-C tests cover all defaults, every operation, exact bone transfer, bounds/capacity errors, texture clone retention, nested-light lifetime and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze MaxBones. |
-| CBIND-035D9 | 129 | Complete ColorMatrix, PbrEffect and SkinnedPbrEffect extensions | ⬜ | Map CNA effect extensions, including material texture/scalar state and bounded skinning transforms, without claiming XNA origin for extension-only APIs. This closes parent CBIND-035D. |
+| CBIND-035D9 | 129 | Complete ColorMatrix, PbrEffect and SkinnedPbrEffect extensions | ✅ | `effects.h` maps all 129 extension rows through owned game-child effects, a fixed 64-byte row-major color matrix, shared PBR material/fog/light/matrix routes, five retained Texture2D slots and a fixed 72-bone SkinnedPbr palette. Matrix/offset inputs reject non-finite values; always-on PBR lighting maps false to `INVALID_STATE`; copied palette operations preserve one-through-72 bounds and atomic capacity behavior. Strict-C tests cover exact defaults, all operations, clone/resource retention, nested-light lifetime and invalid/stale/wrong-kind/wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze the POD, slot identities and MaxBones. This closes parent CBIND-035D. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -402,9 +402,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035C`, `CBIND-035C1`–`CBIND-035C7`
-and `CBIND-035D1`–`CBIND-035D8` are ✅; parents `CBIND-035` and `CBIND-035D` remain 🟨, while `CBIND-035D9`
-through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035D` and `CBIND-035C1`–`CBIND-035D9`
+are ✅; parent `CBIND-035` remains 🟨, while `CBIND-035E` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -478,5 +477,9 @@ slots. The snapshot is now 2,809 implemented, 19 partial, 3,517 planned and 70 n
 at the end of CBIND-035D7.
 CBIND-035D8 maps all 52 SkinnedEffect rows through complete material/lighting/fog/texture state,
 the fixed 72-bone maximum and bounded copied palette operations. The snapshot is now 2,861
-implemented, 19 partial, 3,465 planned and 70 not applicable, with CBIND-035D9 ColorMatrixEffect,
-PbrEffect and SkinnedPbrEffect extensions next.
+implemented, 19 partial, 3,465 planned and 70 not applicable.
+CBIND-035D9 maps all 129 ColorMatrixEffect, PbrEffect and SkinnedPbrEffect extension rows through
+finite fixed-layout color transforms, shared PBR material/interface operations, five clone-aware
+retained texture slots and bounded 72-bone palette transfer. The snapshot is now 2,990
+implemented, 19 partial, 3,336 planned and 70 not applicable; parent CBIND-035D is complete and
+CBIND-035E model, mesh and animation coverage is next.

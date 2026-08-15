@@ -104,6 +104,18 @@ _Static_assert(sizeof(CNA_DirectionalLightHandle) == 8U,
                "CNA directional-light handles must remain stable");
 _Static_assert(CNA_SKINNED_EFFECT_MAX_BONES == UINT32_C(72),
                "CNA SkinnedEffect maximum bone count must remain stable");
+_Static_assert(sizeof(CNA_ColorMatrix4x4) == 64U &&
+                   _Alignof(CNA_ColorMatrix4x4) == 4U,
+               "CNA_ColorMatrix4x4 layout must remain stable");
+_Static_assert(sizeof(CNA_PbrTextureSlot) == sizeof(uint32_t) &&
+                   CNA_PBR_TEXTURE_BASE_COLOR == UINT32_C(0) &&
+                   CNA_PBR_TEXTURE_NORMAL == UINT32_C(1) &&
+                   CNA_PBR_TEXTURE_METALLIC_ROUGHNESS == UINT32_C(2) &&
+                   CNA_PBR_TEXTURE_EMISSIVE == UINT32_C(3) &&
+                   CNA_PBR_TEXTURE_OCCLUSION == UINT32_C(4),
+               "CNA PBR texture-slot identities must remain stable");
+_Static_assert(CNA_SKINNED_PBR_EFFECT_MAX_BONES == UINT32_C(72),
+               "CNA SkinnedPbrEffect maximum bone count must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
