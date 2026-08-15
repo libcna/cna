@@ -162,5 +162,14 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME RendererIdentityRegistry
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
+
+        # plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
+        # scalar that families read out of a global. The rule it enforces cannot be checked by
+        # building: in a single-renderer build a wrong read gives the right answer, because the
+        # default is the only renderer there is. Only a multi-renderer build would notice, and
+        # only for the families that build there -- so the invariant is checked directly instead.
+        add_test(NAME RendererTargetDiscipline
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_target_discipline.py")
     endif()
 endif()
