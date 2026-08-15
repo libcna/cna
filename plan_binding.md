@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035F7 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -233,7 +233,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-033 | Inventory the complete public CNA surface | ✅ | Doxygen-backed `tools/c-api/generate_coverage_inventory.py` deterministically tracks all 414 public headers and 6,415 public/protected declarations while explicitly excluding 95 `Internal`/`Detail` headers and the C API itself. `coverage_mappings.json` assigns reviewed current mappings; every remaining symbol has a C-native mapping proposal, test obligation, status and owner task. The snapshot records 443 implemented, 21 partial, 5,881 planned and 70 explicitly deleted/not-applicable declarations; `--check` proves drift without prematurely wiring the CBIND-043 CI gate. |
 | CBIND-034 | Add render targets, sprite fonts and graphics state coverage | ✅ | `graphics_state.h`, `display.h`, `render_target.h` and `sprite_font.h` map every inventory row in this family: fixed identities and complete state PODs/presets/device round-trips, sampler slots and explicit-state SpriteBatch Begin; display/adapter/presentation values and safe native-handle/refresh limitations; owned 2D/cube targets with applied-property snapshots and atomic singular/MRT binding; copied glyph SpriteFonts retaining their source Texture2D. Strict-C HEADLESS and SDL_RENDERER tests cover ABI layouts, properties, UTF-8, ownership, stale/wrong-thread handles, real 2D binding and honest unavailable-backend paths. The inventory now records 814 implemented, 21 partial, 5,510 planned and 70 not applicable rows, with no planned CBIND-034 row. |
-| CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | 🟨 | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. Work is decomposed into CBIND-035A–G below; the parent becomes complete only when all seven rows and every CBIND-035 inventory row are closed. |
+| CBIND-035 | Add 3D resources, effects, models and draw-submission coverage | ✅ | Design C-native vertex/index data layouts, effects/model/state handles and bulk submissions for all public APIs in these families. Require real-renderer correctness tests; do not claim all renderer parity from structural tests. Work is decomposed into CBIND-035A–G below; the parent becomes complete only when all seven rows and every CBIND-035 inventory row are closed. |
 | CBIND-036 | Add stream, storage, networking and asynchronous-operation coverage | ⬜ | Define stream callbacks, storage/network objects and neutral operation handles where the canonical API needs them, with documented ownership, thread, cancellation and error conversion. Never expose `System::IO::Stream`, `Task`, `std::future` or a C++ pointer. |
 | CBIND-037 | Add collections, events, services, media and devices coverage | ⬜ | Map every public collection/event/service/media/device API to count/copy, stable-handle or callback forms. Prohibit public container layouts and test mutation, capacity, ownership and thread rules. |
 | CBIND-043 | Maintain a machine-checked coverage gate | ⬜ | A CI checker compares the public-header inventory to `COVERAGE.md` and fails if a public type/member/constant/event has no mapping/status. New C++ public API cannot land without its C API row and tests in the same change. |
@@ -249,7 +249,7 @@ mechanical wrapper.
 | CBIND-035D | Add effects, shaders and parameter coverage | ✅ | All 653 Effect/technique/pass/parameter/annotation, stock/custom effect and shader/material rows are mapped without exposing bytecode objects, C++ containers or backend pointers. Completed by CBIND-035D1–D9 with strict-C HEADLESS/SDL_RENDERER and focused sanitizer evidence. |
 | CBIND-035E | Add model, mesh and animation coverage | ✅ | Model/bone/mesh/part collections, morph and both skeletal-animation paths are mapped through stable handles, deep-copied descriptors, deterministic count/copy operations and tested resource lifetimes. |
 | CBIND-035F | Complete graphics-device and draw submission | ✅ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. Work is decomposed into CBIND-035F1–F7 below; the parent becomes complete only when all seven rows are closed. |
-| CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
+| CBIND-035G | Close and verify CBIND-035 | ✅ | No planned CBIND-035 inventory row remains: the snapshot is 3,476 implemented, 23 partial, 2,843 planned and 73 not applicable, and every remaining planned row belongs to CBIND-036, CBIND-037 or CBIND-044. `Draw3DSmoke.c` adds the missing real-output evidence: on a backend without the 3D capability it asserts deterministic refusal of buffer creation and all five draw routes, and on the CPU-raster SOFTWARE backend it clears to a known color and proves the center pixel changed through four independent routes — converted user primitives, indexed user primitives, buffered indexed geometry, and a full owned Model whose mesh part references real vertex/index buffers and a BasicEffect. Pixel readback is treated as a capability separate from 3D, so HEADLESS draws without claiming pixel evidence. Recorded gaps: the C API suite is green on HEADLESS (47/47) and SDL_RENDERER (47/47); the newly added SOFTWARE tree runs 44/47, where `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and `CApi_LifecycleSmoke` carry HEADLESS/SDL-specific expectations that predate this tree and are not yet adapted to SOFTWARE. This closes parent CBIND-035. |
 
 #### CBIND-035B math implementation slices
 
@@ -572,15 +572,23 @@ now 3,358 implemented, 23 partial, 2,961 planned and 73 not applicable. CBIND-03
 effects whose routes report `NOT_SUPPORTED` when the opt-in extension layer is absent, so the
 exported ABI never changes shape with the build option. The snapshot is now 3,476 implemented,
 23 partial, 2,843 planned and 73 not applicable, and **no planned CBIND-035 inventory row
-remains**; parent CBIND-035F is complete and CBIND-035G closure verification is next.
+remains**; parent CBIND-035F is complete. CBIND-035G then adds the missing real-output evidence
+through `Draw3DSmoke.c`: honest refusal on a backend without the 3D capability, and observable
+pixel change through user, indexed, buffered and Model draw routes on the CPU-raster SOFTWARE
+backend, with pixel readback treated as a capability separate from 3D. Parent CBIND-035 is
+complete; CBIND-036 stream/storage/network coverage is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-035F7 is the final task completed in this handoff.
-- Next task: verify and close `CBIND-035G`, which needs real 3D/effect/model draw evidence on a
-  renderer that has the 3D capability; HEADLESS and SDL_RENDERER both refuse it honestly today. Do not
+- Branch: `feature/binding`; CBIND-035G is the final task completed in this handoff and closes
+  parent CBIND-035.
+- Next task: `CBIND-036` stream, storage, networking and asynchronous-operation coverage (406
+  planned rows). Do not reopen closed CBIND-035 slices without a concrete demonstrated defect. Do not
   reopen completed CBIND-035E slices unless a regression demonstrates a concrete defect.
-- Verification baseline: both HEADLESS and SDL_RENDERER C API suites contain 46 tests. The
+- Verification baseline: the HEADLESS and SDL_RENDERER C API suites contain 47 tests and are both
+  green. A third tree, `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`),
+  supplies real 3D pixel evidence and runs 44/47: `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke`
+  and `CApi_LifecycleSmoke` still carry HEADLESS/SDL-specific expectations there. The
   SDL_RENDERER tree is configured with `-DCNA_CNAEXT=ON` and the HEADLESS tree without it, so the
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands

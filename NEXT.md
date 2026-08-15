@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — CBIND-035 GRAPHICS SURFACE COMPLETE THROUGH CBIND-035F7 (2026-08-15)
+## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
-> `CBIND-035F1`–`035F7` are complete:
+> `CBIND-035F1`–`035F7` and `CBIND-035G` are complete, closing parent `CBIND-035`:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -187,8 +187,13 @@
 > extended layer is an opt-in build option, every declaration exists in every build and the effect
 > routes report `NOT_SUPPORTED` without it, so the exported ABI never changes shape. The inventory
 > is now 3,476 implemented, 23 partial, 2,843 planned and 73 N/A and **no planned CBIND-035 row
-> remains**; CBIND-035G closure verification, which needs real 3D draw evidence on a 3D-capable
-> renderer, is next.
+> remains**. CBIND-035G then closes the parent with `Draw3DSmoke.c`: deterministic refusal on a
+> backend without the 3D capability, and observable pixel change through converted user primitives,
+> indexed user primitives, buffered indexed geometry and a full owned Model draw on the CPU-raster
+> SOFTWARE backend. Pixel readback is treated as a capability separate from 3D, so HEADLESS draws
+> without claiming pixel evidence. The suite is green on HEADLESS and SDL_RENDERER (47/47 each);
+> the new SOFTWARE tree runs 44/47 because `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and
+> `CApi_LifecycleSmoke` still carry HEADLESS/SDL-specific expectations there. CBIND-036 is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
