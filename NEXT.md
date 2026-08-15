@@ -724,7 +724,36 @@
 > starts — "nothing is drifting yet", not "north is known". The inventory is now 4,948 implemented,
 > 30 partial, 1,236 planned and 201 N/A, with `Microsoft::Devices::Sensors` fully mapped; all four
 > trees green at 61/61, ASan+UBSan with leak detection clean.
-> **Next: CBIND-037D3**, the 69-row vibrate-controller and `CNA::Devices` system-services slice.
+> CBIND-037D3 then adds those 69 rows: the vibration controller and the whole `CNA::Devices` service
+> set. `devices.h` carries two different things and says so — vibration is the always-present
+> canonical layer, everything else is the `#ifdef CNA_DEVICES` extension, exported in both build
+> states and reporting `NOT_SUPPORTED` when compiled out, with `cna_devices_ext_is_available` as the
+> probe a consumer calls first. A refusal means "this build has no extension layer", never "this
+> machine has no such device".
+>
+> The clipboard question the plan left open is answered: the input module's `CNA::Input::Clipboard`
+> and the extension's `CNA::Devices::Clipboard` wrap **the same SDL clipboard**, so this ABI does not
+> give a consumer two names for one answer. The reads stay `cna_clipboard_*`; the one difference —
+> the extension's setter returns whether the platform accepted the text, which the input setter
+> discards — becomes `cna_devices_clipboard_set_text_ext` and nothing else.
+>
+> Four of these services end in something no automated caller can finish: a modal dialog, an
+> asynchronous file picker, a tray icon on a real desktop, and a rumble motor no verification machine
+> has. Three have a canonical backend seam, so this ABI supplies the backend C cannot write and
+> exposes only the switch plus a log to read back. The tray takes its backend as a **second
+> constructor** canonically, so it gets a second creation route rather than a switch. The fifth,
+> `cna_url_launcher_open_ext`, has no seam at all — succeeding would open a browser on whatever
+> machine runs the suite — so only its refusals are covered, a gap recorded rather than papered over.
+>
+> Canonical behaviors preserved rather than tidied: vibration **bounds its duration but clamps its
+> intensity**, and a not-a-number strength becomes no vibration rather than reaching the platform
+> undefined; a tray entry index past the last entry is **ignored** by the mutators and reads false;
+> a windowless session answers a content scale of zero and an empty safe area; and the power
+> queries keep their canonical **-1 means unknown** sentinel instead of gaining an availability flag.
+> The inventory is now 5,016 implemented, 30 partial, 1,167 planned and 202 N/A; all four trees green
+> at 62/62 — with the extension layer ON in `sdlrenderer`/`asan` and OFF in `headless`/`software`, so
+> both halves of every route are exercised — and ASan+UBSan with leak detection clean.
+> **Next: CBIND-037D4**, the 24-row camera slice, which closes the devices module.
 >
 > Discovered while reading the canonical source, not fixed here: `AccelerometerReadingEventArgs.hpp`'s
 > class comment says the type "is not raised by that implementation", but

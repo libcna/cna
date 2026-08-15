@@ -106,6 +106,11 @@ public:
         getWindowProperty().setTitleProperty(title);
     }
 
+    [[nodiscard]] Microsoft::Xna::Framework::GameWindow& GetWindow()
+    {
+        return getWindowProperty();
+    }
+
     void Clear(const CNA_Color color)
     {
         getGraphicsDeviceProperty().Clear(
@@ -309,6 +314,18 @@ CNA_Result ValidateActiveGameHandle(const CNA_Handle handle)
 {
     std::shared_ptr<CGame> game;
     return GetGame(handle, &game);
+}
+
+CNA_Result GetGameWindow(
+    const CNA_Handle handle,
+    Microsoft::Xna::Framework::GameWindow** const outWindow)
+{
+    std::shared_ptr<CGame> game;
+    if (const CNA_Result result = GetGame(handle, &game); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outWindow = &game->GetWindow();
+    return CNA_RESULT_SUCCESS;
 }
 
 CNA_Result GetBorrowedGraphicsDevice(

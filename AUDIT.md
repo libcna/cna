@@ -69,8 +69,12 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > the last failure, and the canonical test-support surface that lets a machine with no sensors
 > reach the supported path at all, and `CBIND-037D2b` closes the sensor namespace with `Compass`,
 > `Motion` and the three event-argument types, this ABI's own installable sensor backend, and the
-> legacy accelerometer reading event. The
-> generated inventory currently records 4,948 implemented, 30 partial, 1,236 planned and 201
+> legacy accelerometer reading event, and `CBIND-037D3` adds the vibration controller and the whole
+> `CNA::Devices` service set — host power, system information, preferred locales, display metrics,
+> clipboard acceptance, URL launching, message boxes, file dialogs and the system tray — each
+> exported in both build states and reporting `NOT_SUPPORTED` where the extension layer is compiled
+> out. The
+> generated inventory currently records 5,016 implemented, 30 partial, 1,167 planned and 202
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

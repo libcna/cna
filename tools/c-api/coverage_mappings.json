@@ -4634,6 +4634,148 @@
       "tests": "`SensorEventsSmoke.c` covers the type name, the vacuous north-referenced default, the unsupported start refusal, then the supported path through the installed backend: a backend admitting the drift-prone source, start, a fused reading with its nested attitude reaching both the callback and the current value, the calibration event, the interval round trip, stop ending delivery, the refused second disposal and the stale-handle refusals",
       "status": "implemented",
       "task": "CBIND-037D2b"
+    },
+    {
+      "id": "vibrate-controller",
+      "qualified_name_regex": "^Microsoft::Devices::VibrateController(::(getDefaultProperty|Start|Stop|getIsSupportedProperty|getDeviceNameProperty|StartLeftRight|SetBackendForTesting))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "free routes rather than a handle, because the canonical controller is a **process-wide singleton** that is never constructed or destroyed by a caller: `cna_vibrate_controller_start`, `_start_with_intensity_ext`, `_start_left_right_ext`, `_stop`, `_get_is_supported_ext` and the device-name count/copy pair, each taking the game handle for thread affinity. The canonical asymmetry is preserved rather than tidied: the **duration is bounded** on all three start routes and a value outside zero to five seconds is refused, while the **intensity is clamped**, with a not-a-number strength becoming no vibration rather than reaching the platform undefined. `cna_vibrate_controller_set_test_backend_ext` supplies this ABI's own backend where the canonical hook takes a C++ object, and `_get_test_log_ext` reads back what it was asked to do",
+      "tests": "`DevicesSmoke.c` installs the test backend and proves each request arrives with its own arguments: the implied full intensity of the single-argument start, the clamped over-range intensity, the not-a-number strength becoming zero, both motor strengths carried separately, the stop, and the refused six-second and negative durations on both start families. It also covers the device-name buffer-too-small case, the null-output refusals, and the log reporting `INVALID_STATE` before the backend is installed and after it is removed",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "vibrate-controller-destructor",
+      "qualified_name_regex": "^Microsoft::Devices::VibrateController::~VibrateController$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "No C mapping: the canonical controller is a function-local static with a private constructor, so nothing outside the runtime can create or destroy one. The destructor runs at process exit and releases the platform vibration device; there is no callable operation for C to reach",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-power",
+      "qualified_name_regex": "^CNA::Devices::(PowerState(::[A-Za-z]+)?|PowerInfo(::(getStateProperty|getBatteryPercentProperty|getSecondsRemainingProperty))?)$",
+      "kinds": [
+        "class",
+        "enum",
+        "enum-value",
+        "method"
+      ],
+      "mapping": "a fixed-width `CNA_PowerState` with one macro per canonical value at its canonical ordinal plus `CNA_POWER_STATE_MAXIMUM`, and `cna_power_get_state_ext`, `_get_battery_percent_ext`, `_get_seconds_remaining_ext`. The canonical **-1 sentinel** for an unknown charge or time is preserved rather than replaced by a separate availability flag, because it is one value the platform genuinely returns rather than an encoding this ABI invented. This is the host machine's power, distinct from a controller's `cna_gamepad_get_battery_level_ext`",
+      "tests": "`DevicesSmoke.c` asserts the state is a defined identity, that both numbers are either -1 or in range, and covers the null-output refusals; the ordinals are pinned by C and C++ ABI assertions. With the extension layer compiled out every route reports `NOT_SUPPORTED`, which the same suite asserts",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-system-info",
+      "qualified_name_regex": "^CNA::Devices::SystemInfo(::(getLogicalCpuCoreCountProperty|getSystemRamMegabytesProperty))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_system_info_get_logical_cpu_core_count_ext` and `cna_system_info_get_system_ram_megabytes_ext`. The canonical class is a static facade with a deleted constructor, so C has routes and no type",
+      "tests": "`DevicesSmoke.c` asserts both answers are at least one on any machine that can run the suite and covers the null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-locale",
+      "qualified_name_regex": "^CNA::Devices::(Locale(::getPreferredLocalesProperty)?|LocaleInfo(::(Language|Country))?)$",
+      "kinds": [
+        "class",
+        "struct",
+        "field",
+        "method"
+      ],
+      "mapping": "an index-addressed enumeration with no value type: `cna_locale_get_preferred_count_ext` plus a count/copy pair for each half of a locale. The canonical value is **two strings and nothing else**, so a fixed structure would carry no fields at all — the string pairs are the whole mapping, following the same split the joystick and sensor descriptors use for their names",
+      "tests": "`DevicesSmoke.c` reads both halves of every locale this host reports, whatever that number is, and refuses the first index past the count on all three routes",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-display-info",
+      "qualified_name_regex": "^CNA::Devices::DisplayInfo(::(getContentScaleProperty|getSafeAreaProperty))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_display_info_get_content_scale_ext` and `cna_display_info_get_safe_area_ext`, both taking the **game handle** where the canonical queries take a window: this ABI has no window handle, and a game owns exactly one window, so the game addresses it. A session with no native window answers zero and an empty rectangle, which is the canonical answer rather than a failure",
+      "tests": "`DevicesSmoke.c` reads both on the verification tree's own window — the windowless answer is what the headless tree exercises — and covers the null-output refusals",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-clipboard",
+      "qualified_name_regex": "^CNA::Devices::Clipboard(::(setTextProperty|getTextProperty|getHasTextProperty))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the existing `cna_clipboard_get_text_size`/`_copy_text`/`_get_has_text` routes, **not a second set**: both canonical clipboard types wrap the one platform clipboard, so duplicating the reads would give a consumer two names for one answer. The one thing this canonical type adds is that setting reports whether the platform accepted the text, which the input module's setter discards — that difference is `cna_devices_clipboard_set_text_ext` and its acceptance flag. Acceptance still means the request was taken, not that a later read returns it",
+      "tests": "`DevicesSmoke.c` sets text through the acceptance route and asserts the flag is a defined boolean and that a null output is refused; the reads are covered by `InputDevicesSmoke.c`, which exercises the same platform clipboard",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-url-launcher",
+      "qualified_name_regex": "^CNA::Devices::UrlLauncher(::Open)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_url_launcher_open_ext`, whose flag reports that the platform accepted the request and says nothing about what the handler then did. An empty URL is refused by this ABI's own argument check rather than passed through",
+      "tests": "`DevicesSmoke.c` covers the empty-URL and null-output refusals only. **The launch itself is deliberately never called with a real URL**: succeeding would open a browser on whatever machine runs the suite, which is not something a test may do",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-message-box",
+      "qualified_name_regex": "^CNA::Devices::(MessageBoxType(::[A-Za-z]+)?|MessageBox(::(getIsSupportedProperty|ShowSimple|Show|SetBackendForTesting))?)$",
+      "kinds": [
+        "class",
+        "enum",
+        "enum-value",
+        "method"
+      ],
+      "mapping": "a fixed-width `CNA_MessageBoxType` at the canonical ordinals plus `cna_message_box_get_is_supported_ext`, `_show_simple_ext` and `_show_ext`, which takes an array of borrowed label views and answers with the chosen index or -1. **Both show routes block until a person answers**, which the header says plainly, so `cna_message_box_set_test_backend_ext` supplies this ABI's own backend — the canonical hook takes a C++ object — and `_get_test_log_ext` reads back what was requested. The canonical backend is process-wide and so is the switch",
+      "tests": "`DevicesSmoke.c` installs the test backend before any dialog is requested, asserts the recorded severity and label count for both show routes and that the chosen index comes back, and covers the undefined-severity, empty-label-array, null-array and null-output refusals — each asserted not to have reached the backend at all. No real dialog is ever shown",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-file-dialog",
+      "qualified_name_regex": "^CNA::Devices::(FileDialogFilter(::(Name|Pattern))?|FileDialog(::(ResultCallback|getIsSupportedProperty|ShowOpenFile|ShowSaveFile|ShowOpenFolder|SetBackendForTesting))?)$",
+      "kinds": [
+        "class",
+        "struct",
+        "field",
+        "alias",
+        "method"
+      ],
+      "mapping": "a fixed 40-byte `CNA_FileDialogFilter` of two borrowed string views — a filter list is written by the caller and read immediately, so owned strings would be ceremony — plus `cna_file_dialog_get_is_supported_ext` and the three show routes, each taking a `CNA_FileDialogResultCallback` and a context. The canonical result callback type alias becomes that function-pointer type. **The canonical dialog is asynchronous**: the route returns once the request is made and the handler runs whenever the platform answers, possibly never. Cancellation is an empty result rather than a separate signal, exactly as canonically. `cna_file_dialog_set_test_backend_ext` supplies this ABI's own backend, which answers before returning",
+      "tests": "`DevicesSmoke.c` drives all three show routes through the test backend, asserting the handler receives the configured path and that an empty result — the canonical cancellation — arrives as a zero count, and covers the null-handler, null-filter-array and unversioned-filter refusals, each asserted not to have reached the backend",
+      "status": "implemented",
+      "task": "CBIND-037D3"
+    },
+    {
+      "id": "devices-system-tray",
+      "qualified_name_regex": "^CNA::Devices::SystemTray(::(SystemTray|~SystemTray|getIsSupportedProperty|setTooltipProperty|AddEntry|SetEntryLabel|SetEntryChecked|GetEntryChecked|SetEntryEnabled|GetEntryEnabled))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_SystemTrayHandle` with `cna_system_tray_create`, the tooltip setter, `cna_system_tray_add_entry` taking a `CNA_TrayEntryClickCallback` and a context where the canonical method takes a callable, the four entry state routes and `cna_system_tray_destroy`, which removes the icon. The canonical class takes its backend as a **second constructor** rather than through a switch, so this ABI mirrors that with `cna_system_tray_create_with_test_backend_ext` instead of a mode flag, and `cna_system_tray_click_entry_for_tests_ext` activates an entry through it. One canonical behavior is preserved rather than corrected: an entry index past the last entry is **ignored** by the mutators and reads false, instead of being refused",
+      "tests": "`DevicesSmoke.c` builds a tray on the test backend, round-trips every entry state, asserts the entry added checked reports itself checked, proves the click handler runs and that an entry added without one is silent, covers the ignored out-of-range index on all five entry routes, the refused click past the last entry, and the released-handle refusals. Nothing reaches the host's own tray",
+      "status": "implemented",
+      "task": "CBIND-037D3"
     }
   ]
 }

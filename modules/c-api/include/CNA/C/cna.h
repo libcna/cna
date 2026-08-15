@@ -58,5 +58,6 @@
 #include "CNA/C/media_player.h"
 #include "CNA/C/video.h"
 #include "CNA/C/sensors.h"
+#include "CNA/C/devices.h"
 
 #endif

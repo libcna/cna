@@ -111,3 +111,50 @@ Three canonical event-argument types resolve three different ways, and the diffe
 subscription, mapped for completeness. Both fire for one reading and the canonical order is fixed —
 current value first, legacy second — which this ABI reports rather than reserves the right to change.
 Unlike the current-value event, the legacy one is raised only when the reading is valid.
+
+## Vibration and the host services
+
+`devices.h` carries two different things, and the difference matters to a consumer. **Vibration is
+always there**: it belongs to the canonical XNA-era device layer, and its routes answer in every
+build. **Everything else is the CNA device extension**, compiled in or out with one build option, so
+`cna_devices_ext_is_available` is the first thing to call — every `_ext` route below it is exported
+either way and reports `CNA_RESULT_NOT_SUPPORTED` when the layer is absent, so the ABI's symbol set
+never depends on a build option. Read a refusal as "this build has no extension layer", not as "this
+machine has no such device".
+
+The vibration controller is a **process-wide singleton**, so it has no handle: every route addresses
+the one controller and takes the game handle only for thread affinity. Its canonical asymmetry is
+preserved rather than tidied — the **duration is bounded** and a request outside zero to five seconds
+is refused, while the **intensity is clamped**, and a not-a-number strength becomes no vibration at
+all rather than reaching the platform as an undefined value.
+
+### The two clipboards are one clipboard
+
+The extension layer and the input module both expose a clipboard, and they wrap **the same platform
+clipboard**. This ABI does not give a consumer two names for one answer: the reads stay
+`cna_clipboard_get_text_size`/`_copy_text`/`_get_has_text`. The only thing the extension adds is that
+setting reports whether the platform accepted the text, which the input setter discards — that is
+`cna_devices_clipboard_set_text_ext`. Acceptance means the request was taken, not that a later read
+returns it.
+
+### Routes a test cannot complete, and what this ABI does about them
+
+Four of these services end in something no automated caller can finish: a modal dialog, an
+asynchronous file picker, a tray icon on a real desktop, a motor no verification machine has. Three
+of them have a canonical backend seam, so this ABI supplies the backend C cannot write and exposes
+only the switch — `cna_vibrate_controller_set_test_backend_ext`,
+`cna_message_box_set_test_backend_ext`, `cna_file_dialog_set_test_backend_ext` — plus a log or a
+result to read back. The tray takes its backend as a **second constructor** canonically, so it gets
+`cna_system_tray_create_with_test_backend_ext` rather than a switch, and
+`cna_system_tray_click_entry_for_tests_ext` to activate an entry.
+
+The message box and file dialog backends are **process-wide**, exactly as canonically, so those
+switches are not scoped to the game handle they validate.
+
+`cna_url_launcher_open_ext` is the one route with no seam. It hands control to another application,
+so this ABI's own suite never calls it with a real URL — only its refusals are covered. That is a
+deliberate gap in the evidence, recorded rather than papered over.
+
+Two more canonical behaviors are reported rather than corrected: a tray entry index past the last
+entry is **ignored** by the mutators and reads false instead of being refused, and a session with no
+native window answers a content scale of zero and an empty safe area rather than failing.

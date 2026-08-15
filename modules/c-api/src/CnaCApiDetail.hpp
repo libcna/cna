@@ -139,6 +139,7 @@ enum class ObjectKind : uint32_t {
     SensorEventRegistration = 93,
     Compass = 94,
     Motion = 95,
+    SystemTray = 96,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

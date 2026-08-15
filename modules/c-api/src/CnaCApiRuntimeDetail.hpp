@@ -7,6 +7,10 @@
 
 #include <memory>
 
+namespace Microsoft::Xna::Framework {
+class GameWindow;
+}
+
 namespace Microsoft::Xna::Framework::Graphics {
 class GraphicsDevice;
 }
@@ -29,6 +33,12 @@ struct BorrowedGraphicsDevice final {
 [[nodiscard]] CNA_Result BorrowGameGraphicsDevice(
     CNA_Handle game,
     CNA_Handle* outGraphicsDevice);
+
+// The canonical display queries take a window, and this ABI has no window handle of its own: a game
+// owns exactly one, so the game handle addresses it.
+[[nodiscard]] CNA_Result GetGameWindow(
+    CNA_Handle game,
+    Microsoft::Xna::Framework::GameWindow** outWindow);
 
 // Drops the C-side state that outlives a single graphics device: live event subscriptions and the
 // recorded sampler-slot bindings. The game-destroy path calls this once the canonical device has

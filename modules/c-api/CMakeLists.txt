@@ -41,6 +41,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiMediaPlayer.cpp
     src/CnaCApiVideo.cpp
     src/CnaCApiSensors.cpp
+    src/CnaCApiDevices.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
     src/CnaCApiNet.cpp
@@ -82,7 +83,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices CNA_Net CNA_GamerServices)
+target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -957,6 +958,23 @@ if(CNA_BUILD_TESTS)
     add_test(NAME CApi_SensorDeviceSmoke COMMAND cna_c_api_sensor_device_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_SensorDeviceSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
+    add_executable(cna_c_api_devices_smoke
+        tests/pure_c/DevicesSmoke.c
+    )
+    set_target_properties(cna_c_api_devices_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_devices_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_devices_smoke)
+    add_test(NAME CApi_DevicesSmoke COMMAND cna_c_api_devices_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_DevicesSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()

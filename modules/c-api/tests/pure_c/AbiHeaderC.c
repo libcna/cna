@@ -1230,6 +1230,42 @@ _Static_assert(sizeof(CNA_MotionReading) == 184U &&
                    offsetof(CNA_MotionReading, gravity) == 168U,
                "CNA_MotionReading layout must remain stable");
 
+_Static_assert(sizeof(CNA_PowerState) == sizeof(uint32_t) &&
+                   CNA_POWER_STATE_ERROR == UINT32_C(0) &&
+                   CNA_POWER_STATE_UNKNOWN == UINT32_C(1) &&
+                   CNA_POWER_STATE_ON_BATTERY == UINT32_C(2) &&
+                   CNA_POWER_STATE_NO_BATTERY == UINT32_C(3) &&
+                   CNA_POWER_STATE_CHARGING == UINT32_C(4) &&
+                   CNA_POWER_STATE_CHARGED == UINT32_C(5) &&
+                   CNA_POWER_STATE_MAXIMUM == UINT32_C(5),
+               "CNA host power identities must remain stable");
+
+_Static_assert(sizeof(CNA_MessageBoxType) == sizeof(uint32_t) &&
+                   CNA_MESSAGE_BOX_TYPE_ERROR == UINT32_C(0) &&
+                   CNA_MESSAGE_BOX_TYPE_WARNING == UINT32_C(1) &&
+                   CNA_MESSAGE_BOX_TYPE_INFORMATION == UINT32_C(2) &&
+                   CNA_MESSAGE_BOX_TYPE_MAXIMUM == UINT32_C(2),
+               "CNA message box severity identities must remain stable");
+
+_Static_assert(sizeof(CNA_VibrationTestLog) == 48U &&
+                   _Alignof(CNA_VibrationTestLog) == 8U &&
+                   offsetof(CNA_VibrationTestLog, start_calls) == 8U &&
+                   offsetof(CNA_VibrationTestLog, last_duration_ticks) == 24U &&
+                   offsetof(CNA_VibrationTestLog, last_intensity) == 32U,
+               "CNA_VibrationTestLog layout must remain stable");
+
+_Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
+                   _Alignof(CNA_MessageBoxTestLog) == 4U &&
+                   offsetof(CNA_MessageBoxTestLog, last_type) == 16U &&
+                   offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
+               "CNA_MessageBoxTestLog layout must remain stable");
+
+_Static_assert(sizeof(CNA_FileDialogFilter) == 40U &&
+                   _Alignof(CNA_FileDialogFilter) == 8U &&
+                   offsetof(CNA_FileDialogFilter, name) == 8U &&
+                   offsetof(CNA_FileDialogFilter, pattern) == 24U,
+               "CNA_FileDialogFilter layout must remain stable");
+
 /* The legacy reading event carries the same acceleration as three doubles rather than a vector,
    which is why it is a value of its own and not a CNA_AccelerometerReading. */
 _Static_assert(sizeof(CNA_AccelerometerReadingEventInfo) == 48U &&
