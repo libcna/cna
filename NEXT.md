@@ -846,6 +846,25 @@
 > **Next: CBIND-037E4**, the 80-row graphics-device-manager slice, after which only `CBIND-037E2b`'s
 > three content-manager rows remain in the runtime module.
 >
+> **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
+> one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,
+> `media`, `devices` and `devices-ext` have no planned row left, joining `storage`, `content`, `net`,
+> `core`, `math`, `graphics` and `graphics-ext`. What remains is `runtime` (958 rows minus what
+> `E1`–`E3` took: `E4`'s 80 and `E2b`'s 3), `audio` (205) and `gamer-services` (665). All four
+> verification trees are green at 64/64 with the coverage gate current, and the ASan tree runs with
+> leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
+> than an assumption.
+>
+> Four decisions from this stretch are worth carrying forward, because each one will be asked again:
+> **the deciding question for a protected member is not that it is protected** but whether this ABI
+> has a derived class to hang it on — a component's hooks are mapped, a sensor's and a window's are
+> not; **a one-per-game object gets no handle**, answered four times now and worth answering the same
+> way a fifth; **a canonical type keyed by C++ type identity cannot be fully mapped**, so the service
+> container's lookup is `partial` and its registration is `not-applicable`, which is what those
+> statuses are for; and **growing a published structure costs source compatibility even when it is
+> ABI-safe**, so new callbacks arrive as a second table.
+>
 > Two findings from reading the canonical source, neither fixed here. `ExitingEventArgs` exists and
 > **nothing ever constructs or delivers it**: `Game::Exiting` is declared with the plain
 > event-argument type, so the named type is reachable only by a caller who builds one for its own
