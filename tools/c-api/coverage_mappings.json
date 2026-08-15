@@ -903,10 +903,10 @@
       "kinds": [
         "class"
       ],
-      "mapping": "owned game-child ContentManager `CNA_Handle`",
-      "tests": "`ContentSmoke.c` root/cache/load/lifetime under two renderers",
-      "status": "partial",
-      "task": "CBIND-028"
+      "mapping": "owned game-child ContentManager `CNA_Handle` with UTF-8 root, resolved asset path and normalized cache key count/copy, builtin-loader registration, service-provider presence, graphics-device get/set, the manifest and `.xnb` reader-usage snapshots, three typed load routes and explicit unload/destroy",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
     },
     {
       "id": "content-manager-core-members",
@@ -925,10 +925,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_content_manager_load_texture2d` for the Color Texture2D specialization only",
-      "tests": "real UTF-8 fixture/cache/unload/pixel tests in `ContentSmoke.c`",
+      "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` cover the canonical specializations of this template; the generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route",
+      "tests": "real UTF-8 fixture, cache, unload and pixel tests plus extension-less resolution and the unsupported/IO refusals for cube and sound assets in `ContentSmoke.c`",
       "status": "partial",
-      "task": "CBIND-028"
+      "task": "CBIND-036B1"
     },
     {
       "id": "sound-effect-handle-type",
@@ -1965,6 +1965,146 @@
       "tests": "default-message and custom-message conversion, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test",
       "status": "implemented",
       "task": "CBIND-036A"
+    },
+    {
+      "id": "content-manager-default-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ContentManager$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_content_manager_create`, which supplies the root directory and the callback-scoped graphics device in one versioned creation structure",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-service-provider-constructors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::ContentManager$",
+      "signature_regex": "^\\(System::IServiceProvider \\*serviceProvider(, const std::string &rootDirectory)?\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_content_manager_create`, reachable only with a null service provider: `System::IServiceProvider` is a Sharp Runtime object that the C ABI must never expose, so a C-created manager always resolves services through its explicitly set graphics device instead",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE; `cna_content_manager_get_has_service_provider` is asserted to report `CNA_FALSE` for every C-created manager",
+      "status": "partial",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-destructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::~ContentManager$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "`cna_content_manager_destroy`, which disposes the native manager and releases the handle without destroying the resource handles it already issued",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-path-helpers",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:BuildAssetPath|NormalizeKey|RegisterBuiltinLoaders)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_manager_get_asset_path_size`/`_copy_asset_path`, `cna_content_manager_get_normalized_key_size`/`_copy_normalized_key` and `cna_content_manager_register_builtin_loaders`. These three members are `public` only as a side effect of the `DEF_PROP` property macro leaving `public:` in effect; they are mapped because they are genuinely callable and deterministic, not because the C API needs them",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-service-provider-property",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::getServiceProviderProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_manager_get_has_service_provider` reports presence only. The pointer itself is a Sharp Runtime object and never crosses the C boundary",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "partial",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-graphics-device",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:setGraphicsDevice|getGraphicsDeviceInternal)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_manager_set_graphics_device` and `cna_content_manager_get_graphics_device`. The canonical manager stores a raw device pointer, so the C layer answers with the borrowed handle that supplied it after re-validating that handle and confirming pointer identity; no renderer or device pointer is exposed",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-manifest",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:RefreshContentManifest|GetContentManifest|GetXnbReaderUsageSummary)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_manager_refresh_content_manifest` plus count/index/copy routes over the manifest snapshot and the `.xnb` reader-usage summary. The canonical summary is unordered and recomputed per call, so the C routes sort it by reader name to make an index addressable; the manifest itself keeps the canonical stored order",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-typed-load-specializations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::Load<.*>$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect`. Each returns an independently owned handle that uses the normal typed operations for that resource and outlives manager unload or destruction",
+      "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manager-template-extension-points",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentManager::(?:RegisterTypeReader|RegisterCnjLoader|CnjLoaderFn)$",
+      "kinds": [
+        "method",
+        "alias"
+      ],
+      "mapping": "No C mapping: registering a reader or a named `.cnj` factory requires naming an arbitrary C++ type `T` and returning a C++ object of that type, neither of which exists in C. The C API exposes the concrete typed load routes the built-in readers produce instead of inventing an untyped registration operation",
+      "tests": "Doxygen declaration inventory; the typed load routes these readers back are covered by `ContentSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-namespace-logger-alias",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::log$",
+      "kinds": [
+        "alias"
+      ],
+      "mapping": "No C mapping: this is a namespace-local spelling of `CNA::Logger` and declares no operation of its own; the logger type carries its own inventory rows",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-manifest-values",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/ContentManifestEntry\\.hpp$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "count/index/copy routes on the owning content manager: `cna_content_manager_get_manifest_entry_count`, `_get_manifest_entry` with the fixed `CNA_ContentManifestEntryInfo`, `_copy_manifest_relative_path`, `_copy_manifest_native_extension`, `_copy_manifest_xnb_reader_name`, `_get_xnb_reader_usage_count`, `_get_xnb_reader_usage` with the fixed `CNA_ContentReaderUsageInfo` and `_copy_xnb_reader_usage_name`. The C++ structs hold `std::string` and `std::vector<std::string>` members, so they are exposed as fixed PODs plus UTF-8 count/copy rather than as a copied layout",
+      "tests": "`ContentSmoke.c` manifest snapshot over a storage-built content root: exact entry count, relative path, `.xnb`/`.cnj` presence, native-extension list, empty reader-usage summary, buffer-too-small refusal and out-of-range entry/extension/name/usage indexes, plus C and C++ ABI layout assertions",
+      "status": "implemented",
+      "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-load-exception",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/ContentLoadException\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor"
+      ],
+      "mapping": "the C exception firewall converts this canonical failure before it can cross the ABI: a missing, unreadable or undecodable asset becomes `CNA_RESULT_IO` with `CNA_ERROR_CATEGORY_IO`, and the message reaches the caller through the per-thread UTF-8 diagnostic. No exception object, type name or C++ throw is exposed",
+      "tests": "`ContentSmoke.c` asserts the exact result, category and non-empty diagnostic after loading a deleted asset, and the same conversion for cube and sound assets that do not exist",
+      "status": "implemented",
+      "task": "CBIND-036B1"
     }
   ]
 }

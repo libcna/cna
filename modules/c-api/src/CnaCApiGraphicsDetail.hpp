@@ -110,6 +110,11 @@ struct TextureCubeResourceView final {
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
 
+[[nodiscard]] CNA_Result CreateOwnedTextureCube(
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> texture,
+    CNA_Handle parentGame,
+    CNA_Handle* outTexture);
+
 [[nodiscard]] CNA_Result GetOwnedSpriteFont(
     CNA_Handle handle,
     std::shared_ptr<SpriteFontResource>* outSpriteFont);

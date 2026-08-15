@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/audio.h"
+#include "CnaCApiAudioDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
@@ -98,6 +99,37 @@ struct SoundEffectInstanceResource final {
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result CreateOwnedSoundEffect(
+    std::shared_ptr<SoundEffect> soundEffect,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outSoundEffect)
+{
+    if (soundEffect == nullptr || outSoundEffect == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The owned SoundEffect factory arguments are invalid.");
+    }
+    const auto resource = std::make_shared<SoundEffectResource>(
+        SoundEffectResource{std::move(soundEffect), parentGame, 0U});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::SoundEffect,
+        resource,
+        outSoundEffect);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned SoundEffect handle could not be created.");
+    }
+    AddOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_audio_get_capabilities(
     const CNA_Handle gameHandle,

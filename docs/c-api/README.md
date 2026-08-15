@@ -31,7 +31,7 @@ bones/hierarchies, model mesh parts and game-child meshes with retained resource
 live effect/part views, mesh snapshots and top-level models with copied bone transforms, complete
 morph-target descriptors/data, blending, track evaluation and retained mesh-part upload, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
-owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
+owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and typed Color Texture2D, TextureCube and SoundEffect load routes; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async

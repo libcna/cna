@@ -704,9 +704,16 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_content_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_content_smoke)
     add_test(NAME CApi_ContentSmoke COMMAND cna_c_api_content_smoke)
+    # The manifest suite builds its own content root through the storage API, so the storage root
+    # is pinned to a build-tree location; dummy audio lets the WAV load route reach its real
+    # success path instead of only its unsupported one.
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_ContentSmoke PROPERTIES
-            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
+        )
+    else()
+        set_tests_properties(CApi_ContentSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-smoke-home"
         )
     endif()
 

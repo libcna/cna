@@ -210,9 +210,23 @@
 > call. Three boundary conversions were added centrally while doing it --
 > `filesystem_error` and `System::IO::IOException` to `CNA_RESULT_IO`, and
 > `StorageDeviceNotConnectedException` to `CNA_RESULT_INVALID_STATE` -- all three proven in
-> the adapter test rather than inferred. The inventory is now 3,518 implemented, 23 partial,
-> 2,801 planned and 73 N/A. All three trees run the same 48 tests green. CBIND-036B
-> (content, 97 rows) is next.
+> the adapter test rather than inferred. All three trees run the same 48 tests green.
+>
+> CBIND-036B is split in two at the boundary between the manager a C consumer drives and the XNB
+> reader pipeline only C++ type readers can join. CBIND-036B1 closes the manager half (40 rows):
+> resolved asset path and normalized cache key, built-in loader registration, service-provider
+> presence, graphics-device get/set validated by borrowed-handle re-validation plus pointer
+> identity, the manifest and `.xnb` reader-usage snapshots as fixed PODs plus count/indexed copy,
+> and typed Texture2D, TextureCube and SoundEffect load routes returning independently owned
+> handles. Two boundaries are recorded rather than papered over: `System::IServiceProvider` may
+> never cross the ABI, so the two service-provider constructors and the property stay `partial` with
+> presence-only observability; and `Load<T>`/`RegisterTypeReader<T>`/`RegisterCnjLoader<T>` are
+> `not-applicable` because C cannot name an arbitrary C++ type — the C API adds a typed route per
+> asset type instead of an invented untyped registration. The manifest scans a whole directory tree,
+> so `ContentSmoke.c` builds its own content root through the storage API rather than pointing the
+> root at the working directory. The inventory is now 3,545 implemented, 25 partial, 2,768 planned
+> and 77 N/A; all three trees stay green at 48/48. CBIND-036B2 (XNB reader pipeline, 64 rows) is
+> next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

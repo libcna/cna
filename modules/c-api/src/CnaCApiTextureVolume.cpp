@@ -462,6 +462,24 @@ void CopyColorsFromNative(
 
 } // namespace
 
+namespace CNA::C::Detail {
+
+CNA_Result CreateOwnedTextureCube(
+    std::shared_ptr<TextureCube> texture,
+    const CNA_Handle parentGame,
+    CNA_Handle* const outTexture)
+{
+    if (texture == nullptr || outTexture == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The owned TextureCube factory arguments are invalid.");
+    }
+    return CreateTextureCubeHandle(std::move(texture), parentGame, outTexture);
+}
+
+} // namespace CNA::C::Detail
+
 CNA_Result cna_texture3d_create(
     const CNA_Handle graphicsDeviceHandle,
     const CNA_Texture3DCreateInfo* const createInfo,

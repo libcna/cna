@@ -741,3 +741,17 @@ _Static_assert(sizeof(CNA_StorageDeviceHandle) == 8U &&
                    CNA_FILE_SHARE_INHERITABLE == UINT32_C(16) &&
                    CNA_SEEK_ORIGIN_END == UINT32_C(2),
                "CNA storage identities must remain stable");
+_Static_assert(sizeof(CNA_ContentManifestEntryInfo) == 32U &&
+                   _Alignof(CNA_ContentManifestEntryInfo) == 8U &&
+                   offsetof(CNA_ContentManifestEntryInfo, has_xnb) == 8U &&
+                   offsetof(CNA_ContentManifestEntryInfo, has_cnj) == 9U &&
+                   offsetof(CNA_ContentManifestEntryInfo, reserved) == 10U &&
+                   offsetof(CNA_ContentManifestEntryInfo, native_extension_count) == 16U &&
+                   offsetof(CNA_ContentManifestEntryInfo, xnb_reader_name_count) == 24U,
+               "CNA_ContentManifestEntryInfo layout must remain stable");
+_Static_assert(sizeof(CNA_ContentReaderUsageInfo) == 24U &&
+                   _Alignof(CNA_ContentReaderUsageInfo) == 8U &&
+                   offsetof(CNA_ContentReaderUsageInfo, is_registered) == 8U &&
+                   offsetof(CNA_ContentReaderUsageInfo, reserved) == 9U &&
+                   offsetof(CNA_ContentReaderUsageInfo, file_count) == 16U,
+               "CNA_ContentReaderUsageInfo layout must remain stable");
