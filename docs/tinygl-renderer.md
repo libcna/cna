@@ -50,6 +50,7 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | `BasicEffect`: `VertexColorEnabled`, `DiffuseColor`, `Alpha`, `TextureEnabled` | ✅ | |
 | `BasicEffect` per-vertex lighting | ✅ | Three directional lights; ambient, diffuse and emissive through `glLight*`/`glMaterial*`; inverse-transpose normals; separate specular. |
 | `SpriteBatch` (source/dest rects, tint, rotation, origin, flips) | ✅ | Real viewport-local textured quads; origin uses source-rectangle texels. |
+| Shared golden-image corpus | ✅ | Five unchanged cross-renderer scenes, nine pixel/image checks. |
 | World/View/Projection | ✅ | TinyGL's own `GL_PROJECTION`/`GL_MODELVIEW` stacks. |
 | `CullMode` | ✅ | `glFrontFace(GL_CW)` + `glCullFace`. |
 | `FillMode.WireFrame` | ✅ | `glPolygonMode(GL_LINE)`. |
@@ -205,9 +206,11 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
 
-Nine suites, 104 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+Fourteen suites, 113 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
-`TinyGL_DrawRoutes` (6), `TinyGL_FixedLayouts` (4), plus `TinyGL_Lighting` (13). All pass.
+`TinyGL_DrawRoutes` (6), `TinyGL_FixedLayouts` (4), `TinyGL_Lighting` (13), plus five unchanged
+shared golden-image suites (9). All pass. The golden tests set SDL's dummy video driver only to
+satisfy the shared `PixelTestGame` lifecycle; TinyGL itself still creates no native render window.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

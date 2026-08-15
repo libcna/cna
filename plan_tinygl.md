@@ -29,8 +29,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 9 CTest suites, 104 checks,
-9/9 passing under
+**Delivered and green after the post-implementation contract audit.** 14 CTest suites, 113 checks,
+14/14 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -79,6 +79,10 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 - The draw-time `VertexDeclaration` fidelity guard
   (`CNA::Internal::Graphics::RequireFaithfulVertexDeclaration`), so a declaration that changes a
   built-in Position/Colour/Normal/UV layout is refused rather than reinterpreted.
+- Five shared golden-image scenes run unchanged against `examples/golden/`: framebuffer clear,
+  opaque `BasicEffect`, rotated point-sampled `SpriteBatch`, depth-write control and `CullMode`.
+  Together they add nine independent pixel/image checks against references produced by another
+  renderer. Golden scenes that require a capability TinyGL explicitly refuses are not registered.
 
 ## Intentional TinyGL limitations
 
@@ -161,7 +165,7 @@ them are refused one step earlier.
 | `TINYGL-21` | Make OpenMP optional: accelerated when found, complete single-threaded archive with no runtime dependency otherwise | **DONE** |
 | `TINYGL-22` | `TinyGL_DrawRoutes` (6 checks): every topology, 32-bit indices and analytical perspective-correct texture mapping proof | **DONE** |
 | `TINYGL-16` | `TinyGL_Lighting` (13 checks): fixed-function ambient/diffuse/emissive, three directional lights, inverse-transpose normals and an exact separate specular pass | **DONE** |
-| `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
+| `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus (5 suites, 9 checks) | **DONE** |
 | `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
 | `TINYGL-19` | Windows/macOS build verification (only Linux x86_64 has been run) | **OPEN** |
 
@@ -268,9 +272,5 @@ than overridden.
 
 Each needs its own explicit owner instruction, exactly like every other renderer's plan.
 
-1. `TINYGL-17` — golden-image reuse. `OPENGL1` reuses `examples/golden/`'s checked-in PNGs through
-   the shared `PixelTestGame::CompareGoldenImage()` helper; the flat, edge-free scenes in that
-   corpus are the ones a second fixed-function rasterizer can match. The 256×256 texture resample
-   will exclude any scene whose sampled region depends on texel-exact minification.
-2. `TINYGL-19` — Windows and macOS verification. Nothing in the renderer is Linux-specific, but
+1. `TINYGL-19` — Windows and macOS verification. Nothing in the renderer is Linux-specific, but
    only Linux x86_64 has actually been built and run.

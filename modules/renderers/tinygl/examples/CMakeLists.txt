@@ -57,6 +57,43 @@ if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
     cna_tinygl_test(cna_test_tinygl_lighting tinygl_lighting_test.cpp)
     cna_register_renderer_test(NAME TinyGL_Lighting COMMAND cna_test_tinygl_lighting
         TIMEOUT 30 LABELS "TinyGL")
+
+    # TINYGL-17: reuse the shared fixed-function golden corpus verbatim. These five scenes stay
+    # within TinyGL's exact capability boundary (opaque/point-sampled BasicEffect and SpriteBatch,
+    # depth writes and culling). The remaining golden consumers require deliberately unsupported
+    # effects, BlendState::Additive, linear filtering, skinning, PBR, or render targets.
+    cna_tinygl_test(cna_test_tinygl_goldenimage_smoke
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_goldenimage_smoke_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_GoldenImage_Smoke COMMAND cna_test_tinygl_goldenimage_smoke
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "TinyGL;Golden")
+
+    cna_tinygl_test(cna_test_tinygl_basiceffect_golden
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_basiceffect_golden_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_BasicEffect_Golden COMMAND cna_test_tinygl_basiceffect_golden
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "TinyGL;Golden")
+
+    cna_tinygl_test(cna_test_tinygl_spritebatch_rotation_golden
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_spritebatch_rotation_golden_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_SpriteBatch_Rotation_Golden
+        COMMAND cna_test_tinygl_spritebatch_rotation_golden
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "TinyGL;Golden")
+
+    cna_tinygl_test(cna_test_tinygl_depthstencilstate_write_enable_golden
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_depthstencilstate_write_enable_golden_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_DepthStencilState_WriteEnable_Golden
+        COMMAND cna_test_tinygl_depthstencilstate_write_enable_golden
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "TinyGL;Golden")
+
+    cna_tinygl_test(cna_test_tinygl_rasterizerstate_cullmode_golden
+                    ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_rasterizerstate_cullmode_golden_test.cpp)
+    cna_register_renderer_test(NAME TinyGL_RasterizerState_CullMode_Golden
+        COMMAND cna_test_tinygl_rasterizerstate_cullmode_golden
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} TIMEOUT 30
+        ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "TinyGL;Golden")
 endif()
 
 # Module-local tests get the same headless-safe skip convention the root one-shot
