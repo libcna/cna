@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D6 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D7 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -293,7 +293,7 @@ containers, shader objects or renderer pointers.
 | CBIND-035D4 | 67 | Complete techniques, passes and collections | ✅ | `effects.h` maps EffectTechnique/EffectPass and both collection families through owned handles and stable collection-element aliases. Both technique constructors, canonical `P0`, exact names, non-pointer identities, nested pass/annotation views, canonical Apply dispatch and construction-plus-add/count/index/name operations replace owner pointers, references, vectors and iterators. Strict-C tests cover construction, identity, ownerless native Apply, nesting, stable aliases across growth/destruction, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; effect-owned current-technique validation uses the same route once D5 supplies effect lifecycle handles. |
 | CBIND-035D5 | 70 | Complete Effect, ShaderEffect, EffectMaterial and SpriteEffect | ✅ | `effects.h` maps all 68 callable rows plus the two explicitly deleted/non-callable copy operations through owned game-child `CNA_EffectHandle` values: a minimal concrete base adapter, native EffectMaterial/ShaderEffect/SpriteEffect construction, same-type clone, dispose/apply, borrowed device identity, stable parameter/technique/current-technique views, exact type/source strings, shader validity/renderer queries, all uniform/texture/matrix routes and exact stock-sprite recognition. Compiled XNA `.fx` bytecode returns the native callable `NOT_SUPPORTED` limitation; renderer pointers/GpuDrawParams remain private behind Apply/draw paths. Strict-C tests cover lifecycle, current-pass validation, transitive descendant lifetime after parent destruction, texture retention, all shader calls and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze the handle. |
 | CBIND-035D6 | 90 | Complete BasicEffect, DirectionalLight and effect interfaces | ✅ | `effects.h` maps all 90 BasicEffect, DirectionalLight and IEffectMatrices/Fog/Lights rows through owned BasicEffect handles, standalone or stable nested directional-light handles and generic interface operations reusable by later stock effects. All transform, fog, lighting, vertex-color, material, alpha, texture and per-pixel properties plus exact three-light/default-lighting behavior are exposed. Same-device Texture2D assignments are retained and cloned safely; live nested light aliases transitively retain their effect and game after the parent handle is destroyed. Renderer-only GpuDrawParams stays behind Apply/draw. Strict-C tests cover exact defaults/preset constants, every operation, clone/retention/lifetime and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze the light handle. |
-| CBIND-035D7 | 114 | Complete AlphaTest, DualTexture and EnvironmentMap effects | ⬜ | Map all stock-effect constructors, clones and public state with validated texture ownership and enum/range behavior. |
+| CBIND-035D7 | 114 | Complete AlphaTest, DualTexture and EnvironmentMap effects | ✅ | `effects.h` maps all 114 AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect rows through owned game-child effect handles, shared lifecycle/type/matrix/fog/light routes and complete concrete material, alpha-test, two-layer and environment-map state. Texture2D and TextureCube assignments require the same graphics device, retain their C resources per slot and are copied independently into native clones; invalid enums/bools/indices are rejected while native unclamped signed ReferenceAlpha and stock scalar behavior are preserved. EnvironmentMapEffect's always-on lighting maps a false setter to `INVALID_STATE`, and renderer-only GpuDrawParams stays behind Apply/draw. Strict-C tests cover exact defaults, every operation, clone/retention/lifetime, cross-owner refusal and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan. |
 | CBIND-035D8 | 52 | Complete SkinnedEffect | ⬜ | Map the full skinned stock effect, including bounded bone-transform count/copy/set operations, weights, fog, lighting and texture state. |
 | CBIND-035D9 | 129 | Complete ColorMatrix, PbrEffect and SkinnedPbrEffect extensions | ⬜ | Map CNA effect extensions, including material texture/scalar state and bounded skinning transforms, without claiming XNA origin for extension-only APIs. This closes parent CBIND-035D. |
 
@@ -403,7 +403,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 ## Current status
 
 `CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035C`, `CBIND-035C1`–`CBIND-035C7`
-and `CBIND-035D1`–`CBIND-035D6` are ✅; parents `CBIND-035` and `CBIND-035D` remain 🟨, while `CBIND-035D7`
+and `CBIND-035D1`–`CBIND-035D7` are ✅; parents `CBIND-035` and `CBIND-035D` remain 🟨, while `CBIND-035D8`
 through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
@@ -471,4 +471,8 @@ and 70 not applicable at the end of CBIND-035D5.
 CBIND-035D6 maps all 90 BasicEffect, DirectionalLight and effect-interface rows through reusable
 matrix/fog/light operations, stable nested light handles, complete material state and retained
 Texture2D assignments. The snapshot is now 2,695 implemented, 19 partial, 3,631 planned and 70 not
-applicable, with CBIND-035D7 AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect next.
+applicable at the end of CBIND-035D6.
+CBIND-035D7 maps all 114 AlphaTestEffect, DualTextureEffect and EnvironmentMapEffect rows through
+shared effect interfaces plus complete concrete state and clone-aware retained Texture2D/TextureCube
+slots. The snapshot is now 2,809 implemented, 19 partial, 3,517 planned and 70 not applicable,
+with CBIND-035D8 SkinnedEffect next.

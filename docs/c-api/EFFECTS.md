@@ -124,6 +124,24 @@ the native member and transitively retains its parent effect and game ownership 
 effect handle is destroyed. Default lighting delegates the native three-point preset and preserves
 its exact ambient, direction, diffuse, specular and enabled values.
 
+## Alpha-test, dual-texture and environment-map effects
+
+`cna_alpha_test_effect_create`, `cna_dual_texture_effect_create` and
+`cna_environment_map_effect_create` return ordinary owned `CNA_EffectHandle` game children. Base
+lifecycle, exact type names, Apply, cloning and the reusable matrix/fog/light interface functions
+therefore remain uniform across stock effects. Type-specific functions expose every remaining
+material, vertex-color, alpha-test, two-layer texture and environment-map property.
+
+AlphaTestEffect validates the fixed `CNA_CompareFunction` identity at the C boundary. Its signed
+reference alpha deliberately remains unclamped, including values below zero or above 255, matching
+the native contract. EnvironmentMapEffect always reports lighting enabled; setting false returns
+`CNA_RESULT_INVALID_STATE` instead of allowing the native exception to cross the ABI.
+
+Each Texture2D layer and TextureCube environment map requires the effect's graphics device and is
+retained independently. A native clone copies both property state and the C ownership sidecars, so
+clearing or destroying the source effect cannot invalidate the clone's resources. The invalid
+handle clears one slot without disturbing the others.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -155,3 +173,10 @@ and BasicEffect property operation, all three stable nested lights, the native d
 preset, same-type clone state, Texture2D retention and nested-light lifetime after parent-effect
 destruction. It runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan; invalid, stale,
 wrong-kind and wrong-thread cases are included and C17/C++23 assertions freeze the light handle.
+
+`StockEffectSmoke.c` covers exact defaults and type identities for AlphaTestEffect,
+DualTextureEffect and EnvironmentMapEffect; every reusable interface and concrete property;
+unclamped reference-alpha boundaries; enum, Boolean and texture-index validation; always-on
+environment lighting; same-device Texture2D/TextureCube ownership; independent clone retention;
+stable nested-light lifetime; Apply; and stale, wrong-kind and wrong-thread handles. The same
+strict-C test runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan.

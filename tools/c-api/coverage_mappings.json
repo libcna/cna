@@ -346,6 +346,16 @@
       "task": "CBIND-035D6"
     },
     {
+      "id": "alpha-dual-and-environment-map-effects-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:AlphaTestEffect|DualTextureEffect|EnvironmentMapEffect)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "alias"],
+      "mapping": "owned `CNA_EffectHandle` game children with shared base clone/dispose/apply/type, reusable IEffectMatrices/IEffectFog/IEffectLights operations, and type-specific diffuse/emissive/alpha/vertex-color/alpha-test/two-layer/environment-map properties; indexed retained Texture2D layers and retained TextureCube environment maps require the same graphics device and clone independently; ReferenceAlpha preserves the native unclamped signed value and CompareFunction is validated at the C boundary; renderer-only GpuDrawParams remain private behind Apply/draw",
+      "tests": "exact defaults and type identities, every generic interface and concrete property, unclamped ReferenceAlpha boundaries, all valid CompareFunction identities plus invalid enum/bool/index refusal, EnvironmentMapEffect's always-on lighting rule and stable light views, same-device texture ownership, Texture2D/TextureCube retention and clone release ordering, cross-owner refusal, Apply, stale/wrong-kind/wrong-thread paths in strict-C `StockEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D7"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

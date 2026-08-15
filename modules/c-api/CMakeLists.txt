@@ -390,6 +390,24 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_stock_effect_smoke
+        tests/pure_c/StockEffectSmoke.c
+    )
+    set_target_properties(cna_c_api_stock_effect_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_stock_effect_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_stock_effect_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_stock_effect_smoke)
+    add_test(NAME CApi_StockEffectSmoke COMMAND cna_c_api_stock_effect_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_StockEffectSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c
     )

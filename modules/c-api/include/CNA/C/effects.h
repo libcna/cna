@@ -4,6 +4,7 @@
 #define CNA_C_EFFECTS_H
 
 #include "CNA/C/core.h"
+#include "CNA/C/graphics_state.h"
 #include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
@@ -1571,6 +1572,268 @@ CNA_C_API CNA_Result cna_basic_effect_get_texture(
 CNA_C_API CNA_Result cna_basic_effect_set_texture(
     CNA_EffectHandle effect,
     CNA_Handle texture);
+
+/**
+ * @brief Creates an owned AlphaTestEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_alpha_test_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the AlphaTestEffect diffuse material color. */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the AlphaTestEffect diffuse material color. */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the AlphaTestEffect alpha value. */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the AlphaTestEffect alpha value without clamping. */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/**
+ * @brief Gets the retained AlphaTestEffect Texture2D handle.
+ * @param effect AlphaTestEffect handle.
+ * @param out_has_texture Receives whether a texture is assigned.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_texture(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains a same-device Texture2D, or clears with the invalid handle.
+ * @param effect AlphaTestEffect handle.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_texture(
+    CNA_EffectHandle effect,
+    CNA_Handle texture);
+
+/** @brief Gets whether AlphaTestEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether AlphaTestEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/** @brief Gets the AlphaTestEffect comparison function. */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_alpha_function(
+    CNA_EffectHandle effect,
+    CNA_CompareFunction* out_value);
+
+/** @brief Sets the AlphaTestEffect comparison function. */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_alpha_function(
+    CNA_EffectHandle effect,
+    CNA_CompareFunction value);
+
+/** @brief Gets the AlphaTestEffect reference alpha. */
+CNA_C_API CNA_Result cna_alpha_test_effect_get_reference_alpha(
+    CNA_EffectHandle effect,
+    int32_t* out_value);
+
+/** @brief Sets the AlphaTestEffect reference alpha without clamping. */
+CNA_C_API CNA_Result cna_alpha_test_effect_set_reference_alpha(
+    CNA_EffectHandle effect,
+    int32_t value);
+
+/**
+ * @brief Creates an owned DualTextureEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_dual_texture_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the DualTextureEffect diffuse material color. */
+CNA_C_API CNA_Result cna_dual_texture_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the DualTextureEffect diffuse material color. */
+CNA_C_API CNA_Result cna_dual_texture_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the DualTextureEffect alpha value. */
+CNA_C_API CNA_Result cna_dual_texture_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the DualTextureEffect alpha value without clamping. */
+CNA_C_API CNA_Result cna_dual_texture_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/**
+ * @brief Gets one retained DualTextureEffect Texture2D handle.
+ * @param effect DualTextureEffect handle.
+ * @param texture_index Texture layer index, zero or one.
+ * @param out_has_texture Receives whether the layer has a texture.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_dual_texture_effect_get_texture(
+    CNA_EffectHandle effect,
+    uint32_t texture_index,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains one same-device Texture2D layer, or clears it.
+ * @param effect DualTextureEffect handle.
+ * @param texture_index Texture layer index, zero or one.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_dual_texture_effect_set_texture(
+    CNA_EffectHandle effect,
+    uint32_t texture_index,
+    CNA_Handle texture);
+
+/** @brief Gets whether DualTextureEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_dual_texture_effect_get_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether DualTextureEffect consumes per-vertex color. */
+CNA_C_API CNA_Result cna_dual_texture_effect_set_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/**
+ * @brief Creates an owned EnvironmentMapEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_environment_map_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the EnvironmentMapEffect diffuse material color. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the EnvironmentMapEffect diffuse material color. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the EnvironmentMapEffect emissive material color. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the EnvironmentMapEffect emissive material color. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the EnvironmentMapEffect alpha value. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the EnvironmentMapEffect alpha value without clamping. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/**
+ * @brief Gets the retained EnvironmentMapEffect diffuse Texture2D handle.
+ * @param effect EnvironmentMapEffect handle.
+ * @param out_has_texture Receives whether a diffuse texture is assigned.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_environment_map_effect_get_texture(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains a same-device diffuse Texture2D, or clears it.
+ * @param effect EnvironmentMapEffect handle.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_environment_map_effect_set_texture(
+    CNA_EffectHandle effect,
+    CNA_Handle texture);
+
+/**
+ * @brief Gets the retained EnvironmentMapEffect TextureCube handle.
+ * @param effect EnvironmentMapEffect handle.
+ * @param out_has_environment_map Receives whether a cube map is assigned.
+ * @param out_environment_map Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_environment_map_effect_get_environment_map(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_environment_map,
+    CNA_Handle* out_environment_map);
+
+/**
+ * @brief Assigns and retains a same-device TextureCube, or clears it.
+ * @param effect EnvironmentMapEffect handle.
+ * @param environment_map TextureCube/RenderTargetCube handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_environment_map_effect_set_environment_map(
+    CNA_EffectHandle effect,
+    CNA_Handle environment_map);
+
+/** @brief Gets the EnvironmentMapEffect blend amount. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_amount(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the EnvironmentMapEffect blend amount without clamping. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_amount(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the EnvironmentMapEffect specular tint. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_specular(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the EnvironmentMapEffect specular tint. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_specular(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the EnvironmentMapEffect Fresnel factor. */
+CNA_C_API CNA_Result cna_environment_map_effect_get_fresnel_factor(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the EnvironmentMapEffect Fresnel factor without clamping. */
+CNA_C_API CNA_Result cna_environment_map_effect_set_fresnel_factor(
+    CNA_EffectHandle effect,
+    float value);
 
 #ifdef __cplusplus
 }

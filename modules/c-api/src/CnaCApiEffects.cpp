@@ -15,8 +15,12 @@
 #include "Microsoft/Xna/Framework/Graphics/EffectPassCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechnique.hpp"
 #include "Microsoft/Xna/Framework/Graphics/EffectTechniqueCollection.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AlphaTestEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BasicEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/CompareFunction.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DirectionalLight.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DualTextureEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/EnvironmentMapEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectFog.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
@@ -75,8 +79,12 @@ using Microsoft::Xna::Framework::Graphics::EffectPass;
 using Microsoft::Xna::Framework::Graphics::EffectPassCollection;
 using Microsoft::Xna::Framework::Graphics::EffectTechnique;
 using Microsoft::Xna::Framework::Graphics::EffectTechniqueCollection;
+using Microsoft::Xna::Framework::Graphics::AlphaTestEffect;
 using Microsoft::Xna::Framework::Graphics::BasicEffect;
+using Microsoft::Xna::Framework::Graphics::CompareFunction;
 using Microsoft::Xna::Framework::Graphics::DirectionalLight;
+using Microsoft::Xna::Framework::Graphics::DualTextureEffect;
+using Microsoft::Xna::Framework::Graphics::EnvironmentMapEffect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::IEffectFog;
 using Microsoft::Xna::Framework::Graphics::IEffectLights;
@@ -253,6 +261,9 @@ struct EffectLifetime final {
     EffectOwnership ownership;
     std::unordered_map<int, RetainedTextureSlot> shaderTextures;
     RetainedTextureSlot basicTexture;
+    RetainedTextureSlot stockTexture0;
+    RetainedTextureSlot stockTexture1;
+    RetainedTextureSlot environmentMap;
 };
 
 struct EffectState final {
@@ -894,6 +905,32 @@ template<typename TNative, typename TC, typename TConvert>
     return CNA_RESULT_SUCCESS;
 }
 
+template<typename TEffect>
+[[nodiscard]] CNA_Result GetStockEffect(
+    const CNA_EffectHandle handle,
+    std::shared_ptr<EffectResource>* const outResource,
+    TEffect** const outStockEffect,
+    const char* const typeName)
+{
+    std::shared_ptr<EffectResource> effect;
+    if (const CNA_Result result = GetEffect(handle, &effect);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    auto* const stockEffect = dynamic_cast<TEffect*>(effect->value.get());
+    if (stockEffect == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_HANDLE,
+            CNA_ERROR_CATEGORY_HANDLE,
+            std::string("The Effect handle does not refer to a ") + typeName + ".");
+    }
+    if (outResource != nullptr) {
+        *outResource = std::move(effect);
+    }
+    *outStockEffect = stockEffect;
+    return CNA_RESULT_SUCCESS;
+}
+
 template<typename TInterface>
 [[nodiscard]] CNA_Result GetEffectInterface(
     const CNA_EffectHandle handle,
@@ -1024,6 +1061,105 @@ template<typename TGetter>
         CNA_RESULT_INVALID_ARGUMENT,
         CNA_ERROR_CATEGORY_ARGUMENT,
         "The Effect and texture belong to different graphics devices.");
+}
+
+[[nodiscard]] CNA_Result GetRetainedEffectTexture(
+    const RetainedTextureSlot& retained,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture,
+    const char* const nullMessage)
+{
+    if (outHasTexture == nullptr || outTexture == nullptr) {
+        return InvalidArgument(nullMessage);
+    }
+    *outHasTexture = retained.handle == CNA_INVALID_HANDLE ? CNA_FALSE : CNA_TRUE;
+    *outTexture = retained.handle;
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TSetter>
+[[nodiscard]] CNA_Result SetRetainedEffectTexture2D(
+    const std::shared_ptr<EffectResource>& effect,
+    RetainedTextureSlot& retained,
+    const CNA_Handle textureHandle,
+    TSetter&& setter)
+{
+    if (textureHandle == CNA_INVALID_HANDLE) {
+        std::forward<TSetter>(setter)(std::shared_ptr<Texture2D>{});
+        retained.Reset();
+        return CNA_RESULT_SUCCESS;
+    }
+    std::shared_ptr<CNA::C::Detail::Texture2DResource> texture;
+    if (const CNA_Result result = GetOwnedTexture2D(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(*effect, texture->parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (texture->value->getIsDisposedProperty()) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "A disposed Texture2D cannot be assigned to a stock effect.");
+    }
+    if (texture->activeEffectReferenceCount == UINT64_MAX) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The Texture2D effect-reference count cannot be incremented.");
+    }
+    std::forward<TSetter>(setter)(texture->value);
+    retained.Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture->value),
+        texture,
+        &texture->activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
+}
+
+template<typename TSetter>
+[[nodiscard]] CNA_Result SetRetainedEffectTextureCube(
+    const std::shared_ptr<EffectResource>& effect,
+    RetainedTextureSlot& retained,
+    const CNA_Handle textureHandle,
+    TSetter&& setter)
+{
+    if (textureHandle == CNA_INVALID_HANDLE) {
+        std::forward<TSetter>(setter)(std::shared_ptr<TextureCube>{});
+        retained.Reset();
+        return CNA_RESULT_SUCCESS;
+    }
+    TextureCubeResourceView texture;
+    if (const CNA_Result result = GetOwnedTextureCube(textureHandle, &texture);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (const CNA_Result result = ValidateEffectTextureOwner(*effect, texture.parentGame);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (texture.value->getIsDisposedProperty()) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "A disposed TextureCube cannot be assigned to a stock effect.");
+    }
+    if (texture.activeEffectReferenceCount == nullptr ||
+        *texture.activeEffectReferenceCount == UINT64_MAX) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The TextureCube effect-reference count cannot be incremented.");
+    }
+    std::forward<TSetter>(setter)(texture.value);
+    retained.Set(
+        textureHandle,
+        std::static_pointer_cast<Texture>(texture.value),
+        std::move(texture.retentionOwner),
+        texture.activeEffectReferenceCount);
+    return CNA_RESULT_SUCCESS;
 }
 
 } // namespace
@@ -3284,21 +3420,29 @@ CNA_Result cna_effect_clone(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const RetainedTextureSlot& sourceTexture =
-            GetEffectState(effect)->lifetime->basicTexture;
-        if (dynamic_cast<BasicEffect*>(effect->value.get()) != nullptr &&
-            sourceTexture.handle != CNA_INVALID_HANDLE) {
-            std::shared_ptr<EffectResource> clonedEffect;
-            if (const CNA_Result result = GetEffect(*outClone, &clonedEffect);
-                result != CNA_RESULT_SUCCESS) {
-                return result;
-            }
-            GetEffectState(clonedEffect)->lifetime->basicTexture.Set(
-                sourceTexture.handle,
-                sourceTexture.value,
-                sourceTexture.owner,
-                sourceTexture.referenceCount);
+        std::shared_ptr<EffectResource> clonedEffect;
+        if (const CNA_Result result = GetEffect(*outClone, &clonedEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
         }
+        const std::shared_ptr<EffectLifetime> sourceLifetime =
+            GetEffectState(effect)->lifetime;
+        const std::shared_ptr<EffectLifetime> cloneLifetime =
+            GetEffectState(clonedEffect)->lifetime;
+        const auto copyRetained = [](const RetainedTextureSlot& source,
+                                     RetainedTextureSlot& destination) {
+            if (source.handle != CNA_INVALID_HANDLE) {
+                destination.Set(
+                    source.handle,
+                    source.value,
+                    source.owner,
+                    source.referenceCount);
+            }
+        };
+        copyRetained(sourceLifetime->basicTexture, cloneLifetime->basicTexture);
+        copyRetained(sourceLifetime->stockTexture0, cloneLifetime->stockTexture0);
+        copyRetained(sourceLifetime->stockTexture1, cloneLifetime->stockTexture1);
+        copyRetained(sourceLifetime->environmentMap, cloneLifetime->environmentMap);
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -4564,6 +4708,13 @@ CNA_Result cna_effect_lights_set_enabled(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (value == CNA_FALSE &&
+            dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "EnvironmentMapEffect lighting cannot be disabled.");
+        }
         lights->setLightingEnabledProperty(value == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
     });
@@ -4919,6 +5070,779 @@ CNA_Result cna_basic_effect_set_texture(
             std::static_pointer_cast<Texture>(texture->value),
             texture,
             &texture->activeEffectReferenceCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The AlphaTestEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<AlphaTestEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The AlphaTestEffect diffuse-color output is null.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(alphaTest->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        alphaTest->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The AlphaTestEffect alpha output is null.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = alphaTest->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        alphaTest->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("The AlphaTestEffect texture outputs are null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)alphaTest;
+        return GetRetainedEffectTexture(
+            GetEffectState(effect)->lifetime->stockTexture0,
+            outHasTexture,
+            outTexture,
+            "The AlphaTestEffect texture outputs are null.");
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return SetRetainedEffectTexture2D(
+            effect,
+            GetEffectState(effect)->lifetime->stockTexture0,
+            textureHandle,
+            [alphaTest](std::shared_ptr<Texture2D> texture) {
+                alphaTest->SetOwnedTexture(std::move(texture));
+            });
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The AlphaTestEffect vertex-color output is null.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = alphaTest->getVertexColorEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The AlphaTestEffect vertex-color value is not a CNA_Bool.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        alphaTest->setVertexColorEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_alpha_function(
+    const CNA_EffectHandle effectHandle,
+    CNA_CompareFunction* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The AlphaTestEffect comparison output is null.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<CNA_CompareFunction>(
+            alphaTest->getAlphaFunctionProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_alpha_function(
+    const CNA_EffectHandle effectHandle,
+    const CNA_CompareFunction value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value > CNA_COMPARE_NOT_EQUAL) {
+            return InvalidArgument("The AlphaTestEffect comparison function is invalid.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        alphaTest->setAlphaFunctionProperty(static_cast<CompareFunction>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_get_reference_alpha(
+    const CNA_EffectHandle effectHandle,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The AlphaTestEffect reference-alpha output is null.");
+        }
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<int32_t>(alphaTest->getReferenceAlphaProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_alpha_test_effect_set_reference_alpha(
+    const CNA_EffectHandle effectHandle,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        AlphaTestEffect* alphaTest = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &alphaTest, "AlphaTestEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        alphaTest->setReferenceAlphaProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The DualTextureEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<DualTextureEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_dual_texture_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DualTextureEffect diffuse-color output is null.");
+        }
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(dualTexture->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dualTexture->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DualTextureEffect alpha output is null.");
+        }
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = dualTexture->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dualTexture->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    const uint32_t textureIndex,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("The DualTextureEffect texture outputs are null.");
+        }
+        *outHasTexture = CNA_FALSE;
+        *outTexture = CNA_INVALID_HANDLE;
+        if (textureIndex > 1U) {
+            return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)dualTexture;
+        const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
+        return GetRetainedEffectTexture(
+            textureIndex == 0U ? lifetime->stockTexture0 : lifetime->stockTexture1,
+            outHasTexture,
+            outTexture,
+            "The DualTextureEffect texture outputs are null.");
+    });
+}
+
+CNA_Result cna_dual_texture_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const uint32_t textureIndex,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (textureIndex > 1U) {
+            return InvalidArgument("The DualTextureEffect texture index is not zero or one.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::shared_ptr<EffectLifetime> lifetime = GetEffectState(effect)->lifetime;
+        RetainedTextureSlot& retained = textureIndex == 0U
+            ? lifetime->stockTexture0
+            : lifetime->stockTexture1;
+        return SetRetainedEffectTexture2D(
+            effect,
+            retained,
+            textureHandle,
+            [dualTexture, textureIndex](std::shared_ptr<Texture2D> texture) {
+                if (textureIndex == 0U) {
+                    dualTexture->SetOwnedTexture(std::move(texture));
+                } else {
+                    dualTexture->SetOwnedTexture2(std::move(texture));
+                }
+            });
+    });
+}
+
+CNA_Result cna_dual_texture_effect_get_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The DualTextureEffect vertex-color output is null.");
+        }
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = dualTexture->getVertexColorEnabledProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dual_texture_effect_set_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The DualTextureEffect vertex-color value is not a CNA_Bool.");
+        }
+        DualTextureEffect* dualTexture = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &dualTexture, "DualTextureEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dualTexture->setVertexColorEnabledProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<EnvironmentMapEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect diffuse-color output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(environmentMap->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect emissive-color output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(environmentMap->getEmissiveColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setEmissiveColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect alpha output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = environmentMap->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect texture outputs are null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)environmentMap;
+        return GetRetainedEffectTexture(
+            GetEffectState(effect)->lifetime->stockTexture0,
+            outHasTexture,
+            outTexture,
+            "The EnvironmentMapEffect texture outputs are null.");
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return SetRetainedEffectTexture2D(
+            effect,
+            GetEffectState(effect)->lifetime->stockTexture0,
+            textureHandle,
+            [environmentMap](std::shared_ptr<Texture2D> texture) {
+                environmentMap->SetOwnedTexture(std::move(texture));
+            });
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_environment_map(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasEnvironmentMap,
+    CNA_Handle* const outEnvironmentMap)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasEnvironmentMap == nullptr || outEnvironmentMap == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect cube-map outputs are null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)environmentMap;
+        return GetRetainedEffectTexture(
+            GetEffectState(effect)->lifetime->environmentMap,
+            outHasEnvironmentMap,
+            outEnvironmentMap,
+            "The EnvironmentMapEffect cube-map outputs are null.");
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_environment_map(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Handle environmentMapHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return SetRetainedEffectTextureCube(
+            effect,
+            GetEffectState(effect)->lifetime->environmentMap,
+            environmentMapHandle,
+            [environmentMap](std::shared_ptr<TextureCube> texture) {
+                environmentMap->SetOwnedEnvironmentMap(std::move(texture));
+            });
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_amount(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect amount output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = environmentMap->getEnvironmentMapAmountProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_amount(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setEnvironmentMapAmountProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_specular(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect specular output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(environmentMap->getEnvironmentMapSpecularProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_specular(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setEnvironmentMapSpecularProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_get_fresnel_factor(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The EnvironmentMapEffect Fresnel-factor output is null.");
+        }
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = environmentMap->getFresnelFactorProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_environment_map_effect_set_fresnel_factor(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        EnvironmentMapEffect* environmentMap = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &environmentMap, "EnvironmentMapEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        environmentMap->setFresnelFactorProperty(value);
         return CNA_RESULT_SUCCESS;
     });
 }
