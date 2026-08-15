@@ -93,7 +93,7 @@ gate.
 The exact modules and headers are defined in the implementation plan. The current header split is
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
-`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `vertex_values.h`,
+`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`
 and `audio.h`;
 later family headers follow as coverage requires.
@@ -121,6 +121,7 @@ The C API must not expose:
 See the sibling contract documents for ABI versioning, handles, ownership, errors, text/buffers,
 callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
 [effect metadata](EFFECTS.md),
+[models and animation](MODELS.md),
 [textures](TEXTURES.md),
 [3D and cube textures](TEXTURE_VOLUMES.md),
 [vertex buffers](VERTEX_BUFFERS.md),

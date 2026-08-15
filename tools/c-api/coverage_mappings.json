@@ -376,6 +376,16 @@
       "task": "CBIND-035D9"
     },
     {
+      "id": "model-bone-and-collection-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/ModelBone(?:Collection)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_ModelBoneHandle` nodes plus owned live `CNA_ModelBoneCollectionHandle` views; exact UTF-8 names, signed indices, copied transforms, optional parent views, retained child relationships and count/index/name/contains operations replace raw pointers, references, vectors and iterators. The C safety boundary rejects self-parenting and ancestor cycles and uses weak parent metadata so an independently retained child never exposes a dangling parent",
+      "tests": "default and named construction including UTF-8, exact name count/copy and capacity atomicity, index/identity transform/mutation, empty collections, live children growth, parent and multiple child aliases, index/name/contains behavior, hierarchy retention after original-handle destruction, expired optional parents, cycle refusal and invalid/stale/wrong-kind/wrong-thread paths in strict-C `ModelBoneSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles",
+      "status": "implemented",
+      "task": "CBIND-035E1"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

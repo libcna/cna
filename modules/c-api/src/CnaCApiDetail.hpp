@@ -58,6 +58,8 @@ enum class ObjectKind : uint32_t {
     EffectTechniqueCollection = 29,
     Effect = 30,
     DirectionalLight = 31,
+    ModelBone = 32,
+    ModelBoneCollection = 33,
     Test = UINT32_MAX
 };
 

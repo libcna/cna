@@ -28,6 +28,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiInput.cpp
     src/CnaCApiMath.cpp
     src/CnaCApiMatrix.cpp
+    src/CnaCApiModels.cpp
     src/CnaCApiPackedVectors.cpp
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp
@@ -443,6 +444,19 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
+
+    add_executable(cna_c_api_model_bone_smoke
+        tests/pure_c/ModelBoneSmoke.c
+    )
+    set_target_properties(cna_c_api_model_bone_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_model_bone_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_model_bone_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_model_bone_smoke)
+    add_test(NAME CApi_ModelBoneSmoke COMMAND cna_c_api_model_bone_smoke)
 
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c

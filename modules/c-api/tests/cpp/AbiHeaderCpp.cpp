@@ -91,6 +91,8 @@ static_assert(CNA_PBR_TEXTURE_METALLIC_ROUGHNESS == UINT32_C(2));
 static_assert(CNA_PBR_TEXTURE_EMISSIVE == UINT32_C(3));
 static_assert(CNA_PBR_TEXTURE_OCCLUSION == UINT32_C(4));
 static_assert(CNA_SKINNED_PBR_EFFECT_MAX_BONES == UINT32_C(72));
+static_assert(sizeof(CNA_ModelBoneHandle) == 8U);
+static_assert(sizeof(CNA_ModelBoneCollectionHandle) == 8U);
 static_assert(sizeof(CNA_RendererInfo) == 32U);
 static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));

@@ -116,6 +116,9 @@ _Static_assert(sizeof(CNA_PbrTextureSlot) == sizeof(uint32_t) &&
                "CNA PBR texture-slot identities must remain stable");
 _Static_assert(CNA_SKINNED_PBR_EFFECT_MAX_BONES == UINT32_C(72),
                "CNA SkinnedPbrEffect maximum bone count must remain stable");
+_Static_assert(sizeof(CNA_ModelBoneHandle) == 8U &&
+                   sizeof(CNA_ModelBoneCollectionHandle) == 8U,
+               "CNA model-bone handles must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

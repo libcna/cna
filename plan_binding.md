@@ -297,6 +297,23 @@ containers, shader objects or renderer pointers.
 | CBIND-035D8 | 52 | Complete SkinnedEffect | ✅ | `effects.h` maps all 52 SkinnedEffect rows through an owned game-child effect, the shared lifecycle/type/matrix/fog/light routes and complete material, per-pixel, texture, weights and CNA vertex-color state. `CNA_SKINNED_EFFECT_MAX_BONES` freezes the native 72-matrix maximum; copied set and atomic count/capacity copy operations preserve the native one-through-72 bounds and identity defaults without exposing vectors. Texture2D assignments require the same graphics device and retain independently across clones; always-on lighting maps false to `INVALID_STATE`, while GpuDrawParams remains behind Apply/draw. Strict-C tests cover all defaults, every operation, exact bone transfer, bounds/capacity errors, texture clone retention, nested-light lifetime and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze MaxBones. |
 | CBIND-035D9 | 129 | Complete ColorMatrix, PbrEffect and SkinnedPbrEffect extensions | ✅ | `effects.h` maps all 129 extension rows through owned game-child effects, a fixed 64-byte row-major color matrix, shared PBR material/fog/light/matrix routes, five retained Texture2D slots and a fixed 72-bone SkinnedPbr palette. Matrix/offset inputs reject non-finite values; always-on PBR lighting maps false to `INVALID_STATE`; copied palette operations preserve one-through-72 bounds and atomic capacity behavior. Strict-C tests cover exact defaults, all operations, clone/resource retention, nested-light lifetime and invalid/stale/wrong-kind/wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze the POD, slot identities and MaxBones. This closes parent CBIND-035D. |
 
+#### CBIND-035E model and animation implementation slices
+
+The 178 rows owned by CBIND-035E are partitioned by stable-handle dependency. Bone, part and mesh
+views land before aggregate Model ownership; standalone morph/skinning data then supports the
+animation-player layer. Native containers and iterators collapse to live count/index/name views or
+copied bulk transfers.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-035E1 | 23 | Complete ModelBone and ModelBoneCollection | ✅ | `models.h` maps standalone and hierarchy-owned bones through stable handles, exact UTF-8 names, signed indices, copied transforms, optional parent views, retained child relationships and live count/index/name/contains collections. Self-parenting and ancestor cycles are rejected; weak parent metadata prevents a retained child from exposing a dangling native pointer. Strict-C tests cover every route, hierarchy lifetime and invalid/stale/wrong-kind/wrong-thread behavior under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles. |
+| CBIND-035E2 | 28 | Complete ModelMeshPart and its collection | ⬜ | Map mesh-part scalar ranges, effect/buffer/resource associations, tags and live collection views through validated handles without exposing raw pointers or iterators. |
+| CBIND-035E3 | 38 | Complete ModelMesh, ModelMeshCollection and ModelEffectCollection | ⬜ | Map mesh construction/state/draw, parent/effect/part relationships and live count/index/name/contains views with transitive resource lifetime. |
+| CBIND-035E4 | 14 | Complete Model | ⬜ | Map model construction, bone/mesh/root/tag ownership, all three copied transform operations and Draw through an owned game-child model handle. |
+| CBIND-035E5 | 20 | Complete morph-target extension values and operations | ⬜ | Map morph keyframes/tracks/data through fixed descriptors and validated handles plus copied weights, deltas, blended bytes and evaluation without exposing nested vectors. |
+| CBIND-035E6 | 36 | Complete SkinnedModelEXT | ⬜ | Map skeleton, clips, parts, owned GPU resources, transform computation, attach/remove and testing counts through stable handles and copied bulk inputs/outputs. |
+| CBIND-035E7 | 19 | Complete SkinningData and AnimationPlayer | ⬜ | Map skinning-data construction/clip lookup and animation-player clip/update/position plus copied local/world/skin transforms, closing parent CBIND-035E. |
+
 ##### CBIND-035B2 scalar/vector slices
 
 | # | Task | Status | Acceptance criteria |
@@ -483,3 +500,7 @@ finite fixed-layout color transforms, shared PBR material/interface operations, 
 retained texture slots and bounded 72-bone palette transfer. The snapshot is now 2,990
 implemented, 19 partial, 3,336 planned and 70 not applicable; parent CBIND-035D is complete and
 CBIND-035E model, mesh and animation coverage is next.
+CBIND-035E is partitioned into seven dependency-ordered slices. CBIND-035E1 maps all 23
+ModelBone/ModelBoneCollection rows through stable hierarchy nodes and live collection views with
+cycle prevention and no dangling parent exposure. The snapshot is now 3,013 implemented,
+19 partial, 3,313 planned and 70 not applicable, with CBIND-035E2 ModelMeshPart next.
