@@ -228,6 +228,12 @@ def main() -> int:
             # run-wine-dxvk.sh needs its info-level version marker to fail closed against WineD3D.
             "DXVK_LOG_LEVEL": "info",
         }
+        if os.environ.get("CNA_D3D11_VIRTUAL_DESKTOP"):
+            # Plain Xvfb is not enumerated as a Windows monitor by every Wine/SDL combination.
+            # Record and forward the wrapper's Wine-desktop trampoline so the report proves that
+            # production captures ran without opening windows on the host's physical display.
+            capture_environment["CNA_D3D11_VIRTUAL_DESKTOP"] = \
+                os.environ["CNA_D3D11_VIRTUAL_DESKTOP"]
 
     windows_paths = policy["renderer"] == "DIRECTX11/DXVK"
 
