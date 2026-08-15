@@ -19,8 +19,8 @@
 #include <functional>
 
 // RemapOcclusionImageForDualTextureEXT's own decode/re-encode step (plan_cnj.md CNB-88). STATIC
-// so every stbi_*/stbiw_* symbol has internal linkage in this one translation unit -- other parts
-// of the CNA tree (SDL_image's own vendored copy) also compile stb_image.h's implementation, and
+// so every stbi_*/stbiw_* symbol has internal linkage in this one translation unit -- other
+// dependencies in the CNA tree also compile a vendored stb_image.h implementation, and
 // without STATIC the two would collide at link time (duplicate global symbols) in any executable
 // that links both.
 //

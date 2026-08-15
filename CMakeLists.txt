@@ -48,8 +48,12 @@ endif()
 # sibling repo at all. -sNO_DISABLE_EXCEPTION_CATCHING is a legacy-JS-EH-only linker setting with
 # no Wasm-EH equivalent (Wasm EH can always catch), so it is dropped rather than replaced.
 if(EMSCRIPTEN)
-    add_compile_options(-fwasm-exceptions)
-    add_link_options(-fwasm-exceptions)
+    # Emscripten still defaults WASM_LEGACY_EXCEPTIONS to ON, which emits the
+    # deprecated legacy `try` instruction. Select the standardized
+    # `try_table` exception ABI explicitly and keep every object and final
+    # executable on that same ABI.
+    add_compile_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
+    add_link_options(-fwasm-exceptions -sWASM_LEGACY_EXCEPTIONS=0)
 endif()
 
 option(CNA_BUILD_TESTS "Build CNA tests" ON)
@@ -121,6 +125,34 @@ cna_detect_sharp_runtime_shape()
 #find_package(SDL3_ttf REQUIRED)
 
 include(cmake/RendererSelection.cmake)
+
+# Platform implementation selection (plan_platform.md PLAT-11). A separate axis from
+# CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
+# where the window, events and input come from.
+include(cmake/PlatformSelection.cmake)
+
+# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
+# selection, so a default build never downloads or compiles a second native toolkit.
+if(CNA_PLATFORM STREQUAL "SDL2")
+    include(cmake/ThirdPartySDL2.cmake)
+    cna_configure_sdl2()
+endif()
+
+# Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
+# independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
+include(cmake/AudioPlatformSelection.cmake)
+include(cmake/Sdl2OnlyConfiguration.cmake)
+
+# Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
+# directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
+# only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
+include(cmake/PlatformRatchet.cmake)
+
+# Hot-path lint (plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
+# per-vertex, per-fragment, per-sample and per-event loops, per design decision 4. A hard
+# error rather than a warning like the ratchet above: this one starts at zero violations
+# and every regression is a single deliberate line with an obvious fix or an annotation.
+include(cmake/PlatformHotPathLint.cmake)
 
 # Example and test registrations live inside the module tree (modules/<name>/examples/,
 # modules/renderers/<family>/examples/): testing must be enabled before the modules are

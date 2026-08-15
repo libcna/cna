@@ -10,12 +10,10 @@ namespace CNA::Devices
     /**
      * @brief Opens a URL/URI in the system's default external application.
      *
-     * CNA extension — no XNA/WP7 equivalent exists. Backed by SDL3's
-     * `SDL_OpenURL()` (`third_party/SDL/include/SDL3/SDL_misc.h`), which has real
-     * per-platform implementations for every desktop OS, Android, iOS, and
-     * Web/Emscripten.
+     * CNA extension — no XNA/WP7 equivalent exists. Delegates to the selected platform's
+     * external-URL service, which may use a desktop shell, mobile intent or browser API.
      *
-     * @note Per SDL3's own doc comment, a successful result means only that
+     * @note A successful result means only that
      * *something* was launched to handle the URL — not that it actually loaded.
      * Opening a URL may also cause the game window to lose focus, or move the app to
      * the background on mobile.

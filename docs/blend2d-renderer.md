@@ -6,9 +6,10 @@
 [Blend2D](https://github.com/blend2d/blend2d), a real 2D vector graphics engine (Zlib license)
 powered by an AsmJit-generated (also Zlib) JIT pipeline compiler. It owns a premultiplied
 `BLImage`/`BLContext` backbuffer, clears and draws through real Blend2D rasterization, reads the
-completed frame back, and presents it through an SDL streaming texture -- the same "CPU raster +
-SDL presentation" shape the SKIA renderer already established (`docs/skia-renderer.md`). SDL never
-executes a Blend2D draw command; it only displays the finished image.
+completed frame back, and hands it to the platform surface presenter -- the same "CPU raster +
+platform presentation" shape the SKIA renderer already established (`docs/skia-renderer.md`). The
+renderer depends only on `IPlatformSurfacePresenter`; the selected platform owns the native upload,
+scaling and swap. No platform backend executes a Blend2D draw command.
 
 See `plan_blend2d.md` for the task-level remediation history and remaining boundaries.
 
@@ -38,7 +39,7 @@ otherwise.
 
 | CNA feature | Blend2D route | Direct/emulation decision | Evidence |
 |---|---|---|---|
-| Clear, Present, resize, all five presentation modes, backbuffer readback | Direct CPU raster + SDL presentation | Real `BLContext::fill_all`/`blit_image`; SDL only displays the finished RGBA8 frame. | `Blend2D_Surface_Raster`, `Blend2D_Smoke`, `Blend2D_Correctness` (`TestPresentationModes`) |
+| Clear, Present, resize, all five presentation modes, backbuffer readback | Direct CPU raster + platform presentation | Real `BLContext::fill_all`/`blit_image`; `IPlatformSurfacePresenter` only displays the finished RGBA8 frame. | `Blend2D_Surface_Raster`, `Blend2D_Smoke`, `Blend2D_Correctness` (`TestPresentationModes`) |
 | `FixedHeightDynamicWidth` presentation mode | Direct, aspect-derived | Logical width = `round(outputWidth * requestedHeight / outputHeight)`, re-derived on every `Clear`/`Present`/`GetViewportSize` while no render target is bound, exactly matching `SkiaRenderer::RecreateBackbuffer`/`RefreshDynamicBackbufferIfNeeded`'s formula and timing. | `Blend2D_Correctness` (`TestPresentationModes`, including a simulated output-size change via `DebugSetPresentationOutputSizeEXT`) |
 | `SpriteBatch` position/dest-rect/source-rect/rotation/origin/scale/flip/tint overloads | Direct 2D path | `BLContext` transform stack (`apply_transform`/`translate`/`rotate`/`scale`) plus `blit_image`. Flips (`SpriteEffects` and/or a negative destination scale) mirror the drawn content about the destination rectangle's own local center, matching FNA/XNA's per-vertex geometry -- not a naive `scale(-1,1)` about the coordinate origin, which used to move a flipped sprite off its requested destination rectangle. A negative destination scale and `SpriteEffects` compose by XOR (both together cancel out), matching `SoftwareSpriteBatchRenderer`'s reference derivation. A non-white tint (or an out-of-bounds/self-sampling source, see below) resolves a genuine CPU-multiplied, address-mode-aware premultiplied sub-image, since Blend2D's stock blit has no per-draw colour modulation of its own. | `Blend2D_Smoke`, `Blend2D_Correctness` (`TestFlipOriginRotation`, `TestTintChain`) |
 | Source rectangle safety (negative origin, oversized, entirely outside the texture, self-sampling) | Direct blit when fully in-bounds; safe resolved-copy otherwise | Every source pixel read for the tint/resolve path is bounds-mapped through the active `TextureAddressMode` (Clamp/Wrap/Mirror) before it is read, so no source rectangle can produce an out-of-bounds read; the in-bounds fast path is additionally protected by Blend2D's own `blit_image` bounds check (`BL_ERROR_INVALID_VALUE`, checked). Drawing a render target while it is the active target snapshots an independent copy first rather than assuming Blend2D permits self-referential source/destination blits. | `Blend2D_Correctness` (`TestSourceRectangles`, `TestRenderTargets`'s self-sampling checks), clean under ASan/UBSan/LeakSanitizer |
@@ -150,10 +151,11 @@ copy anywhere in this renderer.
   `VertexBuffer`/`IndexBuffer` handles honestly report back their given counts.
 - `Blend2D_Correctness`
   (`modules/renderers/blend2d/examples/blend2d_renderer_correctness_test.cpp`): 112 deterministic
-  pixel-level checks driving `Blend2DRenderer`/`Blend2DSpriteBatchRenderer` directly against a real
-  `SDL_Window` under `SDL_VIDEODRIVER=dummy` (no real display required, so this runs in headless
-  CI). Covers every row of the capability table above, including hostile source rectangles and
-  self-sampling under sanitizers.
+  pixel-level checks driving `Blend2DRenderer`/`Blend2DSpriteBatchRenderer` directly through an
+  `SdlTestSurfacePresenter` under `SDL_VIDEODRIVER=dummy` (no real display required, so this runs
+  in headless CI). This is test infrastructure; production Blend2D code is SDL-free. Covers every
+  row of the capability table above, including hostile source rectangles and self-sampling under
+  sanitizers.
 
 All three are registered as CTests via `cna_register_renderer_test()` and follow the repository's
 `SKIP_RETURN_CODE 77` headless-safe convention (`cna_apply_skip_convention()`).

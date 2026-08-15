@@ -267,7 +267,7 @@ EM_JS(void, CNA_HtmlDom_FlushSprites, (const void* cmds, int count, int stride,
             el.className = 'cna-sprite';
             // will-change keeps each sprite on its own compositor layer, so moving it never
             // repaints. pointer-events:none keeps the sprite layer out of hit testing entirely --
-            // input belongs to SDL's canvas, which is still the element receiving events.
+            // input belongs to the platform canvas, which is still the element receiving events.
             el.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;' +
                                'background-repeat:no-repeat;will-change:transform;pointer-events:none;';
             el.__cnaState = { w: -1, h: -1, url: null, bp: null, rep: null, ir: null,
@@ -353,12 +353,24 @@ namespace CNA::Internal::Renderers::HtmlDom
         // HtmlDomTextureRenderer descend from ITextureRenderer along two separate branches), and this
         // renderer's "native handle" is a JS-side integer with no shared accessor on ITextureRenderer
         // to expose it -- so a contained dynamic_cast against the two known concrete types is the
-        // safe equivalent here, the same conclusion CANVAS and SDL_RENDERER reached.
+        // safe equivalent here, the same conclusion CANVAS and the native 2D renderer reached.
         int TextureIdOf(const ITextureRenderer& texture)
         {
             if (const auto* t = dynamic_cast<const HtmlDomTextureRenderer*>(&texture)) return t->GetCanvasId();
             if (const auto* rt = dynamic_cast<const HtmlDomRenderTargetRenderer*>(&texture)) return rt->GetCanvasId();
             return 0;
+        }
+
+        std::uint8_t StraightTintChannel(std::uint8_t premultiplied, std::uint8_t alpha)
+        {
+            // HTMLDOM-124: XNA's AlphaBlend receives a premultiplied draw colour, but this backend
+            // applies RGB to straight-alpha pixels and applies A separately as CSS opacity. Recover
+            // the straight RGB first or an alpha-only fade darkens twice and creates a distinct
+            // tinted PNG variant for every alpha step. Zero-alpha RGB is unknowable and invisible;
+            // canonical white keeps that draw on the untinted cache path.
+            if (alpha == 0) return 255;
+            const int straight = (static_cast<int>(premultiplied) * 255 + alpha / 2) / alpha;
+            return static_cast<std::uint8_t>(std::min(255, straight));
         }
     }
 
@@ -460,10 +472,17 @@ namespace CNA::Internal::Renderers::HtmlDom
         cmd.flags = flags;
 
         cmd.variantMode = VariantModeFor(op);
-        cmd.packedColor = static_cast<std::uint32_t>(color.getRProperty())
-                        | (static_cast<std::uint32_t>(color.getGProperty()) << 8)
-                        | (static_cast<std::uint32_t>(color.getBProperty()) << 16)
-                        | (static_cast<std::uint32_t>(color.getAProperty()) << 24);
+        const std::uint8_t alpha = color.getAProperty();
+        const std::uint8_t red = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getRProperty(), alpha) : color.getRProperty();
+        const std::uint8_t green = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getGProperty(), alpha) : color.getGProperty();
+        const std::uint8_t blue = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getBProperty(), alpha) : color.getBProperty();
+        cmd.packedColor = static_cast<std::uint32_t>(red)
+                        | (static_cast<std::uint32_t>(green) << 8)
+                        | (static_cast<std::uint32_t>(blue) << 16)
+                        | (static_cast<std::uint32_t>(alpha) << 24);
         return cmd;
     }
 

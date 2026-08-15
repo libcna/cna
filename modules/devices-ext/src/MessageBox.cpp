@@ -3,36 +3,28 @@
 
 #ifdef CNA_DEVICES
 
-#include <mutex>
-
-#include "CNA/Devices/Detail/SdlMessageBoxBackend.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 namespace
 {
-    std::mutex& BackendMutex()
+    CNA::Platform::MessageBoxSeverity ToSeverity(const CNA::Devices::MessageBoxType type)
     {
-        static std::mutex mutex;
-        return mutex;
+        switch (type)
+        {
+        case CNA::Devices::MessageBoxType::Error:       return CNA::Platform::MessageBoxSeverity::Error;
+        case CNA::Devices::MessageBoxType::Warning:     return CNA::Platform::MessageBoxSeverity::Warning;
+        case CNA::Devices::MessageBoxType::Information: return CNA::Platform::MessageBoxSeverity::Information;
+        }
+        return CNA::Platform::MessageBoxSeverity::Information;
     }
 
-    // Task REMED-DEVICES-001: shared_ptr, not unique_ptr -- GetBackend() below
-    // returns a local copy (a new owning reference) while holding the lock, so a
-    // concurrent SetBackendForTesting() reassigning this storage can never destroy
-    // the object an in-flight call is still using. Holding BackendMutex() across
-    // the actual backend call instead was rejected: it would serialize a
-    // UI-blocking modal-dialog call against every other MessageBox caller and
-    // invite deadlock.
-    std::shared_ptr<CNA::Devices::Detail::IMessageBoxBackend>& BackendStorage()
+    /// The dialog service, or null when this platform cannot show a message box.
+    CNA::Platform::IPlatformDialogs* Dialogs()
     {
-        static std::shared_ptr<CNA::Devices::Detail::IMessageBoxBackend> backend =
-            std::make_shared<CNA::Devices::Detail::SdlMessageBoxBackend>();
-        return backend;
-    }
-
-    std::shared_ptr<CNA::Devices::Detail::IMessageBoxBackend> GetBackend()
-    {
-        std::lock_guard<std::mutex> lock(BackendMutex());
-        return BackendStorage();
+        CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        return platform.GetCapabilities().messageBox ? platform.GetDialogs() : nullptr;
     }
 } // namespace
 
@@ -40,33 +32,51 @@ namespace CNA::Devices
 {
     bool MessageBox::getIsSupportedProperty()
     {
-        return true;
+        return Platform::GetCurrentPlatform().GetCapabilities().messageBox;
     }
 
-    void MessageBox::ShowSimple(MessageBoxType type, const std::string& title, const std::string& message)
+    void MessageBox::ShowSimple(const MessageBoxType type, const std::string& title,
+                                const std::string& message)
     {
-        GetBackend()->ShowSimple(type, title, message);
-    }
-
-    int MessageBox::Show(
-        MessageBoxType type,
-        const std::string& title,
-        const std::string& message,
-        const std::vector<std::string>& buttonLabels)
-    {
-        return GetBackend()->Show(type, title, message, buttonLabels);
-    }
-
-    void MessageBox::SetBackendForTesting(std::unique_ptr<Detail::IMessageBoxBackend> backend)
-    {
-        std::lock_guard<std::mutex> lock(BackendMutex());
-        if (backend)
+        Platform::IPlatformDialogs* dialogs = Dialogs();
+        if (dialogs == nullptr)
         {
-            BackendStorage() = std::shared_ptr<Detail::IMessageBoxBackend>(std::move(backend));
+            return;
         }
-        else
+
+        // A message box that could not be shown is not worth taking a process down for: this is
+        // usually the last thing a game does on its way out, and on a headless or embedded host
+        // there may be no one to show it to.
+        try
         {
-            BackendStorage() = std::make_shared<Detail::SdlMessageBoxBackend>();
+            dialogs->ShowMessageBox(ToSeverity(type), title, message, nullptr);
+        }
+        catch (const Platform::PlatformException&)
+        {
+        }
+    }
+
+    int MessageBox::Show(const MessageBoxType type, const std::string& title,
+                         const std::string& message,
+                         const std::vector<std::string>& buttonLabels)
+    {
+        Platform::IPlatformDialogs* dialogs = Dialogs();
+        if (dialogs == nullptr)
+        {
+            return -1;
+        }
+
+        // -1 is already this API's "no choice was made", so a platform that cannot show the
+        // dialog reports the same thing a user dismissing it would, and a caller branching on the
+        // result needs no separate unavailable case.
+        try
+        {
+            return dialogs->ShowMessageBoxWithButtons(ToSeverity(type), title, message,
+                                                      buttonLabels, nullptr);
+        }
+        catch (const Platform::PlatformException&)
+        {
+            return -1;
         }
     }
 } // namespace CNA::Devices

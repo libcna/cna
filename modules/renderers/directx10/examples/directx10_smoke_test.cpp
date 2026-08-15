@@ -2,7 +2,7 @@
 // plan_d3d10.md: smoke test for the D3D10 (real Direct3D 10 via DXVK's d3d10core, real HLSL
 // shaders) graphics renderer's device/swap-chain/back-buffer foundation.
 //
-// Check A -- GetWindowInternal() returns a real, non-null window.
+// Check A -- GameWindow handle returns a real, non-null window.
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
 //   (RGB and alpha), read via a staging-texture Map (D3D10-0f, spike-confirmed).
 // Check C -- Clear() honors a non-opaque requested alpha (128) exactly.
@@ -47,7 +47,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX10Renderer&>(dev.GetRenderer());
 
-        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the D3D10 renderer");
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the D3D10 renderer");
 
         {
             dev.Clear(Color(20, 40, 60, 255));

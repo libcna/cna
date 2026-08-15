@@ -209,19 +209,12 @@ there are no separate portrait rotation cases to test here either):**
    produces the same sign, regardless of which rotation state the device is in) as the
    primary correctness bar.
 
-## 2a. SDL sensor disconnect/reconnect and default-device change (Task SDLCORE-005, 2026-07-17)
+## 2a. Platform sensor disconnect/reconnect and default-device change
 
-**Code under test:** `Detail::SdlSensorSubsystem<TSensor>::IsSensorConnected()`/
-`OpenDefaultSensorLocked()` (shared by `Accelerometer` and `Gyroscope` — one fix, one
-template, both classes). Before this fix, once `sensor_`/`sensorId_` were cached by the
-first successful `OpenDefaultSensorLocked()` call, they were reused **indefinitely** —
-for the rest of this subsystem's process-wide lifetime, no matter how long the
-underlying device had been physically disconnected, and with no way for a different
-default device (or the same device reappearing with a new SDL-assigned id) to ever be
-picked up again short of the whole process restarting. The fix re-validates the cached
-id against a fresh `SDL_GetSensors()` call every time `OpenDefaultSensorLocked()` runs,
-closing and discarding a stale handle so the existing deterministic-selection loop runs
-again instead.
+**Code under test:** `Detail::PlatformSensorSubsystem<TSensor>` and
+`IPlatformSensors::OpenSensor()` (shared behavior for `Accelerometer` and `Gyroscope`). A fresh
+platform session is opened for each stopped-to-started cycle, so a disconnected device cannot
+leave a cached native handle behind and a replacement/default device can be selected normally.
 
 **Why this needs real hardware:** SDL3 has no sensor-specific hotplug event (confirmed
 by reading `third_party/SDL/include/SDL3/SDL_events.h` — only `SDL_EVENT_SENSOR_UPDATE`
@@ -322,7 +315,7 @@ effect upload.
 
 ## 4a. `StartLeftRight()` cleans up an effect whose `SDL_RunHapticEffect()` fails (Task VIB2-003, 2026-07-17)
 
-**Code under test:** `Detail::SdlHapticVibrateBackend::StartLeftRight()`'s handling of a
+**Code under test:** `Sdl3Haptics::PlayLeftRight()`'s handling of a
 successfully-uploaded (`SDL_CreateHapticEffect()` succeeds) but then failing
 `SDL_RunHapticEffect()` call — the fix destroys the just-uploaded effect
 (`SDL_DestroyHapticEffect()`) and resets `leftRightEffectId_` immediately, rather than
@@ -335,8 +328,8 @@ earlier "no haptic device found" guard — `SDL_CreateHapticEffect()`/`SDL_RunHa
 are never reached at all, let alone the specific case of the former succeeding while the
 latter fails. There is no mockable SDL boundary in this codebase for haptics (unlike
 `Detail::IVibrateBackend`'s own fake used by `VibrateControllerTests`' fake-backend suite,
-which only exercises `VibrateController`'s forwarding/clamping logic, not
-`SdlHapticVibrateBackend`'s internal SDL call sequence), so this specific failure path has
+which only exercises `VibrateController`'s forwarding/clamping logic, not the platform's
+internal native call sequence), so this specific failure path has
 only been reasoned about from SDL3's own `SDL_RunHapticEffect()` documented failure modes
 (e.g. device removed between create and run), not exercised. **Status: NOT RUN — hardware
 validation open.**
@@ -347,9 +340,7 @@ validation open.**
    `SDL_RunHapticEffect()` to fail after a successful `SDL_CreateHapticEffect()` — e.g. via
    a debugger breakpoint between the two calls that unplugs the device) to try to trigger
    the failing-`Run()` path.
-2. Confirm (via a debug build, so the new `SDL_Log("SdlHapticVibrateBackend:
-   SDL_RunHapticEffect failed: ...")` diagnostic is compiled in) that a failure is actually
-   observed and logged.
+2. Confirm with a debugger/platform diagnostic that the native run failure is actually observed.
 3. Confirm no effect id is leaked: repeat step 1 many times and check (via SDL's own
    haptic effect count, if exposed by the platform, or simply that subsequent
    `StartLeftRight()`/`Start()`/`Stop()` calls keep behaving normally with no growing
@@ -358,13 +349,9 @@ validation open.**
 
 ## 4b. Haptic device disconnect/reconnect mid-session (Task VIB2-004, 2026-07-17)
 
-**Code under test:** `Detail::SdlHapticVibrateBackend`'s new `ReleaseHapticDeviceIfStale()` /
-`IsHapticDeviceStillConnected()` pair, called from `Start()`, `Stop()`, `StartLeftRight()`, and
-`AcquireHapticDeviceForProbe()` (so `IsSupported()`/`GetDeviceName()` are covered too). Before
-this fix, `haptic_` was opened once and reused forever — a device unplugged mid-session left a
-cached (but no-longer-live) `SDL_Haptic*` in place, and there was no path back to a working
-device even if the same or a different one reconnected, short of destroying and recreating the
-whole `SdlHapticVibrateBackend` (which the `VibrateController` singleton never does).
+**Code under test:** `Sdl3Haptics::EnumerateIds()`/`RetireMissing()`, reached by every platform
+haptic probe/play operation. A device unplugged mid-session is retired before the next operation;
+a later call can select and open a replacement device without recreating `VibrateController`.
 
 **Why this needs real hardware:** SDL3 has no haptic-specific hotplug event, so this fix detects
 disconnect by re-querying `SDL_GetHaptics()` and comparing instance IDs before every operation —
@@ -437,10 +424,10 @@ recording one specific session's results.
 
 | Device / OS | Backend | Action | Expected — strict XNA | Expected — `CNAEXT` extensions | Status |
 |---|---|---|---|---|---|
-| Android phone | `Detail::SdlHapticVibrateBackend` → `Context.VIBRATOR_SERVICE` | `Start(TimeSpan)` | Phone's built-in motor buzzes for the given duration | `Start(TimeSpan, intensity)` scales buzz strength; `getIsSupportedProperty()` true; `getDeviceNameProperty()` non-empty | **NOT RUN** — no Android device in this session (Section 3) |
+| Android phone | `PlatformVibrateBackend` → `IPlatformHaptics` | `Start(TimeSpan)` | Phone's built-in motor buzzes for the given duration | `Start(TimeSpan, intensity)` scales buzz strength; `getIsSupportedProperty()` true; `getDeviceNameProperty()` non-empty | **NOT RUN** — no Android device in this session (Section 3) |
 | Android phone | same | `StartLeftRight(large, small, duration)` | N/A (not real XNA API) | Blends to one intensity on the phone's single actuator (confirmed via SDL3 source, `VIB-003`) — do **not** expect two independently-felt motors | **NOT RUN**, but the single-actuator-blend *code path* is source-confirmed, not just assumed (`VIB-003`) |
 | iOS phone | none yet (`VIB-004`, plan only) | `Start(TimeSpan)` | Deterministic silent no-op (no backend registered) until a `CHHapticEngine` backend is implemented | Same — `getIsSupportedProperty()` false | **DEFERRED** — no backend exists; nothing to run yet |
-| Desktop, no haptic hardware present | `Detail::SdlHapticVibrateBackend`, no device opens | `Start()`/`Stop()`/`StartLeftRight()`/`getIsSupportedProperty()`/`getDeviceNameProperty()` | Silent no-op for `Start`/`Stop`/`StartLeftRight`; `getIsSupportedProperty()` false; `getDeviceNameProperty()` empty | Same | **VERIFIED, this container** — every `VibrateControllerTests` case exercises exactly this environment live (313→ growing test count, all passing) |
+| Desktop, no haptic hardware present | `PlatformVibrateBackend`, no preferred device | `Start()`/`Stop()`/`StartLeftRight()`/`getIsSupportedProperty()`/`getDeviceNameProperty()` | Silent no-op for `Start`/`Stop`/`StartLeftRight`; `getIsSupportedProperty()` false; `getDeviceNameProperty()` empty | Same | **VERIFIED, this container** — platform migration tests exercise this environment deterministically |
 | Desktop with a connected non-gamepad haptic device (e.g. a USB force-feedback wheel) | same, real device opened | `Start(TimeSpan)`/`Start(TimeSpan, intensity)` | Device actuates for the given duration; `getIsSupportedProperty()` true | Intensity scales strength; `StartLeftRight()` may achieve genuine independent magnitudes if the device/driver supports `SDL_HAPTIC_LEFTRIGHT` natively (unlike the Android single-actuator blend above) | **NOT RUN** — no such hardware available in this session |
 | Desktop with a connected rumble-capable gamepad, no other haptic device | same | `getIsSupportedProperty()`, `Start()`, `GamePad::SetVibration()` | `VibrateController` excludes the gamepad's own haptic ID (`IsConnectedGamepadHapticDevice()`) — behaves as if unsupported; `GamePad::SetVibration()` drives the gamepad normally; neither API fights the other for the same motor | Same | **NOT RUN** — no gamepad connected in this session (full steps: Section 5 above) |
 

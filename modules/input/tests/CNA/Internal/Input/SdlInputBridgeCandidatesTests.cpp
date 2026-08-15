@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <string>
 #include <vector>
 
-using CNA::Internal::Input::SdlInputBridge;
+using CNA::Internal::Input::PlatformInputBridge;
+using CNA::Platform::TextEditingCandidatesEvent;
 using Microsoft::Xna::Framework::Input::TextInputEXT;
 
 namespace
@@ -39,14 +38,11 @@ TEST_F(SdlInputBridgeCandidatesTest, CandidatesEventDecodesStringsSelectedAndOri
             ++calls;
         };
 
-    const char* cands[] = {"\xE6\x84\x9B", "love", "eye"}; // UTF-8 incl. a CJK char
-    SDL_Event e{};
-    e.type = SDL_EVENT_TEXT_EDITING_CANDIDATES;
-    e.edit_candidates.candidates = cands;
-    e.edit_candidates.num_candidates = 3;
-    e.edit_candidates.selected_candidate = 1;
-    e.edit_candidates.horizontal = true;
-    SdlInputBridge::ProcessEvent(e);
+    TextEditingCandidatesEvent event;
+    event.candidates = {"\xE6\x84\x9B", "love", "eye"}; // UTF-8 incl. a CJK char
+    event.selectedCandidate = 1;
+    event.horizontal = true;
+    PlatformInputBridge::ProcessEvent(event);
 
     ASSERT_EQ(calls, 1);
     ASSERT_EQ(got.size(), 3u);
@@ -71,13 +67,9 @@ TEST_F(SdlInputBridgeCandidatesTest, NullCandidatesDispatchEmptyList)
             selected = sel;
         };
 
-    SDL_Event e{};
-    e.type = SDL_EVENT_TEXT_EDITING_CANDIDATES;
-    e.edit_candidates.candidates = nullptr;
-    e.edit_candidates.num_candidates = 0;
-    e.edit_candidates.selected_candidate = -1;
-    e.edit_candidates.horizontal = false;
-    SdlInputBridge::ProcessEvent(e);
+    TextEditingCandidatesEvent event;
+    event.selectedCandidate = -1;
+    PlatformInputBridge::ProcessEvent(event);
 
     EXPECT_TRUE(fired);
     EXPECT_EQ(size, 0u);

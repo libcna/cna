@@ -2525,12 +2525,12 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     // remaining 2D/no-3D backends deliberately inherit the shared, unconditionally throwing
     // default. Keeping the three sets disjoint makes a new renderer an audit failure, not an
     // accidental 16-bit fallback.
-    constexpr std::array<const char*, 31> providers{{
+    constexpr std::array<const char*, 32> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
         "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
         "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
-        "software", "sokol", "stub", "vulkan", "webgpu", "wicked",
+        "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
     constexpr std::array<const char*, 2> explicitRejecters{{"gdi", "skia"}};
     constexpr std::array<const char*, 9> inheritedRejecters{{
@@ -2542,7 +2542,7 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
     for (const char* name : providers) { expected.insert(name); }
     for (const char* name : explicitRejecters) { expected.insert(name); }
     for (const char* name : inheritedRejecters) { expected.insert(name); }
-    ASSERT_EQ(42u, expected.size()) << "the policy sets must be disjoint";
+    ASSERT_EQ(43u, expected.size()) << "the policy sets must be disjoint";
 
     const std::filesystem::path renderers =
         RepositoryRoot() / "modules" / "renderers";
@@ -2562,12 +2562,12 @@ TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 
 TEST(GltfRendererIndexWidthPolicy, ProvidersOptInAndUnsupportedRenderersCannotFallBackToSixteenBits)
 {
-    constexpr std::array<const char*, 31> providers{{
+    constexpr std::array<const char*, 32> providers{{
         "bgfx", "diligent", "directx10", "directx11", "directx12", "directx2",
         "directx3", "directx5", "directx6", "directx7", "directx8", "directx9",
         "easygl", "fna3d", "glide", "headless", "llgl", "magnum", "metal",
         "opengl1", "opengl2", "opengl4", "opengles1", "portablegl", "sdl-gpu",
-        "software", "sokol", "stub", "vulkan", "webgpu", "wicked",
+        "software", "sokol", "stub", "tinygl", "vulkan", "webgpu", "wicked",
     }};
     constexpr std::array<const char*, 9> inheritedRejecters{{
         "blend2d", "canvas", "direct2d", "directx1", "freedirect", "html-dom",

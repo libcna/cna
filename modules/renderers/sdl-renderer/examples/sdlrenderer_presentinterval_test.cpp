@@ -15,8 +15,8 @@
 // unset in that case).
 //
 // GraphicsDevice/SdlRenderer expose no public accessor for the real SDL_Renderer's actual
-// current vsync setting (GetRendererInternal() is private, matching this project's convention of
-// not leaking renderer-specific types through the XNA-facing API), so this test verifies what's
+// current vsync setting, matching this project's convention of not leaking renderer-specific
+// types through the XNA-facing API, so this test verifies what's
 // actually observable at the XNA level: every PresentInterval value can be applied via
 // GraphicsDevice::Reset() without throwing, round-trips correctly through
 // PresentationParameters.PresentationInterval, and the device remains fully functional afterward.

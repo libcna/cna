@@ -12,8 +12,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
-struct SDL_Texture;
-
 namespace System::IO { class Stream; }
 
 namespace Microsoft::Xna::Framework
@@ -634,8 +632,6 @@ namespace Microsoft::Xna::Framework::Graphics
         /// Raw block-compressed byte readback counterpart of SetCompressedDataBytes.
         void GetCompressedDataBytes(int level, const Rectangle* rect, std::uint8_t* data,
                                     int startIndex, int elementCount) const;
-
-        [[nodiscard]] SDL_Texture* GetNativeTextureInternal() const;
 
         friend class SpriteBatch;
         friend class GraphicsDevice;

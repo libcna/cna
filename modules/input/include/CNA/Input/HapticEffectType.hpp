@@ -6,37 +6,36 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — which force-feedback effect family a `HapticEffectEXT` describes. Mirrors
-     *        SDL3's individual `SDL_HAPTIC_*` effect-type constants (as opposed to the capability
-     *        bitmask, see `HapticFeatureEXT`).
+     * @brief CNAEXT — which force-feedback effect family a `HapticEffectEXT` describes, using
+     *        CNA-owned values distinct from the capability bitmask in `HapticFeatureEXT`.
      */
     CNAEXT enum class HapticEffectTypeEXT
     {
-        /** @brief A steady directional push (`SDL_HAPTIC_CONSTANT`). */
+        /** @brief A steady directional push. */
         Constant,
-        /** @brief A sine-wave periodic effect (`SDL_HAPTIC_SINE`). */
+        /** @brief A sine-wave periodic effect. */
         Sine,
-        /** @brief A square-wave periodic effect (`SDL_HAPTIC_SQUARE`). */
+        /** @brief A square-wave periodic effect. */
         Square,
-        /** @brief A triangle-wave periodic effect (`SDL_HAPTIC_TRIANGLE`). */
+        /** @brief A triangle-wave periodic effect. */
         Triangle,
-        /** @brief An upward-sawtooth periodic effect (`SDL_HAPTIC_SAWTOOTHUP`). */
+        /** @brief An upward-sawtooth periodic effect. */
         SawtoothUp,
-        /** @brief A downward-sawtooth periodic effect (`SDL_HAPTIC_SAWTOOTHDOWN`). */
+        /** @brief A downward-sawtooth periodic effect. */
         SawtoothDown,
-        /** @brief A linear start-to-end magnitude ramp (`SDL_HAPTIC_RAMP`). */
+        /** @brief A linear start-to-end magnitude ramp. */
         Ramp,
-        /** @brief Spring-like resistance based on axis position (`SDL_HAPTIC_SPRING`). */
+        /** @brief Spring-like resistance based on axis position. */
         Spring,
-        /** @brief Damper-like resistance based on axis velocity (`SDL_HAPTIC_DAMPER`). */
+        /** @brief Damper-like resistance based on axis velocity. */
         Damper,
-        /** @brief Inertia-like resistance based on axis acceleration (`SDL_HAPTIC_INERTIA`). */
+        /** @brief Inertia-like resistance based on axis acceleration. */
         Inertia,
-        /** @brief Friction-like resistance based on axis movement (`SDL_HAPTIC_FRICTION`). */
+        /** @brief Friction-like resistance based on axis movement. */
         Friction,
-        /** @brief Explicit large/small (low/high frequency) motor control (`SDL_HAPTIC_LEFTRIGHT`). */
+        /** @brief Explicit large/small (low/high frequency) motor control. */
         LeftRight,
-        /** @brief A caller-defined raw waveform sample buffer (`SDL_HAPTIC_CUSTOM`). */
+        /** @brief A caller-defined raw waveform sample buffer. */
         Custom
     };
 }

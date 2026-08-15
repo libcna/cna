@@ -1,0 +1,225 @@
+{
+  "schema": 1,
+  "renderer": "OPENGLES3",
+  "device": "Mesa llvmpipe 25.0.7, OpenGL ES 3.2, LP_NUM_THREADS=1",
+  "baseline_revision": "e19e52fb6e0f69b68b57b86eba88d28944179e05",
+  "current_revision": "4d99e6d19",
+  "method": {
+    "scene": "480x270, 500 moving 2x2 RGBA8 sprites per frame",
+    "warmup_frames": 120,
+    "measured_frames_per_phase": 2400,
+    "comparison_pairs": 12,
+    "baseline_runs": 24,
+    "current_runs": 12,
+    "estimator": "per-run p50 and p95; paired log-ratio Student-t 95% CI",
+    "minimum_regression_floor_percent": 0.5
+  },
+  "host": {
+    "system": "Linux",
+    "release": "6.12.101+deb13-amd64",
+    "machine": "x86_64",
+    "python": "3.13.5",
+    "cpu_affinity": [
+      0
+    ]
+  },
+  "metrics": {
+    "stable.submission": {
+      "baseline_frame_ms": {
+        "p50": 0.067578018,
+        "p95": 0.07900009585
+      },
+      "current_frame_ms": {
+        "p50": 0.067636013,
+        "p95": 0.07844405465
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.2205497417374757,
+            "ci95": [
+              -3.250877590188433,
+              3.816534355638483
+            ],
+            "effective_floor": 3.816534355638483
+          },
+          "current_delta_percent": {
+            "mean": -0.026158760054961136,
+            "ci95": [
+              -2.4251157706385538,
+              2.4317785381721233
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": -0.2836766884675588,
+            "ci95": [
+              -2.603655894895218,
+              2.091564381921323
+            ],
+            "effective_floor": 2.603655894895218
+          },
+          "current_delta_percent": {
+            "mean": -0.4841435957999629,
+            "ci95": [
+              -2.2088827227705576,
+              1.2710147056204972
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "stable.end_to_end": {
+      "baseline_frame_ms": {
+        "p50": 0.26903449,
+        "p95": 0.341331989
+      },
+      "current_frame_ms": {
+        "p50": 0.270577505,
+        "p95": 0.33468310554999997
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.9263981282462965,
+            "ci95": [
+              -2.2201334203784078,
+              4.174184271838448
+            ],
+            "effective_floor": 4.174184271838448
+          },
+          "current_delta_percent": {
+            "mean": 0.7832543672387724,
+            "ci95": [
+              -1.4550019466438449,
+              3.0723482824770962
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": -0.6911810213330564,
+            "ci95": [
+              -8.13182980518084,
+              7.352105805780094
+            ],
+            "effective_floor": 8.13182980518084
+          },
+          "current_delta_percent": {
+            "mean": -1.6893871729127752,
+            "ci95": [
+              -7.082420308034997,
+              4.016663224313629
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "churn.submission": {
+      "baseline_frame_ms": {
+        "p50": 0.069979012,
+        "p95": 0.08164010484999999
+      },
+      "current_frame_ms": {
+        "p50": 0.070199013,
+        "p95": 0.08239703465
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.21819909377277438,
+            "ci95": [
+              -2.1890849669966426,
+              2.684730290174029
+            ],
+            "effective_floor": 2.684730290174029
+          },
+          "current_delta_percent": {
+            "mean": 0.6454474752276645,
+            "ci95": [
+              -2.2711759439057864,
+              3.6491147348165685
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": -0.07352810057353255,
+            "ci95": [
+              -1.311052989270446,
+              1.1795149175242121
+            ],
+            "effective_floor": 1.311052989270446
+          },
+          "current_delta_percent": {
+            "mean": 0.22723394232308067,
+            "ci95": [
+              -1.75172703082444,
+              2.2460560388765027
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "churn.end_to_end": {
+      "baseline_frame_ms": {
+        "p50": 0.271478012,
+        "p95": 0.3432699965
+      },
+      "current_frame_ms": {
+        "p50": 0.273576021,
+        "p95": 0.3389536471
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.565128178297157,
+            "ci95": [
+              -2.1378679075347717,
+              3.342782231248783
+            ],
+            "effective_floor": 3.342782231248783
+          },
+          "current_delta_percent": {
+            "mean": 1.2910407703280407,
+            "ci95": [
+              -2.0267984078098022,
+              4.721237783395143
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": 2.1312396982590167,
+            "ci95": [
+              -2.16067221825592,
+              6.611424657084859
+            ],
+            "effective_floor": 6.611424657084859
+          },
+          "current_delta_percent": {
+            "mean": -2.87378829957606,
+            "ci95": [
+              -7.117708552743653,
+              1.5640425347648403
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    }
+  },
+  "passed": true
+}

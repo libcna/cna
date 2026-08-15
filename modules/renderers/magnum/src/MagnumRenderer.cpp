@@ -46,6 +46,23 @@ namespace CNA::Internal::Renderers::Magnum
         constexpr int kPbrSpecularMapSlot = 5;
         constexpr int kPbrSpecularColorMapSlot = 6;
 
+        CNA::Platform::GlContextDescription RequestedContext(const int multiSampleCount)
+        {
+            CNA::Platform::GlContextDescription description;
+            description.majorVersion = 3;
+            description.minorVersion = 3;
+            description.profile = CNA::Platform::GlProfile::Core;
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            if (multiSampleCount > 1)
+            {
+                description.multisampleBuffers = 1;
+                description.multisampleSamples = multiSampleCount;
+            }
+            return description;
+        }
+
         Mg::Color4 ToMagnumColor(float r, float g, float b, float a)
         {
             return Mg::Color4{r, g, b, a};
@@ -73,59 +90,33 @@ namespace CNA::Internal::Renderers::Magnum
         }
     }
 
-    MagnumRenderer::MagnumRenderer(SDL_Window* window,
-                                                 int virtualWidth, int virtualHeight,
-                                                 CnaPresentationMode mode,
-                                                 int multiSampleCount, int swapInterval)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
-        , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
-        , swapInterval_(swapInterval)
+    MagnumRenderer::MagnumRenderer(const GraphicsRendererCreateArgs& args)
+        : platformContext_(std::make_unique<PlatformGlContextOwner>(
+              RequirePlatformGlContext(args.glContext, "MAGNUM"),
+              RequirePlatformGlWindow(args.surface, "MAGNUM"),
+              RequestedContext(args.multiSampleCount)))
+        , surface_(args.surface)
+        , magnumContext_(
+              std::make_unique<::Magnum::Platform::GLContext>(::Magnum::NoCreate))
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , sampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 1)
+        , swapInterval_(args.swapInterval)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("MagnumRenderer initialized with null window.");
-
-        // The SDL window is NOT owned here -- it belongs to GraphicsDevice / the platform layer.
-        // The GL context created below IS owned by this renderer.
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        // SDL defaults the stencil size to 0, which would make DepthStencilState.StencilEnable a
-        // permanent no-op no matter what a game requested.
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        if (sampleCount_ > 1)
-        {
-            // The back buffer is made multisampled by the context itself rather than by an
-            // off-screen buffer this renderer would have to resolve by hand every Present.
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, sampleCount_);
-        }
-
-        glContext_ = SDL_GL_CreateContext(window_);
-        if (glContext_ == nullptr)
-        {
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
-        }
-        SDL_GL_MakeCurrent(window_, glContext_);
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval_);
 
         // Magnum loads its OpenGL entry points from whichever context is current, so this must
         // happen after MakeCurrent and never before.
-        magnumContext_ = std::make_unique<::Magnum::Platform::GLContext>(::Magnum::NoCreate);
         if (!magnumContext_->tryCreate())
         {
-            SDL_GL_DestroyContext(glContext_);
-            glContext_ = nullptr;
             throw std::runtime_error(
-                "Magnum could not initialize against the SDL-created OpenGL context.");
+                "Magnum could not initialize against the platform-created OpenGL context.");
         }
 
-        int actualSamples = 0;
-        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &actualSamples);
-        sampleCount_ = std::max(1, actualSamples);
+        const auto granted = platformContext_->GetAttributes();
+        sampleCount_ = granted.multisampleBuffers > 0 && granted.multisampleSamples > 1
+            ? granted.multisampleSamples : 1;
 
         maxMrtTargets_ = std::max(1, std::min({4,
             Mg::GL::AbstractFramebuffer::maxDrawBuffers(),
@@ -150,30 +141,23 @@ namespace CNA::Internal::Renderers::Magnum
         // Registered last, after every fallible step above has succeeded: a constructor that throws
         // never runs its destructor, so an earlier registration would leave a dangling entry in the
         // shared window registry.
-        RegisterForWindow(window_, this);
+        RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     MagnumRenderer::~MagnumRenderer()
     {
-        UnregisterForWindow(window_);
+        UnregisterForWindow(surface_.GetWindowId());
 
         // Every GL object this renderer owns has to die while the context that created it is still
         // current: Magnum's GL object destructors consult GL::Context::current() and abort outright
         // when there is none. Member destruction order alone is not enough -- it runs after this
-        // body, which is where the context itself is torn down -- so each owned resource is
-        // released here first, in front of the context. Every GL-owning member has to appear below;
-        // one that does not is not a leak but an abort, and only on the paths that create it.
+        // body, so each owned resource is explicitly released in front of Magnum's context.
+        // PlatformGlContextOwner is declared first and is consequently destroyed last.
         defaultWhiteTexture_.reset();
         defaultFlatNormalTexture_.reset();
         mrtFramebuffer_.reset();
         stockShaders_.reset();
         magnumContext_.reset();
-
-        if (glContext_ != nullptr)
-        {
-            SDL_GL_DestroyContext(glContext_);
-            glContext_ = nullptr;
-        }
     }
 
     bool MagnumRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -231,7 +215,7 @@ namespace CNA::Internal::Renderers::Magnum
 
     void MagnumRenderer::GetPhysicalSize(int& width, int& height) const
     {
-        SDL_GetWindowSize(window_, &width, &height);
+        surface_.GetDrawableSize(width, height);
     }
 
     void MagnumRenderer::GetLogicalSize(int& width, int& height) const
@@ -261,6 +245,11 @@ namespace CNA::Internal::Renderers::Magnum
         GetLogicalSize(width, height);
     }
 
+    void MagnumRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+    }
+
     void MagnumRenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -275,7 +264,7 @@ namespace CNA::Internal::Renderers::Magnum
     void MagnumRenderer::SetSwapInterval(int interval)
     {
         swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
     }
 
     bool MagnumRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -289,8 +278,8 @@ namespace CNA::Internal::Renderers::Magnum
         if (physicalHeight <= 0)
             return false;
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physicalHeight);
-        logX = windowX * scale;
-        logY = windowY * scale;
+        logX = surface_.WindowToDrawable(windowX) * scale;
+        logY = surface_.WindowToDrawable(windowY) * scale;
         return true;
     }
 
@@ -309,14 +298,14 @@ namespace CNA::Internal::Renderers::Magnum
             return false;
         const float inverseScale =
             static_cast<float>(physicalHeight) / static_cast<float>(virtualHeight_);
-        windowX = logX * inverseScale;
-        windowY = logY * inverseScale;
+        windowX = surface_.DrawableToWindow(logX * inverseScale);
+        windowY = surface_.DrawableToWindow(logY * inverseScale);
         return true;
     }
 
     void MagnumRenderer::Present()
     {
-        SDL_GL_SwapWindow(window_);
+        platformContext_->SwapBuffers();
     }
 
     // ---- Destination selection ----
@@ -1565,9 +1554,7 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_MAGNUM
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Magnum::MagnumRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
-            args.presentationMode, args.multiSampleCount, args.swapInterval);
+        return std::make_unique<Magnum::MagnumRenderer>(args);
     }
 #endif
 }

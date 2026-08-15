@@ -35,7 +35,7 @@ namespace Microsoft::Xna::Framework::Graphics
      * REMED-GFX-142: **colour, depth AND stencil** -- all three, not colour alone. FNA3D's public
      * header documents the flag this maps to as "Set this to 1 to store the color/depth/stencil
      * contents for future use", and all three of its drivers agree (an OpenGL FBO attachment and a
-     * D3D11 DSV simply persist; its SDL_GPU driver loads both depth and stencil unless a clear is
+     * D3D11 DSV simply persist; one GPU driver loads both depth and stencil unless a clear is
      * pending and always stores them). So for `PreserveContents` and `PlatformContents`:
      * - colour, depth and stencil each survive a full unbind/rebind cycle,
      * - across a trip through another render target or through the backbuffer,

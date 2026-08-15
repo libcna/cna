@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
@@ -1101,7 +1102,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         ~ConstructionResources()
         {
             if (rendererRegistered)
-                IGraphicsRenderer::UnregisterForWindow(window);
+                IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window));
 
             for (auto it = shaders.rbegin(); it != shaders.rend(); ++it)
             {
@@ -1283,7 +1284,7 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
 
         resources.FailAt(SdlGpuFailurePointEXT::RendererRegistration);
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
         resources.rendererRegistered = true;
         resources.FailAt(SdlGpuFailurePointEXT::AfterRendererRegistration);
 
@@ -1305,7 +1306,7 @@ namespace CNA::Internal::Renderers::SdlGpu
     {
         if (registeredForWindow_)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
             registeredForWindow_ = false;
         }
         // Drops every queued command, and with it every SdlGpuSampledTextureEXT::keepAlive a
@@ -7386,6 +7387,7 @@ namespace CNA::Internal::Renderers
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<SdlGpu::SdlGpuRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }
 }

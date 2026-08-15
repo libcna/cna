@@ -58,7 +58,7 @@ namespace CNA::Internal::Renderers::Blend2D
         /// TextureFilter.hpp), but BLPatternQuality is a single nearest/bilinear choice with no
         /// separate min/mag/mip control and Blend2D has no mip chain at all. SpriteBatch draws are
         /// near-universally magnification-dominant, so the MAGNIFICATION ("expand") component is
-        /// used as the effective filter -- the same decomposition SdlRenderer.cpp's own
+        /// used as the effective filter -- the same decomposition the native 2D renderer's
         /// SetSamplerFilter uses for the identical reason (Task 701 finding):
         ///   Linear=0, Anisotropic=2 (linear-based, no Blend2D equivalent), LinearMipPoint=3,
         ///   MinPointMagLinearMipLinear=7, MinPointMagLinearMipPoint=8 (all mag=Linear) -> BILINEAR.

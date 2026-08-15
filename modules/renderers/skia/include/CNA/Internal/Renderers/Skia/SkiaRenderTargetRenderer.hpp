@@ -42,7 +42,7 @@ namespace CNA::Internal::Renderers::Skia
 
         [[nodiscard]] int GetWidth() const override { return Surface().Width(); }
         [[nodiscard]] int GetHeight() const override { return Surface().Height(); }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const std::uint8_t* rgba,
                                int levelWidth, int levelHeight) override;

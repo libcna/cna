@@ -3,32 +3,43 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_clipboard.h>
-#include <SDL3/SDL_stdinc.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 namespace CNA::Devices
 {
     bool Clipboard::setTextProperty(const std::string& text)
     {
-        return SDL_SetClipboardText(text.c_str());
+        Platform::IPlatformClipboard* clipboard = Platform::GetCurrentPlatform().GetClipboard();
+        if (clipboard == nullptr)
+        {
+            // Null exactly when the platform reports no clipboard capability. This API answers
+            // with a bool, so a caller learns it failed without an exception -- the same shape
+            // the previous native-backed version had when setting clipboard text failed.
+            return false;
+        }
+
+        try
+        {
+            clipboard->SetText(text);
+            return true;
+        }
+        catch (const Platform::PlatformException&)
+        {
+            return false;
+        }
     }
 
     std::string Clipboard::getTextProperty()
     {
-        char* text = SDL_GetClipboardText();
-        if (text == nullptr)
-        {
-            return {};
-        }
-
-        std::string result(text);
-        SDL_free(text);
-        return result;
+        Platform::IPlatformClipboard* clipboard = Platform::GetCurrentPlatform().GetClipboard();
+        return clipboard != nullptr ? clipboard->GetText() : std::string();
     }
 
     bool Clipboard::getHasTextProperty()
     {
-        return SDL_HasClipboardText();
+        Platform::IPlatformClipboard* clipboard = Platform::GetCurrentPlatform().GetClipboard();
+        return clipboard != nullptr && clipboard->HasText();
     }
 } // namespace CNA::Devices
 

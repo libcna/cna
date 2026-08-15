@@ -53,6 +53,7 @@ target_include_directories(${RENDERER_TARGET} PRIVATE "${CNA_FNA3D_GENERATED_DIR
 # MojoShader switches.
 target_link_libraries(${RENDERER_TARGET} PUBLIC cna_fna3d)
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
+set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local.

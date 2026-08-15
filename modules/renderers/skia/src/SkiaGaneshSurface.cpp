@@ -32,17 +32,16 @@ namespace CNA::Internal::Renderers::Skia
         sk_sp<SkSurface> surface;
     };
 
-    SkiaGaneshSurface::SkiaGaneshSurface(SDL_Window* window)
-        : window_(window)
-        , context_(std::in_place, window)
+    SkiaGaneshSurface::SkiaGaneshSurface(const GraphicsRendererCreateArgs& args)
+        : glService_(args.glContext)
+        , surface_(args.surface)
+        , context_(std::in_place, glService_, surface_.GetWindowId())
     {
         int width = 0;
         int height = 0;
-        if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0)
-        {
-            throw std::runtime_error(
-                std::string("SkiaGaneshSurface SDL_GetWindowSizeInPixels failed: ") + SDL_GetError());
-        }
+        surface_.GetDrawableSize(width, height);
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error("SkiaGaneshSurface has a non-positive drawable size.");
 
         impl_ = std::make_unique<Impl>();
         WrapBackbuffer(width, height);
@@ -114,15 +113,14 @@ namespace CNA::Internal::Renderers::Skia
         return impl_->surface->getCanvas();
     }
 
-    void SkiaGaneshSurface::Resize()
+    void SkiaGaneshSurface::Resize(const RendererSurfaceInfo& surface)
     {
+        surface_.Update(surface);
         int width = 0;
         int height = 0;
-        if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0)
-        {
-            throw std::runtime_error(
-                std::string("SkiaGaneshSurface SDL_GetWindowSizeInPixels failed: ") + SDL_GetError());
-        }
+        surface_.GetDrawableSize(width, height);
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error("SkiaGaneshSurface has a non-positive drawable size.");
         if (width == width_ && height == height_)
             return;
         WrapBackbuffer(width, height);
@@ -131,8 +129,7 @@ namespace CNA::Internal::Renderers::Skia
     void SkiaGaneshSurface::Present()
     {
         context_->NativeContextEXT()->flushAndSubmit(impl_->surface.get());
-        if (!SDL_GL_SwapWindow(window_))
-            throw std::runtime_error(std::string("SkiaGaneshSurface SDL_GL_SwapWindow failed: ") + SDL_GetError());
+        context_->SwapBuffers();
     }
 
     bool SkiaGaneshSurface::ReadPixels(int x, int y, int width, int height, std::uint8_t* outRgba8) const
@@ -152,15 +149,13 @@ namespace CNA::Internal::Renderers::Skia
         // context, and rewrapping it is exactly WrapBackbuffer's job.
         impl_->surface.reset(); // release the surface that depends on the OLD context first
         context_.reset();       // destroy the OLD GL context + GrDirectContext
-        context_.emplace(window_); // construct a brand NEW GL context + GrDirectContext; throws on failure
+        context_.emplace(glService_, surface_.GetWindowId());
 
         int width = 0;
         int height = 0;
-        if (!SDL_GetWindowSizeInPixels(window_, &width, &height) || width <= 0 || height <= 0)
-        {
-            throw std::runtime_error(
-                std::string("SkiaGaneshSurface SDL_GetWindowSizeInPixels failed: ") + SDL_GetError());
-        }
+        surface_.GetDrawableSize(width, height);
+        if (width <= 0 || height <= 0)
+            throw std::runtime_error("SkiaGaneshSurface has a non-positive drawable size.");
         WrapBackbuffer(width, height); // rewrap fresh, at the current (possibly changed) size
     }
 #else
@@ -174,9 +169,10 @@ namespace CNA::Internal::Renderers::Skia
     {
     };
 
-    SkiaGaneshSurface::SkiaGaneshSurface(SDL_Window* window)
-        : window_(window)
-        , context_(std::in_place, window)
+    SkiaGaneshSurface::SkiaGaneshSurface(const GraphicsRendererCreateArgs& args)
+        : glService_(args.glContext)
+        , surface_(args.surface)
+        , context_(std::in_place, glService_, surface_.GetWindowId())
     {
     }
 
@@ -186,7 +182,7 @@ namespace CNA::Internal::Renderers::Skia
 
     SkCanvas* SkiaGaneshSurface::Canvas() const noexcept { return nullptr; }
 
-    void SkiaGaneshSurface::Resize() {}
+    void SkiaGaneshSurface::Resize(const RendererSurfaceInfo&) {}
 
     void SkiaGaneshSurface::DebugSimulateContextLossEXT() {}
 

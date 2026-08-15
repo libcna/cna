@@ -4,7 +4,7 @@
 # added by DX-121 (D3D12EffectRenderer's runtime D3DCompile() path) -- confirmed safe to link in
 # isolation by D3D11's own DX-14-compile/DX-58 precedent.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 d3d12 dxgi d3dcompiler cna_renderer_d3dcommon)
+target_link_libraries(${RENDERER_TARGET} PRIVATE d3d12 dxgi d3dcompiler cna_renderer_d3dcommon)
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

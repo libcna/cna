@@ -5,7 +5,6 @@ file(GLOB_RECURSE CNA_DEVICES_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_devices Devices ${CNA_DEVICES_SOURCES})
 target_link_libraries(cna_devices PUBLIC cna_runtime cna_graphics_core cna_core cna_math)
 cna_link_sharp_runtime(cna_devices PUBLIC Core.Base)
-target_link_libraries(cna_devices PRIVATE SDL3::SDL3)
 
 if(ANDROID)
     # Detail::AndroidSensorBridge (Microsoft::Devices::Sensors) calls the NDK's

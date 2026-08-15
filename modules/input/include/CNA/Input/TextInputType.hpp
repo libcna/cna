@@ -9,7 +9,7 @@ namespace CNA::Input
      * @brief CNAEXT — a hint describing the kind of text being entered.
      *
      * XNA 4.0's text input has no notion of input type; this CNA extension mirrors SDL3's
-     * `SDL_TextInputType`, letting a game hint the on-screen keyboard / IME layout (e.g. show a
+     * `PlatformTextInputType`, letting a game hint the on-screen keyboard / IME layout (e.g. show a
      * numeric pad, hide password characters, or offer an email keyboard) via
      * `TextInputEXT::StartTextInputWithTypeEXT`.
      */

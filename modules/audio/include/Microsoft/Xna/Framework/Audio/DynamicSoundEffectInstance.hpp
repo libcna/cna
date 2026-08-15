@@ -185,16 +185,15 @@ namespace Microsoft::Xna::Framework::Audio
         // exists to synchronize around, and this flag must be visible before that point).
         std::atomic<bool>   isFloat_ = false;
 
-        bool                streamIsFloat_ = false; // format the live audioStream_ was created with; game-thread-only, no lock needed
+        bool                streamIsFloat_ = false; // format of the live queued source; game-thread-only
 
-        void* audioStream_    = nullptr; // SDL_AudioStream*
+        void* audioStream_    = nullptr; // opaque internal mixer stream
 
         mutable std::mutex queueMutex_;
         std::vector<std::vector<SharpRuntime::bytecs>> queuedBuffers_;
 
-        // Byte size of each chunk handed to audioStream_ via SubmitQueuedToStream(), oldest
-        // first. A chunk is only popped once Update() observes (via SDL_GetAudioStreamQueued)
-        // that the stream no longer holds that many bytes queued as input -- i.e. once it has
+        // Byte size of each chunk handed to the mixer stream, oldest first. A chunk is only
+        // popped once Update() observes that the stream no longer holds that many bytes -- once it has
         // actually been consumed by playback, not merely submitted. Counted alongside
         // queuedBuffers_ by getPendingBufferCountProperty() (matches FNA's PendingBufferCount,
         // which only shrinks once the native voice reports a buffer as consumed).

@@ -45,7 +45,7 @@ using namespace Microsoft::Xna::Framework::Graphics;
 
 namespace
 {
-    constexpr int kExpectedChecks = 35;
+    constexpr int kExpectedChecks = 36;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(void, JsPublishResult, (int result, int passed, int expected), {
@@ -280,6 +280,24 @@ protected:
                   CloseEnough(result.getBProperty(), 50, 2) &&
                   CloseEnough(result.getAProperty(), 128, 2),
                   "HTMLDOM-85: AlphaBlend un-premultiplies premultiplied source data correctly");
+
+            // HTMLDOM-124: the draw colour is premultiplied under AlphaBlend too. The DOM path
+            // applies RGB to straight-alpha pixels and A separately as opacity/globalAlpha, so it
+            // must recover straight tint RGB first. An opaque source makes the regression exact:
+            // before the fix this alpha-only white fade read back half-darkened RGB (~100,50,25).
+            Texture2D opaqueTex = Make1x1(dev, 200, 100, 50, 255);
+            const Color faded = ReadBackTopLeftPixel(SpriteSortMode::Deferred, BlendState::AlphaBlend, [&] {
+                spriteBatch_->Draw(opaqueTex, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1),
+                                   Color::FromNonPremultiplied(255, 255, 255, 128));
+            });
+            std::printf("       alphablend tint fade got (%d,%d,%d,%d) want ~(200,100,50,128)\n",
+                        faded.getRProperty(), faded.getGProperty(), faded.getBProperty(),
+                        faded.getAProperty());
+            check(CloseEnough(faded.getRProperty(), 200, 2) &&
+                  CloseEnough(faded.getGProperty(), 100, 2) &&
+                  CloseEnough(faded.getBProperty(), 50, 2) &&
+                  CloseEnough(faded.getAProperty(), 128, 2),
+                  "HTMLDOM-124: AlphaBlend alpha-only tint changes opacity without double-darkening RGB");
         }
 
         // plan_html_dom.md HTMLDOM-86/HTMLDOM-100: Opaque replaces the destination with the source

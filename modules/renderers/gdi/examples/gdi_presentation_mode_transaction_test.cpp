@@ -12,6 +12,7 @@
 
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -62,7 +63,8 @@ namespace
     bool ExerciseDirectRenderer(SDL_Window* window)
     {
         bool ok = true;
-        GdiRenderer renderer(window, 40, 100, CnaPresentationMode::Letterbox);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 40, 100, CnaPresentationMode::Letterbox));
 
         renderer.Clear(0.2f, 0.4f, 0.6f, 1.0f);
         renderer.Present();
@@ -82,6 +84,7 @@ namespace
 
         ok &= Expect(ForceSkewedAspect(window),
                      "test window resizes to an extreme drawable aspect ratio");
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
 
         ok &= ExpectArgumentOutOfRange(
             [&] {

@@ -1,4 +1,5 @@
 // plan_dx.md Phase DIRECTX2/DIRECTX4: D3D11 renderer skeleton + device/swap-chain/back-buffer.
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX11/DirectX11Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX11/D3D11Textures.hpp"
@@ -8,8 +9,6 @@
 #include "CNA/Internal/Renderers/DirectX11/D3D11SpriteBatch.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DShaderCache.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -89,16 +88,20 @@ namespace CNA::Internal::Renderers::DirectX11
     }
 
     DirectX11Renderer::DirectX11Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface, "DirectX11Renderer")
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
         vsyncEnabled_ = args.swapInterval > 0;
 
-        if (window_)
-        {
-            SDL_GetWindowSizeInPixels(window_, &width_, &height_);
-        }
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX11Renderer requires a Win32 native window.");
+        hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+
+        const auto drawableSize = surface_.GetDrawableSize();
+        width_ = drawableSize.width;
+        height_ = drawableSize.height;
         if (width_ <= 0) width_ = args.virtualWidth > 0 ? args.virtualWidth : 1024;
         if (height_ <= 0) height_ = args.virtualHeight > 0 ? args.virtualHeight : 768;
 
@@ -106,10 +109,12 @@ namespace CNA::Internal::Renderers::DirectX11
         CreateSwapChainResources();
         CreateWindowSizeDependentViews();
 
-        SDL_Log("[D3D11] Renderer initialised (%dx%d), feature level 0x%04x, debug layer %s, tearing %s",
-                width_, height_, static_cast<unsigned>(featureLevel_),
-                debugLayerEnabled_ ? "enabled" : "disabled",
-                allowTearingSupported_ ? "supported" : "unsupported");
+        CNA::Logger::Info(
+            "D3D11 renderer initialised (" + std::to_string(width_) + "x" +
+                std::to_string(height_) + "), feature level " + FormatHr(featureLevel_) +
+                ", debug layer " + (debugLayerEnabled_ ? "enabled" : "disabled") +
+                ", tearing " + (allowTearingSupported_ ? "supported" : "unsupported"),
+            CNA::LogCategory::RENDER);
     }
 
     DirectX11Renderer::~DirectX11Renderer() = default;
@@ -141,7 +146,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // design decision 12: the debug layer is best-effort, never a hard requirement.
         if (FAILED(hr) && (flags & D3D11_CREATE_DEVICE_DEBUG) && hr == DXGI_ERROR_SDK_COMPONENT_MISSING)
         {
-            SDL_Log("[D3D11] D3D11 debug layer unavailable; retrying without it.");
+            CNA::Logger::Warn("D3D11 debug layer unavailable; retrying without it.",
+                              CNA::LogCategory::RENDER);
             flags &= ~D3D11_CREATE_DEVICE_DEBUG;
             hr = tryCreate(flags, kFeatureLevels, ARRAYSIZE(kFeatureLevels));
         }
@@ -149,7 +155,8 @@ namespace CNA::Internal::Renderers::DirectX11
         // design decision 12: some drivers reject an explicit 11_1 request outright.
         if (hr == E_INVALIDARG)
         {
-            SDL_Log("[D3D11] Feature level 11_1 rejected (E_INVALIDARG); retrying without it.");
+            CNA::Logger::Warn("D3D11 feature level 11_1 rejected; retrying without it.",
+                              CNA::LogCategory::RENDER);
             hr = tryCreate(flags, kFeatureLevels + 1, ARRAYSIZE(kFeatureLevels) - 1);
         }
 
@@ -198,14 +205,6 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::CreateSwapChainResources()
     {
-        if (!window_)
-            throw std::runtime_error("DirectX11Renderer: no window available to create a swap chain for");
-
-        HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!hwnd)
-            throw std::runtime_error("DirectX11Renderer: could not obtain HWND from SDL window");
-
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width = static_cast<UINT>(width_);
         desc.Height = static_cast<UINT>(height_);
@@ -218,7 +217,7 @@ namespace CNA::Internal::Renderers::DirectX11
         desc.Flags = (allowTearingSupported_ && allowTearingRequested_) ? DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0;
 
         HRESULT hr = factory_->CreateSwapChainForHwnd(
-            device_.Get(), hwnd, &desc, nullptr, nullptr, swapChain_.ReleaseAndGetAddressOf());
+            device_.Get(), hwnd_, &desc, nullptr, nullptr, swapChain_.ReleaseAndGetAddressOf());
         if (FAILED(hr))
             throw std::runtime_error("CreateSwapChainForHwnd failed, hr=" + FormatHr(hr));
     }
@@ -284,10 +283,11 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::EnsureSwapChainSize()
     {
-        if (!window_ || !swapChain_) return;
+        if (!swapChain_) return;
 
-        int w = 0, h = 0;
-        SDL_GetWindowSizeInPixels(window_, &w, &h);
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int w = drawableSize.width;
+        const int h = drawableSize.height;
         if (w <= 0 || h <= 0) return;
         if (w == width_ && h == height_) return;
 
@@ -316,7 +316,8 @@ namespace CNA::Internal::Renderers::DirectX11
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
-            SDL_Log("[D3D11] Device removed/reset! reason=%s", FormatHr(reason).c_str());
+            CNA::Logger::Error("D3D11 device removed/reset; reason=" + FormatHr(reason),
+                               CNA::LogCategory::RENDER);
         }
     }
 
@@ -348,15 +349,14 @@ namespace CNA::Internal::Renderers::DirectX11
 
     void DirectX11Renderer::GetViewportSize(int& width, int& height)
     {
-        if (window_)
-        {
-            SDL_GetWindowSizeInPixels(window_, &width, &height);
-        }
-        else
-        {
-            width = width_;
-            height = height_;
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        width = drawableSize.width > 0 ? drawableSize.width : width_;
+        height = drawableSize.height > 0 ? drawableSize.height : height_;
+    }
+
+    void DirectX11Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
     }
 
     void DirectX11Renderer::SetVirtualResolution(int width, int height)

@@ -8,12 +8,11 @@ namespace CNA::Internal::Audio
 {
     /**
      * Builds a minimal, valid in-memory RIFF/WAVE file from raw WAVEFORMATEX fields plus a
-     * complete PCM/compressed payload, so it can be handed to SDL3's own WAV loader
-     * (`SDL_LoadWAV_IO`, used internally by `MIX_LoadAudio_IO`) instead of the raw-PCM-only
-     * `MIX_LoadRawAudio_IO` path, which only understands uncompressed `SDL_AudioFormat` values.
+     * complete PCM/compressed payload, so it can be handed to the engine's encoded-audio loader
+     * instead of its raw-PCM-only path, which only understands uncompressed sample formats.
      *
-     * SDL3's WAV loader natively decodes PCM (8/16/24/32-bit), IEEE float (32-bit), and MS/IMA
-     * ADPCM (4-bit) -- this wrapper is the shared mechanism that lets CNA reach that decoder for
+     * The WAV decoder natively handles PCM (8/16/24/32-bit), IEEE float (32-bit), and MS/IMA
+     * ADPCM (4-bit) -- this wrapper is the shared mechanism that lets CNA reach the decoder for
      * every one of those formats from both the XNB `SoundEffectReader` and XACT `WaveBank`
      * entries, without CNA needing its own ADPCM/float decoder.
      *
@@ -24,7 +23,7 @@ namespace CNA::Internal::Audio
      * vector for formats with no extension (PCM, IEEE float).
      *
      * `factSampleFrames`, if nonzero, is written as a "fact" chunk's `dwSampleLength` -- not
-     * strictly required by SDL's non-strict WAV loading mode, but included when known since it
+     * strictly required by the non-strict WAV loading mode, but included when known since it
      * improves decode accuracy for compressed formats. Pass 0 to omit the fact chunk entirely.
      */
     std::vector<uint8_t> BuildWavFromWaveFormatEx(
@@ -46,8 +45,8 @@ namespace CNA::Internal::Audio
      * Appends a minimal "smpl" chunk encoding one loop point (start/end, in decoded PCM sample
      * frames) to an already-built WAV file, so `SoundEffect::FromStream`'s own
      * `TryParseWavSmplChunk` picks it up automatically. This is the only way to carry an
-     * authored loop region through `SoundEffect::FromStream` (which decodes via
-     * `MIX_LoadAudio_IO`, not a raw-buffer constructor that takes loop points directly) -- shared
+     * authored loop region through `SoundEffect::FromStream` (which uses the encoded-audio load
+     * path, not a raw-buffer constructor that takes loop points directly) -- shared
      * by both the XNB `SoundEffectReader` and XACT `WaveBank` entries, whose WAV-wrapped formats
      * (PCM8/float/MS-ADPCM/IMA-ADPCM) both need this to honor an authored loop region.
      *

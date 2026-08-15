@@ -3,9 +3,10 @@
 #
 # Tests are split by execution requirement, mirroring the SKIA renderer's own registration
 # (modules/renderers/skia/examples/CMakeLists.txt): Blend2DSurface itself is pure Blend2D CPU
-# rasterization with no SDL/window dependency at all, while the full renderer (window creation,
-# GraphicsDevice/Game integration, presentation) needs a real X11/virtual display.
+# rasterization with no window dependency at all, while full GraphicsDevice/Game integration uses
+# the selected platform and its surface presenter (a real X11/virtual display for the smoke test).
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D")
     enable_testing()
@@ -52,9 +53,8 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32 AND CNA_GRAPHICS_RENDERER ST
         LABELS "Blend2D;Display")
 
     # Deep correctness/safety regression suite: drives Blend2DRenderer/Blend2DSpriteBatchRenderer
-    # directly against a real SDL_Window, but SDL_VIDEODRIVER=dummy means no real X11/Wayland
-    # display is required at all (mirrors modules/renderers/freedirect/examples/CMakeLists.txt's
-    # identical "dummy" pattern) -- so this runs in any environment, including headless CI.
+    # directly through the SDL test presenter, but SDL_VIDEODRIVER=dummy means no real X11/Wayland
+    # display is required at all -- so this runs in any environment, including headless CI.
     cna_blend2d_test(cna_test_blend2d_correctness blend2d_renderer_correctness_test.cpp)
     cna_register_renderer_test(NAME Blend2D_Correctness COMMAND cna_test_blend2d_correctness
         TIMEOUT 60 ENVIRONMENT "SDL_VIDEODRIVER=dummy" LABELS "Blend2D;Correctness")

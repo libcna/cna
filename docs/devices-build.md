@@ -119,7 +119,7 @@ match list against the 283-case ground truth above:
 - **Matched 2 unrelated false positives outside `Microsoft::Devices`** —
   `GamePadTest.GetAccelerometerEXTReturnsFalseAndZeroesOutputWhenNoGamePadConnected`
   (via the bare `Accelerometer` substring) and
-  `SdlInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
+  `PlatformInputBridgeTouchGestureTest.FingerMotionThroughProcessEventProducesFlick` (via the
   bare `Motion` substring).
 
 The corrected filter below uses the 21 full suite names instead of loose substrings —
@@ -173,7 +173,7 @@ loop iterations; and Task P7-3's dispatch use-after-free fix was confirmed real,
 theoretical, only by *deliberately reverting it* and observing the regression test
 segfault 5 times out of 5 — a technique worth reaching for whenever a new regression
 test passes cleanly on the first try and you want to be sure it would actually fail
-without the fix. If you change anything touching `Detail::SdlSensorSubsystem<TSensor>`,
+without the fix. If you change anything touching `Detail::PlatformSensorSubsystem<TSensor>`,
 `Accelerometer`, or `Gyroscope`, re-run the relevant `--gtest_filter` in a loop (20–60
 iterations) before trusting a single pass:
 
@@ -185,12 +185,11 @@ done
 ```
 
 **Exception-swallowing policy in sensor dispatch (Task P8-5):**
-`Detail::SdlSensorSubsystem<TSensor>::DispatchToInstances()` catches and swallows *any*
+`Detail::PlatformSensorSubsystem<TSensor>::DispatchToInstances()` catches and swallows *any*
 exception a `CurrentValueChanged`/`ReadingChanged` handler throws, per-instance, and
 continues dispatching to the rest of the batch. This is a deliberate design choice, not
-an oversight: the real path (`SensorEventWatch()`) is an `SDL_EventFilter` callback
-invoked directly by `SDL_PushEvent()`, a C API that does not expect a C++ exception to
-unwind through its own call frames — and swallowing it there is also what lets a
+an oversight: the selected platform session may invoke through a C callback boundary that does
+not permit a C++ exception to unwind through its own call frames. Swallowing it there is also what lets a
 *different*, later instance in the same dispatch batch still receive its own event even
 if an earlier instance's handler misbehaves. `AccelerometerTests`/`GyroscopeTests`'
 `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent` (Task
@@ -257,8 +256,8 @@ against the cross-compiled ARM64 object files):
 ```
 
 `plan_devices_phase7.md` Task P7-7 re-ran this same `llvm-nm` check against Phase 7's
-actual new symbols (`GetGlobalSdlSensorMutex()`, `WaitForDisposalToComplete()`,
-`Detail::SdlSensorSubsystem<...>::DispatchToInstances<...>()`) in
+actual then-new symbols (the global native sensor mutex, `WaitForDisposalToComplete()`,
+and the shared dispatch manager) in
 `Accelerometer.cpp.o`/`Gyroscope.cpp.o`, not just re-confirming the Task P4-11-era
 landscape symbols still compile — see that task's Resolution for the exact commands.
 `plan_devices_phase8.md` Task P8-8 did the same again for Phase 8's actual new symbols
@@ -472,7 +471,7 @@ Devices-only test suite, not just written and assumed):
 
 These use the same corrected, exact-suite-name filter as Section 2 above (a bare
 `Accelerometer*`/`Motion*` glob here would pick up the same `GamePadTest`/
-`SdlInputBridgeTouchGestureTest` false positives noted there):
+`PlatformInputBridgeTouchGestureTest` false positives noted there):
 
 ```bash
 # AddressSanitizer — catches use-after-free, heap corruption, buffer overflows.

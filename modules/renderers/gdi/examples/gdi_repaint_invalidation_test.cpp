@@ -2,6 +2,7 @@
 // GDI-052: retained-client repaint invalidation independent of Win32 GetUpdateRect lifetime.
 
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -75,7 +76,8 @@ int main()
     int result = 0;
     try
     {
-        GdiRenderer renderer(window, 32, 24, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 32, 24, CnaPresentationMode::Stretch));
         bool ok = true;
 
         renderer.Clear(0.1f, 0.2f, 0.3f, 1.0f);
@@ -97,13 +99,15 @@ int main()
         renderer.DebugResetBackbufferDamage();
         ok &= Expect(PushWindowEvent(other, SDL_EVENT_WINDOW_EXPOSED),
                      "unrelated synthetic expose event was queued");
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(other));
         ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
-                     "another SDL window cannot invalidate this GDI client");
+                     "another platform window cannot invalidate this GDI client");
 
         ok &= Expect(PushWindowEvent(window, SDL_EVENT_WINDOW_EXPOSED),
                      "synthetic expose event was queued");
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
-                     "SDL exposed event records a repaint even if WM_PAINT was already validated");
+                     "platform exposure records a repaint even if WM_PAINT was already validated");
         Rectangle damage;
         bool fullyDirty = false;
         ok &= Expect(!renderer.DebugGetBackbufferDamage(damage, fullyDirty),
@@ -123,6 +127,7 @@ int main()
         {
             ok &= Expect(PushWindowEvent(window, eventType),
                          "synthetic lifecycle event was queued");
+            renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
             ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                          "lifecycle event requests a complete retained-client repaint");
             renderer.Present();
@@ -133,15 +138,15 @@ int main()
         SDL_Event foreground{};
         foreground.type = SDL_EVENT_DID_ENTER_FOREGROUND;
         ok &= Expect(SDL_PushEvent(&foreground), "foreground event was queued");
+        renderer.OnSurfaceInvalidated(0);
         ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "process foreground transition invalidates the retained GDI client");
         renderer.Present();
         ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "foreground repaint completes through a no-draw dirty present");
 
-        // Exercise the real Win32/SDL paint lifecycle behind F3, not only injected SDL events.
-        // SDL's Win32 WM_PAINT handler validates the update region before it emits EXPOSED; the
-        // event-watch generation must therefore remain authoritative after GetUpdateRect is empty.
+        // Exercise the real Win32 paint lifecycle behind F3, not only injected events. The
+        // platform-mapped exposure remains authoritative after GetUpdateRect is empty.
         ok &= Expect(SDL_ShowWindow(window) && SDL_SyncWindow(window),
                      "native repaint test shows and synchronizes its Win32 client");
         SDL_PumpEvents();
@@ -150,11 +155,12 @@ int main()
             SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
         ok &= Expect(nativeWindow != nullptr && InvalidateRect(nativeWindow, nullptr, FALSE) &&
                          UpdateWindow(nativeWindow),
-                     "native InvalidateRect/UpdateWindow dispatches WM_PAINT through SDL");
+                     "native InvalidateRect/UpdateWindow dispatches WM_PAINT");
         SDL_PumpEvents();
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         ok &= Expect(GetUpdateRect(nativeWindow, nullptr, FALSE) == FALSE &&
                          renderer.DebugIsNativeClientInvalidated(),
-                     "SDL-validated WM_PAINT still leaves a watched repaint generation pending");
+                     "platform-mapped WM_PAINT still leaves a repaint generation pending");
         renderer.Present();
         ok &= Expect(!renderer.DebugIsNativeClientInvalidated(),
                      "no-draw present repairs the real validated WM_PAINT client");
@@ -165,6 +171,7 @@ int main()
         ok &= Expect(SDL_MinimizeWindow(window) && SDL_SyncWindow(window),
                      "native window enters the minimized lifecycle state");
         SDL_PumpEvents();
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         int logicalWidthWhileMinimized = 0;
         int logicalHeightWhileMinimized = 0;
         renderer.GetViewportSize(logicalWidthWhileMinimized, logicalHeightWhileMinimized);
@@ -175,6 +182,8 @@ int main()
         ok &= Expect(SDL_RestoreWindow(window) && SDL_SyncWindow(window),
                      "native window completes the restore round-trip");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
+        renderer.OnSurfaceInvalidated(SDL_GetWindowID(window));
         ok &= Expect(renderer.DebugIsNativeClientInvalidated(),
                      "real restore requests a retained no-draw repaint");
         renderer.Present();
@@ -237,6 +246,7 @@ int main()
                      "scaled-present test resized the native client");
         ok &= Expect(SDL_SyncWindow(window),
                      "scaled-present test synchronized the native resize");
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         renderer.Clear(0.2f, 0.3f, 0.4f, 1.0f);
         renderer.DebugForceNextDibBlitFailure();
         bool stretchFailureThrew = false;

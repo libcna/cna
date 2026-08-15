@@ -11,7 +11,7 @@ namespace CNA::Devices
      * @brief Reports the device's current power/battery status.
      *
      * CNA extension — no XNA/WP7 equivalent exists. Backed by SDL3's
-     * `SDL_GetPowerInfo()` (`third_party/SDL/include/SDL3/SDL_power.h`), which has
+     * `IPlatformSystemInfo::GetPowerInfo()`, which has
      * real per-platform implementations for Windows, Linux, macOS, Android, iOS, and
      * Web/Emscripten (`third_party/SDL/src/power/`).
      *

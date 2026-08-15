@@ -137,7 +137,7 @@ TEST(VideoPlayerTest, PlayRealFixtureProducesATextureOfCorrectSize)
 }
 
 // plan_media.md MEDIA-131 regression (found by external code review): Play() left the newly
-// opened SDL audio stream paused forever -- SDL_OpenAudioDeviceStream() opens every stream paused
+// opened audio stream paused forever -- playback-stream creation opens every stream paused
 // by default, and ReconfigureAudioOutputForCurrentTrack() only resumes it when state_ == Playing,
 // but OpenDecoder() (which calls that helper) used to run entirely before Play() itself ever set
 // state_ to Playing. Every video with audio played completely silently.
@@ -370,7 +370,7 @@ TEST(VideoPlayerTest, SetAudioTrackEXTMidPlaybackActuallyChangesTheActiveSampleR
 // was already queued for playback for no reason. The fix split it into independent
 // ReconfigureVideoOutputForCurrentTrack()/ReconfigureAudioOutputForCurrentTrack() halves. This
 // proves the split holds: the audio stream's own pointer identity survives a video track switch
-// untouched (a torn-down-and-reopened stream would be a different SDL_AudioStream*).
+// untouched (a torn-down-and-reopened stream would have a different opaque identity).
 TEST(VideoPlayerTest, SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream)
 {
     GraphicsDevice gd;
@@ -378,7 +378,7 @@ TEST(VideoPlayerTest, SetVideoTrackEXTDoesNotTearDownTheUnrelatedAudioStream)
     VideoPlayer player;
     player.Play(&video);
 
-    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    const void* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
     ASSERT_NE(before, nullptr);
 
     player.SetVideoTrackEXT(0);
@@ -516,7 +516,7 @@ TEST(VideoPlayerTest, ReselectingTheSameAudioTrackDoesNotTearDownTheStream)
     VideoPlayer player;
     player.Play(&video);
 
-    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    const void* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
     ASSERT_NE(before, nullptr);
 
     player.SetAudioTrackEXT(0); // track 0 is already active -- a true no-op
@@ -548,7 +548,7 @@ TEST(VideoPlayerTest, SelectingAnOutOfRangeAudioTrackDoesNotTearDownTheStream)
     VideoPlayer player;
     player.Play(&video);
 
-    SDL_AudioStream* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
+    const void* before = VideoPlayerTestAccess::GetAudioStreamPtr(player);
     ASSERT_NE(before, nullptr);
 
     player.SetAudioTrackEXT(99); // out of range -- multi_track_audio.mkv has only 2 audio tracks

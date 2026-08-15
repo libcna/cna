@@ -1,5 +1,24 @@
 # NEXT.md
 
+> **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
+> authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
+> guide, and `NEXT_platform.md` carries detailed continuity notes.
+>
+> Platform, graphics and audio are independent build choices:
+> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
+> does not imply a renderer or audio backend.
+>
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
+> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
+> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
+> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
+>
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
+> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
+
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
 > Ten frozen feature lanes integrated one at a time into `11branches`, which started at exactly the

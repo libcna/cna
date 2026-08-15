@@ -6,12 +6,9 @@
 
 // plan_metal.md METAL-34-style extraction: the actual letterbox/logical-viewport arithmetic is
 // pure C++ (plain floats/ints and CnaPresentationMode, a shared enum with zero Objective-C
-// dependency) -- only the caller-side "ask SDL for the physical window size" step needs a real
-// window, so that step stays in MetalRenderer.mm's own computeLogicalViewport() wrapper.
-// This is the same real formula plan_metal.md METAL-153/154's own comment says was "ported from
-// SdlGpuRenderer::TransformWindowToLogical/TransformLogicalToWindow verbatim (same
-// LogicalViewport shape, same formula) rather than re-derived" -- extracting Metal's own copy here
-// does not touch SdlGpuRenderer's independent implementation.
+// dependency) -- only the caller-side physical window snapshot needs a real window, so that step
+// stays in MetalRenderer.mm's own computeLogicalViewport() wrapper. This is the established GPU
+// renderer's formula (same LogicalViewport shape and math) rather than an independent re-derivation.
 namespace CNA::Internal::Renderers::Metal
 {
     /** @brief Physical and logical dimensions of Metal's active presentation rectangle. */

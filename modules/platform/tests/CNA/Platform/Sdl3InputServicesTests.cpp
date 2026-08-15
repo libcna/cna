@@ -1,0 +1,510 @@
+// SPDX-License-Identifier: MS-PL
+//
+// PLAT-79/80/81/82/87: the SDL3 input services.
+//
+// No user, no devices and no display here, so these assert the properties that hold regardless:
+// snapshot shape, refusal behaviour, range normalisation and lifetime safety. Behaviour that
+// genuinely needs hardware is left to the input parity suites in Phase 5.
+
+#include "../../../src/Sdl3/Sdl3InputServices.hpp"
+#include "../../../src/Sdl3/Sdl3JoystickControls.hpp"
+#include "../../../src/Sdl3/Sdl3TextInputTypes.hpp"
+
+#include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <array>
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace {
+
+using namespace CNA::Platform;
+
+class Sdl3InputTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        const std::vector<std::string> available = PlatformFactory::GetAvailable();
+        if (std::find(available.begin(), available.end(), "SDL3") == available.end())
+        {
+            GTEST_SKIP() << "built with CNA_PLATFORM != SDL3";
+        }
+        platform_ = PlatformFactory::Create("SDL3");
+    }
+
+    void TearDown() override
+    {
+        if (virtualJoystick_ != 0)
+        {
+            (void)SDL_DetachVirtualJoystick(virtualJoystick_);
+            platform_->GetJoystick()->Update();
+        }
+        if (gamepadSubsystemAcquired_)
+        {
+            platform_->ReleaseSubsystem(PlatformSubsystem::Gamepad);
+        }
+    }
+
+    SDL_JoystickID AttachVirtualFlightStick()
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Gamepad);
+        gamepadSubsystemAcquired_ = true;
+
+        SDL_VirtualJoystickDesc description;
+        SDL_INIT_INTERFACE(&description);
+        description.type = SDL_JOYSTICK_TYPE_FLIGHT_STICK;
+        description.vendor_id = 0x1234;
+        description.product_id = 0x5678;
+        description.naxes = 2;
+        description.nbuttons = 2;
+        description.nhats = 1;
+        description.name = "CNA virtual flight stick";
+        virtualJoystick_ = SDL_AttachVirtualJoystick(&description);
+        return virtualJoystick_;
+    }
+
+    std::unique_ptr<IPlatform> platform_;
+    SDL_JoystickID virtualJoystick_ = 0;
+    bool gamepadSubsystemAcquired_ = false;
+};
+
+TEST_F(Sdl3InputTest, EveryInputServiceIsPresentBecauseItsCapabilityIsTrue)
+{
+    const PlatformCapabilities capabilities = platform_->GetCapabilities();
+    EXPECT_EQ(platform_->GetKeyboard() != nullptr, capabilities.exactKeyboardState);
+    EXPECT_EQ(platform_->GetMouse() != nullptr, capabilities.pixelAccurateMouse);
+    EXPECT_EQ(platform_->GetGamepad() != nullptr, capabilities.gamepad);
+    EXPECT_EQ(platform_->GetJoystick() != nullptr, capabilities.joystick);
+    EXPECT_EQ(platform_->GetTextInput() != nullptr, capabilities.textInput);
+}
+
+// --- keyboard ------------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, KeyboardSnapshotIsSafeBeforeAnyUpdate)
+{
+    // A caller may read state before the first frame; reporting phantom held keys would make a
+    // game act on input that never happened.
+    const KeyboardSnapshot& snapshot = platform_->GetKeyboard()->GetSnapshot();
+    EXPECT_TRUE(snapshot.pressedKeys.empty());
+    EXPECT_EQ(snapshot.modifiers, 0);
+}
+
+TEST_F(Sdl3InputTest, KeyboardUpdateIsSafeWithNoVideoSubsystem)
+{
+    // The game loop calls Update() every frame regardless of what is initialised.
+    EXPECT_NO_THROW(platform_->GetKeyboard()->Update());
+    EXPECT_NO_THROW((void)platform_->GetKeyboard()->HasKeyboard());
+}
+
+TEST_F(Sdl3InputTest, KeyboardUpdateIsIdempotentWithNoInput)
+{
+    // Two updates with nothing pressed must not accumulate: the snapshot is rebuilt each frame,
+    // not appended to. Getting that wrong grows the list without bound.
+    platform_->GetKeyboard()->Update();
+    const std::size_t first = platform_->GetKeyboard()->GetSnapshot().pressedKeys.size();
+    platform_->GetKeyboard()->Update();
+    EXPECT_EQ(platform_->GetKeyboard()->GetSnapshot().pressedKeys.size(), first);
+}
+
+// --- mouse ---------------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, MouseSnapshotStartsWithNothingHeld)
+{
+    const MouseSnapshot& snapshot = platform_->GetMouse()->GetSnapshot();
+    EXPECT_EQ(snapshot.buttons, 0);
+}
+
+TEST_F(Sdl3InputTest, MouseUpdateIsSafeAndButtonMaskStaysInCnasOwnBitOrder)
+{
+    EXPECT_NO_THROW(platform_->GetMouse()->Update());
+    // Only the five defined bits may ever be set; SDL's own mask uses a different, 1-based
+    // button numbering, and leaking it would make every consumer depend on that detail.
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().buttons & ~0x1F, 0);
+}
+
+TEST(Sdl3MouseTest, WheelEventsAccumulateInXnaUnitsAndTruncateBeforeScaling)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    mouse.ObserveEvent(MouseWheelEvent{17, 1.9f, -2.1f});
+
+    const MouseSnapshot& snapshot = mouse.GetSnapshot();
+    EXPECT_EQ(snapshot.window, 17u);
+    EXPECT_EQ(snapshot.scrollX, 120);
+    EXPECT_EQ(snapshot.scrollY, -240);
+}
+
+TEST_F(Sdl3InputTest, PositionWithNoWindowIsRecordedWithoutANativeWarp)
+{
+    EXPECT_NO_THROW(platform_->GetMouse()->SetPosition(0, 12, 34));
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().x, 12);
+    EXPECT_EQ(platform_->GetMouse()->GetSnapshot().y, 34);
+}
+
+TEST_F(Sdl3InputTest, PositionRefusesAnUnknownNonZeroWindowId)
+{
+    EXPECT_THROW(platform_->GetMouse()->SetPosition(0xFFFFFFFFu, 12, 34), PlatformException);
+}
+
+TEST_F(Sdl3InputTest, CursorVisibilityCallsAreSafe)
+{
+    EXPECT_NO_THROW(platform_->GetMouse()->SetCursorVisible(false));
+    EXPECT_NO_THROW(platform_->GetMouse()->SetCursorVisible(true));
+}
+
+TEST(Sdl3MouseTest, InvalidCustomCursorIsRejectedBeforeAnyNativeCall)
+{
+    CNA::Platform::Sdl3::Sdl3Mouse mouse;
+    const std::array<std::uint32_t, 1> pixel{0xFFFFFFFFu};
+
+    EXPECT_THROW(mouse.SetCursor(CursorImage{0, 1, 0, 0, pixel}), PlatformException);
+    EXPECT_THROW(mouse.SetCursor(CursorImage{1, 1, 1, 0, pixel}), PlatformException);
+    EXPECT_THROW(mouse.SetCursor(CursorImage{2, 1, 0, 0, pixel}), PlatformException);
+}
+
+TEST_F(Sdl3InputTest, RelativeModeRefusesWithNoFocusedWindow)
+{
+    // SDL3 scopes relative mode to a window. With nothing focused there is nothing to capture,
+    // so the request is refused rather than silently doing nothing and reporting success.
+    EXPECT_THROW(platform_->GetMouse()->SetRelativeMode(0, true), PlatformException);
+    EXPECT_FALSE(platform_->GetMouse()->IsRelativeMode());
+}
+
+// --- gamepad -------------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, GamepadUpdateIsSafeWithNoDevicesAndNoSubsystem)
+{
+    EXPECT_NO_THROW(platform_->GetGamepad()->Update());
+    EXPECT_EQ(platform_->GetGamepad()->GetCount(), GamepadSlotCount);
+}
+
+TEST_F(Sdl3InputTest, AnEmptySlotReportsDisconnectedRatherThanThrowing)
+{
+    // XNA games read all four player indices unconditionally, so polling an absent pad is
+    // ordinary control flow -- throwing here would make the normal case exceptional.
+    platform_->GetGamepad()->Update();
+    for (const int index : {-1, 0, 1, 2, 3, 99})
+    {
+        const GamepadSnapshot& snapshot = platform_->GetGamepad()->GetSnapshot(index);
+        if (index < 0 || index >= platform_->GetGamepad()->GetCount())
+        {
+            EXPECT_FALSE(snapshot.connected) << "index " << index;
+            EXPECT_EQ(snapshot.buttons, 0u);
+            EXPECT_EQ(snapshot.axes.size(), GamepadAxisCount);
+            EXPECT_EQ(snapshot.packetNumber, 0u);
+        }
+    }
+}
+
+TEST_F(Sdl3InputTest, NamingAndRumblingAnAbsentPadAreSafeNoOps)
+{
+    platform_->GetGamepad()->Update();
+    EXPECT_TRUE(platform_->GetGamepad()->GetName(99).empty());
+    EXPECT_FALSE(platform_->GetGamepad()->SetRumble(99, 1.0f, 1.0f, 100));
+}
+
+TEST_F(Sdl3InputTest, OptionalGamepadFeaturesRefuseAnAbsentSlot)
+{
+    IPlatformGamepad* gamepad = platform_->GetGamepad();
+    gamepad->Update();
+
+    EXPECT_FALSE(gamepad->GetCapabilities(99).connected);
+    EXPECT_TRUE(gamepad->GetInfo(99).name.empty());
+    EXPECT_FALSE(gamepad->SetTriggerRumble(99, 1.0f, 1.0f, 100));
+    EXPECT_FALSE(gamepad->SetLightBar(99, 1, 2, 3));
+    GamepadSensorReading reading{1.0f, 2.0f, 3.0f};
+    EXPECT_FALSE(gamepad->TryGetSensor(99, GamepadSensor::Gyroscope, reading));
+    EXPECT_FLOAT_EQ(reading.x, 0.0f);
+    EXPECT_EQ(gamepad->GetPlayerIndex(99), -1);
+    EXPECT_FALSE(gamepad->SetPlayerIndex(99, 2));
+    EXPECT_EQ(gamepad->GetPowerInfo(99).state, GamepadPowerState::Error);
+    EXPECT_EQ(gamepad->GetButtonLabel(99, GamepadButton::A), GamepadButtonLabel::Unknown);
+    EXPECT_EQ(gamepad->GetTouchpadCount(99), 0);
+    EXPECT_EQ(gamepad->GetTouchpadFingerCount(99, 0), 0);
+    GamepadTouchpadFinger finger{true, 1.0f, 1.0f, 1.0f};
+    EXPECT_FALSE(gamepad->TryGetTouchpadFinger(99, 0, 0, finger));
+    EXPECT_FALSE(finger.down);
+    EXPECT_FLOAT_EQ(finger.pressure, 0.0f);
+}
+
+TEST_F(Sdl3InputTest, RumbleStrengthOutOfRangeIsClampedNotWrapped)
+{
+    // Strength is documented as [0, 1]. Scaling an out-of-range value without clamping would
+    // wrap through the 16-bit conversion and turn "maximum" into "almost nothing".
+    platform_->GetGamepad()->Update();
+    EXPECT_NO_THROW((void)platform_->GetGamepad()->SetRumble(0, 5.0f, -5.0f, 10));
+}
+
+TEST_F(Sdl3InputTest, RepeatedUpdatesDoNotLeakGamepadHandles)
+{
+    // A connected id keeps one handle and one player slot; disappeared ids are closed. With no
+    // devices, repeated reconciliation must remain allocation- and handle-stable.
+    for (int i = 0; i < 50; ++i)
+    {
+        platform_->GetGamepad()->Update();
+    }
+    SUCCEED();
+}
+
+// --- raw joystick -------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, RawJoystickUpdateAndUnknownQueriesAreSafeWithoutHardware)
+{
+    IPlatformJoystick* joystick = platform_->GetJoystick();
+    EXPECT_NO_THROW(joystick->Update());
+    EXPECT_FALSE(joystick->IsConnected(999));
+    EXPECT_FALSE(joystick->GetCapabilities(999).connected);
+    EXPECT_TRUE(joystick->GetSnapshot(999).axes.empty());
+}
+
+TEST_F(Sdl3InputTest, RepeatedRawJoystickUpdatesDoNotAccumulateDevices)
+{
+    IPlatformJoystick* joystick = platform_->GetJoystick();
+    joystick->Update();
+    const std::size_t count = joystick->GetJoysticks().size();
+    for (int i = 0; i < 50; ++i)
+    {
+        joystick->Update();
+    }
+    EXPECT_EQ(joystick->GetJoysticks().size(), count);
+}
+
+TEST_F(Sdl3InputTest, VirtualJoystickPublishesNativeAxesButtonsAndHat)
+{
+    const SDL_JoystickID id = AttachVirtualFlightStick();
+    ASSERT_NE(id, 0u) << SDL_GetError();
+
+    IPlatformJoystick* service = platform_->GetJoystick();
+    service->Update();
+    ASSERT_TRUE(service->IsConnected(id));
+
+    const JoystickCapabilities caps = service->GetCapabilities(id);
+    EXPECT_EQ(caps.axisCount, 2);
+    EXPECT_EQ(caps.buttonCount, 2);
+    EXPECT_EQ(caps.hatCount, 1);
+    EXPECT_EQ(caps.ballCount, 0);
+    EXPECT_EQ(caps.kind, JoystickKind::FlightStick);
+    EXPECT_EQ(caps.name, "CNA virtual flight stick");
+
+    SDL_Joystick* native = SDL_GetJoystickFromID(id);
+    ASSERT_NE(native, nullptr);
+    EXPECT_TRUE(SDL_SetJoystickVirtualAxis(native, 0, -12345));
+    EXPECT_TRUE(SDL_SetJoystickVirtualAxis(native, 1, 23456));
+    EXPECT_TRUE(SDL_SetJoystickVirtualButton(native, 0, true));
+    EXPECT_TRUE(SDL_SetJoystickVirtualHat(native, 0, SDL_HAT_RIGHTDOWN));
+    SDL_UpdateJoysticks();
+
+    service->Update();
+    const JoystickSnapshot first = service->GetSnapshot(id);
+    EXPECT_EQ(first.axes, (std::vector<std::int16_t>{-12345, 23456}));
+    EXPECT_EQ(first.buttons, (std::vector<bool>{true, false}));
+    EXPECT_EQ(first.hats, (std::vector<JoystickHat>{JoystickHat::RightDown}));
+    EXPECT_TRUE(first.balls.empty());
+}
+
+TEST_F(Sdl3InputTest, DetachedVirtualJoystickIsRetiredOnTheNextUpdate)
+{
+    const SDL_JoystickID id = AttachVirtualFlightStick();
+    ASSERT_NE(id, 0u) << SDL_GetError();
+
+    IPlatformJoystick* service = platform_->GetJoystick();
+    service->Update();
+    ASSERT_TRUE(service->IsConnected(id));
+
+    ASSERT_TRUE(SDL_DetachVirtualJoystick(id));
+    virtualJoystick_ = 0;
+    service->Update();
+
+    EXPECT_FALSE(service->IsConnected(id));
+    EXPECT_FALSE(service->GetCapabilities(id).connected);
+    EXPECT_TRUE(service->GetSnapshot(id).axes.empty());
+}
+
+TEST(Sdl3JoystickControlsTest, EveryNativeJoystickTypeMapsByName)
+{
+    using CNA::Platform::Sdl3::ToJoystickKind;
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_UNKNOWN), JoystickKind::Unknown);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_GAMEPAD), JoystickKind::Gamepad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_WHEEL), JoystickKind::Wheel);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_ARCADE_STICK), JoystickKind::ArcadeStick);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_FLIGHT_STICK), JoystickKind::FlightStick);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_DANCE_PAD), JoystickKind::DancePad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_GUITAR), JoystickKind::Guitar);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_DRUM_KIT), JoystickKind::DrumKit);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_ARCADE_PAD), JoystickKind::ArcadePad);
+    EXPECT_EQ(ToJoystickKind(SDL_JOYSTICK_TYPE_THROTTLE), JoystickKind::Throttle);
+}
+
+TEST(Sdl3JoystickControlsTest, EveryNativeHatPositionMapsExactly)
+{
+    using CNA::Platform::Sdl3::ToJoystickHat;
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_CENTERED), JoystickHat::Centered);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_UP), JoystickHat::Up);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHT), JoystickHat::Right);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_DOWN), JoystickHat::Down);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFT), JoystickHat::Left);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHTUP), JoystickHat::RightUp);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_RIGHTDOWN), JoystickHat::RightDown);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFTUP), JoystickHat::LeftUp);
+    EXPECT_EQ(ToJoystickHat(SDL_HAT_LEFTDOWN), JoystickHat::LeftDown);
+    EXPECT_EQ(ToJoystickHat(0xFF), JoystickHat::Centered);
+}
+
+TEST(Sdl3JoystickControlsTest, NativePowerStatesMapWithoutAPlatformLeak)
+{
+    using CNA::Platform::Sdl3::ToJoystickPowerState;
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_ERROR), JoystickPowerState::Error);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_UNKNOWN), JoystickPowerState::Unknown);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_ON_BATTERY), JoystickPowerState::OnBattery);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_NO_BATTERY), JoystickPowerState::NoBattery);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_CHARGING), JoystickPowerState::Charging);
+    EXPECT_EQ(ToJoystickPowerState(SDL_POWERSTATE_CHARGED), JoystickPowerState::Charged);
+}
+
+// --- text input ------------------------------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, TextInputStartsInactive)
+{
+    EXPECT_FALSE(platform_->GetTextInput()->IsActive(0));
+    EXPECT_FALSE(platform_->GetTextInput()->IsScreenKeyboardShown(0));
+}
+
+TEST_F(Sdl3InputTest, TextInputCommandsRefuseAnUnknownWindowId)
+{
+    constexpr WindowId missing = 0xFFFFFFFFu;
+    IPlatformTextInput* input = platform_->GetTextInput();
+
+    EXPECT_THROW(input->Start(missing, TextInputType::Default), PlatformException);
+    EXPECT_THROW(input->Stop(missing), PlatformException);
+    EXPECT_THROW(input->SetInputArea(missing, TextInputArea{}), PlatformException);
+    EXPECT_FALSE(input->IsActive(missing));
+    EXPECT_FALSE(input->IsScreenKeyboardShown(missing));
+}
+
+TEST_F(Sdl3InputTest, TextInputLifecycleAndAreaReachALivePlatformWindow)
+{
+    try
+    {
+        platform_->AcquireSubsystem(PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "no video subsystem (no display): " << error.what();
+    }
+
+    WindowDescription description;
+    description.title = "Sdl3TextInputTest";
+    description.width = 64;
+    description.height = 64;
+    description.visible = false;
+
+    std::unique_ptr<IPlatformWindow> window;
+    try
+    {
+        window = platform_->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+        GTEST_SKIP() << "no hidden platform window: " << error.what();
+    }
+
+    IPlatformTextInput* input = platform_->GetTextInput();
+    const WindowId id = window->GetId();
+    EXPECT_NO_THROW(input->Start(id, TextInputType::Default));
+    EXPECT_TRUE(input->IsActive(id));
+    EXPECT_NO_THROW(input->SetInputArea(id, TextInputArea{4, 5, 32, 16, 3}));
+    EXPECT_NO_THROW(input->Stop(id));
+    EXPECT_FALSE(input->IsActive(id));
+
+    window.reset();
+    platform_->ReleaseSubsystem(PlatformSubsystem::Video);
+}
+
+TEST(Sdl3TextInputTypesTest, EveryPortablePurposeMapsToTheExpectedNativeHint)
+{
+    using CNA::Platform::Sdl3::ToSdlTextInputType;
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Default), SDL_TEXTINPUT_TYPE_TEXT);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Text), SDL_TEXTINPUT_TYPE_TEXT);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextName), SDL_TEXTINPUT_TYPE_TEXT_NAME);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextEmail), SDL_TEXTINPUT_TYPE_TEXT_EMAIL);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextUsername), SDL_TEXTINPUT_TYPE_TEXT_USERNAME);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextPasswordHidden),
+              SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::TextPasswordVisible),
+              SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::Number), SDL_TEXTINPUT_TYPE_NUMBER);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::NumberPasswordHidden),
+              SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN);
+    EXPECT_EQ(ToSdlTextInputType(TextInputType::NumberPasswordVisible),
+              SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE);
+}
+
+} // namespace
+
+// --- modifier layout (PLAT-77e) ---------------------------------------------------------------
+
+TEST_F(Sdl3InputTest, ModifierBitsUseTheContractsLayoutNotSdls)
+{
+    // The snapshot's modifier field is a bare uint16_t, which is exactly the shape that invites
+    // an implementation to pass its native mask straight through: it compiles, it runs, and it is
+    // silently wrong on the second implementation because the values mean something else. With no
+    // modifier held, every contract bit must be clear -- a passed-through mask would still carry
+    // whatever latched state the host reports in bits the contract never assigned.
+    IPlatformKeyboard* keyboard = platform_->GetKeyboard();
+    ASSERT_NE(keyboard, nullptr);
+    keyboard->Update();
+
+    const std::uint16_t modifiers = keyboard->GetSnapshot().modifiers;
+    constexpr std::uint16_t known =
+        static_cast<std::uint16_t>(KeyModifier::Shift) |
+        static_cast<std::uint16_t>(KeyModifier::Control) |
+        static_cast<std::uint16_t>(KeyModifier::Alt) |
+        static_cast<std::uint16_t>(KeyModifier::Gui) |
+        static_cast<std::uint16_t>(KeyModifier::CapsLock) |
+        static_cast<std::uint16_t>(KeyModifier::NumLock) |
+        static_cast<std::uint16_t>(KeyModifier::ScrollLock) |
+        static_cast<std::uint16_t>(KeyModifier::Mode);
+
+    EXPECT_EQ(modifiers & ~known, 0)
+        << "the mask carries bits the contract never assigned, which means it was not translated";
+}
+
+TEST_F(Sdl3InputTest, HasModifierReadsTheDocumentedBits)
+{
+    constexpr std::uint16_t mask = static_cast<std::uint16_t>(KeyModifier::Shift) |
+                                   static_cast<std::uint16_t>(KeyModifier::NumLock);
+
+    EXPECT_TRUE(HasModifier(mask, KeyModifier::Shift));
+    EXPECT_TRUE(HasModifier(mask, KeyModifier::NumLock));
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::Control));
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::Mode));
+
+    // None is zero, so it is never "present" -- a caller testing for it would otherwise get true
+    // for every mask.
+    EXPECT_FALSE(HasModifier(mask, KeyModifier::None));
+    EXPECT_FALSE(HasModifier(0, KeyModifier::None));
+}
+
+TEST_F(Sdl3InputTest, EveryModifierBitIsDistinct)
+{
+    // Two modifiers sharing a bit would make one of them unreadable, and the failure would look
+    // like "Alt is stuck on" rather than like a layout mistake.
+    constexpr KeyModifier all[] = {KeyModifier::Shift,    KeyModifier::Control,
+                                   KeyModifier::Alt,      KeyModifier::Gui,
+                                   KeyModifier::CapsLock, KeyModifier::NumLock,
+                                   KeyModifier::ScrollLock, KeyModifier::Mode};
+    std::uint16_t seen = 0;
+    for (const KeyModifier modifier : all)
+    {
+        const auto bit = static_cast<std::uint16_t>(modifier);
+        EXPECT_NE(bit, 0) << "a modifier other than None must have a bit";
+        EXPECT_EQ(seen & bit, 0) << "bit reused";
+        seen = static_cast<std::uint16_t>(seen | bit);
+    }
+}

@@ -97,7 +97,8 @@ The **SDL** dependency is the `third_party/SDL` git submodule (`libsdl-org/SDL`)
 `release-3.4.0` tag on SDL `main`, self-reporting as SDL **3.5.0** (in-development). It is **not** a tagged
 release; the nearest **stable release tags** are the `release-3.4.x` line (latest **`release-3.4.8`**).
 
-**Minimum SDL3 API relied upon:** standard SDL3 gamepad (`SDL_Gamepad*` + hotplug events), keyboard
+**Minimum SDL3 API relied upon:** standard SDL3 gamepad and raw joystick APIs (including hotplug,
+axes/buttons/hats/trackballs and joystick-to-haptic correlation), keyboard
 (scancode/keycode), mouse (relative mode, warp), touch (`SDL_EVENT_FINGER_*`), text-input, and gamepad
 sensor/rumble/trigger-rumble — all present since SDL **3.2 / 3.4.0**, so a `release-3.4.x` build has
 everything the input layer uses.
@@ -113,25 +114,10 @@ everything the input layer uses.
 
 ### Headless run inventory (INPUT-BUILD-008)
 
-`ctest -L input` must run under a display server (`xvfb-run` + `SDL_VIDEODRIVER=x11` in CI and on
-headless boxes) — a few `MouseCursor`/`SetCursor` cases need real SDL cursors. Behavior of the input
-subset by video driver:
-
-| Video driver | MouseCursor/SetCursor cursor-handle cases | Result |
-|--------------|-------------------------------------------|--------|
-| `x11` (Xvfb or real display) | run | **100% green** |
-| `dummy` (fully headless) | **5 GTEST_SKIP** + **3 fail** | not green — do not gate on `dummy` |
-
-- **Skipped under `dummy`** (need a valid `SDL_Cursor` handle to exercise ownership/disposal):
-  `MouseCursorTest.DisposeReleasesHandleAndIsIdempotent`, `.MoveConstructorTransfersOwnershipAndNullsSource`,
-  `.MoveAssignmentDisposesPreviousHandleAndTransfersOwnership`, `.NonOwningConstructorDoesNotDestroyCursorOnDestruction`,
-  and `MouseTest.SetCursorIsSafeNoOpForDisposedCursor`.
-- **Fail under `dummy`, pass under `x11`** (stock/default cursor creation returns null on the dummy
-  driver): `MouseCursorTest.StockCursorsAreNonNullWhenVideoAvailable`, `.DisposingAStockSingletonIsANoOpAndKeepsItUsable`,
-  `.DefaultConstructorCreatesNonNullOwningCursor`.
-
-So the always-portable input count is stable; only these display-dependent cursor cases vary by driver,
-which is why CI standardizes on `xvfb-run … SDL_VIDEODRIVER=x11`.
+`MouseCursor` and `Mouse::SetCursor` tests are display-independent as of PLAT-81: they verify the
+platform-neutral system/custom cursor descriptions through a canned `IPlatformMouse`. SDL-native
+cursor creation remains covered at the SDL platform edge. Other input tests that create real windows
+still require `xvfb-run` + `SDL_VIDEODRIVER=x11` in CI; the dummy driver may skip those window cases.
 
 ### Fresh-clone reproducibility (INPUT-BUILD-001)
 
@@ -165,8 +151,9 @@ Notes:
 - **Updated 2026-07-17 (`plan_input.md` P9-027):** the input-filter count grew from the 2026-07-16
   baseline of 496 to **524** across the `feature/input` audit. The Phase 1-9 sessions covered by this
   update added 7 tests directly (`KeyboardStateTest.GetPressedKeysHasNoDuplicateWhenSameKeyGivenTwice`
-  P2-011; `SdlInputBridgeKeyboardTest.SimultaneousModifierAndLockKeyCombinationTracksAllIndependently`
-  P2-056; `SdlInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
+  P2-011; the former P2-056 modifier combination is now covered by
+  `PlatformInputBridgeKeyboardTest.ModifierAndLockKeysStayDistinct`;
+  `PlatformInputBridgeMouseTest.MotionEventUpdatesAbsolutePosition`,
   `.MotionEventRelativeDeltaReachesInputManagerThroughBridge`, and
   `.MotionEventConvertsWindowCoordinatesToLogicalForLetterboxedRenderer` P3-013/P3-039;
   `GestureDetectorTest.GestureTimestampIsNonNegativeAndAdvancesWithTheClock` P6-012;
@@ -215,16 +202,15 @@ of the translation logic only, and are otherwise manual/hardware-gated:
 - **Real gamepad *actuation*** — a physical rumble motor spinning, real trigger haptics, a real
   sensor's live values, and genuine OS hot-plug / per-controller GUID. As of **Phase I15** the SDL
   gamepad *translation and bookkeeping* (hot-plug/slot assignment, button/axis mapping, capabilities,
-  rumble/LED/sensor support, GUID formatting) IS headless-tested via an injectable fake SDL backend
-  (`ISdlGamepadBackend` / `FakeSdlGamepadBackend`, `*FakeGamepad*` tests). What the fake cannot prove
-  is that the physical device *acts* — that stays manual/hardware-gated. See `plan_input.md`
+  rumble/LED/sensor support, GUID formatting) is headless-tested at both sides of the platform
+  contract: pure SDL mapping helpers plus a complete canned `IPlatformGamepad` drive public
+  `GamePad` without hardware. What these tests cannot prove is that the physical device *acts* —
+  that stays manual/hardware-gated. See `plan_input.md`
   (Phase I15) and `docs/input-manual-verification-results.md`.
   - **Startup invariant:** the SDL gamepad subsystem is initialized explicitly in
-    `Game::DoInitialize()` — once, before the first event pump and the first `Update()` — via
-    `SdlInputBridge::EnsureGamepadSubsystemInitialized()`, with a defensive lazy call still in
-    `SdlInputBridge::ProcessEvent()`. So gamepads connected before the first frame are enumerated
-    from startup (the fake test `SdlGamepadSubsystemInit.*` checks the idempotent init primitive;
-    the pre-connected-visibility path is covered by `FakeGamepadTest.PadConnectedBeforeFirstFrame*`).
+    `Game::DoInitialize()` — before the first event pump and snapshot update — through
+    `IPlatform::AcquireSubsystem(Gamepad)`. The matching reference is released by explicit disposal
+    or the destructor, and `Sdl3Gamepad::Update()` enumerates pre-connected devices in frame one.
 - **IME / composition** — real `TextEditing` composition, cursor, and selection over a physical IME.
 - **Wayland OS-cursor landing** — `SDL_GetGlobalMouseState` is compositor-restricted, so the absolute
   landing pixel of `Mouse::SetPosition` is only readable under X11.

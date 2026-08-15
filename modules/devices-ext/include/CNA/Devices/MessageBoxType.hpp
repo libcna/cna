@@ -8,8 +8,7 @@ namespace CNA::Devices
     /**
      * @brief Icon/severity of a `MessageBox` dialog.
      *
-     * Mirrors SDL3's `SDL_MESSAGEBOX_ERROR`/`_WARNING`/`_INFORMATION` flags
-     * (`third_party/SDL/include/SDL3/SDL_messagebox.h`). CNA extension — no
+     * Uses CNA's platform-neutral error/warning/information vocabulary. CNA extension — no
      * XNA/WP7 equivalent exists.
      */
     enum class MessageBoxType

@@ -4,9 +4,9 @@ include_guard(GLOBAL)
 #
 # Blend2D is a 2D vector graphics engine released under the Zlib license, powered at runtime by
 # an AsmJit-generated (also Zlib) JIT pipeline compiler. CNA uses it as a genuine 2D-only CPU
-# rendering route: a Blend2D BLImage/BLContext backbuffer, presented to the SDL3 window through a
-# streaming SDL_Renderer texture -- the same "CPU raster + SDL presentation" shape already
-# established by the SKIA renderer (cmake/ThirdPartySkia.cmake), but built from source via
+# rendering route: a Blend2D BLImage/BLContext backbuffer handed to the platform's narrow surface
+# presenter -- the same CPU-raster/presenter shape established by the SKIA renderer
+# (cmake/ThirdPartySkia.cmake), but built from source via
 # FetchContent (like BGFX/LLGL/Wicked) rather than consumed as a build-outside-the-tree artifact,
 # since Blend2D (unlike Skia) is a small, portable, natively CMake-buildable C++ library.
 #

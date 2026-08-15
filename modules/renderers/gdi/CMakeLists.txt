@@ -2,7 +2,7 @@
 # CPU-2D translation units come from the software module (CNA_GDI_SOFTWARE_SOURCES, published
 # by modules/renderers/software/CMakeLists.txt in the GDI configuration).
 cna_add_renderer(${CNA_GDI_SOFTWARE_SOURCES})
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 gdi32 cna_renderer_software_headers)
+target_link_libraries(${RENDERER_TARGET} PRIVATE gdi32 cna_renderer_software_headers)
 
 # GDI-078: report the actual GDI archive boundary at configure time, so plan_gdi.md/NEXT_gdi.md
 # source/object counts can be checked against generated evidence instead of a copied number.

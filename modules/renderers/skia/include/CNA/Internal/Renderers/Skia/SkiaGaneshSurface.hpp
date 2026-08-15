@@ -2,8 +2,6 @@
 
 #include "CNA/Internal/Renderers/Skia/SkiaGaneshContext.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -12,7 +10,7 @@ class SkCanvas;
 
 namespace CNA::Internal::Renderers::Skia
 {
-    /// SKIA-161: wraps SkiaGaneshContext's real GrDirectContext around the SDL-owned default
+    /// SKIA-161: wraps SkiaGaneshContext's real GrDirectContext around the platform default
     /// OpenGL framebuffer (FBO 0), producing a real, presentable, read-backable SkSurface -- the
     /// piece SkiaGaneshContext (SKIA-160) explicitly deferred. SKIA-162 added
     /// DebugSimulateContextLossEXT(), a genuine GL context destroy+recreate (mirroring
@@ -40,7 +38,7 @@ namespace CNA::Internal::Renderers::Skia
         /// current default framebuffer as a real SkSurface, sized to the window's current
         /// drawable size in pixels. Throws std::runtime_error transactionally if any step fails,
         /// including every failure mode SkiaGaneshContext itself can throw.
-        explicit SkiaGaneshSurface(SDL_Window* window);
+        explicit SkiaGaneshSurface(const GraphicsRendererCreateArgs& args);
 
         /// @brief Releases the wrapped surface before the owned Ganesh context is released.
         /// The caller-owned window itself is untouched.
@@ -59,10 +57,10 @@ namespace CNA::Internal::Renderers::Skia
         /// @brief Rewraps the default framebuffer at its current drawable size. Must be called
         /// after the window resizes; the SkCanvas returned by a prior Canvas() call is invalid
         /// afterward. A no-op if the drawable size is unchanged.
-        void Resize();
+        void Resize(const RendererSurfaceInfo& surface);
 
         /// @brief Flushes and submits all pending Skia GPU work for this surface, then swaps the
-        /// window's front/back buffers via SDL_GL_SwapWindow.
+        /// window's front/back buffers through the platform context service.
         void Present();
 
         /// @brief Reads back exact RGBA8 premultiplied pixels from the given rectangle into
@@ -90,7 +88,8 @@ namespace CNA::Internal::Renderers::Skia
     private:
         void WrapBackbuffer(int width, int height);
 
-        SDL_Window* window_ = nullptr;
+        CNA::Platform::IPlatformGlContext* glService_ = nullptr;
+        PlatformGlSurfaceState surface_;
         // Declared before impl_ so impl_ (the wrapped SkSurface, which depends on the GrDirectContext
         // context_ owns) is destroyed first -- members destruct in reverse declaration order.
         // std::optional (not a plain value) so DebugSimulateContextLossEXT() can destroy and

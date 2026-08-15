@@ -14,8 +14,6 @@
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 
-struct SDL_AudioStream;
-
 namespace Microsoft::Xna::Framework::Graphics
 {
     class GraphicsDevice;
@@ -27,13 +25,18 @@ namespace CNA::Internal::Media
     class VideoDecoder;
 }
 
+namespace CNA::Internal::Audio
+{
+    class MixerStream;
+}
+
 namespace Microsoft::Xna::Framework::Media
 {
     /**
      * @brief Controls video playback.
      *
      * Decodes video frames via FFmpeg and renders them through the CNA graphics
-     * renderer. Audio is fed to an SDL3 AudioStream.
+     * renderer. Audio is fed through CNA's selected audio implementation.
      */
     class VideoPlayer final : public System::Object, public System::IDisposable
     {
@@ -200,7 +203,7 @@ namespace Microsoft::Xna::Framework::Media
         void ApplyVolume();
         [[nodiscard]] double GetElapsedSeconds() const;
 
-        // Hands whatever decoder_->DrainAudio() produced to the SDL stream (if one exists) and
+        // Hands whatever decoder_->DrainAudio() produced to the audio stream (if one exists) and
         // always clears audioBuffer_ afterward -- including when audioStream_ is null (no audio
         // device available, or a video-only track). The old inline version at both call sites only
         // cleared the buffer inside the `if (audioStream_)` branch, so a video playing with no
@@ -217,10 +220,10 @@ namespace Microsoft::Xna::Framework::Media
         // MEDIA-90, a real bug found by external code review).
         void ReconfigureVideoOutputForCurrentTrack();
 
-        // (Re)creates the SDL audio stream to match whatever audio track is currently active on
+        // (Re)creates the audio stream to match whatever audio track is currently active on
         // `decoder_`. Split from the video-side reconfiguration (plan_media.md MEDIA-148, found by
         // external code review): the two used to be one function always called together, so
-        // switching only the video track tore down and reopened the SDL audio stream too,
+        // switching only the video track tore down and reopened the audio stream too,
         // discarding whatever audio was already queued for playback -- and vice versa for an
         // audio-only switch needlessly recreating the video texture.
         void ReconfigureAudioOutputForCurrentTrack();
@@ -237,7 +240,7 @@ namespace Microsoft::Xna::Framework::Media
 
         std::unique_ptr<CNA::Internal::Media::VideoDecoder> decoder_;
         std::unique_ptr<Graphics::Texture2D>                frameTexture_;
-        SDL_AudioStream*                                     audioStream_ = nullptr;
+        CNA::Internal::Audio::MixerStream*                   audioStream_ = nullptr;
 
         // Timing
         using Clock = std::chrono::steady_clock;

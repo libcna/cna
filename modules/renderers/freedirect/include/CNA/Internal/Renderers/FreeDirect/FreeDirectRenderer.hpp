@@ -126,7 +126,6 @@ namespace CNA::Internal::Renderers::FreeDirect
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        SDL_Window* GetWindowInternal() const override;
         /** @brief Replaces this instance's resize-only test hooks and rearms one failure. CNAEXT. */
         void SetTestHooksEXT(const FreeDirectTestHooksEXT& testHooks);
         /** @brief Returns native identities and resize-dependent renderer state. CNAEXT. */
@@ -135,7 +134,6 @@ namespace CNA::Internal::Renderers::FreeDirect
         // PresentPrimary, against the same SDL_Window* this renderer hands to
         // SetCooperativeLevel) -- it is never exposed to CNA, so this always returns nullptr,
         // same as every other non-SDL_Renderer-based renderer.
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         // DX3-68 (Phase X7): a real letterbox scale+offset transform (uniform scale to fit,
         // centered), independently recomputed from the real physical SDL_Window size -- matches
         // free-direct's own hardcoded SDL_LOGICAL_PRESENTATION_LETTERBOX behavior without needing

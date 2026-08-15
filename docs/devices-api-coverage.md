@@ -266,16 +266,16 @@ real API exactly (no change needed).
   — genuinely publicly mutable in the real API, unlike the reading structs' `internal
   set` convention.
 
-## SDL/internal-only internals (`Detail::` namespace, not XNA-facing)
+## Platform/internal-only internals (`Detail::` namespace, not XNA-facing)
 
 **Re-confirmed 2026-07-06 (`DEV-API-001`): none of this namespace's members appear in
 any public (non-`Detail::`) header** — `grep`-verified no `Detail::` type or free
 function is referenced from `Accelerometer.hpp`/`Gyroscope.hpp`/`Compass.hpp`/
 `Motion.hpp`/`SensorBase.hpp`'s public sections, only forward-declared as an opaque
 pointer/reference member (e.g. `Accelerometer.hpp`'s `friend class
-Detail::SdlSensorSubsystem<Accelerometer>;` forward declaration) or used entirely inside
+Detail::PlatformSensorSubsystem<Accelerometer>;` forward declaration) or used entirely inside
 `.cpp` files. This table was extended this pass — the Android-only rows below predate
-2026-07-06; the SDL-backend and shared-utility rows are new.
+2026-07-06; PLAT-108 subsequently replaced the native backend rows with platform adapters.
 
 | Type | Purpose |
 |---|---|
@@ -286,9 +286,9 @@ Detail::SdlSensorSubsystem<Accelerometer>;` forward declaration) or used entirel
 | `ConvertMagneticFieldAccuracyStatusToHeadingAccuracyDegrees()` / `ShouldRaiseCalibrateForAccuracyStatus()` | Accuracy-status mapping (Compass) |
 | `ConvertRotationVectorToXnaQuaternion()` / `ExtractYawPitchRollFromQuaternion()` | Quaternion passthrough + Euler extraction (Motion) |
 | `AndroidSensorLandscapeOrientation` (enum) / `ConvertAndroidPortraitToXnaLandscape()` | Accelerometer/Gyroscope's shared landscape axis remap |
-| `SdlSensorSubsystem<TSensor>` | Shared SDL sensor-subsystem/event-watch/dispatch machinery for `Accelerometer`/`Gyroscope`, one instantiation per concrete sensor type (added `DEV-API-001`) |
-| `GetGlobalSdlSensorMutex()` | Process-wide mutex serializing real SDL sensor-subsystem calls across `Accelerometer` and `Gyroscope` (added `DEV-API-001`) |
-| `ScopeExit<F>` / `MakeScopeExit()` | General-purpose RAII scope-exit guard used by `SdlSensorSubsystem<TSensor>::DispatchToInstances()`'s cleanup path (added `DEV-API-001`) |
+| `PlatformSensorSubsystem<TSensor>` | Shared platform session/registration/callback-dispatch machinery for `Accelerometer`/`Gyroscope`, one instantiation per concrete sensor type (migrated by PLAT-108) |
+| `PlatformVibrateBackend` | Private adapter from `VibrateController` to `IPlatformHaptics` (added by PLAT-108) |
+| `ScopeExit<F>` / `MakeScopeExit()` | General-purpose RAII scope-exit guard used by `PlatformSensorSubsystem<TSensor>::DispatchToInstances()`'s cleanup path (added `DEV-API-001`) |
 
 ---
 
@@ -370,6 +370,5 @@ file's prior content, rather than assuming the file was still current.
   `Dispose(bool)`/`GetTypeName()` for the four sensor classes; constructors/getters/
   setters/equality/`ToString()`/`GetHashCode()`/`GetTypeName()` for the five reading
   structs) — previously implicit/assumed rather than explicitly tabulated; extended the
-  `Detail::` internals table with `SdlSensorSubsystem<TSensor>`/
-  `GetGlobalSdlSensorMutex()`/`ScopeExit<F>`, which existed in the codebase but were
-  missing from this table.
+  `Detail::` internals table with the sensor manager and `ScopeExit<F>`, which existed in the
+  codebase but were missing from this table. PLAT-108 later updated those rows in place.

@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 
 #include "System/ArgumentOutOfRangeException.hpp"
-
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <cmath>
@@ -16,9 +14,12 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 2: registers (or updates) a texture's data-URI variant in the
+// plan_svg_dom.md design decision 2 / SVGDOM-7: registers (or updates) a texture variant in the
 // JS-side registry the SVG backbuffer flush path (SvgDomSpriteBatchRenderer.cpp) resolves
-// <image href> from. Idempotent per (id, variantMode) from the C++ side (only called once per
+// <image href> from. C++ still exposes/caches a data URI for its native-testable contract, but JS
+// converts that one source string to a shared Blob URL. Every sprite then retains only the short
+// Blob URL rather than its own ~4/3-expanded copy of a potentially megabyte-sized atlas URI.
+// Idempotent per (id, variantMode) from the C++ side (only called once per
 // variant generation -- see SvgDomTextureRenderer::GetDataUriEXT). `texW`/`texH` are the texture's
 // own natural size (always the same across every call for a given id); `variantW`/`variantH` are
 // this specific variant's own image size -- equal to texW/texH for variants 0/1, but 2x for the
@@ -42,7 +43,24 @@ EM_JS(void, CNA_SvgDom_RegisterTextureVariant, (int id, int variantMode, const c
     // never passed to CNA_SvgDom_CreateTargetCanvas), so this never runs the other direction.
     if (!entry.variants) entry.variants = {};
     if (!entry.variantDims) entry.variantDims = {};
-    entry.variants[variantMode] = UTF8ToString(uri);
+    if (!entry.variantObjectUrls) entry.variantObjectUrls = {};
+    const source = UTF8ToString(uri);
+    let href = source;
+    let objectUrl = null;
+    const prefix = 'data:image/png;base64,';
+    if (source.indexOf(prefix) === 0 && typeof URL !== 'undefined' && URL.createObjectURL &&
+        typeof Blob !== 'undefined' && typeof atob !== 'undefined') {
+        const binary = atob(source.substring(prefix.length));
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; ++i) bytes[i] = binary.charCodeAt(i);
+        objectUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+        href = objectUrl;
+    }
+    const oldObjectUrl = entry.variantObjectUrls[variantMode];
+    if (oldObjectUrl && typeof URL !== 'undefined' && URL.revokeObjectURL)
+        URL.revokeObjectURL(oldObjectUrl);
+    entry.variants[variantMode] = href;
+    entry.variantObjectUrls[variantMode] = objectUrl;
     entry.variantDims[variantMode] = { w: variantW, h: variantH };
     entry.w = texW; entry.h = texH;
 });
@@ -57,6 +75,13 @@ EM_JS(void, CNA_SvgDom_RegisterTextureVariant, (int id, int variantMode, const c
 // entry on first use, so plenty of short-lived textures never had one to begin with).
 EM_JS(void, CNA_SvgDom_DestroyTexture, (int id), {
     const reg = Module['cnaSvgDomTextures'];
+    const entry = reg && reg[id];
+    if (entry && entry.variantObjectUrls && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        for (const key in entry.variantObjectUrls) {
+            const objectUrl = entry.variantObjectUrls[key];
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        }
+    }
     if (reg) delete reg[id];
 });
 #endif
@@ -76,39 +101,8 @@ namespace CNA::Internal::Renderers::SvgDom
 
     std::vector<std::uint8_t> EncodePngEXT(const std::uint8_t* rgba, int width, int height)
     {
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32, const_cast<std::uint8_t*>(rgba), width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SVG_DOM: SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        SDL_IOStream* dst = SDL_IOFromDynamicMem();
-        if (!dst)
-        {
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SVG_DOM: SDL_IOFromDynamicMem failed: ") + SDL_GetError());
-        }
-
-        if (!IMG_SavePNG_IO(surface, dst, false))
-        {
-            SDL_CloseIO(dst);
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SVG_DOM: IMG_SavePNG_IO failed: ") + SDL_GetError());
-        }
-
-        std::vector<std::uint8_t> png;
-        const Sint64 size = SDL_TellIO(dst);
-        if (size > 0)
-        {
-            auto* buf = static_cast<std::uint8_t*>(
-                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
-                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
-            if (buf)
-                png.assign(buf, buf + size);
-        }
-
-        SDL_CloseIO(dst);
-        SDL_DestroySurface(surface);
-        return png;
+        return CNA::Internal::Graphics::ImageLoader::EncodePng(
+            rgba, width, height, width, height);
     }
 
     std::string Base64EncodeEXT(const std::uint8_t* data, std::size_t len)

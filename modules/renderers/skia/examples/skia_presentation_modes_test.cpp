@@ -2,6 +2,7 @@
 // SKIA-13/SKIA-14: all raster presentation mappings, coordinate transforms, and a real resize.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -15,6 +16,8 @@
 
 using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -35,13 +38,13 @@ namespace
         return std::fabs(actual - expected) <= tolerance;
     }
 
-    [[nodiscard]] bool QuerySizes(SkiaRenderer& renderer,
+    [[nodiscard]] bool QuerySizes(SDL_Window* window,
                                   int& windowWidth, int& windowHeight,
                                   int& outputWidth, int& outputHeight)
     {
-        SDL_GetWindowSize(renderer.GetWindowInternal(), &windowWidth, &windowHeight);
+        SDL_GetWindowSize(window, &windowWidth, &windowHeight);
         return windowWidth > 0 && windowHeight > 0
-            && SDL_GetRenderOutputSize(renderer.GetRendererInternal(), &outputWidth, &outputHeight)
+            && SDL_GetRenderOutputSize(SDL_GetRenderer(window), &outputWidth, &outputHeight)
             && outputWidth > 0 && outputHeight > 0;
     }
 
@@ -117,13 +120,15 @@ int main()
 
     try
     {
-        SkiaRenderer renderer(window, kVirtualWidth, kVirtualHeight,
-                                    CnaPresentationMode::FixedHeightDynamicWidth, 0);
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, kVirtualWidth, kVirtualHeight,
+            CnaPresentationMode::FixedHeightDynamicWidth, 0));
         int windowWidth = 0;
         int windowHeight = 0;
         int outputWidth = 0;
         int outputHeight = 0;
-        Check(QuerySizes(renderer, windowWidth, windowHeight, outputWidth, outputHeight),
+        Check(QuerySizes(window, windowWidth, windowHeight, outputWidth, outputHeight),
               "SDL reports positive window and renderer-output dimensions");
 
         const float outputToWindowX = static_cast<float>(windowWidth) / outputWidth;
@@ -177,7 +182,7 @@ int main()
             int currentWindowHeight = 0;
             SDL_GetWindowSize(window, &currentWindowWidth, &currentWindowHeight);
             if (currentWindowWidth == resizedWindowWidth && currentWindowHeight == windowHeight
-                && SDL_GetRenderOutputSize(renderer.GetRendererInternal(),
+                && SDL_GetRenderOutputSize(SDL_GetRenderer(window),
                                            &resizedOutputWidth, &resizedOutputHeight)
                 && resizedOutputWidth > 0 && resizedOutputHeight > 0
                 && resizedOutputWidth != outputWidth)

@@ -6,13 +6,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — the physical category of a raw joystick device. Mirrors SDL3's `SDL_JoystickType`.
+     * @brief CNAEXT — the platform-neutral physical category of a raw joystick device.
      */
     CNAEXT enum class JoystickTypeEXT
     {
         /** @brief Unknown or unrecognized joystick type. */
         Unknown,
-        /** @brief A device SDL also maps as a gamepad. */
+        /** @brief A device the platform also maps as a gamepad. */
         Gamepad,
         /** @brief A steering wheel. */
         Wheel,

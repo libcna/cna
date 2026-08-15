@@ -1,0 +1,731 @@
+// SPDX-License-Identifier: MS-PL
+//
+// PLAT-33..38: the SDL event taxonomy mapped onto PlatformEvent.
+//
+// Driven by synthetic SDL_Event values rather than by real input, so every branch is reachable
+// without a user, a device or a display server. This is the one test file that includes SDL
+// directly: it is testing the SDL implementation, and modules/platform is the allowlisted place
+// for that (PLAT-3).
+
+#include "../../../src/Sdl3/Sdl3EventMapper.hpp"
+#include "../../../src/Sdl3/Sdl3GamepadControls.hpp"
+#include "../../../src/Sdl3/Sdl3KeyCodes.hpp"
+#include "../../../src/Sdl3/Sdl3Scancodes.hpp"
+
+#include "CNA/Platform/Input/IPlatformKeyboard.hpp"
+
+#include <SDL3/SDL.h>
+#include <gtest/gtest.h>
+
+#include <limits>
+#include <string>
+
+namespace {
+
+using namespace CNA::Platform;
+using CNA::Platform::Sdl3::MapSdlEvent;
+using namespace CNA::Platform::Sdl3;
+
+SDL_Event MakeEvent(const SDL_EventType type)
+{
+    SDL_Event event{};
+    event.type = type;
+    return event;
+}
+
+// --- window events (PLAT-33) ----------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, WindowEventsMapToTheirKinds)
+{
+    const struct
+    {
+        SDL_EventType sdl;
+        WindowEventKind expected;
+    } cases[] = {
+        {SDL_EVENT_WINDOW_SHOWN, WindowEventKind::Exposed},
+        {SDL_EVENT_WINDOW_EXPOSED, WindowEventKind::Exposed},
+        {SDL_EVENT_WINDOW_RESIZED, WindowEventKind::Resized},
+        {SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, WindowEventKind::PixelSizeChanged},
+        {SDL_EVENT_WINDOW_FOCUS_GAINED, WindowEventKind::FocusGained},
+        {SDL_EVENT_WINDOW_FOCUS_LOST, WindowEventKind::FocusLost},
+        {SDL_EVENT_WINDOW_CLOSE_REQUESTED, WindowEventKind::CloseRequested},
+        {SDL_EVENT_WINDOW_MINIMIZED, WindowEventKind::Minimized},
+        {SDL_EVENT_WINDOW_MAXIMIZED, WindowEventKind::Maximized},
+        {SDL_EVENT_WINDOW_RESTORED, WindowEventKind::Restored},
+        {SDL_EVENT_WINDOW_MOVED, WindowEventKind::Moved},
+        {SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED, WindowEventKind::DisplayScaleChanged},
+        {SDL_EVENT_WINDOW_DISPLAY_CHANGED, WindowEventKind::DisplayChanged},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(testCase.sdl);
+        source.window.windowID = 42;
+        source.window.data1 = 1024;
+        source.window.data2 = 768;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        ASSERT_EQ(GetEventTypeName(mapped), "WindowEvent");
+
+        const auto& window = std::get<WindowEvent>(mapped);
+        EXPECT_EQ(window.kind, testCase.expected);
+        EXPECT_EQ(window.window, 42u);
+        EXPECT_EQ(window.data1, 1024);
+        EXPECT_EQ(window.data2, 768);
+    }
+}
+
+TEST(Sdl3EventMapperTests, ResizeAndPixelSizeChangeStayDistinct)
+{
+    // Conflating them is how a renderer draws at the wrong scale under high DPI, so the mapping
+    // is asserted rather than assumed.
+    SDL_Event resized = MakeEvent(SDL_EVENT_WINDOW_RESIZED);
+    SDL_Event pixels = MakeEvent(SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED);
+
+    PlatformEvent a;
+    PlatformEvent b;
+    ASSERT_TRUE(MapSdlEvent(resized, a));
+    ASSERT_TRUE(MapSdlEvent(pixels, b));
+    EXPECT_NE(std::get<WindowEvent>(a).kind, std::get<WindowEvent>(b).kind);
+}
+
+// --- keyboard and text (PLAT-34) --------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, KeyDownCarriesScancodeKeycodeModifiersAndRepeat)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_KEY_DOWN);
+    source.key.windowID = 7;
+    source.key.scancode = SDL_SCANCODE_A;
+    source.key.key = SDLK_A;
+    source.key.mod = SDL_KMOD_LSHIFT;
+    source.key.down = true;
+    source.key.repeat = true;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& key = std::get<KeyEvent>(mapped);
+    EXPECT_EQ(key.window, 7u);
+    EXPECT_EQ(key.scancode, Scancode::A);
+    EXPECT_EQ(key.keycode, KeyCode::A);
+    EXPECT_EQ(key.modifiers, static_cast<std::uint16_t>(KeyModifier::Shift));
+    EXPECT_TRUE(key.pressed);
+    // Repeat must survive the mapping: a platform without real key-release synthesises releases
+    // from repeat timing, so losing this flag would break that path silently.
+    EXPECT_TRUE(key.repeat);
+}
+
+TEST(Sdl3EventMapperTests, EveryNativeModifierMapsToTheContractLayout)
+{
+    struct Case
+    {
+        SDL_Keymod native;
+        KeyModifier expected;
+    };
+    constexpr Case cases[] = {
+        {SDL_KMOD_LSHIFT, KeyModifier::Shift},
+        {SDL_KMOD_RSHIFT, KeyModifier::Shift},
+        {SDL_KMOD_LCTRL, KeyModifier::Control},
+        {SDL_KMOD_RCTRL, KeyModifier::Control},
+        {SDL_KMOD_LALT, KeyModifier::Alt},
+        {SDL_KMOD_RALT, KeyModifier::Alt},
+        {SDL_KMOD_LGUI, KeyModifier::Gui},
+        {SDL_KMOD_RGUI, KeyModifier::Gui},
+        {SDL_KMOD_CAPS, KeyModifier::CapsLock},
+        {SDL_KMOD_NUM, KeyModifier::NumLock},
+        {SDL_KMOD_SCROLL, KeyModifier::ScrollLock},
+        {SDL_KMOD_MODE, KeyModifier::Mode},
+    };
+
+    for (const Case& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_KEY_DOWN);
+        source.key.mod = testCase.native;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped));
+        EXPECT_EQ(std::get<KeyEvent>(mapped).modifiers,
+                  static_cast<std::uint16_t>(testCase.expected));
+    }
+}
+
+TEST(Sdl3EventMapperTests, KeyUpIsNotAPress)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_KEY_UP);
+    source.key.down = false;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    EXPECT_FALSE(std::get<KeyEvent>(mapped).pressed);
+}
+
+TEST(Sdl3EventMapperTests, NativeKeycodesCoverEveryContractKeyFamily)
+{
+    const struct Case { SDL_Keycode native; KeyCode expected; } cases[] = {
+        {SDLK_A, KeyCode::A}, {SDLK_D, KeyCode::D},
+        {SDLK_0, KeyCode::D0}, {SDLK_1, KeyCode::D1},
+        {SDLK_KP_1, KeyCode::NumPad1}, {SDLK_KP_PLUS, KeyCode::Add},
+        {SDLK_SEMICOLON, KeyCode::OemSemicolon}, {SDLK_COMMA, KeyCode::OemComma},
+        {SDLK_LSHIFT, KeyCode::LeftShift}, {SDLK_RSHIFT, KeyCode::RightShift},
+        {SDLK_LCTRL, KeyCode::LeftControl}, {SDLK_RCTRL, KeyCode::RightControl},
+        {SDLK_LALT, KeyCode::LeftAlt}, {SDLK_RALT, KeyCode::RightAlt},
+        {SDLK_CAPSLOCK, KeyCode::CapsLock}, {SDLK_NUMLOCKCLEAR, KeyCode::NumLock},
+        {SDLK_SCROLLLOCK, KeyCode::Scroll},
+        {SDLK_F1, KeyCode::F1}, {SDLK_F13, KeyCode::F13}, {SDLK_F24, KeyCode::F24},
+        {SDLK_UP, KeyCode::Up}, {SDLK_SPACE, KeyCode::Space},
+        {SDLK_RETURN, KeyCode::Enter}, {SDLK_ESCAPE, KeyCode::Escape},
+        {SDLK_VOLUMEUP, KeyCode::VolumeUp}, {SDLK_APPLICATION, KeyCode::Apps},
+        {SDLK_SLEEP, KeyCode::Sleep},
+    };
+
+    for (const Case& testCase : cases)
+        EXPECT_EQ(ToKeyCode(testCase.native), testCase.expected)
+            << static_cast<unsigned>(testCase.native);
+}
+
+TEST(Sdl3EventMapperTests, LocaleAndMediaKeycodePolicyIsAppliedAtTheSdlEdge)
+{
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00E6}), KeyCode::OemQuotes);     // Norwegian æ
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00F8}), KeyCode::OemSemicolon); // Norwegian ø
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x00E9}), KeyCode::None);         // accented text uses TextInput
+    EXPECT_EQ(ToKeyCode(SDL_Keycode{0x4E2D}), KeyCode::None);         // unnamed CJK codepoint
+
+    EXPECT_EQ(ToKeyCode(SDLK_VOLUMEUP), KeyCode::VolumeUp);
+    EXPECT_EQ(ToKeyCode(SDLK_VOLUMEDOWN), KeyCode::VolumeDown);
+    EXPECT_EQ(ToKeyCode(SDLK_MEDIA_NEXT_TRACK), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_MEDIA_PLAY_PAUSE), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_AC_HOME), KeyCode::None);
+    EXPECT_EQ(ToKeyCode(SDLK_AC_BACK), KeyCode::Escape); // DEC-17
+    EXPECT_EQ(ToKeyCode(SDLK_UNKNOWN), KeyCode::None);
+}
+
+TEST(Sdl3EventMapperTests, EventTypeWinsOverStaleNativeDownFields)
+{
+    SDL_Event key = MakeEvent(SDL_EVENT_KEY_DOWN);
+    key.key.down = false;
+    SDL_Event mouse = MakeEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    mouse.button.down = false;
+    SDL_Event gamepad = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+    gamepad.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
+    gamepad.gbutton.down = false;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(key, mapped));
+    EXPECT_TRUE(std::get<KeyEvent>(mapped).pressed);
+    ASSERT_TRUE(MapSdlEvent(mouse, mapped));
+    EXPECT_TRUE(std::get<MouseButtonEvent>(mapped).pressed);
+    ASSERT_TRUE(MapSdlEvent(gamepad, mapped));
+    EXPECT_TRUE(std::get<ControllerButtonEvent>(mapped).pressed);
+}
+
+TEST(Sdl3EventMapperTests, TextInputCarriesItsText)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_INPUT);
+    source.text.windowID = 3;
+    source.text.text = "ř";  // multi-byte on purpose: the payload is UTF-8, not ASCII
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& text = std::get<TextInputEvent>(mapped);
+    EXPECT_EQ(text.window, 3u);
+    EXPECT_EQ(text.text, "ř");
+}
+
+TEST(Sdl3EventMapperTests, TextInputWithNullTextDoesNotCrash)
+{
+    // SDL's text pointer is not guaranteed non-null on every path, and dereferencing it would be
+    // a crash in the event pump -- the worst possible place for one.
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_INPUT);
+    source.text.text = nullptr;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    EXPECT_TRUE(std::get<TextInputEvent>(mapped).text.empty());
+}
+
+TEST(Sdl3EventMapperTests, TextEditingCarriesCompositionCursorAndSelection)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_EDITING);
+    source.edit.windowID = 3;
+    source.edit.text = "compo";
+    source.edit.start = 2;
+    source.edit.length = 3;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& editing = std::get<TextEditingEvent>(mapped);
+    EXPECT_EQ(editing.text, "compo");
+    EXPECT_EQ(editing.cursor, 2);
+    EXPECT_EQ(editing.selectionLength, 3);
+}
+
+TEST(Sdl3EventMapperTests, TextEditingCandidatesCarryOwnedUtf8ListAndDisplayState)
+{
+    char first[] = "候補";
+    const char* candidates[] = {first, nullptr, "選択"};
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_EDITING_CANDIDATES);
+    source.edit_candidates.windowID = 11;
+    source.edit_candidates.candidates = candidates;
+    source.edit_candidates.num_candidates = 3;
+    source.edit_candidates.selected_candidate = 2;
+    source.edit_candidates.horizontal = true;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    first[0] = '\0'; // the mapped payload must not retain SDL-owned string storage
+
+    const auto& editing = std::get<TextEditingCandidatesEvent>(mapped);
+    EXPECT_EQ(editing.window, 11u);
+    EXPECT_EQ(editing.candidates, (std::vector<std::string>{"候補", "", "選択"}));
+    EXPECT_EQ(editing.selectedCandidate, 2);
+    EXPECT_TRUE(editing.horizontal);
+}
+
+TEST(Sdl3EventMapperTests, TextEditingCandidatesAcceptAnEmptySdlList)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_TEXT_EDITING_CANDIDATES);
+    source.edit_candidates.candidates = nullptr;
+    source.edit_candidates.num_candidates = 5; // ignored when SDL supplies no array
+    source.edit_candidates.selected_candidate = -1;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& editing = std::get<TextEditingCandidatesEvent>(mapped);
+    EXPECT_TRUE(editing.candidates.empty());
+    EXPECT_EQ(editing.selectedCandidate, -1);
+    EXPECT_FALSE(editing.horizontal);
+}
+
+// --- mouse and touch (PLAT-35) ------------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, MouseMotionCarriesPositionAndDelta)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_MOUSE_MOTION);
+    source.motion.windowID = 1;
+    source.motion.x = 12.5f;
+    source.motion.y = 34.5f;
+    source.motion.xrel = -2.0f;
+    source.motion.yrel = 3.0f;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& motion = std::get<MouseMotionEvent>(mapped);
+    EXPECT_FLOAT_EQ(motion.x, 12.5f);
+    EXPECT_FLOAT_EQ(motion.y, 34.5f);
+    EXPECT_FLOAT_EQ(motion.deltaX, -2.0f);
+    EXPECT_FLOAT_EQ(motion.deltaY, 3.0f);
+}
+
+TEST(Sdl3EventMapperTests, MouseButtonCarriesButtonPressStateAndClickCount)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_MOUSE_BUTTON_DOWN);
+    source.button.button = SDL_BUTTON_RIGHT;
+    source.button.down = true;
+    source.button.clicks = 2;
+    source.button.x = 5.0f;
+    source.button.y = 6.0f;
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    const auto& button = std::get<MouseButtonEvent>(mapped);
+    EXPECT_EQ(button.button, SDL_BUTTON_RIGHT);
+    EXPECT_TRUE(button.pressed);
+    EXPECT_EQ(button.clicks, 2);
+}
+
+TEST(Sdl3EventMapperTests, WheelKeepsHostConfiguredDirection)
+{
+    // SDL has already applied the host's natural-scrolling preference to x/y. The direction
+    // member only describes that fact; applying it again would reverse established CNA/FNA
+    // behaviour during the PlatformEvent migration.
+    SDL_Event normal = MakeEvent(SDL_EVENT_MOUSE_WHEEL);
+    normal.wheel.x = -2.0f;
+    normal.wheel.y = 1.0f;
+    normal.wheel.direction = SDL_MOUSEWHEEL_NORMAL;
+
+    SDL_Event flipped = MakeEvent(SDL_EVENT_MOUSE_WHEEL);
+    flipped.wheel.x = -2.0f;
+    flipped.wheel.y = 1.0f;
+    flipped.wheel.direction = SDL_MOUSEWHEEL_FLIPPED;
+
+    PlatformEvent a;
+    PlatformEvent b;
+    ASSERT_TRUE(MapSdlEvent(normal, a));
+    ASSERT_TRUE(MapSdlEvent(flipped, b));
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(a).x, -2.0f);
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(a).y, 1.0f);
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(b).x, -2.0f);
+    EXPECT_FLOAT_EQ(std::get<MouseWheelEvent>(b).y, 1.0f);
+}
+
+TEST(Sdl3EventMapperTests, TouchEventsMapToTheirKinds)
+{
+    const struct
+    {
+        SDL_EventType sdl;
+        TouchEventKind expected;
+    } cases[] = {
+        {SDL_EVENT_FINGER_DOWN, TouchEventKind::Down},
+        {SDL_EVENT_FINGER_UP, TouchEventKind::Up},
+        {SDL_EVENT_FINGER_MOTION, TouchEventKind::Motion},
+        {SDL_EVENT_FINGER_CANCELED, TouchEventKind::Cancelled},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(testCase.sdl);
+        source.tfinger.fingerID = 9;
+        source.tfinger.x = 0.25f;
+        source.tfinger.y = 0.75f;
+        source.tfinger.dx = -0.125f;
+        source.tfinger.dy = 0.0625f;
+        source.tfinger.pressure = 0.5f;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        const auto& touch = std::get<TouchEvent>(mapped);
+        EXPECT_EQ(touch.kind, testCase.expected);
+        EXPECT_EQ(touch.fingerId, 9u);
+        // Normalised coordinates must pass through unscaled; multiplying by a window size here
+        // would double-apply once the consumer scales them too.
+        EXPECT_FLOAT_EQ(touch.x, 0.25f);
+        EXPECT_FLOAT_EQ(touch.y, 0.75f);
+        const bool isMotion = testCase.expected == TouchEventKind::Motion;
+        EXPECT_FLOAT_EQ(touch.deltaX, isMotion ? -0.125f : 0.0f);
+        EXPECT_FLOAT_EQ(touch.deltaY, isMotion ? 0.0625f : 0.0f);
+        EXPECT_FLOAT_EQ(touch.pressure, 0.5f);
+        EXPECT_EQ(touch.clientWidth, 1);
+        EXPECT_EQ(touch.clientHeight, 1);
+    }
+}
+
+// --- devices (PLAT-36) ---------------------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, DeviceAddAndRemoveMapToTheRightKindAndConnectedFlag)
+{
+    const struct
+    {
+        SDL_EventType sdl;
+        InputDeviceKind kind;
+        bool connected;
+    } cases[] = {
+        {SDL_EVENT_GAMEPAD_ADDED, InputDeviceKind::Gamepad, true},
+        {SDL_EVENT_GAMEPAD_REMOVED, InputDeviceKind::Gamepad, false},
+        {SDL_EVENT_JOYSTICK_ADDED, InputDeviceKind::Joystick, true},
+        {SDL_EVENT_JOYSTICK_REMOVED, InputDeviceKind::Joystick, false},
+        {SDL_EVENT_KEYBOARD_ADDED, InputDeviceKind::Keyboard, true},
+        {SDL_EVENT_KEYBOARD_REMOVED, InputDeviceKind::Keyboard, false},
+        {SDL_EVENT_MOUSE_ADDED, InputDeviceKind::Mouse, true},
+        {SDL_EVENT_MOUSE_REMOVED, InputDeviceKind::Mouse, false},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(testCase.sdl);
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.kind);
+        const auto& device = std::get<DeviceEvent>(mapped);
+        EXPECT_EQ(device.kind, testCase.kind);
+        EXPECT_EQ(device.connected, testCase.connected);
+    }
+}
+
+TEST(Sdl3EventMapperTests, SensorUpdatePreservesIdentityAllValuesAndSampleTimestamp)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_SENSOR_UPDATE);
+    source.sensor.which = 81;
+    source.sensor.timestamp = 1234;
+    source.sensor.sensor_timestamp = 987654321;
+    for (std::size_t index = 0; index < 6; ++index)
+    {
+        source.sensor.data[index] = static_cast<float>(index) - 2.5f;
+    }
+
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    ASSERT_EQ(GetEventTypeName(mapped), "SensorEvent");
+    const auto& sensor = std::get<SensorEvent>(mapped);
+    EXPECT_EQ(sensor.device, 81u);
+    for (std::size_t index = 0; index < sensor.values.size(); ++index)
+    {
+        EXPECT_FLOAT_EQ(sensor.values[index], static_cast<float>(index) - 2.5f);
+    }
+    EXPECT_EQ(sensor.timestampNanoseconds, 987654321u)
+        << "the reading timestamp, not the queue timestamp, is the sample's time";
+}
+
+TEST(Sdl3EventMapperTests, GamepadAxesMapToCnaVocabularyAndBridgeNumerics)
+{
+    const struct
+    {
+        SDL_GamepadAxis sdl;
+        GamepadAxis expected;
+        Sint16 raw;
+        float value;
+    } cases[] = {
+        {SDL_GAMEPAD_AXIS_LEFTX, GamepadAxis::LeftThumbstickX, -16384,
+         static_cast<float>(-16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_LEFTY, GamepadAxis::LeftThumbstickY, -16384,
+         -static_cast<float>(-16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_RIGHTX, GamepadAxis::RightThumbstickX, 16384,
+         static_cast<float>(16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_RIGHTY, GamepadAxis::RightThumbstickY, 16384,
+         -static_cast<float>(16384) / 32767.0f},
+        {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, GamepadAxis::LeftTrigger, -16384, 0.0f},
+        {SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, GamepadAxis::RightTrigger, 32767, 1.0f},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+        source.gaxis.which = 91;
+        source.gaxis.axis = static_cast<Uint8>(testCase.sdl);
+        source.gaxis.value = testCase.raw;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        const auto& axis = std::get<ControllerAxisEvent>(mapped);
+        EXPECT_EQ(axis.device, 91u);
+        EXPECT_EQ(axis.axis, testCase.expected);
+        EXPECT_FLOAT_EQ(axis.value, testCase.value);
+    }
+
+    // This is the non-endpoint sample that distinguishes the existing bridge/FNA divisor from
+    // the mapper's old 32768 negative-half divisor.
+    EXPECT_NE((static_cast<float>(-16384) / 32767.0f), -0.5f);
+}
+
+TEST(Sdl3EventMapperTests, GamepadStickEndpointsClampAfterYInversion)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+    source.gaxis.axis = SDL_GAMEPAD_AXIS_LEFTY;
+
+    source.gaxis.value = -32768;
+    PlatformEvent negative;
+    ASSERT_TRUE(MapSdlEvent(source, negative));
+    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(negative).value, 1.0f);
+
+    source.gaxis.value = 32767;
+    PlatformEvent positive;
+    ASSERT_TRUE(MapSdlEvent(source, positive));
+    EXPECT_FLOAT_EQ(std::get<ControllerAxisEvent>(positive).value, -1.0f);
+}
+
+TEST(Sdl3EventMapperTests, EverySupportedGamepadButtonMapsToCnaVocabulary)
+{
+    const struct
+    {
+        SDL_GamepadButton sdl;
+        GamepadButton expected;
+    } cases[] = {
+        {SDL_GAMEPAD_BUTTON_SOUTH, GamepadButton::A},
+        {SDL_GAMEPAD_BUTTON_EAST, GamepadButton::B},
+        {SDL_GAMEPAD_BUTTON_WEST, GamepadButton::X},
+        {SDL_GAMEPAD_BUTTON_NORTH, GamepadButton::Y},
+        {SDL_GAMEPAD_BUTTON_BACK, GamepadButton::Back},
+        {SDL_GAMEPAD_BUTTON_START, GamepadButton::Start},
+        {SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, GamepadButton::LeftShoulder},
+        {SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, GamepadButton::RightShoulder},
+        {SDL_GAMEPAD_BUTTON_LEFT_STICK, GamepadButton::LeftStick},
+        {SDL_GAMEPAD_BUTTON_RIGHT_STICK, GamepadButton::RightStick},
+        {SDL_GAMEPAD_BUTTON_DPAD_UP, GamepadButton::DPadUp},
+        {SDL_GAMEPAD_BUTTON_DPAD_DOWN, GamepadButton::DPadDown},
+        {SDL_GAMEPAD_BUTTON_DPAD_LEFT, GamepadButton::DPadLeft},
+        {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, GamepadButton::DPadRight},
+        {SDL_GAMEPAD_BUTTON_GUIDE, GamepadButton::BigButton},
+        {SDL_GAMEPAD_BUTTON_MISC1, GamepadButton::Misc1},
+        {SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, GamepadButton::Paddle1},
+        {SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, GamepadButton::Paddle2},
+        {SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, GamepadButton::Paddle3},
+        {SDL_GAMEPAD_BUTTON_LEFT_PADDLE2, GamepadButton::Paddle4},
+        {SDL_GAMEPAD_BUTTON_TOUCHPAD, GamepadButton::TouchPad},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+        source.gbutton.which = 73;
+        source.gbutton.button = static_cast<Uint8>(testCase.sdl);
+        source.gbutton.down = true;
+
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        const auto& button = std::get<ControllerButtonEvent>(mapped);
+        EXPECT_EQ(button.device, 73u);
+        EXPECT_EQ(button.button, testCase.expected);
+        EXPECT_TRUE(button.pressed);
+        ASSERT_TRUE(ToSdlGamepadButton(testCase.expected).has_value());
+        EXPECT_EQ(*ToSdlGamepadButton(testCase.expected), testCase.sdl);
+    }
+}
+
+TEST(Sdl3EventMapperTests, UnknownGamepadControlsAreNotLeakedAsRawIndices)
+{
+    PlatformEvent mapped = WindowEvent{.window = 44};
+
+    SDL_Event axis = MakeEvent(SDL_EVENT_GAMEPAD_AXIS_MOTION);
+    axis.gaxis.axis = static_cast<Uint8>(SDL_GAMEPAD_AXIS_COUNT);
+    EXPECT_FALSE(MapSdlEvent(axis, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent");
+
+    SDL_Event button = MakeEvent(SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+    button.gbutton.button = static_cast<Uint8>(SDL_GAMEPAD_BUTTON_COUNT);
+    EXPECT_FALSE(MapSdlEvent(button, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent");
+}
+
+TEST(Sdl3EventMapperTests, GamepadDeviceMetadataUsesOnlyContractEnums)
+{
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_GAMEPAD), GamepadKind::Gamepad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_WHEEL), GamepadKind::Wheel);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_ARCADE_STICK), GamepadKind::ArcadeStick);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_FLIGHT_STICK), GamepadKind::FlightStick);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_DANCE_PAD), GamepadKind::DancePad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_GUITAR), GamepadKind::Guitar);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_DRUM_KIT), GamepadKind::DrumKit);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_ARCADE_PAD), GamepadKind::BigButtonPad);
+    EXPECT_EQ(ToGamepadKind(SDL_JOYSTICK_TYPE_UNKNOWN), GamepadKind::Unknown);
+
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_XBOX360), GamepadModel::Xbox360);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_XBOXONE), GamepadModel::XboxOne);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_PS4), GamepadModel::PlayStation4);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_PS5), GamepadModel::PlayStation5);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO),
+              GamepadModel::NintendoSwitchPro);
+    EXPECT_EQ(ToGamepadModel(SDL_GAMEPAD_TYPE_UNKNOWN), GamepadModel::Unknown);
+
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_WIRED),
+              GamepadConnectionState::Wired);
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_WIRELESS),
+              GamepadConnectionState::Wireless);
+    EXPECT_EQ(ToGamepadConnectionState(SDL_JOYSTICK_CONNECTION_UNKNOWN),
+              GamepadConnectionState::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, GamepadPowerAndGlyphMappingsAreExhaustive)
+{
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_UNKNOWN), GamepadPowerState::Unknown);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_ERROR), GamepadPowerState::Error);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_ON_BATTERY), GamepadPowerState::OnBattery);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_CHARGING), GamepadPowerState::Charging);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_CHARGED), GamepadPowerState::Charged);
+    EXPECT_EQ(ToGamepadPowerState(SDL_POWERSTATE_NO_BATTERY), GamepadPowerState::NoBattery);
+
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_A), GamepadButtonLabel::A);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_B), GamepadButtonLabel::B);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_X), GamepadButtonLabel::X);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_Y), GamepadButtonLabel::Y);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_CROSS), GamepadButtonLabel::Cross);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_CIRCLE), GamepadButtonLabel::Circle);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_SQUARE), GamepadButtonLabel::Square);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_TRIANGLE), GamepadButtonLabel::Triangle);
+    EXPECT_EQ(ToGamepadButtonLabel(SDL_GAMEPAD_BUTTON_LABEL_UNKNOWN), GamepadButtonLabel::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, GamepadMotorStrengthClampsAndTreatsNanAsOff)
+{
+    EXPECT_EQ(NormalizeGamepadMotorLevel(-1.0f), 0u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(0.0f), 0u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(0.5f), 32767u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(1.0f), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(2.0f), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(std::numeric_limits<float>::infinity()), 65535u);
+    EXPECT_EQ(NormalizeGamepadMotorLevel(std::numeric_limits<float>::quiet_NaN()), 0u);
+}
+
+// --- lifecycle and quit (PLAT-37) ---------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, QuitMaps)
+{
+    SDL_Event source = MakeEvent(SDL_EVENT_QUIT);
+    PlatformEvent mapped;
+    ASSERT_TRUE(MapSdlEvent(source, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "QuitEvent");
+}
+
+TEST(Sdl3EventMapperTests, ApplicationLifecycleTransitionsMap)
+{
+    const struct
+    {
+        SDL_EventType sdl;
+        AppLifecycleKind expected;
+    } cases[] = {
+        {SDL_EVENT_WILL_ENTER_BACKGROUND, AppLifecycleKind::WillEnterBackground},
+        {SDL_EVENT_DID_ENTER_FOREGROUND, AppLifecycleKind::DidEnterForeground},
+        {SDL_EVENT_LOW_MEMORY, AppLifecycleKind::LowMemory},
+    };
+
+    for (const auto& testCase : cases)
+    {
+        SDL_Event source = MakeEvent(testCase.sdl);
+        PlatformEvent mapped;
+        ASSERT_TRUE(MapSdlEvent(source, mapped)) << ToString(testCase.expected);
+        EXPECT_EQ(std::get<AppLifecycleEvent>(mapped).kind, testCase.expected);
+    }
+}
+
+// --- events CNA does not consume -----------------------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, UnconsumedSdlEventsAreReportedAsUnmappedNotAsEmptyEvents)
+{
+    // SDL emits far more than CNA uses. Returning false is what stops PollEvents appending a
+    // default-constructed event -- which would look to a caller like a genuine QuitEvent, since
+    // that is the variant's first alternative.
+    SDL_Event source = MakeEvent(SDL_EVENT_CLIPBOARD_UPDATE);
+    PlatformEvent mapped;
+    EXPECT_FALSE(MapSdlEvent(source, mapped));
+}
+
+TEST(Sdl3EventMapperTests, AnUnmappedEventLeavesTheDestinationUntouched)
+{
+    PlatformEvent mapped = WindowEvent{};
+    SDL_Event source = MakeEvent(SDL_EVENT_CLIPBOARD_UPDATE);
+    EXPECT_FALSE(MapSdlEvent(source, mapped));
+    EXPECT_EQ(GetEventTypeName(mapped), "WindowEvent") << "destination must not be overwritten";
+}
+
+// --- scancode translation (PLAT-78a) ----------------------------------------------------------
+
+TEST(Sdl3EventMapperTests, EverySdlScancodeCnaNamesRoundTripsThroughTheContract)
+{
+    // Both numberings are HID usage IDs, so the translation is a validated cast rather than a
+    // table. That makes it cheap and makes a silent mismatch invisible -- this walks SDL's entire
+    // scancode range and checks that anything CNA recognises comes back as the same SDL value.
+    int recognised = 0;
+    for (int raw = 0; raw < SDL_SCANCODE_COUNT; ++raw)
+    {
+        const auto sdl = static_cast<SDL_Scancode>(raw);
+        const Scancode mapped = CNA::Platform::Sdl3::ToScancode(sdl);
+        if (mapped == Scancode::Unknown && sdl != SDL_SCANCODE_UNKNOWN)
+        {
+            continue;  // a key CNA does not name; refusing it is the correct answer
+        }
+        EXPECT_EQ(CNA::Platform::Sdl3::ToSdlScancode(mapped), sdl) << "raw " << raw;
+        ++recognised;
+    }
+
+    // A translation that recognised nothing would pass every assertion above.
+    EXPECT_GE(recognised, 120);
+}
+
+TEST(Sdl3EventMapperTests, AnSdlScancodeCnaDoesNotNameBecomesUnknown)
+{
+    // SDL's space runs past the HID keyboard page with its own media and system keys. Letting one
+    // through as a raw cast would produce a Scancode no switch handles and ToString cannot name.
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_UNKNOWN), Scancode::Unknown);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_CUT), Scancode::Unknown);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_MEDIA_EJECT), Scancode::Unknown);
+}
+
+TEST(Sdl3EventMapperTests, TheLettersAndModifiersTranslateToTheKeysTheyName)
+{
+    // The cases a reader would want spot-checked by name rather than by round-trip.
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_A), Scancode::A);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_W), Scancode::W);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_LSHIFT), Scancode::LeftShift);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_RGUI), Scancode::RightGui);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_KP_5), Scancode::Keypad5);
+    EXPECT_EQ(CNA::Platform::Sdl3::ToScancode(SDL_SCANCODE_SLEEP), Scancode::Sleep);
+}
+
+} // namespace

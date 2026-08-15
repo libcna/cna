@@ -10,7 +10,7 @@ namespace CNA::Input
 {
     /**
      * @brief CNAEXT — the coordinate system used to encode a haptic effect's direction. Mirrors
-     *        SDL3's `SDL_HapticDirectionType`.
+     *        the platform contract's haptic direction type.
      */
     CNAEXT enum class HapticDirectionTypeEXT
     {
@@ -26,7 +26,7 @@ namespace CNA::Input
 
     /**
      * @brief CNAEXT — the direction a haptic effect's force comes from. Mirrors SDL3's
-     *        `SDL_HapticDirection`.
+     *        `CNA::Platform::HapticDirection`.
      */
     CNAEXT struct HapticDirectionEXT
     {

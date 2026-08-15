@@ -113,6 +113,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
     void ShaderEffect::FillGpuDrawParams(CNA::Internal::Renderers::GpuDrawParams& params) const
     {
+        params.customEffectRequested = true;
         params.customEffectRenderer = effectRenderer_.get();
     }
 

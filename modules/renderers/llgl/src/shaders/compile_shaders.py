@@ -8,7 +8,7 @@ in the binary at once:
   *.gl.vert.glsl / *.gl.frag.glsl  OpenGL flavour, embedded verbatim as GLSL source strings
 
 Both are emitted into a single generated header so a build needs no shader toolchain at all -- the
-same discipline as the Bgfx and SDL_GPU renderers' own checked-in generated headers.
+same discipline as the other runtime-selected renderers' checked-in generated headers.
 
 Requires glslangValidator (Debian/Ubuntu package: glslang-tools) on PATH, or --glslang <path>.
 

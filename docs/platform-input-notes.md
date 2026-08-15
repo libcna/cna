@@ -78,8 +78,8 @@ See also [`docs/input-backend.md`](input-backend.md) (architecture) and
 ## Browser / Emscripten (WebAssembly)
 
 CNA builds for Emscripten (EasyGL backend = WebGL 2 / OpenGL ES 3.0). Input flows through SDL3's
-Emscripten backend, which bridges browser DOM events to the same `SdlInputBridge::ProcessEvent` path used
-everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior to be aware of:
+Emscripten backend, which maps browser DOM events into the same `PlatformInputBridge::ProcessEvent`
+path used everywhere else, so no browser-specific input code exists in CNA. Browser-specific behavior:
 
 - **Exceptions are enabled.** Several input paths throw (`TouchCollection`/`TouchPanel::SetFinger` →
   `std::out_of_range`, `TouchPanel::ReadGesture` → `System::InvalidOperationException`). Emscripten disables
@@ -180,19 +180,64 @@ each cell.
   guide) normalization is done by SDL's bundled **`gamecontrollerdb`** mapping table plus SDL's built-in
   entries. CNA does **not** ship or parse its own mapping DB; a device SDL cannot map is simply not
   reported as a gamepad. `SDL_GameControllerAddMappingsFromFile`/env (`SDL_GAMECONTROLLERCONFIG`) can add
-  mappings at the SDL layer without any CNA change. The XNA `Buttons`/axis mapping from the SDL layout is
-  pinned by `EverySdlButtonMapsToTheExpectedXnaButton` / `AxisMappingHandlesYInversionAndTriggerNormalization`.
-- **Joystick type → `GamePadType` (INPUT-GAMEPAD-031).** On connect the bridge maps `SDL_JoystickType`
-  (`SDL_GetJoystickType`) to the XNA `GamePadType` (`GamePad`/`Wheel`/`ArcadeStick`/`FlightStick`/…) and
-  stores it on the capabilities. Tested end-to-end through the fake backend by
-  `FakeGamepadTest.SdlJoystickTypeMapsToXnaGamePadType`.
+  mappings at the SDL layer without any CNA change. `Sdl3GamepadControls` is the single CNA-owned
+  SDL-layout translation point. Its native axis/button mapping is pinned by
+  `Sdl3EventMapperTests.GamepadAxesMapToCnaVocabularyAndBridgeNumerics` and
+  `EverySupportedGamepadButtonMapsToCnaVocabulary`; `GamePadMappingTest.EveryButtonMapsToItsXnaFlag`
+  then pins the platform-to-XNA boundary through whole canned snapshots.
+- **Joystick type → `GamePadType` (INPUT-GAMEPAD-031).** When a device first occupies a stable player
+  slot, `Sdl3Gamepad` caches its `SDL_JoystickType` as `GamepadKind`; public `GamePad` maps that CNA-owned
+  enum to XNA's `GamePadType`. `GamepadDeviceMetadataUsesOnlyContractEnums` pins the SDL edge and
+  `GamePadPlatformTest.CapabilitiesMapEveryCategoryWithoutNativeQueries` pins the public edge.
 - **Steam Input / virtual controllers (INPUT-GAMEPAD-036).** Valve controllers report the Steam vendor id
   `0x28de`; matching FNA, CNA remaps the re-exposed controller to a fixed GUID (`xinput` for Xbox-emulated,
-  `4c05c405`/`4c05e60c` for PS4/PS5 — `SdlInputBridge` GUID path, mirroring `SDL3_FNAPlatform.cs:2193-2210`).
+  `4c05c405`/`4c05e60c` for PS4/PS5 — the public `GamePad` GUID path, mirroring
+  `SDL3_FNAPlatform.cs:2193-2210`).
   Steam Input commonly presents a **virtual Xbox 360 controller**; the real device is then hidden behind
-  it, so CNA sees the virtual pad (this is expected, not a bug). Verified indirectly by the GUID/Valve-override
-  tests (`GetGuidUsesVendorProductAndValveOverrides`, `FormatsXinputVendorProductAndNoDevice`).
+  it, so CNA sees the virtual pad (this is expected, not a bug). Verified without native hardware by
+  `GamePadPlatformTest.GuidFormattingCoversXinputHexPaddingAndValveOverrides`.
 - **Per-platform specifics (INPUT-GAMEPAD-037)** are in the platform sections above: Linux/X11 hotplug+rumble,
   Windows XInput `"xinput"` GUID + rumble/trigger-rumble/light-bar, Android/iOS depend on attached hardware /
   the SDL backend. Real-hardware actuation across vendors (Xbox/PS/Switch/generic/BT) is manual-gated
   (INPUT-GAMEPAD-035).
+
+### Raw joystick snapshots (PLAT-83)
+
+- **Raw and mapped views remain distinct.** A wheel/HOTAS can expose arbitrary device-ordered axes,
+  buttons, POV hats and trackballs through `IPlatformJoystick` even when SDL also maps the same
+  hardware into a four-slot `IPlatformGamepad`. Neither view derives its state from the other.
+- **One publish per frame.** `Game` acquires the shared gamepad/joystick subsystem before frame one,
+  drains native events, then calls `IPlatformJoystick::Update()` once. Public `Joysticks::GetStateEXT`
+  therefore cannot consume a trackball delta twice or observe axes from a different native instant
+  than buttons. Trackball deltas are zero when SDL reports no motion during that publication.
+- **Hotplug identity is platform-owned.** `JoystickInfo::id`, `DeviceEvent::device` and the haptic
+  joystick correlation use the same `DeviceId`. SDL3 maps its instance id at the native edge; no
+  public or platform header exposes `SDL_JoystickID` or `SDL_Joystick*`.
+
+### Standalone haptics (PLAT-84)
+
+- **Stable ids, not enumeration positions.** `IPlatformHaptics::GetHaptics()` returns ascending
+  `DeviceId` descriptors. Cached rumble handles are keyed by that id and retired when enumeration
+  no longer contains it, so removing device A cannot make A's cached handle masquerade as the new
+  device at index zero.
+- **The simple subset is platform-owned.** Standalone enumeration, rumble capability,
+  initialization, play and stop cross `IPlatformHaptics`. `HapticDevice` keeps the selected
+  platform's haptic-subsystem reference until `Dispose`, and the SDL3 platform closes its cached
+  handles before releasing the final subsystem reference.
+- **The rich effect model is platform-owned.** `IPlatformHapticDevice` creates/updates/runs
+  arbitrary constant, periodic, condition, ramp, left-right and custom effects from CNA-owned
+  descriptors. SDL3 converts them at its edge; the duplicate internal backend is gone and the
+  public `HapticDevice` contains no native handle.
+
+### Host motion sensors (PLAT-85)
+
+- **Static reads keep the old lifetime shape.** `CNA::Input::Sensors` acquires
+  `PlatformSubsystem::Sensor`, opens the selected `IPlatformSensors` kind, reads, closes it and
+  releases the subsystem on every call. It does not cache a service pointer or started flag across
+  calls; either would outlive the ambient platform that supplied it.
+- **Teardown order is explicit.** A started sensor closes before its subsystem reference is
+  released. SDL3 also deactivates any cached service handles before the platform's last sensor
+  reference reaches zero, so destruction cannot close a stale native pointer.
+- **Polling and events are separate contracts.** Public accelerometer/gyroscope helpers stay
+  on-demand. `SensorEvent` independently preserves an event stream's stable id, six values and
+  sensor-clock timestamp for general platform consumers; the input bridge intentionally ignores it.

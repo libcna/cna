@@ -1,0 +1,225 @@
+{
+  "schema": 1,
+  "renderer": "SOFTWARE",
+  "device": "CNA deterministic CPU rasterizer, Intel Core i7-1260P CPU 0",
+  "baseline_revision": "e19e52fb6e0f69b68b57b86eba88d28944179e05",
+  "current_revision": "4d99e6d19",
+  "method": {
+    "scene": "480x270, 500 moving 2x2 RGBA8 sprites per frame",
+    "warmup_frames": 120,
+    "measured_frames_per_phase": 2400,
+    "comparison_pairs": 12,
+    "baseline_runs": 24,
+    "current_runs": 12,
+    "estimator": "per-run p50 and p95; paired log-ratio Student-t 95% CI",
+    "minimum_regression_floor_percent": 0.5
+  },
+  "host": {
+    "system": "Linux",
+    "release": "6.12.101+deb13-amd64",
+    "machine": "x86_64",
+    "python": "3.13.5",
+    "cpu_affinity": [
+      0
+    ]
+  },
+  "metrics": {
+    "stable.submission": {
+      "baseline_frame_ms": {
+        "p50": 0.249442995,
+        "p95": 0.27679214049999995
+      },
+      "current_frame_ms": {
+        "p50": 0.249668002,
+        "p95": 0.27390955284999996
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.9831655925339642,
+            "ci95": [
+              -0.3507610214349138,
+              2.334948441329053
+            ],
+            "effective_floor": 2.334948441329053
+          },
+          "current_delta_percent": {
+            "mean": 0.0031649266252857665,
+            "ci95": [
+              -0.7478759363209163,
+              0.7598889160852649
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": 1.381711191410079,
+            "ci95": [
+              -0.08398686989458277,
+              2.8689100186041374
+            ],
+            "effective_floor": 2.8689100186041374
+          },
+          "current_delta_percent": {
+            "mean": -0.6477504614602029,
+            "ci95": [
+              -1.3866728223365075,
+              0.09670873983138667
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "stable.end_to_end": {
+      "baseline_frame_ms": {
+        "p50": 0.341354504,
+        "p95": 0.37657877075
+      },
+      "current_frame_ms": {
+        "p50": 0.341342002,
+        "p95": 0.3722920015
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 1.0458084307032645,
+            "ci95": [
+              -0.29680084109166055,
+              2.406497359639749
+            ],
+            "effective_floor": 2.406497359639749
+          },
+          "current_delta_percent": {
+            "mean": -0.05315130361303752,
+            "ci95": [
+              -0.7554754352018218,
+              0.6541429680210031
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": 1.416171864109367,
+            "ci95": [
+              -0.3321677849787267,
+              3.19518030031404
+            ],
+            "effective_floor": 3.19518030031404
+          },
+          "current_delta_percent": {
+            "mean": -0.8778146688383984,
+            "ci95": [
+              -1.7003713509981526,
+              -0.04837495461977903
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "churn.submission": {
+      "baseline_frame_ms": {
+        "p50": 0.252416998,
+        "p95": 0.27908619365
+      },
+      "current_frame_ms": {
+        "p50": 0.25257299850000003,
+        "p95": 0.27987530954999995
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.39360787537478964,
+            "ci95": [
+              -0.3416151987792545,
+              1.1342550086267884
+            ],
+            "effective_floor": 1.1342550086267884
+          },
+          "current_delta_percent": {
+            "mean": 0.4305291774202213,
+            "ci95": [
+              -0.617357739814024,
+              1.4894649756898077
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": 0.3203276793447585,
+            "ci95": [
+              -1.0248586849256143,
+              1.6837966783310399
+            ],
+            "effective_floor": 1.6837966783310399
+          },
+          "current_delta_percent": {
+            "mean": -0.07393210400456521,
+            "ci95": [
+              -1.17798300781192,
+              1.0424533830798561
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    },
+    "churn.end_to_end": {
+      "baseline_frame_ms": {
+        "p50": 0.34425202,
+        "p95": 0.378393769
+      },
+      "current_frame_ms": {
+        "p50": 0.3444205075,
+        "p95": 0.38011961395
+      },
+      "comparisons": {
+        "p50": {
+          "baseline_noise_percent": {
+            "mean": 0.33755295771106525,
+            "ci95": [
+              -0.26996844756459165,
+              0.9487751765944472
+            ],
+            "effective_floor": 0.9487751765944472
+          },
+          "current_delta_percent": {
+            "mean": 0.43088149920182567,
+            "ci95": [
+              -0.5605369111488835,
+              1.432184420528867
+            ]
+          },
+          "passed": true
+        },
+        "p95": {
+          "baseline_noise_percent": {
+            "mean": 0.34556653465438036,
+            "ci95": [
+              -1.1956145957703281,
+              1.9107874813995847
+            ],
+            "effective_floor": 1.9107874813995847
+          },
+          "current_delta_percent": {
+            "mean": -0.10783497342956301,
+            "ci95": [
+              -1.245685933628753,
+              1.0431263487813165
+            ]
+          },
+          "passed": true
+        }
+      },
+      "passed": true
+    }
+  },
+  "passed": true
+}

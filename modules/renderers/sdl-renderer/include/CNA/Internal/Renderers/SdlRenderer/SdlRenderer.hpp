@@ -6,7 +6,21 @@
 
 namespace CNA::Internal::Renderers::SdlRenderer
 {
-    class SdlTextureRenderer : public ITextureRenderer
+    /** @brief SDL-only texture access used inside the SDL_Renderer backend. */
+    class ISdlTextureRenderer
+    {
+    public:
+        /** @brief Destroys the SDL texture view. */
+        virtual ~ISdlTextureRenderer() = default;
+
+        /**
+         * @brief Gets the SDL texture owned by this backend resource.
+         * @return The non-owning SDL texture pointer used by the SDL sprite batch.
+         */
+        [[nodiscard]] virtual SDL_Texture* GetNativeSdlTexture() const = 0;
+    };
+
+    class SdlTextureRenderer : public ITextureRenderer, public ISdlTextureRenderer
     {
     public:
         SDL_Texture* texture = nullptr;
@@ -17,13 +31,13 @@ namespace CNA::Internal::Renderers::SdlRenderer
         ~SdlTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return texture; }
+        SDL_Texture* GetNativeSdlTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
     };
 
     /// SDL_TEXTUREACCESS_TARGET-based off-screen render target.
-    class SdlRenderTargetRenderer : public IRenderTargetRenderer
+    class SdlRenderTargetRenderer : public IRenderTargetRenderer, public ISdlTextureRenderer
     {
     public:
         SDL_Texture* texture = nullptr;
@@ -36,7 +50,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
 
         int GetWidth()  const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return texture; }
+        SDL_Texture* GetNativeSdlTexture() const override { return texture; }
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void BindGL(int /*unit*/) const override {}
 
@@ -131,6 +145,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
         int lastOutputW_ = 0; ///< last known renderer output width; used to detect Android surface resize
         int lastOutputH_ = 0; ///< last known renderer output height
         CnaPresentationMode presentationMode_ = CnaPresentationMode::Overscan;
+        CNA::Platform::WindowId registeredWindowId_ = 0;
 
         SdlRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
                            CnaPresentationMode mode = CnaPresentationMode::Overscan,
@@ -147,12 +162,14 @@ namespace CNA::Internal::Renderers::SdlRenderer
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        bool TransformWindowToLogical(float windowX, float windowY,
+                                      float& logicalX, float& logicalY) const override;
+        bool TransformLogicalToWindow(float logicalX, float logicalY,
+                                      float& windowX, float& windowY) const override;
         // Task 714: SDL_Renderer's 2D blit pipeline has no MSAA control at all -- accepts any
         // requested MultiSampleCount without throwing (logging once per request), always
         // reporting back 0 (the real, device-clamped maximum on this renderer).
         int ApplyMultiSampleCount(int requestedMultiSampleCount) override;
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return renderer; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

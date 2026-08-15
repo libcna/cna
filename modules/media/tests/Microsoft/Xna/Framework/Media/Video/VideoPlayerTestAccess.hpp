@@ -3,9 +3,7 @@
 
 #include <cstddef>
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_audio.h>
-
+#include "CNA/Internal/Audio/MixerEngine.hpp"
 #include "CNA/Internal/Media/VideoDecoder.hpp"
 #include "Microsoft/Xna/Framework/Media/Video/VideoPlayer.hpp"
 
@@ -14,8 +12,8 @@ namespace Microsoft::Xna::Framework::Media
     // Test-only accessor for VideoPlayer's private decoder_/audioStream_, needed to verify a
     // track switch (SetAudioTrackEXT/SetVideoTrackEXT) actually reconfigured the real
     // audio/video output -- not just "didn't throw" -- and that a freshly-opened audio stream is
-    // genuinely resumed, not left paused (SDL_OpenAudioDeviceStream() opens every stream paused
-    // by default; VideoPlayer itself exposes no public getters for either question) --
+    // genuinely resumed, not left paused (the playback stream opens paused by contract;
+    // VideoPlayer itself exposes no public getters for either question) --
     // plan_media.md MEDIA-90/MEDIA-131, found by external code review.
     struct VideoPlayerTestAccess
     {
@@ -44,7 +42,7 @@ namespace Microsoft::Xna::Framework::Media
 
         static bool IsAudioStreamDevicePaused(const VideoPlayer& player)
         {
-            return player.audioStream_ != nullptr && SDL_AudioStreamDevicePaused(player.audioStream_);
+            return CNA::Internal::Audio::IsMixerStreamPaused(player.audioStream_);
         }
 
         // Raw pointer identity, not just presence/pause-state -- proves a track switch that
@@ -52,7 +50,7 @@ namespace Microsoft::Xna::Framework::Media
         // it alone rather than tearing it down and reopening a new one, which would discard
         // whatever audio was already queued for playback (plan_media.md MEDIA-148, found by
         // external code review).
-        static SDL_AudioStream* GetAudioStreamPtr(const VideoPlayer& player)
+        static const void* GetAudioStreamPtr(const VideoPlayer& player)
         {
             return player.audioStream_;
         }
@@ -67,7 +65,7 @@ namespace Microsoft::Xna::Framework::Media
 
         // Simulates the audio device becoming unavailable mid-playback (e.g. what
         // ReconfigureAudioOutputForCurrentTrack() already does gracefully when
-        // SDL_OpenAudioDeviceStream() itself fails) by tearing down a real, already-open stream the
+        // playback-stream creation itself fails) by tearing down a real, already-open stream the
         // same way that function's own failure path does, without touching any other state. Lets a
         // test exercise the "no audio device" code path deterministically against a fixture that
         // genuinely has audio, rather than depending on this sandbox's real audio driver failing.
@@ -75,9 +73,8 @@ namespace Microsoft::Xna::Framework::Media
         {
             if (player.audioStream_)
             {
-                SDL_DestroyAudioStream(player.audioStream_);
+                CNA::Internal::Audio::DestroyMixerStream(player.audioStream_);
                 player.audioStream_ = nullptr;
-                SDL_QuitSubSystem(SDL_INIT_AUDIO);
             }
         }
     };

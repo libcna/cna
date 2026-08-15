@@ -3,6 +3,7 @@
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
 #include "CNA/Internal/Renderers/SvgDom/SvgDomRenderTargetRenderer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -14,14 +15,14 @@
 // reuse by index, hide the unused tail at Present()" shape HtmlDom's own DOM path uses,
 // independently applied here to SVG's own primitives. Each pool slot is a wrapping <g> (carrying
 // the sprite's own collapsed affine `transform="matrix(...)"`, image-rendering, mix-blend-mode and
-// tint filter -- all mode-independent) around TWO alternately shown children: a nested <svg>
+// tint/filter/opacity -- all mode-independent) around TWO alternately shown children: a nested <svg>
 // viewport (crop-only draws -- its own width/height/viewBox crop the source rectangle, an SVG
 // nested <svg> clips its content to its own box by spec, so this needs no separate <clipPath>)
 // containing one <image>, or a <rect> filled by a per-slot <pattern> (SVGDOM-1: Wrap/symmetric
 // Mirror addressing on an out-of-bounds sourceRectangle -- see ValidateAddressModesEXT). Tint is an
-// `feColorMatrix` filter, cached in <defs> and referenced by url(#id) -- omitted entirely for an
-// opaque-alpha white tint with no Opaque-alpha-forcing, the overwhelmingly common case, so most
-// sprites carry no filter attribute at all. Every attribute/style write below is dirty-checked
+// `feColorMatrix` filter, cached in <defs> and referenced by url(#id). SVGDOM-5 keeps alpha out of
+// that filter and applies it as cheap element opacity; a white alpha-only fade therefore has no SVG
+// filter at all. Every attribute/style write below is dirty-checked
 // against the pool element's own last-applied state (`__cna`), so a steady frame (same sprite
 // count, same per-sprite texture/geometry/tint/addressing) costs no DOM writes beyond the initial
 // pool creation -- only `transform` typically changes frame to frame for a moving sprite.
@@ -92,11 +93,16 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
         }
         const g = entryEl.g, viewport = entryEl.viewport, image = entryEl.image,
               rect = entryEl.rect, prev = entryEl.cna;
-        if (prev.hidden) { g.style.display = ''; prev.hidden = false; }
+        if (prev.hidden) { g.style.removeProperty('display'); prev.hidden = false; }
 
         if (prev.tiled !== tiled) {
-            viewport.style.display = tiled ? 'none' : '';
-            rect.style.display = tiled ? '' : 'none';
+            if (tiled) {
+                viewport.style.display = 'none';
+                rect.style.removeProperty('display');
+            } else {
+                viewport.style.removeProperty('display');
+                rect.style.display = 'none';
+            }
             prev.tiled = tiled;
         }
 
@@ -110,7 +116,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
             prev.additive = additive;
         }
 
-        const href = entry.variants[variantMode] || '';
+        const href = entry.variants[variantMode] || String();
 
         if (!tiled) {
             const viewBox = sx2 + ' ' + sy2 + ' ' + sw2 + ' ' + sh2;
@@ -151,10 +157,22 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
         const r = packedColor & 0xFF, g2 = (packedColor >> 8) & 0xFF,
               b = (packedColor >> 16) & 0xFF, a = (packedColor >> 24) & 0xFF;
         const isOpaqueOp = (flags & 16) !== 0; // SvgFlagOpaque
-        const needsTint = r !== 255 || g2 !== 255 || b !== 255 || a !== 255 || isOpaqueOp;
+        // SVGDOM-5: alpha is a compositor property, not a colour-matrix concern. In particular,
+        // Mobile Eggbert's rotating loading sprite varies alpha every frame; putting alpha into the
+        // filter key created a new <filter>/<feColorMatrix> pair for every step and forced Firefox
+        // down its expensive SVG-filter paint path. A single-child <g>'s opacity is equivalent to
+        // multiplying the source alpha and stays on the cheap, bounded path.
+        const opacity = isOpaqueOp ? 1 : (a / 255);
+        if (prev.opacity !== opacity) {
+            if (opacity === 1) g.style.removeProperty('opacity');
+            else g.style.opacity = opacity;
+            prev.opacity = opacity;
+        }
+
+        const needsTint = r !== 255 || g2 !== 255 || b !== 255 || isOpaqueOp;
         let filterId = "";
         if (needsTint) {
-            const key = r + '_' + g2 + '_' + b + '_' + a + '_' + (isOpaqueOp ? 1 : 0);
+            const key = r + '_' + g2 + '_' + b + '_' + (isOpaqueOp ? 1 : 0);
             filterId = Module['cnaSvgDomFilterCache'] && Module['cnaSvgDomFilterCache'][key];
             if (!filterId) {
                 if (!Module['cnaSvgDomFilterCache']) Module['cnaSvgDomFilterCache'] = {};
@@ -165,7 +183,7 @@ EM_JS(void, CNA_SvgDom_FlushSpritesToSvg, (const void* cmds, int count, int stri
                 const cm = document.createElementNS(svgNS, 'feColorMatrix');
                 cm.setAttribute('type', 'matrix');
                 const rr = r / 255, gg = g2 / 255, bb = b / 255;
-                const alphaRow = isOpaqueOp ? '0 0 0 0 1' : ('0 0 0 ' + (a / 255) + ' 0');
+                const alphaRow = isOpaqueOp ? '0 0 0 0 1' : '0 0 0 1 0';
                 cm.setAttribute('values',
                     rr + ' 0 0 0 0  0 ' + gg + ' 0 0 0  0 0 ' + bb + ' 0 0  ' + alphaRow);
                 filter.appendChild(cm);
@@ -242,6 +260,17 @@ namespace CNA::Internal::Renderers::SvgDom
 {
     namespace
     {
+        std::uint8_t StraightTintChannel(std::uint8_t premultiplied, std::uint8_t alpha)
+        {
+            // SVGDOM-5: XNA supplies a premultiplied draw colour to AlphaBlend. SVG/Canvas2D use
+            // straight-alpha source pixels, with RGB tint and element/source alpha applied
+            // independently, so recover the straight RGB or a fade gets darkened twice. At zero
+            // alpha RGB is invisible and unknowable; canonical white avoids pointless filters.
+            if (alpha == 0) return 255;
+            const int straight = (static_cast<int>(premultiplied) * 255 + alpha / 2) / alpha;
+            return static_cast<std::uint8_t>(std::min(255, straight));
+        }
+
         struct Mat2x3
         {
             float a = 1, b = 0, c = 0, d = 1, e = 0, f = 0;
@@ -329,10 +358,17 @@ namespace CNA::Internal::Renderers::SvgDom
         // tiled-but-not-mirrored (Wrap) draw reuses the plain straight/unpremultiplied slots 0/1
         // since a plain 'repeat' tiling of the untouched texture already reproduces Wrap addressing.
         cmd.variantMode = VariantModeFor(op) + (mirrored ? 2 : 0);
-        cmd.packedColor = static_cast<std::uint32_t>(color.getRProperty())
-                        | (static_cast<std::uint32_t>(color.getGProperty()) << 8)
-                        | (static_cast<std::uint32_t>(color.getBProperty()) << 16)
-                        | (static_cast<std::uint32_t>(color.getAProperty()) << 24);
+        const std::uint8_t alpha = color.getAProperty();
+        const std::uint8_t red = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getRProperty(), alpha) : color.getRProperty();
+        const std::uint8_t green = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getGProperty(), alpha) : color.getGProperty();
+        const std::uint8_t blue = op == DomCompositeOp::AlphaBlend
+            ? StraightTintChannel(color.getBProperty(), alpha) : color.getBProperty();
+        cmd.packedColor = static_cast<std::uint32_t>(red)
+                        | (static_cast<std::uint32_t>(green) << 8)
+                        | (static_cast<std::uint32_t>(blue) << 16)
+                        | (static_cast<std::uint32_t>(alpha) << 24);
         return cmd;
     }
 

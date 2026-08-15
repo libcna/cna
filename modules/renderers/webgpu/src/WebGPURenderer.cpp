@@ -1,10 +1,5 @@
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
-
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_video.h>
-#if defined(__APPLE__) && __has_include(<SDL3/SDL_metal.h>)
-#include <SDL3/SDL_metal.h>
-#endif
+#include "CNA/Internal/Renderers/WebGPU/WebGPUMetalSurface.hpp"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -2269,20 +2264,13 @@ namespace CNA::Internal::Renderers::WebGPU
                             blendSnapshot_);
     }
 
-    WebGPURenderer::WebGPURenderer(SDL_Window* window,
-                                                  int virtualWidth,
-                                                  int virtualHeight,
-                                                  CnaPresentationMode presentationMode,
-                                                  int swapInterval)
-        : window_(window),
-          virtualWidth_(virtualWidth),
-          virtualHeight_(virtualHeight),
-          presentationMode_(presentationMode),
-          swapInterval_(swapInterval)
+    WebGPURenderer::WebGPURenderer(const GraphicsRendererCreateArgs& args)
+        : surfaceState_(args.surface, "WebGPURenderer"),
+          virtualWidth_(args.virtualWidth),
+          virtualHeight_(args.virtualHeight),
+          presentationMode_(args.presentationMode),
+          swapInterval_(args.swapInterval)
     {
-        if (window_ == nullptr)
-            throw std::invalid_argument("CNA WebGPU: SDL window cannot be null");
-
         instance_ = wgpuCreateInstance(nullptr);
         if (instance_ == nullptr)
             throw std::runtime_error("CNA WebGPU: wgpuCreateInstance failed");
@@ -2292,7 +2280,7 @@ namespace CNA::Internal::Renderers::WebGPU
             CreateSurface();
             RequestAdapterAndDevice();
             ConfigureSurface(true);
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
         }
         catch (...)
         {
@@ -2308,8 +2296,8 @@ namespace CNA::Internal::Renderers::WebGPU
             if (adapter_ != nullptr) wgpuAdapterRelease(adapter_);
             if (surface_ != nullptr) wgpuSurfaceRelease(surface_);
             if (instance_ != nullptr) wgpuInstanceRelease(instance_);
-#if defined(__APPLE__) && __has_include(<SDL3/SDL_metal.h>)
-            if (metalView_ != nullptr) SDL_Metal_DestroyView(metalView_);
+#if defined(__APPLE__)
+            DestroyWebGPUMetalLayer(metalSurfaceOwner_);
 #endif
             throw;
         }
@@ -2317,7 +2305,7 @@ namespace CNA::Internal::Renderers::WebGPU
 
     WebGPURenderer::~WebGPURenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
         // REMED-GFX-167: FIRST, before any native handle below is released. A queued command holds
         // a reference to the texture it samples, and these vectors are members -- destroyed after
         // this body, i.e. after device_/adapter_/instance_ are gone. A frame abandoned rather than
@@ -2359,75 +2347,73 @@ namespace CNA::Internal::Renderers::WebGPU
         if (adapter_ != nullptr) wgpuAdapterRelease(adapter_);
         if (surface_ != nullptr) wgpuSurfaceRelease(surface_);
         if (instance_ != nullptr) wgpuInstanceRelease(instance_);
-#if defined(__APPLE__) && __has_include(<SDL3/SDL_metal.h>)
-        if (metalView_ != nullptr) SDL_Metal_DestroyView(metalView_);
+#if defined(__APPLE__)
+        DestroyWebGPUMetalLayer(metalSurfaceOwner_);
 #endif
     }
 
     void WebGPURenderer::CreateSurface()
     {
-        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        const char* driver = SDL_GetCurrentVideoDriver();
         WGPUSurfaceDescriptor descriptor{};
         descriptor.label = StringView("CNA WebGPU Surface");
+        const auto& nativeHandle = surfaceState_.GetNativeHandle();
 
 #if defined(_WIN32)
+        CNA::Platform::Win32NativeWindow native;
+        if (!CNA::Platform::TryGetWin32(nativeHandle, native))
+            throw std::runtime_error("CNA WebGPU: a Win32 native window is required");
         WGPUSurfaceSourceWindowsHWND source{};
         source.chain.sType = WGPUSType_SurfaceSourceWindowsHWND;
         source.hinstance = GetModuleHandleW(nullptr);
-        source.hwnd = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-        if (source.hwnd == nullptr)
-            throw std::runtime_error("CNA WebGPU: SDL did not expose a Win32 HWND");
+        source.hwnd = native.hwnd;
         descriptor.nextInChain = &source.chain;
         surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
-#elif defined(__APPLE__) && __has_include(<SDL3/SDL_metal.h>)
-        metalView_ = SDL_Metal_CreateView(window_);
-        if (metalView_ == nullptr)
-            throw std::runtime_error(std::string("CNA WebGPU: SDL_Metal_CreateView failed: ") + SDL_GetError());
+#elif defined(__APPLE__)
+        const auto drawableSize = surfaceState_.GetDrawableSize();
         WGPUSurfaceSourceMetalLayer source{};
         source.chain.sType = WGPUSType_SurfaceSourceMetalLayer;
-        source.layer = SDL_Metal_GetLayer(metalView_);
+        source.layer = CreateWebGPUMetalLayer(
+            nativeHandle, drawableSize.width, drawableSize.height,
+            surfaceState_.GetDisplayScale(), metalSurfaceOwner_);
         descriptor.nextInChain = &source.chain;
         surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
-#elif defined(__ANDROID__) && defined(SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER)
+#elif defined(__ANDROID__)
+        CNA::Platform::AndroidNativeWindow native;
+        if (!CNA::Platform::TryGetAndroid(nativeHandle, native))
+            throw std::runtime_error("CNA WebGPU: an Android native window is required");
         WGPUSurfaceSourceAndroidNativeWindow source{};
         source.chain.sType = WGPUSType_SurfaceSourceAndroidNativeWindow;
-        source.window = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
-        if (source.window == nullptr)
-            throw std::runtime_error("CNA WebGPU: SDL did not expose Android native window");
+        source.window = native.window;
         descriptor.nextInChain = &source.chain;
         surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
 #elif defined(__linux__)
-        if (driver != nullptr && std::strcmp(driver, "wayland") == 0)
+        CNA::Platform::WaylandNativeWindow wayland;
+        CNA::Platform::X11NativeWindow x11;
+        if (CNA::Platform::TryGetWayland(nativeHandle, wayland))
         {
             WGPUSurfaceSourceWaylandSurface source{};
             source.chain.sType = WGPUSType_SurfaceSourceWaylandSurface;
-            source.display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
-            source.surface = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
-            if (source.display == nullptr || source.surface == nullptr)
-                throw std::runtime_error("CNA WebGPU: SDL did not expose Wayland display/surface properties");
+            source.display = wayland.display;
+            source.surface = wayland.surface;
             descriptor.nextInChain = &source.chain;
             surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
         }
-        else if (driver != nullptr && std::strcmp(driver, "x11") == 0)
+        else if (CNA::Platform::TryGetX11(nativeHandle, x11))
         {
             WGPUSurfaceSourceXlibWindow source{};
             source.chain.sType = WGPUSType_SurfaceSourceXlibWindow;
-            source.display = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-            source.window = static_cast<std::uint64_t>(SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
-            if (source.display == nullptr || source.window == 0)
-                throw std::runtime_error("CNA WebGPU: SDL did not expose X11 display/window properties");
+            source.display = x11.display;
+            source.window = x11.window;
             descriptor.nextInChain = &source.chain;
             surface_ = wgpuInstanceCreateSurface(instance_, &descriptor);
         }
         else
         {
-            throw std::runtime_error(std::string("CNA WebGPU: unsupported SDL Linux video driver: ") +
-                                     (driver != nullptr ? driver : "unknown"));
+            throw std::runtime_error("CNA WebGPU: unsupported Linux native window: " +
+                                     CNA::Platform::Describe(nativeHandle));
         }
 #else
-        (void) properties;
-        (void) driver;
+        (void) nativeHandle;
         throw std::runtime_error("CNA WebGPU: native surface creation is unsupported on this platform");
 #endif
 
@@ -2473,11 +2459,10 @@ namespace CNA::Internal::Renderers::WebGPU
 
     void WebGPURenderer::ConfigureSurface(bool force)
     {
-        int width = 0;
-        int height = 0;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
-        const bool minimized = (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED) != 0;
-        if (minimized || width <= 0 || height <= 0)
+        const auto drawableSize = surfaceState_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
+        if (width <= 0 || height <= 0)
         {
             if (surfaceConfigured_ && surface_ != nullptr)
                 wgpuSurfaceUnconfigure(surface_);
@@ -2866,9 +2851,9 @@ struct VertexOutput {
         if (created == nullptr)
             throw std::runtime_error("CNA WebGPU: failed to create keyed SpriteBatch pipeline");
         spritePipelines_.emplace(key, created);
-        SDL_Log("[WebGPU][GFX-102] Sprite pipeline cache miss -> size=%zu blend=%d "
+        std::fprintf(stderr, "[WebGPU][GFX-102] Sprite pipeline cache miss -> size=%zu blend=%d "
                 "color=(%d,%d,%d) alpha=(%d,%d,%d) writeMask=0x%X sampleMask=0x%08X "
-                "format=%d samples=%u",
+                "format=%d samples=%u\n",
                 spritePipelines_.size(), snapshot.blendEnabled ? 1 : 0,
                 snapshot.colorSrc, snapshot.colorDst, snapshot.colorFunc,
                 snapshot.alphaSrc, snapshot.alphaDst, snapshot.alphaFunc,
@@ -5467,7 +5452,7 @@ struct VSOut {
         // RenderTargetCube face is bound the sprite maps 1:1 into that target's own pixels (an
         // identity viewport, x=y=0, width=height=logical=target size) and the clip-space divide
         // below uses the target's dimensions, not physicalWidth_/physicalHeight_. Mirrors
-        // SdlGpuRenderer::QueueSprite()'s own currentRenderTarget_ branch (extended here to
+        // the native GPU renderer's own current-target branch (extended here to
         // the cube face too, since this renderer bakes NDC CPU-side at enqueue and each target's
         // pending sprites are flushed into that target's own render pass on the next target switch).
         LogicalViewport viewport;
@@ -6647,7 +6632,7 @@ struct VSOut {
         // construction -- so an A -> B -> A sequence can never apply target B's policy to target A,
         // whichever order the flushes happen in.
         // REMED-GFX-142: depth/stencil now follows the same rule as the 2D sibling above, which is
-        // also FNA3D's own (its SDL_GPU driver loads both aspects unless a clear is pending, and
+        // also FNA3D's own (its native GPU driver loads both aspects unless a clear is pending, and
         // its GL and D3D11 drivers preserve them because an FBO attachment and a DSV simply
         // persist). This used to clear unconditionally on the reasoning that RenderTargetUsage is
         // a colour contract and that one depth texture shared by six faces would "hand face A
@@ -6871,6 +6856,16 @@ struct VSOut {
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
+    void WebGPURenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surfaceState_.Update(surface);
+#if defined(__APPLE__)
+        const auto drawableSize = surfaceState_.GetDrawableSize();
+        ResizeWebGPUMetalLayer(metalSurfaceOwner_, drawableSize.width, drawableSize.height,
+                               surfaceState_.GetDisplayScale());
+#endif
+    }
+
     void WebGPURenderer::SetSwapInterval(int interval)
     {
         interval = std::max(0, interval);
@@ -7008,9 +7003,9 @@ struct VSOut {
         clearStencilPending_ = true;
 
         if (sampleCount_ > 1)
-            SDL_Log("[WebGPU] MultiSampleCount reset to %dx", sampleCount_);
+            std::fprintf(stderr, "[WebGPU] MultiSampleCount reset to %dx\n", sampleCount_);
         else
-            SDL_Log("[WebGPU] MultiSampleCount reset to disabled (1x)");
+            std::fprintf(stderr, "[WebGPU] MultiSampleCount reset to disabled (1x)\n");
 
         return GetMultiSampleCount();
     }
@@ -7025,10 +7020,12 @@ struct VSOut {
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.width == 0.0f || viewport.height == 0.0f)
             return false;
-        logicalX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
-        logicalY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
-        return windowX >= viewport.x && windowX < viewport.x + viewport.width &&
-               windowY >= viewport.y && windowY < viewport.y + viewport.height;
+        const float drawableX = surfaceState_.WindowToDrawable(windowX);
+        const float drawableY = surfaceState_.WindowToDrawable(windowY);
+        logicalX = (drawableX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logicalY = (drawableY - viewport.y) * viewport.logicalHeight / viewport.height;
+        return drawableX >= viewport.x && drawableX < viewport.x + viewport.width &&
+               drawableY >= viewport.y && drawableY < viewport.y + viewport.height;
     }
 
     bool WebGPURenderer::TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const
@@ -7036,8 +7033,10 @@ struct VSOut {
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.logicalWidth == 0.0f || viewport.logicalHeight == 0.0f)
             return false;
-        windowX = viewport.x + logicalX * viewport.width / viewport.logicalWidth;
-        windowY = viewport.y + logicalY * viewport.height / viewport.logicalHeight;
+        windowX = surfaceState_.DrawableToWindow(
+            viewport.x + logicalX * viewport.width / viewport.logicalWidth);
+        windowY = surfaceState_.DrawableToWindow(
+            viewport.y + logicalY * viewport.height / viewport.logicalHeight);
         return true;
     }
 
@@ -10524,7 +10523,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<WebGPU::WebGPURenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
+        return std::make_unique<WebGPU::WebGPURenderer>(args);
     }
 }

@@ -8,7 +8,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      *
      * Backed by `ARB_occlusion_query`/core (>=1.5) -- `glGenQueries`/`glBeginQuery(GL_SAMPLES_
      * PASSED)`/`glEndQuery`/`glGetQueryObjectiv(GL_QUERY_RESULT_AVAILABLE)`/`glGetQueryObjectuiv
-     * (GL_QUERY_RESULT)`, loaded via `SDL_GL_GetProcAddress` the same way
+     * (GL_QUERY_RESULT)`, loaded via the platform GL resolver the same way
      * `TryLoadOpenGL1FramebufferObjectFunctions()` loads its own entry points. `GL_SAMPLES_PASSED`
      * (not the newer `GL_ANY_SAMPLES_PASSED`) means `PixelCount()` returns a real, exact visible-
      * sample count on a non-multisampled target -- unlike EasyGL's own GLES3-constrained
@@ -38,7 +38,7 @@ namespace CNA::Internal::Renderers::OpenGL1
     };
 
     /**
-     * @brief Loads the ARB_occlusion_query/core-1.5 entry points via SDL_GL_GetProcAddress.
+     * @brief Loads the ARB_occlusion_query/core-1.5 entry points via the platform GL resolver.
      *
      * Must be called once after a GL context is current, gated on
      * OpenGL1Capabilities::occlusionQuery. Idempotent.

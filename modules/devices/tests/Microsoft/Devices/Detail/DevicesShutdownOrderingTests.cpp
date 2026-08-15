@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 //
 // Task SDLCORE-011: VibrateController::getDefaultProperty()'s function-local static singleton
-// destructs at process-exit static teardown, which can run after the application's own SDL_Quit()
-// call -- this environment cannot exercise that ordering hazard by calling the real SDL_Quit()
+// destructs at process-exit static teardown, which can run after the application's own native
+// shutdown call — this environment cannot exercise that ordering hazard with a real shutdown
 // inside the shared CnaTests process itself (it would tear down SDL for every other test sharing
 // this binary). Spawns tools/devices/shutdown_ordering_harness.cpp, mirroring the precedent set by
 // tests/CNA/Internal/Audio/AudioMixerTests.cpp for the same "needs a fresh process" problem.
@@ -31,7 +31,7 @@ namespace
     };
 
     // Spawns the harness with no arguments (the supported, intended usage -- calls
-    // Detail::DevicesShutdownCoordinator::Shutdown() before SDL_Quit()), capturing its stderr for
+    // Detail::DevicesShutdownCoordinator::Shutdown() before native shutdown), capturing its stderr for
     // diagnostics on failure. Returns {pid, readFd} on success, {-1, -1} on a spawn-side failure
     // (already reported via ADD_FAILURE).
     SpawnedProcess SpawnHarness()
@@ -105,13 +105,13 @@ namespace
 
 // Task SDLCORE-011: proves the harness process -- which touches
 // VibrateController::getDefaultProperty(), calls DevicesShutdownCoordinator::Shutdown(), then the
-// real SDL_Quit(), then returns from main() (triggering the singleton's static destructor after
-// SDL_Quit() already ran) -- exits cleanly (0) with no crash or hang, both in ordinary CI builds
+// real native shutdown, then returns from main() (triggering the singleton's static destructor after
+// shutdown already ran) — exits cleanly (0) with no crash or hang, both in ordinary CI builds
 // (a regression guard against a hang/crash regressing unnoticed) and, when this specific build is
 // an ASan one, as empirical proof no heap-use-after-free was detected. See
 // Detail::DevicesShutdownCoordinator's own doc comment for the honestly-scoped limitation this
 // does *not* prove: a real, successfully-opened haptic_ device is never available in this
-// container, so the SDL_CloseHaptic() guard specifically remains reasoned-from-source only, not
+// container, so the native haptic-close guard specifically remains reasoned-from-source only, not
 // reproduced under ASan here.
 TEST(DevicesShutdownOrderingTest, HarnessExitsCleanlyAfterShutdownCoordinatorThenRealSdlQuit)
 {

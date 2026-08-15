@@ -44,7 +44,7 @@ using namespace CNA::Internal::Renderers::SvgDom;
 
 namespace
 {
-    constexpr int kExpectedChecks = 13;
+    constexpr int kExpectedChecks = 18;
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(int, JsSurfaceExists, (), {
@@ -52,9 +52,42 @@ namespace
         return (el && el.tagName.toLowerCase() === 'svg') ? 1 : 0;
     });
 
-    EM_JS(int, JsCanvasHidden, (), {
+    EM_JS(int, JsInputSurfacePreserved, (), {
         const canvas = Module['canvas'] || document.querySelector('canvas');
-        return canvas && canvas.style.visibility === 'hidden' ? 1 : 0;
+        const root = Module['cnaSvgDomRoot'];
+        return canvas && root && canvas.style.opacity === '0' &&
+               canvas.style.visibility !== 'hidden' && root.style.pointerEvents === 'none' &&
+               root.getAttribute('pointer-events') === 'none' ? 1 : 0;
+    });
+
+    EM_JS(int, JsSurfaceAnchoredToInputCanvas, (), {
+        const canvas = Module['canvas'] || document.querySelector('canvas');
+        const root = Module['cnaSvgDomRoot'];
+        const viewport = Module['cnaSvgDomViewportEl'];
+        if (!canvas || !root || !viewport || canvas.parentNode !== viewport ||
+            root.parentNode !== viewport) return 0;
+        const canvasRect = canvas.getBoundingClientRect();
+        const rootRect = root.getBoundingClientRect();
+        const close = (a, b) => Math.abs(a - b) < 0.51;
+        return close(rootRect.left, canvasRect.left) && close(rootRect.top, canvasRect.top) &&
+               close(rootRect.width, canvasRect.width) && close(rootRect.height, canvasRect.height)
+                   ? 1 : 0;
+    });
+
+    EM_JS(int, JsTextureUsesSharedBlobUrl, (int i), {
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        const image = slot0.container.children[i].querySelector('image');
+        if (!image) return 0;
+        const href = image.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
+                     image.getAttribute('href') || "";
+        return href.indexOf('blob:') === 0 && href.length < 256 ? 1 : 0;
+    });
+
+    EM_JS(int, JsFrameCursorWasResetByPresent, (), {
+        return Module['cnaSvgDomFlushCursor'] === 0 &&
+               Module['cnaSvgDomLastFlushKey'] === null ? 1 : 0;
     });
 
     // SVGDOM-A: sprites now live inside per-FLUSH ordered slots (Module['cnaSvgDomFlushSlots']),
@@ -68,9 +101,8 @@ namespace
         return slot0 ? slot0.container.children.length : -1;
     });
 
-    /// 1 when sprite `i` (in flush slot 0) is a nested <svg> containing an <image> with a
-    /// data:image/png href.
-    EM_JS(int, JsSpriteHasImageWithPngHref, (int i), {
+    /// 1 when sprite `i` (in flush slot 0) is a nested <svg> containing an <image> with a source.
+    EM_JS(int, JsSpriteHasImageHref, (int i), {
         const slots = Module['cnaSvgDomFlushSlots'];
         const slot0 = slots && slots[0];
         if (!slot0 || !slot0.container.children[i]) return 0;
@@ -78,7 +110,7 @@ namespace
         if (!image) return 0;
         const href = image.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ||
                     image.getAttribute('href') || "";
-        return href.indexOf('data:image/png') === 0 ? 1 : 0;
+        return href.length > 0 ? 1 : 0;
     });
 
     /// 1 when sprite `i` (in flush slot 0) carries a filter="url(...)" attribute on its own
@@ -88,6 +120,14 @@ namespace
         const slot0 = slots && slots[0];
         if (!slot0 || !slot0.container.children[i]) return 0;
         return slot0.container.children[i].getAttribute('filter') ? 1 : 0;
+    });
+
+    EM_JS(int, JsSpriteHasOpacity, (int i, double expected), {
+        const slots = Module['cnaSvgDomFlushSlots'];
+        const slot0 = slots && slots[0];
+        if (!slot0 || !slot0.container.children[i]) return 0;
+        const opacity = Number(slot0.container.children[i].style.opacity || 1);
+        return Math.abs(opacity - expected) < 0.000001 ? 1 : 0;
     });
 
     /// 1 when sprite `i` (in flush slot 0)'s own wrapping <g> has mix-blend-mode: plus-lighter.
@@ -111,10 +151,14 @@ namespace
     });
 #else
     int JsSurfaceExists() { return 0; }
-    int JsCanvasHidden() { return 0; }
+    int JsInputSurfacePreserved() { return 0; }
+    int JsSurfaceAnchoredToInputCanvas() { return 0; }
+    int JsTextureUsesSharedBlobUrl(int) { return 0; }
+    int JsFrameCursorWasResetByPresent() { return 0; }
     int JsFlushSlot0ChildCount() { return -1; }
-    int JsSpriteHasImageWithPngHref(int) { return 0; }
+    int JsSpriteHasImageHref(int) { return 0; }
     int JsSpriteHasFilter(int) { return 0; }
+    int JsSpriteHasOpacity(int, double) { return 0; }
     int JsSpriteIsAdditive(int) { return 0; }
     int JsSupportsPlusLighter() { return 0; }
     void JsPublishResult(int, int, int) {}
@@ -156,14 +200,32 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<SvgDomRenderer&>(dev.GetRenderer());
 
+        if (frame_ == 2)
+        {
+            // The first frame's EndDraw()->Present() has run by now. This check intentionally
+            // precedes any frame-2 Clear(): the regression is specifically that Present itself
+            // must end a retained DOM frame for games that never call GraphicsDevice.Clear().
+            check(JsFrameCursorWasResetByPresent() == 1,
+                  "Present rewinds the SVG frame cursor without requiring Clear");
+            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
+            std::fflush(stdout);
+            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
+            JsPublishResult(result_, passCount_, kExpectedChecks);
+            Exit();
+            return;
+        }
+
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr,
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr,
                   "GraphicsDevice has a real SDL_Window under the SVG_DOM renderer");
-            check(renderer.GetRendererInternal() == nullptr,
-                  "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr,
+                  "SDL_GetRenderer(window) is null -- no SDL_Renderer exists on this renderer");
             check(JsSurfaceExists() == 1, "a real <svg id=\"cna-svg-dom-root\"> surface was created");
-            check(JsCanvasHidden() == 1, "the SDL <canvas> is hidden, so only the SVG surface shows");
+            check(JsInputSurfacePreserved() == 1,
+                  "the transparent SDL canvas remains the input target while SVG ignores pointer events");
+            check(JsSurfaceAnchoredToInputCanvas() == 1,
+                  "the visible SVG surface is positioned exactly over SDL's input canvas");
             check(JsSupportsPlusLighter() == 1,
                   "this test browser genuinely supports mix-blend-mode: plus-lighter -- the "
                   "Additive check below is exercising the real CSS blend");
@@ -181,8 +243,10 @@ protected:
             spriteBatch_->Draw(*texture_, Vector2(0, 0), Color::White);
             spriteBatch_->End();
             check(JsFlushSlot0ChildCount() == 1, "one sprite element was appended for one Draw()");
-            check(JsSpriteHasImageWithPngHref(0) == 1,
-                  "the sprite is a nested <svg> containing an <image> with a data:image/png href");
+            check(JsSpriteHasImageHref(0) == 1,
+                  "the sprite is a nested <svg> containing an <image> with a PNG-backed href");
+            check(JsTextureUsesSharedBlobUrl(0) == 1,
+                  "sprite href is a short shared Blob URL, not a repeated full-atlas data URI");
             check(JsSpriteHasFilter(0) == 0,
                   "a Color::White (identity) tint carries no feColorMatrix filter -- zero overhead "
                   "for the overwhelmingly common untinted case");
@@ -203,6 +267,17 @@ protected:
             check(JsSpriteIsAdditive(2) == 1,
                   "BlendState::Additive sets mix-blend-mode: plus-lighter on the sprite element");
 
+            // SVGDOM-5: a pure AlphaBlend fade is the high-frequency Mobile Eggbert loading path.
+            // It must not allocate/use an SVG filter; only the pooled sprite's opacity changes.
+            spriteBatch_->Begin(SpriteSortMode::Deferred, BlendState::AlphaBlend);
+            spriteBatch_->Draw(*texture_, Vector2(0, 0),
+                               Color::FromNonPremultiplied(255, 255, 255, 128));
+            spriteBatch_->End();
+            check(JsSpriteHasFilter(3) == 0,
+                  "an alpha-only fade carries no feColorMatrix filter");
+            check(JsSpriteHasOpacity(3, 128.0 / 255.0) == 1,
+                  "an alpha-only fade is represented by the pooled sprite's opacity");
+
             // Render target: draw a solid colour into it and read it back for real.
             dev.SetRenderTarget(renderTarget_.get());
             dev.Clear(Color(10, 20, 30, 255));
@@ -219,12 +294,6 @@ protected:
             check(threw,
                   "reading back the SVG backbuffer throws -- no browser API rasterizes a live SVG "
                   "subtree synchronously; render into a RenderTarget2D instead");
-
-            std::printf("=== %d/%d PASS ===\n", passCount_, kExpectedChecks);
-            std::fflush(stdout);
-            result_ = (passCount_ == kExpectedChecks) ? 0 : 1;
-            JsPublishResult(result_, passCount_, kExpectedChecks);
-            Exit();
         }
     }
 

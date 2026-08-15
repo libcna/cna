@@ -14,9 +14,10 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <unordered_set>
 
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedKeyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
@@ -25,62 +26,46 @@ using namespace Microsoft::Xna::Framework::Input;
 
 namespace
 {
-    void ResetKeyboardState()
+    class KeyboardPlatformInputTest : public ::testing::Test
     {
-        const Keys keysToReset[] = {
-            Keys::Left,
-            Keys::Right,
-            Keys::Up,
-            Keys::Down,
-            Keys::Space,
-            Keys::Enter,
-            Keys::Escape,
-            Keys::LeftControl,
-            Keys::RightControl,
-            Keys::LeftShift,
-            Keys::RightShift,
-            Keys::A,
-            Keys::D,
-            Keys::W,
-            Keys::S,
-        };
+    protected:
+        CNA::Platform::Testing::CannedKeyboardPlatform platform;
+        std::unique_ptr<CNA::Platform::Testing::ScopedCurrentPlatform> installed;
 
-        for (const auto key : keysToReset)
+        void SetUp() override
         {
-            CNA::Internal::Input::InputManager::SetKeyState(key, false);
+            installed = std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(platform);
         }
-    }
+
+        void TearDown() override { installed.reset(); }
+    };
 }
 
 // ===========================================================================
 // Keyboard::GetState / GetState(PlayerIndex)
 // ===========================================================================
 
-TEST(KeyboardInputTest, GetStateReflectsPressedAndReleasedKeys)
+TEST_F(KeyboardPlatformInputTest, GetStateReflectsPublishedPlatformSnapshot)
 {
-    ResetKeyboardState();
-
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::Left, true);
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::Space, true);
+    platform.Canned().SetPending({CNA::Platform::KeyCode::Left,
+                                  CNA::Platform::KeyCode::Space});
+    platform.Canned().Update();
 
     const auto state = Keyboard::GetState();
 
     EXPECT_TRUE(state.IsKeyDown(Keys::Left));
     EXPECT_TRUE(state.IsKeyDown(Keys::Space));
     EXPECT_TRUE(state.IsKeyUp(Keys::Right));
-
-    ResetKeyboardState();
 }
 
-TEST(KeyboardInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
+TEST_F(KeyboardPlatformInputTest, ReturnedValueDoesNotChangeAfterPlatformPublishesAnotherFrame)
 {
-    ResetKeyboardState();
-
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::A, true);
+    platform.Canned().SetPending({CNA::Platform::KeyCode::A});
+    platform.Canned().Update();
     const auto snapshot = Keyboard::GetState();
 
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::A, false);
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::D, true);
+    platform.Canned().SetPending({CNA::Platform::KeyCode::D});
+    platform.Canned().Update();
 
     EXPECT_TRUE(snapshot.IsKeyDown(Keys::A));
     EXPECT_TRUE(snapshot.IsKeyUp(Keys::D));
@@ -88,17 +73,12 @@ TEST(KeyboardInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
     const auto currentState = Keyboard::GetState();
     EXPECT_TRUE(currentState.IsKeyUp(Keys::A));
     EXPECT_TRUE(currentState.IsKeyDown(Keys::D));
-
-    ResetKeyboardState();
 }
 
-TEST(KeyboardInputTest, GetPressedKeysContainsOnlyPressedKeys)
+TEST_F(KeyboardPlatformInputTest, GetPressedKeysContainsOnlyThePublishedKeys)
 {
-    ResetKeyboardState();
-
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::W, true);
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::S, true);
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::W, false);
+    platform.Canned().SetPending({CNA::Platform::KeyCode::S});
+    platform.Canned().Update();
 
     const auto state = Keyboard::GetState();
     const auto pressedKeys = state.GetPressedKeys();
@@ -107,22 +87,26 @@ TEST(KeyboardInputTest, GetPressedKeysContainsOnlyPressedKeys)
     EXPECT_EQ(pressedKeys[0], Keys::S);
     EXPECT_TRUE(state.IsKeyDown(Keys::S));
     EXPECT_TRUE(state.IsKeyUp(Keys::W));
-
-    ResetKeyboardState();
 }
 
-TEST(KeyboardInputTest, GetStateWithPlayerIndexMatchesGetState)
+TEST_F(KeyboardPlatformInputTest, GetStateWithPlayerIndexMatchesGetState)
 {
-    ResetKeyboardState();
-
-    CNA::Internal::Input::InputManager::SetKeyState(Keys::Enter, true);
+    platform.Canned().SetPending({CNA::Platform::KeyCode::Enter});
+    platform.Canned().Update();
 
     const auto state = Keyboard::GetState(Microsoft::Xna::Framework::PlayerIndex::One);
 
     EXPECT_TRUE(state.IsKeyDown(Keys::Enter));
     EXPECT_EQ(state, Keyboard::GetState());
+}
 
-    ResetKeyboardState();
+TEST_F(KeyboardPlatformInputTest, MissingKeyboardServiceReturnsEmptyState)
+{
+    platform.Canned().SetPending({CNA::Platform::KeyCode::A});
+    platform.Canned().Update();
+    platform.SetKeyboardAvailable(false);
+
+    EXPECT_TRUE(Keyboard::GetState().GetPressedKeys().empty());
 }
 
 // ===========================================================================
@@ -147,7 +131,7 @@ TEST(KeyboardInputTest, GetKeyFromScancodeEXTNoneReturnsNone)
 
 TEST(KeyboardInputTest, GetKeyFromScancodeEXTUnmappedKeyReturnsNone)
 {
-    // Keys::Kana has no SDL_Scancode equivalent (no such physical key on US layouts).
+    // Keys::Kana has no physical-scancode equivalent (no such key on US layouts).
     EXPECT_EQ(Keyboard::GetKeyFromScancodeEXT(Keys::Kana), Keys::None);
 }
 

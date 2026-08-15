@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/OpenGLES1/OpenGLES1Renderer.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
@@ -15,6 +13,24 @@ namespace CNA::Internal::Renderers::OpenGLES1
 {
     namespace
     {
+        CNA::Platform::GlContextDescription RequestedContext(
+            const int multiSampleCount, const bool withMultisampling)
+        {
+            CNA::Platform::GlContextDescription description;
+            description.majorVersion = 1;
+            description.minorVersion = 1;
+            description.profile = CNA::Platform::GlProfile::Es;
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            if (withMultisampling && multiSampleCount > 1)
+            {
+                description.multisampleBuffers = 1;
+                description.multisampleSamples = multiSampleCount;
+            }
+            return description;
+        }
+
         GLenum ToGLPrimitive(PrimitiveType pt)
         {
             switch (pt)
@@ -577,16 +593,15 @@ namespace CNA::Internal::Renderers::OpenGLES1
     // -------------------------------------------------------------------------
 
     OpenGLES1Renderer::OpenGLES1Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface)
+        , platformGlService_(&RequirePlatformGlContext(args.glContext, "OPENGLES1"))
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , swapInterval_(args.swapInterval)
         , requestedMultiSampleCount_(args.multiSampleCount)
     {
-        if (!window_) throw std::runtime_error("OpenGLES1Renderer initialized with null window.");
-
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        RequirePlatformGlWindow(args.surface, "OPENGLES1");
 
         CreateGLContext();
         LoadExtensionEntryPoints();
@@ -594,10 +609,11 @@ namespace CNA::Internal::Renderers::OpenGLES1
         std::cout << "OpenGLES1Renderer initialized with OpenGL ES "
                   << reinterpret_cast<const char*>(glGetString(GL_VERSION)) << std::endl;
 
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval_);
 
         glShadeModel(GL_SMOOTH);
         glEnable(GL_NORMALIZE);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     OpenGLES1Renderer::~OpenGLES1Renderer()
@@ -610,63 +626,45 @@ namespace CNA::Internal::Renderers::OpenGLES1
             whiteTexture_ = 0;
         }
 
-        IGraphicsRenderer::UnregisterForWindow(window_);
-        DestroyGLContext();
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
     }
 
     void OpenGLES1Renderer::CreateGLContext()
     {
         // Requests a genuine OpenGL ES 1.1 (fixed-function "Common", CM) context -- this is the
-        // one attribute set that distinguishes this renderer from EasyGL's identical-shaped
-        // SDL_GL_CreateContext call (which requests ES 3.0). See docs/opengles1-renderer.md for
+        // one attribute set that distinguishes this renderer from EasyGL's ES 3.0 request. See
+        // docs/opengles1-renderer.md for
         // this project's own empirical finding that not every EGL/GLES driver actually implements
         // ES1 context creation despite advertising ES1-capable configs (a real Mesa llvmpipe
         // limitation found during this renderer's own bring-up, not a theoretical concern).
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
         // OPENGLES1-87: backbuffer MSAA. Requesting samples the driver cannot give makes context
         // creation fail outright, so a failed attempt is retried without them rather than taking
         // the whole device down over an optional quality setting.
         const bool wantMsaa = requestedMultiSampleCount_ > 1;
-        if (wantMsaa)
+        try
         {
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, requestedMultiSampleCount_);
+            platformContext_ = std::make_unique<PlatformGlContextOwner>(
+                *platformGlService_, surface_.GetWindowId(),
+                RequestedContext(requestedMultiSampleCount_, wantMsaa));
         }
-
-        glContext_ = SDL_GL_CreateContext(window_);
-        if (!glContext_ && wantMsaa)
+        catch (const CNA::Platform::PlatformException&)
         {
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 0);
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 0);
-            glContext_ = SDL_GL_CreateContext(window_);
-        }
-
-        if (!glContext_)
-        {
-            throw std::runtime_error(
-                std::string("OpenGLES1: SDL_GL_CreateContext failed (no OpenGL ES 1.1 driver "
-                            "available on this system): ") + SDL_GetError());
+            if (!wantMsaa) throw;
+            platformContext_ = std::make_unique<PlatformGlContextOwner>(
+                *platformGlService_, surface_.GetWindowId(),
+                RequestedContext(requestedMultiSampleCount_, false));
         }
 
         // Report what was actually granted, never what was asked for.
-        int grantedBuffers = 0, grantedSamples = 0;
-        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS, &grantedBuffers);
-        SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &grantedSamples);
-        actualMultiSampleCount_ = (grantedBuffers > 0 && grantedSamples > 1) ? grantedSamples : 0;
+        const auto granted = platformContext_->GetAttributes();
+        actualMultiSampleCount_ =
+            (granted.multisampleBuffers > 0 && granted.multisampleSamples > 1)
+                ? granted.multisampleSamples : 0;
     }
 
     void OpenGLES1Renderer::DestroyGLContext()
     {
-        if (glContext_)
-        {
-            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
-            glContext_ = nullptr;
-        }
+        platformContext_.reset();
     }
 
     namespace
@@ -682,9 +680,9 @@ namespace CNA::Internal::Renderers::OpenGLES1
     void OpenGLES1Renderer::LoadExtensionEntryPoints()
     {
         glBlendFuncSeparateOES_ = reinterpret_cast<PFNGLBLENDFUNCSEPARATEOESPROC>(
-            SDL_GL_GetProcAddress("glBlendFuncSeparateOES"));
+            LoadPlatformGlProcAddress("glBlendFuncSeparateOES"));
         glBlendEquationOES_ = reinterpret_cast<PFNGLBLENDEQUATIONOESPROC>(
-            SDL_GL_GetProcAddress("glBlendEquationOES"));
+            LoadPlatformGlProcAddress("glBlendEquationOES"));
 
         // GL_OES_framebuffer_object (OPENGLES1-72): optional -- RenderTarget2D support is gated on
         // every one of these resolving, not just the extension string (a driver could advertise
@@ -697,7 +695,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         // OPENGLES1-88: Min/Max blend equations and a separate alpha equation.
         blendMinMaxSupported_ = HasGLExtension("GL_EXT_blend_minmax");
         glBlendEquationSeparateOES_ = reinterpret_cast<PFNGLBLENDEQUATIONSEPARATEOESPROC>(
-            SDL_GL_GetProcAddress("glBlendEquationSeparateOES"));
+            LoadPlatformGlProcAddress("glBlendEquationSeparateOES"));
         if (!HasGLExtension("GL_OES_blend_equation_separate"))
             glBlendEquationSeparateOES_ = nullptr;
 
@@ -724,21 +722,21 @@ namespace CNA::Internal::Renderers::OpenGLES1
         }
 
         glGenerateMipmapOES_ = reinterpret_cast<PFNGLGENERATEMIPMAPOESPROC>(
-            SDL_GL_GetProcAddress("glGenerateMipmapOES"));
+            LoadPlatformGlProcAddress("glGenerateMipmapOES"));
 
         fboSupported_ = HasGLExtension("GL_OES_framebuffer_object");
         if (fboSupported_)
         {
-            glGenFramebuffersOES_ = reinterpret_cast<PFNGLGENFRAMEBUFFERSOESPROC>(SDL_GL_GetProcAddress("glGenFramebuffersOES"));
-            glBindFramebufferOES_ = reinterpret_cast<PFNGLBINDFRAMEBUFFEROESPROC>(SDL_GL_GetProcAddress("glBindFramebufferOES"));
-            glDeleteFramebuffersOES_ = reinterpret_cast<PFNGLDELETEFRAMEBUFFERSOESPROC>(SDL_GL_GetProcAddress("glDeleteFramebuffersOES"));
-            glFramebufferTexture2DOES_ = reinterpret_cast<PFNGLFRAMEBUFFERTEXTURE2DOESPROC>(SDL_GL_GetProcAddress("glFramebufferTexture2DOES"));
-            glFramebufferRenderbufferOES_ = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFEROESPROC>(SDL_GL_GetProcAddress("glFramebufferRenderbufferOES"));
-            glCheckFramebufferStatusOES_ = reinterpret_cast<PFNGLCHECKFRAMEBUFFERSTATUSOESPROC>(SDL_GL_GetProcAddress("glCheckFramebufferStatusOES"));
-            glGenRenderbuffersOES_ = reinterpret_cast<PFNGLGENRENDERBUFFERSOESPROC>(SDL_GL_GetProcAddress("glGenRenderbuffersOES"));
-            glBindRenderbufferOES_ = reinterpret_cast<PFNGLBINDRENDERBUFFEROESPROC>(SDL_GL_GetProcAddress("glBindRenderbufferOES"));
-            glDeleteRenderbuffersOES_ = reinterpret_cast<PFNGLDELETERENDERBUFFERSOESPROC>(SDL_GL_GetProcAddress("glDeleteRenderbuffersOES"));
-            glRenderbufferStorageOES_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEOESPROC>(SDL_GL_GetProcAddress("glRenderbufferStorageOES"));
+            glGenFramebuffersOES_ = reinterpret_cast<PFNGLGENFRAMEBUFFERSOESPROC>(LoadPlatformGlProcAddress("glGenFramebuffersOES"));
+            glBindFramebufferOES_ = reinterpret_cast<PFNGLBINDFRAMEBUFFEROESPROC>(LoadPlatformGlProcAddress("glBindFramebufferOES"));
+            glDeleteFramebuffersOES_ = reinterpret_cast<PFNGLDELETEFRAMEBUFFERSOESPROC>(LoadPlatformGlProcAddress("glDeleteFramebuffersOES"));
+            glFramebufferTexture2DOES_ = reinterpret_cast<PFNGLFRAMEBUFFERTEXTURE2DOESPROC>(LoadPlatformGlProcAddress("glFramebufferTexture2DOES"));
+            glFramebufferRenderbufferOES_ = reinterpret_cast<PFNGLFRAMEBUFFERRENDERBUFFEROESPROC>(LoadPlatformGlProcAddress("glFramebufferRenderbufferOES"));
+            glCheckFramebufferStatusOES_ = reinterpret_cast<PFNGLCHECKFRAMEBUFFERSTATUSOESPROC>(LoadPlatformGlProcAddress("glCheckFramebufferStatusOES"));
+            glGenRenderbuffersOES_ = reinterpret_cast<PFNGLGENRENDERBUFFERSOESPROC>(LoadPlatformGlProcAddress("glGenRenderbuffersOES"));
+            glBindRenderbufferOES_ = reinterpret_cast<PFNGLBINDRENDERBUFFEROESPROC>(LoadPlatformGlProcAddress("glBindRenderbufferOES"));
+            glDeleteRenderbuffersOES_ = reinterpret_cast<PFNGLDELETERENDERBUFFERSOESPROC>(LoadPlatformGlProcAddress("glDeleteRenderbuffersOES"));
+            glRenderbufferStorageOES_ = reinterpret_cast<PFNGLRENDERBUFFERSTORAGEOESPROC>(LoadPlatformGlProcAddress("glRenderbufferStorageOES"));
             fboSupported_ = glGenFramebuffersOES_ && glBindFramebufferOES_ && glDeleteFramebuffersOES_
                           && glFramebufferTexture2DOES_ && glFramebufferRenderbufferOES_
                           && glCheckFramebufferStatusOES_ && glGenRenderbuffersOES_
@@ -750,7 +748,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
         cubeMapSupported_ = HasGLExtension("GL_OES_texture_cube_map");
         if (cubeMapSupported_)
         {
-            glTexGeniOES_ = reinterpret_cast<PFNGLTEXGENIOESPROC>(SDL_GL_GetProcAddress("glTexGeniOES"));
+            glTexGeniOES_ = reinterpret_cast<PFNGLTEXGENIOESPROC>(LoadPlatformGlProcAddress("glTexGeniOES"));
             cubeMapSupported_ = glTexGeniOES_ != nullptr;
         }
 
@@ -770,7 +768,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     {
         CreateGLContext();
         LoadExtensionEntryPoints();
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval_);
         glShadeModel(GL_SMOOTH);
         glEnable(GL_NORMALIZE);
 
@@ -791,7 +789,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
 
     void OpenGLES1Renderer::GetPhysicalSize(int& width, int& height) const
     {
-        SDL_GetWindowSize(window_, &width, &height);
+        surface_.GetDrawableSize(width, height);
     }
 
     void OpenGLES1Renderer::GetLogicalSize(int& width, int& height) const
@@ -857,6 +855,11 @@ namespace CNA::Internal::Renderers::OpenGLES1
         GetLogicalSize(width, height);
     }
 
+    void OpenGLES1Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+    }
+
     void OpenGLES1Renderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -871,7 +874,7 @@ namespace CNA::Internal::Renderers::OpenGLES1
     void OpenGLES1Renderer::SetSwapInterval(int interval)
     {
         swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
     }
 
     bool OpenGLES1Renderer::TransformWindowToLogical(float windowX, float windowY,
@@ -882,8 +885,8 @@ namespace CNA::Internal::Renderers::OpenGLES1
         GetPhysicalSize(physW, physH);
         if (physH <= 0) return false;
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
+        logX = surface_.WindowToDrawable(windowX) * scale;
+        logY = surface_.WindowToDrawable(windowY) * scale;
         return true;
     }
 
@@ -898,14 +901,14 @@ namespace CNA::Internal::Renderers::OpenGLES1
         GetPhysicalSize(physW, physH);
         if (physH <= 0) return false;
         const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
+        windowX = surface_.DrawableToWindow(logX * invScale);
+        windowY = surface_.DrawableToWindow(logY * invScale);
         return true;
     }
 
     void OpenGLES1Renderer::Present()
     {
-        SDL_GL_SwapWindow(window_);
+        platformContext_->SwapBuffers();
     }
 
     // -------------------------------------------------------------------------

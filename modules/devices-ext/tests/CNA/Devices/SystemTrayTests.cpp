@@ -3,230 +3,164 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
-#include <vector>
-
-#include "CNA/Devices/Detail/ITrayBackend.hpp"
 #include "CNA/Devices/SystemTray.hpp"
+#include "CNA/Platform/CannedTray.hpp"
+#include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
 
-using CNA::Devices::SystemTray;
-using CNA::Devices::Detail::ITrayBackend;
-using CNA::Devices::Detail::TrayEntryClickCallback;
+#include <memory>
 
-namespace
-{
-    // Task DEVICES-CNA-009: the real backend (Detail::SdlTrayBackend) creates a
-    // genuine, visible tray icon on the real desktop the moment Create() is called --
-    // learned directly from DEVICES-CNA-008's real zenity incident, every test here
-    // uses this fake instead, never the real backend. SystemTray's test-only
-    // constructor overload takes this fake *before* any Create() call happens, unlike
-    // a post-construction SetBackendForTesting() swap (see SystemTray.hpp's own doc
-    // comment for why that ordering matters here specifically).
-    class FakeTrayBackend final : public ITrayBackend
-    {
-    public:
-        bool CreateCalled = false;
-        std::string LastCreateTooltip;
+namespace {
 
-        bool DestroyCalled = false;
+    using CNA::Devices::SystemTray;
+    using CNA::Platform::PlatformCapability;
+    using CNA::Platform::PlatformFactory;
+    using CNA::Platform::PlatformNotSupportedException;
+    using CNA::Platform::Testing::CannedTrayPlatform;
+    using CNA::Platform::Testing::CannedTrayState;
+    using CNA::Platform::Testing::ScopedCurrentPlatform;
 
-        // Task DEVICES-CNA-009: SystemTray owns its backend directly (unlike
-        // FileDialog's process-wide swappable backend), so once the owning
-        // SystemTray is destroyed, this FakeTrayBackend is destroyed with it --
-        // reading DestroyCalled through a dangling raw pointer afterward is a real
-        // use-after-free (caught by ASan during this task's own development, not
-        // hypothetical). Tests that need to observe destruction after the SystemTray
-        // itself has gone out of scope must use this externally-owned flag instead
-        // of the member above.
-        std::shared_ptr<bool> DestroyedFlag;
-
-        int SetTooltipCallCount = 0;
-        std::string LastTooltip;
-
-        struct Entry
-        {
-            std::string Label;
-            bool Checkable = false;
-            bool Checked = false;
-            bool Enabled = true;
-            TrayEntryClickCallback OnClick;
-        };
-        std::vector<Entry> Entries;
-
-        void Create(const std::string& tooltip) override
-        {
-            CreateCalled = true;
-            LastCreateTooltip = tooltip;
-        }
-
-        void Destroy() override
-        {
-            DestroyCalled = true;
-            if (DestroyedFlag)
-            {
-                *DestroyedFlag = true;
-            }
-        }
-
-        void SetTooltip(const std::string& tooltip) override
-        {
-            ++SetTooltipCallCount;
-            LastTooltip = tooltip;
-        }
-
-        std::size_t AddEntry(
-            const std::string& label,
-            bool checkable,
-            bool initiallyChecked,
-            bool initiallyEnabled,
-            TrayEntryClickCallback onClick) override
-        {
-            Entries.push_back(Entry{label, checkable, initiallyChecked, initiallyEnabled, std::move(onClick)});
-            return Entries.size() - 1;
-        }
-
-        void SetEntryLabel(std::size_t index, const std::string& label) override
-        {
-            if (index < Entries.size())
-            {
-                Entries[index].Label = label;
-            }
-        }
-
-        void SetEntryChecked(std::size_t index, bool checked) override
-        {
-            if (index < Entries.size())
-            {
-                Entries[index].Checked = checked;
-            }
-        }
-
-        [[nodiscard]] bool GetEntryChecked(std::size_t index) const override
-        {
-            return index < Entries.size() && Entries[index].Checked;
-        }
-
-        void SetEntryEnabled(std::size_t index, bool enabled) override
-        {
-            if (index < Entries.size())
-            {
-                Entries[index].Enabled = enabled;
-            }
-        }
-
-        [[nodiscard]] bool GetEntryEnabled(std::size_t index) const override
-        {
-            return index < Entries.size() && Entries[index].Enabled;
-        }
-    };
 } // namespace
 
-TEST(SystemTrayTests, GetIsSupportedPropertyDoesNotCrash)
+TEST(SystemTrayTests, IsSupportedReflectsTheSelectedPlatformCapability)
 {
-    EXPECT_NO_THROW({ (void)SystemTray::getIsSupportedProperty(); });
+    {
+        CannedTrayPlatform platform;
+        ScopedCurrentPlatform current(platform);
+        EXPECT_TRUE(SystemTray::getIsSupportedProperty());
+    }
+    {
+        std::unique_ptr<CNA::Platform::IPlatform> platform = PlatformFactory::Create("Headless");
+        ScopedCurrentPlatform current(*platform);
+        EXPECT_FALSE(SystemTray::getIsSupportedProperty());
+    }
 }
 
-TEST(SystemTrayTests, ConstructorCallsCreateOnTheInjectedFakeBackend)
+TEST(SystemTrayTests, UnsupportedPlatformRefusesBeforeCreatingAnIcon)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    FakeTrayBackend* fake = fakeOwned.get();
+    std::unique_ptr<CNA::Platform::IPlatform> platform = PlatformFactory::Create("Headless");
+    ScopedCurrentPlatform current(*platform);
 
-    SystemTray tray("my tooltip", std::move(fakeOwned));
-
-    EXPECT_TRUE(fake->CreateCalled);
-    EXPECT_EQ(fake->LastCreateTooltip, "my tooltip");
-    EXPECT_FALSE(fake->DestroyCalled);
+    try
+    {
+        SystemTray tray("unreachable");
+        FAIL() << "an unsupported tray must refuse instead of becoming an inert object";
+    }
+    catch (const PlatformNotSupportedException& refusal)
+    {
+        EXPECT_EQ(refusal.GetCapability(), PlatformCapability::Tray);
+    }
 }
 
-TEST(SystemTrayTests, DestructorCallsDestroyOnTheInjectedFakeBackend)
+TEST(SystemTrayTests, ConstructorCreatesOneIconWithTheRequestedTooltip)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    FakeTrayBackend* fake = fakeOwned.get();
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
 
-    // SystemTray owns the backend directly, so it (and this FakeTrayBackend) is
-    // destroyed when `tray` goes out of scope below -- `destroyed` is a separate
-    // heap allocation this test retains its own reference to, specifically so it
-    // remains safe to read after that happens (see FakeTrayBackend::DestroyedFlag's
-    // own doc comment for the real use-after-free this replaced).
-    auto destroyed = std::make_shared<bool>(false);
-    fake->DestroyedFlag = destroyed;
+    SystemTray tray("my tooltip");
+
+    ASSERT_EQ(platform.Canned().icons.size(), 1u);
+    EXPECT_EQ(platform.Canned().icons[0]->tooltip, "my tooltip");
+    EXPECT_FALSE(platform.Canned().icons[0]->destroyed);
+}
+
+TEST(SystemTrayTests, DestructorRemovesTheOwnedIcon)
+{
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    std::shared_ptr<CannedTrayState> state;
 
     {
-        SystemTray tray("my tooltip", std::move(fakeOwned));
-        EXPECT_FALSE(*destroyed);
+        SystemTray tray("my tooltip");
+        ASSERT_EQ(platform.Canned().icons.size(), 1u);
+        state = platform.Canned().icons[0];
+        EXPECT_FALSE(state->destroyed);
     }
 
-    EXPECT_TRUE(*destroyed);
+    EXPECT_TRUE(state->destroyed);
 }
 
-TEST(SystemTrayTests, SetTooltipPropertyForwardsToBackend)
+TEST(SystemTrayTests, TooltipAndLabelChangesReachThePlatformIcon)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    FakeTrayBackend* fake = fakeOwned.get();
-    SystemTray tray("initial", std::move(fakeOwned));
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    SystemTray tray("initial");
+    const std::shared_ptr<CannedTrayState>& state = platform.Canned().icons[0];
 
     tray.setTooltipProperty("updated");
+    const std::size_t index = tray.AddEntry("Show", false, false, true, {});
+    tray.SetEntryLabel(index, "Open");
 
-    EXPECT_EQ(fake->SetTooltipCallCount, 1);
-    EXPECT_EQ(fake->LastTooltip, "updated");
+    EXPECT_EQ(state->tooltip, "updated");
+    ASSERT_EQ(state->entries.size(), 1u);
+    EXPECT_EQ(state->entries[0].label, "Open");
 }
 
-TEST(SystemTrayTests, AddEntryForwardsParametersAndReturnsIncrementingIndices)
+TEST(SystemTrayTests, AddEntryPreservesParametersAndReturnsStableIndices)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    FakeTrayBackend* fake = fakeOwned.get();
-    SystemTray tray("tooltip", std::move(fakeOwned));
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    SystemTray tray("tooltip");
+    const std::shared_ptr<CannedTrayState>& state = platform.Canned().icons[0];
 
-    const std::size_t firstIndex = tray.AddEntry("Show", false, false, true, [] {});
-    const std::size_t secondIndex = tray.AddEntry("Enabled", true, true, true, [] {});
+    const std::size_t first = tray.AddEntry("Show", false, false, true, {});
+    const std::size_t second = tray.AddEntry("Enabled", true, true, false, {});
 
-    EXPECT_EQ(firstIndex, 0u);
-    EXPECT_EQ(secondIndex, 1u);
-    ASSERT_EQ(fake->Entries.size(), 2u);
-    EXPECT_EQ(fake->Entries[0].Label, "Show");
-    EXPECT_FALSE(fake->Entries[0].Checkable);
-    EXPECT_TRUE(fake->Entries[1].Checkable);
-    EXPECT_TRUE(fake->Entries[1].Checked);
+    EXPECT_EQ(first, 0u);
+    EXPECT_EQ(second, 1u);
+    ASSERT_EQ(state->entries.size(), 2u);
+    EXPECT_EQ(state->entries[0].label, "Show");
+    EXPECT_FALSE(state->entries[0].checkable);
+    EXPECT_TRUE(state->entries[0].enabled);
+    EXPECT_TRUE(state->entries[1].checkable);
+    EXPECT_TRUE(state->entries[1].checked);
+    EXPECT_FALSE(state->entries[1].enabled);
 }
 
-TEST(SystemTrayTests, EntryClickCallbackFiresThroughTheBackend)
+TEST(SystemTrayTests, EntryClickCallbackCanFireRepeatedlyThroughThePlatformIcon)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    FakeTrayBackend* fake = fakeOwned.get();
-    SystemTray tray("tooltip", std::move(fakeOwned));
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    SystemTray tray("tooltip");
+    const std::shared_ptr<CannedTrayState>& state = platform.Canned().icons[0];
 
-    bool clicked = false;
-    tray.AddEntry("Quit", false, false, true, [&clicked] { clicked = true; });
+    int clicks = 0;
+    tray.AddEntry("Quit", false, false, true, [&clicks] { ++clicks; });
 
-    ASSERT_EQ(fake->Entries.size(), 1u);
-    ASSERT_TRUE(static_cast<bool>(fake->Entries[0].OnClick));
-    fake->Entries[0].OnClick();
-
-    EXPECT_TRUE(clicked);
+    ASSERT_EQ(state->entries.size(), 1u);
+    ASSERT_TRUE(static_cast<bool>(state->entries[0].onClick));
+    state->entries[0].onClick();
+    state->entries[0].onClick();
+    EXPECT_EQ(clicks, 2);
 }
 
-TEST(SystemTrayTests, SetAndGetEntryCheckedRoundTrip)
+TEST(SystemTrayTests, CheckedAndEnabledStatesRoundTrip)
 {
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    SystemTray tray("tooltip", std::move(fakeOwned));
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    SystemTray tray("tooltip");
 
-    const std::size_t index = tray.AddEntry("Toggle", true, false, true, [] {});
+    const std::size_t index = tray.AddEntry("Toggle", true, false, true, {});
     EXPECT_FALSE(tray.GetEntryChecked(index));
-
-    tray.SetEntryChecked(index, true);
-    EXPECT_TRUE(tray.GetEntryChecked(index));
-}
-
-TEST(SystemTrayTests, SetAndGetEntryEnabledRoundTrip)
-{
-    auto fakeOwned = std::make_unique<FakeTrayBackend>();
-    SystemTray tray("tooltip", std::move(fakeOwned));
-
-    const std::size_t index = tray.AddEntry("Action", false, false, true, [] {});
     EXPECT_TRUE(tray.GetEntryEnabled(index));
 
+    tray.SetEntryChecked(index, true);
     tray.SetEntryEnabled(index, false);
+    EXPECT_TRUE(tray.GetEntryChecked(index));
     EXPECT_FALSE(tray.GetEntryEnabled(index));
+}
+
+TEST(SystemTrayTests, UnknownEntryIndicesAreSafeAndReadFalse)
+{
+    CannedTrayPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    SystemTray tray("tooltip");
+
+    EXPECT_NO_THROW(tray.SetEntryLabel(42, "missing"));
+    EXPECT_NO_THROW(tray.SetEntryChecked(42, true));
+    EXPECT_NO_THROW(tray.SetEntryEnabled(42, true));
+    EXPECT_FALSE(tray.GetEntryChecked(42));
+    EXPECT_FALSE(tray.GetEntryEnabled(42));
 }
 
 #endif // CNA_DEVICES
