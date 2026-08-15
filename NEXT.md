@@ -394,6 +394,18 @@
 > families use the count/copy protocol with borrowed views for the reverse lookups, and an unknown
 > name answers with the canonical none identity rather than failing. The inventory is now 4,143
 > implemented, 30 partial, 2,125 planned and 117 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4b then closes the mouse. Each snapshot construction takes the button bit set the
+> snapshot already carries rather than five separately ordered button-state arguments, so a
+> consumer cannot silently transpose two of them, and the eight-argument form leaves the horizontal
+> wheel at zero exactly as the canonical one does. Unlike the gamepad and keyboard snapshots this
+> type **does** override its string conversion, and C reproduces the canonical format exactly. The
+> static `ClickedEXT` event becomes an owned registration that takes no game handle, because the
+> canonical event belongs to the process; `INTERNAL_onClicked` becomes the raise route that makes
+> it observable without a real device, and the canonical test-support reset is documented as
+> dropping every subscription — including ones this API handed out — so a release afterwards is a
+> no-op rather than a failure, which the test proves. The inventory is now 4,164 implemented, 30
+> partial, 2,104 planned and 117 N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

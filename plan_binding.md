@@ -386,8 +386,8 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B3 | 45 | Complete the GamePad statics | ✅ | `input_gamepad.h` maps every remaining `GamePad` static as one `cna_gamepad_*` route, each taking an active game handle for the same reason the state and capability captures do: CNA is event-driven, so a device query is only meaningful on the game thread of a running game. `ExcludeAxisDeadZone` is the exception and takes none, being a pure value operation; the three dead-zone constants were already exposed as macros carrying the canonical expressions verbatim. Two canonical shapes are preserved rather than collapsed: a query reporting availability through its return value and its answer through an output reference keeps **both** answers separate in C, so "no sensor" is an ordinary answer rather than a failure, and the four identity strings use the project count/copy protocol. The touchpad finger query's four output references become one fixed 16-byte `CNA_GamePadTouchpadFinger`. No `std::string`, `Vector3` or CNA::Input enumeration crosses the boundary. **Borrowed from CBIND-037B7:** `GamePadButtonLabelEXT`, `GamePadConnectionStateEXT` and `PowerStateEXT` (21 rows), because three of these statics return them and cannot be mapped without them — 45 rows here, 117 left there. `InputSnapshotsSmoke.c` asserts the shape of an empty-slot answer for every route, the count/copy round trip for all four identity strings, and the per-route out-of-range, null-output, undefined-bit and wrong-thread refusals; all three trees green (51/51) plus ASan+UBSan with leak detection on. |
 | CBIND-037B4 | 80 | Complete keyboard, mouse and text input | 🟨 | Map the remaining `Keyboard`/`KeyboardState`, `Mouse`/`MouseState`, `KeyState`, `MouseCursor` and `TextInputEXT` rows. Split further by device, because the cursor is an owned disposable type and the text-input surface is event-driven while the keyboard and mouse are plain snapshots. |
 | CBIND-037B4a | 35 | Complete the keyboard | ✅ | `input_keyboard.h` maps `KeyState`, the whole `KeyboardState` value surface and every `Keyboard` static over the versioned 256-slot bit field the C API already had. `cna_keyboard_state_init_from_keys` maps **both** canonical set-taking constructors, since an initializer list and an unordered set are the same deduplicated array in C. **Documented deviation:** the canonical constructors silently drop a key outside the 256-slot field; C refuses instead, so a caller can never lose a key without being told, and the refusal matches every other keyboard route. The player-slot `GetState` overload reports the same snapshot for every slot, because CNA has one keyboard. Both name families use the project count/copy protocol with borrowed `CNA_StringView` reverse lookups, so no `std::string` crosses the boundary, and an unknown name answers with the canonical none identity rather than failing. **Borrowed from CBIND-037B7:** `KeyModifiersEXT` and its five operators (15 rows), because `GetModStateEXT` returns it — 35 rows here, 102 left there. The flag operators need no route: unlike the gamepad button identities these really are flags, and C masks them with its own operators. `InputSnapshotsSmoke.c` covers every value operation and query plus their refusals, green in all three trees (51/51) and under ASan+UBSan with leak detection on. |
-| CBIND-037B4b | 22 | Complete the mouse | ⬜ | Map the remaining `Mouse` statics — window handle, position, cursor, relative mode, capture, global position and warp, the clicked event — and the `MouseState` value surface. |
-| CBIND-037B4c | 21 | Complete the mouse cursor | ⬜ | Map `MouseCursor` as an owned disposable handle: the stock singletons, texture-derived cursors and disposal, without exposing `SDL_Cursor`. |
+| CBIND-037B4b | 21 | Complete the mouse | ✅ | `input_mouse.h` maps the whole `MouseState` value surface and every remaining `Mouse` static. Each construction takes the same `CNA_MouseButtonFlags` bit set the snapshot already carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them; the eight-argument form leaves the horizontal wheel at zero exactly as the canonical one does. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and C reproduces the canonical format exactly, `None` included. The window handle crosses as an opaque `uint64_t` the C API never dereferences. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and the global-position query — canonically `void` with two output references — cannot fail at all. The static `ClickedEXT` event becomes an owned `CNA_MouseEventRegistrationHandle` that takes no game handle, because the canonical event belongs to the process; `INTERNAL_onClicked` becomes the raise route that makes it observable without a device, and `ResetForTests` is documented as dropping every subscription, including ones this API handed out, so a release afterwards is a no-op. **Re-partitioned:** `Mouse::SetCursor` moved to CBIND-037B4c (21 rows here, 22 there), because it cannot be mapped before a cursor handle exists. `InputSnapshotsSmoke.c` proves the click round trip and the reset-drops-subscriptions behavior; green in all three trees (51/51) and under ASan+UBSan with leak detection on. |
+| CBIND-037B4c | 22 | Complete the mouse cursor | ⬜ | Map `MouseCursor` as an owned disposable handle: the stock singletons, texture-derived cursors and disposal, without exposing `SDL_Cursor`. Also owns `Mouse::SetCursor`, moved here from CBIND-037B4b. |
 | CBIND-037B4d | 27 | Complete text input | ⬜ | Map `TextInputEXT`: the three events, activation and screen-keyboard queries, typed start, and the input rectangle. Borrows `TextInputTypeEXT` from CBIND-037B7. |
 | CBIND-037B5 | 80 | Complete touch and gestures | ⬜ | Map the remaining `TouchPanel`, `TouchCollection`, `TouchLocation`, `TouchPanelCapabilities`, `GestureType` and `GestureSample` rows. |
 | CBIND-037B6 | 126 | Complete the haptics extension family | ⬜ | Map `CNA::Input` haptics: devices, features, effects, effect types, capabilities, directions and the haptics facade. |
@@ -742,7 +742,9 @@ CBIND-037B4 splits again by device, and CBIND-037B4a closes the keyboard: the wh
 value surface and every `Keyboard` static over the 256-slot bit field C already had, with the
 canonical silent drop of an out-of-range key deliberately replaced by a refusal so nothing is lost
 without the caller knowing. The snapshot is now 4,143 implemented, 30 partial, 2,125 planned and
-117 not applicable. CBIND-037B2 then maps the five
+117 not applicable. CBIND-037B4b then closes the mouse, including the static clicked event as an
+owned registration that takes no game handle and a raise route that makes it observable without a
+device. The snapshot is now 4,164 implemented, 30 partial, 2,104 planned and 117 not applicable. CBIND-037B2 then maps the five
 gamepad value types onto the representations C already had rather than adding a second spelling of
 the same numbers, and preserves three canonical behaviors worth naming: the thumbstick square clamp
 and trigger clamp, the epsilon trigger comparison, and the directional pad's own hash weighting. It
@@ -753,11 +755,11 @@ CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-037B4a is the final task completed in this handoff. Parent
+- Branch: `feature/binding`; CBIND-037B4b is the final task completed in this handoff. Parent
   CBIND-036 closed with CBIND-036E5, and parent CBIND-035 with CBIND-035G.
-- Next task: `CBIND-037B4b` complete the mouse (22 planned rows). Do not reopen closed CBIND-035,
-  CBIND-036, CBIND-037A, CBIND-037B1–B3 or CBIND-037B4a slices without a concrete demonstrated
-  defect.
+- Next task: `CBIND-037B4c` complete the mouse cursor (22 planned rows, including
+  `Mouse::SetCursor` moved there). Do not reopen closed CBIND-035, CBIND-036, CBIND-037A,
+  CBIND-037B1–B3 or CBIND-037B4a–B4b slices without a concrete demonstrated defect.
 - When a coverage rule matches a free operator in a shared namespace (`CNA::Input::operator|` and
   friends), add a `signature_regex`: without one it silently swallows the identically named
   operators of *other* enumerations in that namespace and claims coverage that does not exist.
@@ -785,8 +787,8 @@ CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-037B4a: 414 headers / 6,415 symbols; 4,143 implemented, 30
-  partial, 2,125 planned and 117 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-037B4b: 414 headers / 6,415 symbols; 4,164 implemented, 30
+  partial, 2,104 planned and 117 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

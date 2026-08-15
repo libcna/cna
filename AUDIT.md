@@ -41,7 +41,8 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > info, button labels, the four identity strings, connection state and the touchpad queries. The
 > `CBIND-037B4a` adds the keyboard: the whole `KeyboardState` value surface, the key-state
 > identity and every `Keyboard` static including both key-name families. The
-> generated inventory currently records 4,143 implemented, 30 partial, 2,125 planned and 117
+> `CBIND-037B4b` adds the mouse, including the static clicked event as an owned registration. The
+> generated inventory currently records 4,164 implemented, 30 partial, 2,104 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

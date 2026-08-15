@@ -3134,6 +3134,42 @@
       "tests": "`InputSnapshotsSmoke.c` asserts all four slots report a snapshot byte-identical to `cna_keyboard_get_state`, plus the out-of-range-slot and null-output refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4a"
+    },
+    {
+      "id": "mouse-state-values",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseState::(?:MouseState|Equals|GetHashCode|ToString|operator==|operator!=|getHorizontalScrollWheelValueEXTProperty)$",
+      "kinds": [
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "routes over the versioned `CNA_MouseState` snapshot the C API already had, whose horizontal-wheel field is the CNA extension property. `cna_mouse_state_init` reproduces the default constructor, `_init_from_values` the eight-argument one \u2014 leaving the horizontal wheel at zero exactly as it does \u2014 and `_init_from_values_ext` the nine-argument CNA extension. Each takes the same `CNA_MouseButtonFlags` bit set the snapshot carries rather than five separately ordered button-state arguments, so a consumer cannot silently transpose two of them. Equality, inequality, the hash and the string each get their own route. Unlike the gamepad and keyboard snapshots this type **does** override its string conversion, and the C text reproduces the canonical format exactly, including `None` for no button and the omission of the horizontal wheel",
+      "tests": "`InputSnapshotsSmoke.c` covers the default value, both explicit constructions with the horizontal wheel checked in each, an undefined button bit refused, equal and unequal comparisons in both directions, the hash proved to ignore the buttons and the horizontal wheel, the exact text for a pressed and an empty snapshot, a too-small capacity writing nothing, and every null and invalid-snapshot refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4b"
+    },
+    {
+      "id": "mouse-statics",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Mouse(?:::(?:getWindowHandleProperty|setWindowHandleProperty|SetPosition|getIsRelativeMouseModeEXTProperty|setIsRelativeMouseModeEXTProperty|SetCaptureEXT|GetGlobalPositionEXT|WarpGlobalEXT|INTERNAL_onClicked|ResetForTests))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "one `cna_mouse_*` route per canonical static, each taking an active game handle. The class itself has no handle: its canonical constructor is deleted and every member is static. The window handle crosses as an opaque `uint64_t` the C API never dereferences, not as a `CNA_Handle`. A request no backend can satisfy answers `CNA_FALSE` through an applied output rather than failing, and `GetGlobalPositionEXT` \u2014 which the canonical API declares `void` with two output references \u2014 reports both coordinates and cannot fail. `INTERNAL_onClicked` becomes `cna_mouse_raise_clicked_ext`, which is what makes the clicked event observable without a real device, and `ResetForTests` becomes `_reset_for_tests_ext`, documented as clearing the bound window and dropping every subscription including ones this API handed out",
+      "tests": "`InputSnapshotsSmoke.c` round-trips the window handle and restores it, exercises position, capture, global position, warp and relative mode with their null-output refusals, raises a click and observes it, and proves the reset drops a live subscription so the handler stops running and the registration release afterwards is still a success, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4b"
+    },
+    {
+      "id": "mouse-clicked-event",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::Mouse::ClickedEXT$",
+      "kinds": [
+        "field"
+      ],
+      "mapping": "`cna_mouse_subscribe_clicked_ext` and `cna_mouse_unsubscribe_clicked_ext` over an owned `CNA_MouseEventRegistrationHandle`. The canonical event is **static**, so the subscription belongs to the process and takes no game handle; the registration owns only its subscription token and detaches by token, which is why releasing it after the process event has been cleared is a no-op rather than a failure. The callback receives the native button number and the caller's own copied context; no multicast object crosses the ABI",
+      "tests": "`InputSnapshotsSmoke.c` subscribes, raises a click and asserts the handler ran with the right button, releases and asserts it stops running, covers double release and a never-created handle as `CNA_RESULT_INVALID_HANDLE`, and covers the null-callback and null-output refusals; the reset case proves a cleared event still releases cleanly. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4b"
     }
   ]
 }

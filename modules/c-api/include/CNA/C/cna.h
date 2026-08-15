@@ -38,6 +38,7 @@
 #include "CNA/C/input.h"
 #include "CNA/C/input_gamepad.h"
 #include "CNA/C/input_keyboard.h"
+#include "CNA/C/input_mouse.h"
 #include "CNA/C/content.h"
 #include "CNA/C/content_readers.h"
 #include "CNA/C/gamer_services.h"

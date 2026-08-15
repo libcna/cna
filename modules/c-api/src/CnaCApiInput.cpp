@@ -3,6 +3,7 @@
 #include "CNA/C/input.h"
 #include "CNA/C/input_gamepad.h"
 #include "CNA/C/input_keyboard.h"
+#include "CNA/C/input_mouse.h"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
@@ -27,6 +28,7 @@
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+#include "System/MulticastAction.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocationState.hpp"
@@ -2699,5 +2701,476 @@ CNA_Result cna_keyboard_get_key_from_name_ext(
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         return LookUpKey(&Keyboard::GetKeyFromNameEXT, gameHandle, name, outKey);
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Input::ButtonState;
+
+constexpr CNA_MouseButtonFlags MouseButtonMask = CNA_MOUSE_BUTTON_LEFT | CNA_MOUSE_BUTTON_MIDDLE |
+    CNA_MOUSE_BUTTON_RIGHT | CNA_MOUSE_BUTTON_X1 | CNA_MOUSE_BUTTON_X2;
+
+[[nodiscard]] ButtonState MouseButton(
+    const CNA_MouseButtonFlags buttons,
+    const CNA_MouseButtonFlags bit) noexcept
+{
+    return (buttons & bit) != 0U ? ButtonState::Pressed : ButtonState::Released;
+}
+
+[[nodiscard]] CNA_MouseButtonFlags CollectMouseButtons(const MouseState& state) noexcept
+{
+    CNA_MouseButtonFlags buttons = UINT32_C(0);
+    if (state.getLeftButtonProperty() == ButtonState::Pressed) {
+        buttons |= CNA_MOUSE_BUTTON_LEFT;
+    }
+    if (state.getMiddleButtonProperty() == ButtonState::Pressed) {
+        buttons |= CNA_MOUSE_BUTTON_MIDDLE;
+    }
+    if (state.getRightButtonProperty() == ButtonState::Pressed) {
+        buttons |= CNA_MOUSE_BUTTON_RIGHT;
+    }
+    if (state.getXButton1Property() == ButtonState::Pressed) {
+        buttons |= CNA_MOUSE_BUTTON_X1;
+    }
+    if (state.getXButton2Property() == ButtonState::Pressed) {
+        buttons |= CNA_MOUSE_BUTTON_X2;
+    }
+    return buttons;
+}
+
+[[nodiscard]] CNA_MouseState SnapshotMouse(const MouseState& native)
+{
+    const CNA_MouseState snapshot = {
+        sizeof(CNA_MouseState),
+        StructureVersion,
+        native.getXProperty(),
+        native.getYProperty(),
+        native.getScrollWheelValueProperty(),
+        native.getHorizontalScrollWheelValueEXTProperty(),
+        CollectMouseButtons(native),
+        0U
+    };
+    return snapshot;
+}
+
+[[nodiscard]] MouseState NativeMouseState(const CNA_MouseState& state)
+{
+    return MouseState(
+        static_cast<int>(state.x),
+        static_cast<int>(state.y),
+        static_cast<int>(state.scroll_wheel),
+        MouseButton(state.pressed_buttons, CNA_MOUSE_BUTTON_LEFT),
+        MouseButton(state.pressed_buttons, CNA_MOUSE_BUTTON_MIDDLE),
+        MouseButton(state.pressed_buttons, CNA_MOUSE_BUTTON_RIGHT),
+        MouseButton(state.pressed_buttons, CNA_MOUSE_BUTTON_X1),
+        MouseButton(state.pressed_buttons, CNA_MOUSE_BUTTON_X2),
+        static_cast<int>(state.horizontal_scroll_wheel));
+}
+
+[[nodiscard]] CNA_Result ValidateMouseButtons(const CNA_MouseButtonFlags buttons)
+{
+    if ((buttons & ~MouseButtonMask) != 0U) {
+        return InvalidInput("The mouse button mask contains an undefined bit.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ValidateMouseState(const CNA_MouseState* const state)
+{
+    return ValidateVersionedStructure(state, "The mouse snapshot is invalid.");
+}
+
+// The canonical clicked event is process-wide static state, so the registration owns only its
+// subscription token and detaches by token. Releasing it after ResetForTests() cleared the event
+// simply removes nothing.
+class MouseClickedRegistration final {
+public:
+    explicit MouseClickedRegistration(const System::MulticastAction<int>::Token token)
+        : token_(token)
+    {
+    }
+
+    MouseClickedRegistration(const MouseClickedRegistration&) = delete;
+    MouseClickedRegistration& operator=(const MouseClickedRegistration&) = delete;
+
+    ~MouseClickedRegistration()
+    {
+        if (token_ != System::MulticastAction<int>::InvalidToken) {
+            (void)Mouse::ClickedEXT.Remove(token_);
+        }
+    }
+
+private:
+    System::MulticastAction<int>::Token token_;
+};
+
+} // namespace
+
+CNA_Result cna_mouse_state_init(CNA_MouseState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The mouse snapshot output is null.");
+        }
+        *outState = SnapshotMouse(MouseState());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_init_from_values(
+    const int32_t x,
+    const int32_t y,
+    const int32_t scrollWheel,
+    const CNA_MouseButtonFlags pressedButtons,
+    CNA_MouseState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The mouse snapshot output is null.");
+        }
+        if (const CNA_Result result = ValidateMouseButtons(pressedButtons);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = SnapshotMouse(MouseState(
+            static_cast<int>(x),
+            static_cast<int>(y),
+            static_cast<int>(scrollWheel),
+            MouseButton(pressedButtons, CNA_MOUSE_BUTTON_LEFT),
+            MouseButton(pressedButtons, CNA_MOUSE_BUTTON_MIDDLE),
+            MouseButton(pressedButtons, CNA_MOUSE_BUTTON_RIGHT),
+            MouseButton(pressedButtons, CNA_MOUSE_BUTTON_X1),
+            MouseButton(pressedButtons, CNA_MOUSE_BUTTON_X2)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_init_from_values_ext(
+    const int32_t x,
+    const int32_t y,
+    const int32_t scrollWheel,
+    const int32_t horizontalScrollWheel,
+    const CNA_MouseButtonFlags pressedButtons,
+    CNA_MouseState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The mouse snapshot output is null.");
+        }
+        if (const CNA_Result result = ValidateMouseButtons(pressedButtons);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        CNA_MouseState state = {
+            sizeof(CNA_MouseState), StructureVersion, x, y, scrollWheel, horizontalScrollWheel,
+            pressedButtons, 0U
+        };
+        *outState = SnapshotMouse(NativeMouseState(state));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_equals(
+    const CNA_MouseState* const left,
+    const CNA_MouseState* const right,
+    CNA_Bool* const outEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEquals == nullptr) {
+            return InvalidInput("The mouse comparison output is null.");
+        }
+        if (const CNA_Result result = ValidateMouseState(left); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateMouseState(right); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEquals = NativeMouseState(*left).Equals(NativeMouseState(*right))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_not_equals(
+    const CNA_MouseState* const left,
+    const CNA_MouseState* const right,
+    CNA_Bool* const outNotEquals)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        CNA_Bool equals = CNA_FALSE;
+        if (const CNA_Result result = cna_mouse_state_equals(left, right, &equals);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (outNotEquals == nullptr) {
+            return InvalidInput("The mouse comparison output is null.");
+        }
+        *outNotEquals = equals != CNA_FALSE ? CNA_FALSE : CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_get_hash_code(
+    const CNA_MouseState* const state,
+    int32_t* const outHash)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHash == nullptr) {
+            return InvalidInput("The mouse hash output is null.");
+        }
+        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHash = static_cast<int32_t>(NativeMouseState(*state).GetHashCode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_get_string_size(
+    const CNA_MouseState* const state,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The mouse text output is null.");
+        }
+        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = NativeMouseState(*state).ToString().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_state_copy_string(
+    const CNA_MouseState* const state,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateMouseState(state); result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyDeviceText(
+            NativeMouseState(*state).ToString(),
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_mouse_get_window_handle(const CNA_Handle gameHandle, uint64_t* const outWindow)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWindow == nullptr) {
+            return InvalidInput("The mouse window-handle output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWindow = static_cast<uint64_t>(Mouse::getWindowHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_set_window_handle(const CNA_Handle gameHandle, const uint64_t window)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_set_position(const CNA_Handle gameHandle, const int32_t x, const int32_t y)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::SetPosition(static_cast<int>(x), static_cast<int>(y));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_get_is_relative_mouse_mode_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outEnabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEnabled == nullptr) {
+            return InvalidInput("The relative-mode output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outEnabled = Mouse::getIsRelativeMouseModeEXTProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_set_is_relative_mouse_mode_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool enabled)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::setIsRelativeMouseModeEXTProperty(enabled != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_set_capture_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool enabled,
+    CNA_Bool* const outApplied)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outApplied == nullptr) {
+            return InvalidInput("The mouse capture output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outApplied = Mouse::SetCaptureEXT(enabled != CNA_FALSE) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_get_global_position_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outX,
+    int32_t* const outY)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outX == nullptr || outY == nullptr) {
+            return InvalidInput("The global-position output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        int x = 0;
+        int y = 0;
+        Mouse::GetGlobalPositionEXT(x, y);
+        *outX = static_cast<int32_t>(x);
+        *outY = static_cast<int32_t>(y);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_warp_global_ext(
+    const CNA_Handle gameHandle,
+    const int32_t x,
+    const int32_t y,
+    CNA_Bool* const outApplied)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outApplied == nullptr) {
+            return InvalidInput("The mouse warp output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outApplied = Mouse::WarpGlobalEXT(static_cast<int>(x), static_cast<int>(y))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_subscribe_clicked_ext(
+    const CNA_MouseClickedCallback callback,
+    void* const context,
+    CNA_MouseEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The mouse registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The mouse clicked callback is null.");
+        }
+        const auto token = Mouse::ClickedEXT.Add([callback, context](const int button) {
+            callback(static_cast<int32_t>(button), context);
+        });
+        const auto resource = std::make_shared<MouseClickedRegistration>(token);
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            CNA::C::Detail::ObjectKind::MouseEventRegistration,
+            resource,
+            outRegistration);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                CNA::C::Detail::ErrorCategoryForResult(result),
+                "The mouse clicked registration could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_unsubscribe_clicked_ext(
+    const CNA_MouseEventRegistrationHandle registration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<MouseClickedRegistration> resource;
+        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
+            registration,
+            CNA::C::Detail::ObjectKind::MouseEventRegistration,
+            &resource);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                getResult,
+                CNA::C::Detail::ErrorCategoryForResult(getResult),
+                "The mouse clicked registration handle is invalid for this call.");
+        }
+        const CNA_Result releaseResult =
+            CNA::C::Detail::GetRuntimeHandles().Release(registration);
+        if (releaseResult == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            releaseResult,
+            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
+            "The mouse clicked registration handle could not be released.");
+    });
+}
+
+CNA_Result cna_mouse_raise_clicked_ext(const CNA_Handle gameHandle, const int32_t button)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::INTERNAL_onClicked(static_cast<int>(button));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_mouse_reset_for_tests_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Mouse::ResetForTests();
+        return CNA_RESULT_SUCCESS;
     });
 }

@@ -722,6 +722,103 @@ static int validate_pure_keyboard_value_helpers(void)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static int validate_pure_mouse_value_helpers(void)
+{
+    CNA_MouseState state;
+    CNA_MouseState other;
+    CNA_Bool flag = UINT8_C(9);
+    int32_t hash = 9;
+    int32_t other_hash = 9;
+    uint64_t bytes = UINT64_C(0);
+    char text[128];
+
+    if (cna_mouse_state_init(&state) != CNA_RESULT_SUCCESS ||
+        state.struct_size != sizeof(CNA_MouseState) || state.struct_version != UINT32_C(1) ||
+        state.x != 0 || state.y != 0 || state.scroll_wheel != 0 ||
+        state.horizontal_scroll_wheel != 0 ||
+        state.pressed_buttons != 0U || state.reserved != 0U ||
+        cna_mouse_state_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The eight-argument canonical constructor leaves the horizontal wheel at zero. */
+    if (cna_mouse_state_init_from_values(
+            3, 4, 120, CNA_MOUSE_BUTTON_LEFT | CNA_MOUSE_BUTTON_X2, &state) !=
+            CNA_RESULT_SUCCESS ||
+        state.x != 3 || state.y != 4 || state.scroll_wheel != 120 ||
+        state.horizontal_scroll_wheel != 0 ||
+        state.pressed_buttons != (CNA_MOUSE_BUTTON_LEFT | CNA_MOUSE_BUTTON_X2) ||
+        cna_mouse_state_init_from_values(0, 0, 0, UINT32_C(0x40), &state) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_state_init_from_values(0, 0, 0, 0U, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_mouse_state_init_from_values_ext(
+            3, 4, 120, -240, CNA_MOUSE_BUTTON_MIDDLE, &state) != CNA_RESULT_SUCCESS ||
+        state.horizontal_scroll_wheel != -240 ||
+        state.pressed_buttons != CNA_MOUSE_BUTTON_MIDDLE ||
+        cna_mouse_state_init_from_values_ext(0, 0, 0, 0, UINT32_C(0x40), &state) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_state_init_from_values_ext(0, 0, 0, 0, 0U, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    other = state;
+    if (cna_mouse_state_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_mouse_state_not_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    other.x = 99;
+    if (cna_mouse_state_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_mouse_state_not_equals(&state, &other, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE ||
+        cna_mouse_state_equals(&state, &other, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_state_not_equals(0, &other, &flag) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The canonical hash mixes only the position and the vertical wheel, so two snapshots that
+       differ only in their buttons or horizontal wheel hash alike. */
+    other = state;
+    other.pressed_buttons = CNA_MOUSE_BUTTON_RIGHT;
+    other.horizontal_scroll_wheel = 999;
+    if (cna_mouse_state_get_hash_code(&state, &hash) != CNA_RESULT_SUCCESS ||
+        cna_mouse_state_get_hash_code(&other, &other_hash) != CNA_RESULT_SUCCESS ||
+        hash != other_hash ||
+        cna_mouse_state_get_hash_code(0, &hash) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_state_get_hash_code(&state, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Unlike the gamepad and keyboard snapshots, this one really does describe its fields. */
+    memset(text, 0, sizeof(text));
+    if (cna_mouse_state_init_from_values(
+            3, 4, 120, CNA_MOUSE_BUTTON_LEFT | CNA_MOUSE_BUTTON_RIGHT, &state) !=
+            CNA_RESULT_SUCCESS ||
+        cna_mouse_state_get_string_size(&state, &bytes) != CNA_RESULT_SUCCESS ||
+        cna_mouse_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "[MouseState X=3, Y=4, Buttons=Left Right, Wheel=120]") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_mouse_state_init(&state) != CNA_RESULT_SUCCESS ||
+        cna_mouse_state_copy_string(&state, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "[MouseState X=0, Y=0, Buttons=None, Wheel=0]") != 0) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    return cna_mouse_state_copy_string(&state, text, UINT64_C(2), &bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL &&
+        text[0] == '\0' &&
+        cna_mouse_state_get_string_size(0, &bytes) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_mouse_state_copy_string(&state, text, UINT64_C(128), 0) ==
+            CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static int validate_pure_dead_zone_exclusion(void)
 {
     float value = 9.0F;
@@ -1029,6 +1126,100 @@ static int validate_keyboard_queries(const CNA_Handle game)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+typedef struct ClickRecord {
+    int32_t last_button;
+    int32_t count;
+} ClickRecord;
+
+static void on_mouse_clicked(const int32_t button, void* const context)
+{
+    ClickRecord* const record = (ClickRecord*)context;
+    record->last_button = button;
+    record->count += 1;
+}
+
+static int validate_mouse_queries(const CNA_Handle game)
+{
+    ClickRecord record = {0, 0};
+    CNA_MouseEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+    CNA_MouseEventRegistrationHandle rejected = CNA_INVALID_HANDLE;
+    uint64_t window = UINT64_C(9);
+    uint64_t restored = UINT64_C(0);
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool restored_relative = CNA_FALSE;
+    int32_t x = 9;
+    int32_t y = 9;
+
+    if (cna_mouse_get_window_handle(game, &restored) != CNA_RESULT_SUCCESS ||
+        cna_mouse_get_window_handle(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The window handle is process-wide state, so it is put back afterwards. */
+    if (cna_mouse_set_window_handle(game, UINT64_C(0)) != CNA_RESULT_SUCCESS ||
+        cna_mouse_get_window_handle(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0) ||
+        cna_mouse_set_window_handle(game, restored) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    if (cna_mouse_set_position(game, 0, 0) != CNA_RESULT_SUCCESS ||
+        cna_mouse_get_global_position_ext(game, &x, &y) != CNA_RESULT_SUCCESS ||
+        cna_mouse_get_global_position_ext(game, 0, &y) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_warp_global_ext(game, x, y, &flag) != CNA_RESULT_SUCCESS ||
+        cna_mouse_warp_global_ext(game, 0, 0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_set_capture_ext(game, CNA_FALSE, &flag) != CNA_RESULT_SUCCESS ||
+        cna_mouse_set_capture_ext(game, CNA_FALSE, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_mouse_get_is_relative_mouse_mode_ext(game, &restored_relative) !=
+            CNA_RESULT_SUCCESS ||
+        cna_mouse_get_is_relative_mouse_mode_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_set_is_relative_mouse_mode_ext(game, restored_relative) !=
+            CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The clicked event is static, so the subscription takes no game handle; the raise route is
+       what makes it observable without a real device. */
+    if (cna_mouse_subscribe_clicked_ext(0, &record, &registration) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        registration != CNA_INVALID_HANDLE ||
+        cna_mouse_subscribe_clicked_ext(on_mouse_clicked, &record, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_mouse_subscribe_clicked_ext(on_mouse_clicked, &record, &registration) !=
+            CNA_RESULT_SUCCESS ||
+        registration == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_mouse_raise_clicked_ext(game, 3) != CNA_RESULT_SUCCESS ||
+        record.count != 1 || record.last_button != 3) {
+        (void)cna_mouse_unsubscribe_clicked_ext(registration);
+        return 0;
+    }
+    if (cna_mouse_unsubscribe_clicked_ext(registration) != CNA_RESULT_SUCCESS ||
+        cna_mouse_unsubscribe_clicked_ext(registration) != CNA_RESULT_INVALID_HANDLE ||
+        cna_mouse_unsubscribe_clicked_ext(rejected) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    /* After release the handler no longer runs. */
+    if (cna_mouse_raise_clicked_ext(game, 4) != CNA_RESULT_SUCCESS || record.count != 1) {
+        return 0;
+    }
+
+    /* The canonical reset drops every subscription, including one this API handed out, so a
+       registration released afterwards is a no-op rather than a failure. */
+    record.count = 0;
+    if (cna_mouse_subscribe_clicked_ext(on_mouse_clicked, &record, &registration) !=
+            CNA_RESULT_SUCCESS ||
+        cna_mouse_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_mouse_raise_clicked_ext(game, 5) != CNA_RESULT_SUCCESS || record.count != 0 ||
+        cna_mouse_unsubscribe_clicked_ext(registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return cna_mouse_set_window_handle(game, restored) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1114,7 +1305,8 @@ static CNA_Result on_update(
         }
     }
 
-    if (!validate_device_queries(game) || !validate_keyboard_queries(game)) {
+    if (!validate_device_queries(game) || !validate_keyboard_queries(game) ||
+        !validate_mouse_queries(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -1235,8 +1427,11 @@ int main(void)
     if (!validate_pure_keyboard_value_helpers()) {
         return 15;
     }
-    if (!validate_pure_dead_zone_exclusion()) {
+    if (!validate_pure_mouse_value_helpers()) {
         return 17;
+    }
+    if (!validate_pure_dead_zone_exclusion()) {
+        return 18;
     }
     if (!validate_pure_touch_helpers()) {
         return 16;
