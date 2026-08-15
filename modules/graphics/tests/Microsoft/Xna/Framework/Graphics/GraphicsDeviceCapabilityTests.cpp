@@ -44,6 +44,10 @@
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced. The oracle
+// header scopes its own copy inside its namespace, so a consumer needs this for itself.
+using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
+
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
 //
@@ -59,148 +63,155 @@ using CNA::GraphicsCapability;
 // 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
-// OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
-// anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
-// truthful answer, and is asserted here rather than left as a standing red -- the point of the
-// capability query is that a caller can trust it.
-#if defined(CNA_RENDERER_OPENGLES1)
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_EASYGL) \
-    && (defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_WEBGL1))
-// The GLSL ES 1.00 profiles of the EasyGL family (OPENGLES2 native; WEBGL1 is Emscripten-only
-// and cannot build this suite, listed for completeness) truthfully refuse the ES 3.0-level
-// features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays true
-// -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under these
-// profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible elsewhere.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = true;
-#elif defined(CNA_RENDERER_OPENGL1)
-// plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
-// 3D-capable renderer -- no MRT and no custom-shader support in its fixed-function
-// pipeline, reported truthfully rather than inherited. Occlusion queries became real in
-// item 23 (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer
-// differs from EasyGL's.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_WICKED)
-// plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
-// IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection this
-// renderer does not do, so custom effects are refused at the call site rather than approximated.
-// MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with readback) are
-// genuinely implemented, so those two keep the default expectation. This arm became reachable
-// only when WICKED-78 made a bare device's teardown survivable; the catch-all below had been
-// answering for this renderer until then.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_SKIA)
-// The one 2D-only renderer in this block. All three answers are structural rather than
-// not-yet-implemented: SkCanvas produces exactly one colour result (docs/skia-renderer.md's MRT
-// row, `Skia_MRT_Rejection`), raster final pixels cannot distinguish positive from zero coverage
-// so no samples-passed query is definable at all, and the accepted custom-effect route is the
-// narrow opt-in CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would
-// promise. Reported false and asserted here rather than left to the catch-all below, which would
-// have claimed all three.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_BLEND2D)
-// Another 2D-only renderer, same shape as Skia immediately above: Blend2D's BLContext produces
-// exactly one colour result (no MRT mechanism), a raster surface has no samples-passed query to
-// report, and this renderer implements no custom-shader Effect ABI at all (CreateEffectRenderer
-// keeps the shared nullptr default). All three are honest structural refusals, not gaps.
-#elif defined(CNA_RENDERER_OPENVG)
-// OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
-// at all -- and no programmable shader stage for a genuinely custom Effect (same reasoning as
-// Canvas/Skia's own arms just above/below).
-#elif defined(CNA_RENDERER_PORTABLEGL)
-// PortableGL owns exactly one framebuffer per context and creates no render targets at all
-// (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and its
-// shader stage is a pair of C function pointers with nothing for a CNA Effect to be compiled into
-// (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect rather than drawing
-// with the built-in sprite shader). All three answers are structural, and each is backed by a
-// refusal in modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_DILIGENT)
-// plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
-// honest, narrower profile at this point in its implementation -- no custom ShaderEffect
-// compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41, a
-// real IQuery, exact or binary depending on the device feature) are both real. Each answer
-// is reported truthfully rather than inherited from EasyGL, and each moves when its own task lands.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_FNA3D)
-// plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a *compiled*
-// Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in the library
-// compiles a GLSL/HLSL source string, which is what IEffectRenderer/CreateEffectRenderer is handed.
-// The false is therefore structural, not not-yet-implemented, and CreateEffectRenderer returns
-// null to match (docs/fna3d-renderer.md). MRT (FNA3D_SetRenderTargets takes the whole ordered set)
-// and occlusion queries (FNA3D_CreateQuery/QueryPixelCount) are genuinely implemented.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#else
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = true;
-#endif
+/// plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
+/// `#if`/`#elif` chain of `constexpr bool`s, which in a multi-renderer build can only ever describe
+/// the DEFAULT renderer -- every other renderer in the same binary was asserted against the
+/// default's profile. It is a lookup keyed on the ACTIVE renderer now. Each arm keeps its own
+/// reasoning with it.
+struct CapabilityExpectation
+{
+    bool multipleRenderTargets;
+    bool occlusionQuery;
+    bool customEffects;
+};
+
+[[nodiscard]] inline CapabilityExpectation ExpectedCapabilities()
+{
+    using CNA::GraphicsRendererType;
+    switch (CNA::GraphicsRendererSelection::GetSelected())
+    {
+        // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query
+        // mechanism anywhere in the CM registry, and no shader compiler at all. Its `false` for
+        // these three is the truthful answer, and is asserted rather than left as a standing red --
+        // the point of the capability query is that a caller can trust it.
+        case GraphicsRendererType::OpenGLES1:
+            return {false, false, false};
+
+        // The GLSL ES 1.00 profiles of the EasyGL family truthfully refuse the ES 3.0-level
+        // features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays
+        // true -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under
+        // these profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible
+        // elsewhere. The family's other three profiles take the default arm below, which is what
+        // the `CNA_GL_PROFILE_*` half of the old condition expressed.
+        case GraphicsRendererType::OpenGLES2:
+        case GraphicsRendererType::WebGL1:
+            return {false, false, true};
+
+        // plan_opengl1.md phase 12: a second, legitimately-different, equally-honest 3D-capable
+        // renderer -- no MRT and no custom-shader support in its fixed-function pipeline, reported
+        // truthfully rather than inherited. Occlusion queries became real in item 23
+        // (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer differs
+        // from EasyGL's.
+        case GraphicsRendererType::OpenGL1:
+            return {false, true, false};
+
+        // plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
+        // IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection
+        // this renderer does not do, so custom effects are refused at the call site rather than
+        // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
+        // readback) are genuinely implemented.
+        case GraphicsRendererType::Wicked:
+            return {true, true, false};
+
+        // Skia: all three answers are structural rather than not-yet-implemented. SkCanvas produces
+        // exactly one colour result (docs/skia-renderer.md's MRT row, `Skia_MRT_Rejection`), raster
+        // final pixels cannot distinguish positive from zero coverage so no samples-passed query is
+        // definable at all, and the accepted custom-effect route is the narrow opt-in
+        // CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would promise.
+        case GraphicsRendererType::Skia:
+            return {false, false, false};
+
+        // Blend2D, same shape as Skia: BLContext produces exactly one colour result (no MRT
+        // mechanism), a raster surface has no samples-passed query to report, and this renderer
+        // implements no custom-shader Effect ABI at all (CreateEffectRenderer keeps the shared
+        // nullptr default). All three are honest structural refusals, not gaps.
+        //
+        // These three values are what this arm's comment always claimed, but the arm DEFINED
+        // nothing: `#elif defined(CNA_RENDERER_BLEND2D)` was followed straight by the next `#elif`,
+        // so a Blend2D build selected an empty arm, never reached the catch-all, and left
+        // kExpectMultipleRenderTargets and friends undefined at their use sites -- this file could
+        // not compile for that renderer at all. Same for OpenVG below. Neither is buildable in this
+        // environment, so the values are the documented intent rather than a measurement.
+        case GraphicsRendererType::Blend2D:
+            return {false, false, false};
+
+        // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
+        // concept at all -- and no programmable shader stage for a genuinely custom Effect.
+        case GraphicsRendererType::OpenVg:
+            return {false, false, false};
+
+        // PortableGL owns exactly one framebuffer per context and creates no render targets at all
+        // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and
+        // its shader stage is a pair of C function pointers with nothing for a CNA Effect to be
+        // compiled into (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect
+        // rather than drawing with the built-in sprite shader). All three answers are structural,
+        // and each is backed by a refusal in
+        // modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
+        case GraphicsRendererType::PortableGL:
+            return {false, false, false};
+
+        // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
+        // narrower profile at this point in its implementation -- no custom ShaderEffect
+        // compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41,
+        // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
+        // is reported truthfully rather than inherited from EasyGL, and each moves when its own task
+        // lands.
+        case GraphicsRendererType::Diligent:
+            return {true, true, false};
+
+        // plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
+        // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
+        // the library compiles a GLSL/HLSL source string, which is what
+        // IEffectRenderer/CreateEffectRenderer is handed. The false is therefore structural, not
+        // not-yet-implemented, and CreateEffectRenderer returns null to match
+        // (docs/fna3d-renderer.md). MRT (FNA3D_SetRenderTargets takes the whole ordered set) and
+        // occlusion queries (FNA3D_CreateQuery/QueryPixelCount) are genuinely implemented.
+        case GraphicsRendererType::Fna3d:
+            return {true, true, false};
+
+        default:
+            return {true, true, true};
+    }
+}
 
 // Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
 // identities in this repository are untouched by this file and keep whatever they answer today.
-#if defined(CNA_RENDERER_SKIA) || defined(CNA_RENDERER_BLEND2D)
-TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
+/// plan_runtimerenderer.md RTR-P9-4: the deliberately 2D-only renderers. Each answers false, and
+/// that is the correct answer rather than a gap. The other 2D-only identities in this repository
+/// are untouched by this file and keep whatever they answer today -- exactly as the `#else` arm
+/// this replaces did.
+[[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "this 2D-only raster renderer claims a 3D pipeline -- every 3D route it owns refuses "
-           "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
+    return CNA_RENDERER_IS(Skia, Blend2D, OpenVg);
 }
 
-TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
-{
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "this 2D-only raster renderer claims a depth/stencil buffer -- its render targets have "
-           "no attachment, and DepthStencilState::None is accepted only as the absence of one";
-}
-#elif defined(CNA_RENDERER_OPENVG)
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "OpenVG (ShivaVG) claims a 3D pipeline -- every 3D route it owns refuses through "
-           "HandleUnsupported3DCall(), so a true report cannot be backed by anything";
-}
-
-TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
-{
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "OpenVG has no depth/stencil concept whatsoever -- OpenVgRenderer::SupportsDepthStencil "
-           "returns false unconditionally";
-}
-#else
-TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
-{
-    GraphicsDevice gd;
+    if (IsTwoDimensionalOnly())
+    {
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
+            << "this 2D-only renderer claims a 3D pipeline -- every 3D route it owns refuses "
+               "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
+        return;
+    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
+    if (IsTwoDimensionalOnly())
+    {
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
+            << "this 2D-only renderer claims a depth/stencil buffer -- its render targets have no "
+               "attachment, and DepthStencilState::None is accepted only as the absence of one";
+        return;
+    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
-#endif
 
 TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 {
@@ -212,19 +223,19 @@ TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), kExpectMultipleRenderTargets);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), ExpectedCapabilities().multipleRenderTargets);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), kExpectOcclusionQuery);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), ExpectedCapabilities().occlusionQuery);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsCustomEffects)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), kExpectCustomEffects);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), ExpectedCapabilities().customEffects);
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific

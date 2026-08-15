@@ -300,3 +300,55 @@ list is missing five entries) or does not (in which case the validation should r
 correct the other. `SkiaRenderer::IsCompressedTransferFormatEXT` already claims the compressed
 transfer path for exactly those five formats, which suggests the validation is the accurate half and
 the test simply was never updated for them.
+
+## 6. Two arms of a capability chain define nothing, so those two renderers cannot compile the suite
+
+`GraphicsDeviceCapabilityTests.cpp` chose three expected answers through one `#if`/`#elif` chain:
+
+```cpp
+#elif defined(CNA_RENDERER_SKIA)
+// ... reasoning ...
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
+#elif defined(CNA_RENDERER_BLEND2D)
+// Another 2D-only renderer, same shape as Skia immediately above: ... All three are honest
+// structural refusals, not gaps.
+#elif defined(CNA_RENDERER_OPENVG)
+// OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
+// at all ...
+#elif defined(CNA_RENDERER_PORTABLEGL)
+constexpr bool kExpectMultipleRenderTargets = false;
+...
+```
+
+The `BLEND2D` and `OPENVG` arms carry the full reasoning for their answers and then **define no
+constants at all** — the comment is followed directly by the next `#elif`.
+
+`#elif` arms are mutually exclusive, so this is not a fall-through to the catch-all. A Blend2D build
+selects the empty Blend2D arm, the `#else` is never reached, and `kExpectMultipleRenderTargets`,
+`kExpectOcclusionQuery` and `kExpectCustomEffects` do not exist. They are used unguarded a few lines
+below:
+
+```cpp
+TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
+{
+    GraphicsDevice gd;
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets),
+              kExpectMultipleRenderTargets);
+}
+```
+
+so `CnaTests` does not compile for `CNA_GRAPHICS_RENDERER=BLEND2D` or `=OPENVG`. Verified by
+reading: the three names are defined in that one chain and nowhere else in the file.
+
+Neither renderer is buildable in this environment, so this is a defect found by inspection, not one
+reproduced by a failing build. That also explains how it survived: nothing on this machine compiles
+either configuration, and the arms look complete because the reasoning is there.
+
+**Handled in RTR-P9-4.** The chain is now a lookup keyed on the active renderer, where every arm
+returns a value and a renderer that is not named falls to a documented default. Blend2D and OpenVG
+return `{false, false, false}`, which is what their comments always claimed. Those two values are
+the **documented intent, not a measurement** — they cannot be checked here until one of those
+renderers builds. If either turns out to report a capability as true, the test will now say so
+instead of failing to compile.
