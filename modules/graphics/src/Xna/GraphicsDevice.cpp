@@ -2602,6 +2602,7 @@ namespace Microsoft::Xna::Framework::Graphics
                 ss.getMaxAnisotropyProperty());
             renderer_->ApplySamplerMipState(i, ss.getMaxMipLevelProperty(),
                                            ss.getMipMapLevelOfDetailBiasProperty());
+            renderer_->ApplySamplerAddressW(i, (int)ss.getAddressWProperty());
         }
     }
 

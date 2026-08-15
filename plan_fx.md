@@ -45,7 +45,7 @@ Delivered task groups:
   application and post-source-destruction clone use, which also builds as a standalone corpus
   replayer and mutation-campaign driver in any configuration, plus the deterministic in-build
   mutation corpus extended from construction only to that same full surface (`FX-051`);
-- thirty-nine upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
+- forty upstream crash classes found by that campaign and fixed in the managed MojoShader patch --
   a dereferenced NULL preshader parse, a SPIR-V attribute fixup assert, register copies sized by
   the constant table rather than the parsed storage, an unbounded preshader operand count, two
   asserts on untrusted preshader tokens, an allocation sized before its own bounds check, and an
@@ -117,8 +117,8 @@ Still open before the FNA3D slice can satisfy every aspirational exit criterion 
 - a fuzz gate that runs dry on every driver (`FX-051`). Eighteen crash classes are fixed in the
   managed MojoShader patch and the campaign is clean on FNA3D's OpenGL driver; the SDL_GPU
   driver's SPIR-V emitter still asserts on hostile shader bytecode;
-- `SamplerState.AddressW` reaching any renderer at all (`FX-026`), a pre-existing shared-layer gap
-  that compiled sampler coverage exposed;
+- additional renderers consuming `SamplerState.AddressW` (`FX-026` carried it through the shared
+  contract and FNA3D consumes it; the rest keep the documented no-op default);
 - additional renderer implementations (`FX-061`–`FX-069`), including EasyGL/OpenGL/OpenGL ES
   (`FX-062`) and Vulkan (`FX-064`–`FX-065`). The shared contract they must pass now exists
   (`FX-060`); until a backend passes it, its correct behavior is an explicit
@@ -486,7 +486,7 @@ values everywhere except inside a structure.
 | FX-021 | Synchronize only dirty parameters/textures before native pass application | FX-016, FX-020 | Mock counters prove correct first upload, no redundant upload, and subview invalidation |
 | FX-022 | Implement complete neutral-to-CNA blend/depth/stencil/rasterizer state translation | FX-002, FX-020 | Table-driven tests cover every supported legacy render-state token and unknown-token policy |
 | FX-023 | Implement texture/sampler state translation without mutating shared immutable state objects | FX-017, FX-020 | **Done.** Per-slot tests cover every filter-component combination, addressing, LOD bias, mip level, anisotropy, exact register targeting, reflected texture binding, and clone isolation |
-| FX-026 | Carry `SamplerState.AddressW` through the renderer-neutral sampler contract | FX-023 | `IGraphicsRenderer::ApplySamplerState` takes only U and V, so FNA3D mirrors U into W and a draw overwrites an effect's assigned `ADDRESSW`. Pre-existing shared-layer gap, observable only for volume textures; the value is already translated and published on the device |
+| FX-026 | Carry `SamplerState.AddressW` through the renderer-neutral sampler contract | FX-023 | **Done.** `IGraphicsRenderer::ApplySamplerAddressW` carries the third axis, following the `ApplySamplerMipState` precedent: a separate default-no-op call each renderer adopts explicitly, rather than a signature change across 39 implementations. `GraphicsDevice` publishes it with the rest of a slot's sampler state, and FNA3D consumes it instead of mirroring U. A renderer that has not adopted it no longer invents a W of its own, so an effect's assigned `ADDRESSW` stands. Covered by `Fna3dSamplerAddressTests.cpp` through a new read-only `GetSamplerStateEXT`, which is where the assembled native state is observable. Renderers other than FNA3D adopt it as their volume-texture support warrants; EasyGL needs a profile guard because `GL_TEXTURE_WRAP_R` is ES 3.0+ |
 | FX-024 | Integrate compiled selection/disposal with `GraphicsDevice` and every primitive draw entry point | FX-013, FX-019, FX-020 | Draws cannot use stale runtimes and stock application cannot overwrite compiled passes |
 | FX-025 | Integrate compiled effects into SpriteBatch Begin/flush/end behavior | FX-024 | SpriteBatch pixel tests pass across multiple flushes and texture switches |
 

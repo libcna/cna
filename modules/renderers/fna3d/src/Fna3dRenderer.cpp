@@ -803,8 +803,26 @@ namespace CNA::Internal::Renderers::Fna3d
         sampler.filter = ToFna3dTextureFilter(filter);
         sampler.addressU = ToFna3dTextureAddressMode(addressU);
         sampler.addressV = ToFna3dTextureAddressMode(addressV);
-        sampler.addressW = sampler.addressU;
         sampler.maxAnisotropy = maxAnisotropy > 0 ? maxAnisotropy : 1;
+    }
+
+    FNA3D_SamplerState Fna3dRenderer::GetSamplerStateEXT(int slot) const
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+        {
+            return FNA3D_SamplerState{};
+        }
+        return samplerStates_[static_cast<std::size_t>(slot)];
+    }
+
+    void Fna3dRenderer::ApplySamplerAddressW(int slot, int addressW)
+    {
+        if (slot < 0 || slot >= static_cast<int>(samplerStates_.size()))
+        {
+            return;
+        }
+        samplerStates_[static_cast<std::size_t>(slot)].addressW =
+            ToFna3dTextureAddressMode(addressW);
     }
 
     void Fna3dRenderer::ApplySamplerMipState(int slot, int maxMipLevel, float lodBias)

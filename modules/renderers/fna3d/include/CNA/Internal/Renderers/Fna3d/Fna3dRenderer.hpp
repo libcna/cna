@@ -1128,6 +1128,13 @@ namespace CNA::Internal::Renderers::Fna3d
         void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) override;
 
         /**
+         * @brief Applies the third addressing axis of a SamplerState to one texture slot.
+         * @param slot     Texture unit index.
+         * @param addressW Raw `TextureAddressMode` ordinal for W.
+         */
+        void ApplySamplerAddressW(int slot, int addressW) override;
+
+        /**
          * @brief Sets the constant blend colour used by the BlendFactor blend modes.
          * @param r,g,b,a Colour components in 0..1.
          */
@@ -1469,6 +1476,16 @@ namespace CNA::Internal::Renderers::Fna3d
         void ApplyLightingParamsEXT(Fna3dStockEffect& effect, const Matrix& world,
                                     const Matrix& view, const GpuDrawParams& params,
                                     bool withSpecular);
+
+        /**
+         * @brief CNAEXT. Reads back the native sampler state this renderer holds for one slot.
+         *
+         * The renderer accumulates a slot's sampler state from several independent contract calls
+         * before handing it to FNA3D, so this is the only place the assembled result is visible.
+         * @param slot Sampler slot index; out-of-range slots return a default-constructed state.
+         * @return The FNA3D sampler state currently held for that slot.
+         */
+        [[nodiscard]] FNA3D_SamplerState GetSamplerStateEXT(int slot) const;
 
     private:
         friend class Fna3dCompiledEffect;

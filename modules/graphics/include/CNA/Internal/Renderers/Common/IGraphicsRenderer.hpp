@@ -1572,6 +1572,15 @@ namespace CNA::Internal::Renderers
         /// so existing renderers can adopt each field independently and explicitly.
         virtual void ApplySamplerMipState(int slot, int maxMipLevel, float lodBias) {}
 
+        /// Applies the third addressing axis of a SamplerState. Separate from ApplySamplerState
+        /// for the same reason as the mip controls above: it is observable only where a renderer
+        /// samples a volume texture, so each renderer adopts it explicitly. A renderer that does
+        /// not override this must not invent a W mode of its own -- an effect's assigned ADDRESSW
+        /// is then the one that stands. Default: no-op.
+        /// @param slot     Texture unit index (0-15).
+        /// @param addressW Raw TextureAddressMode int value for W.
+        virtual void ApplySamplerAddressW(int slot, int addressW) {}
+
         /// Sets the constant blend color used with the BlendFactor blend mode.
         /// Maps to glBlendColor on GL renderers. Default: no-op.
         virtual void SetBlendFactor(float r, float g, float b, float a) {}
