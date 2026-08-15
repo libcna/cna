@@ -1101,7 +1101,7 @@ index 036f18d..ac9fe0f 100644
          }
      effect->ctx.mapUniformBufferMemory(effect->ctx.shaderContext,
 diff --git a/profiles/mojoshader_profile_spirv.c b/profiles/mojoshader_profile_spirv.c
-index 5d5999b..b9e6064 100644
+index 5d5999b..ff74ef2 100644
 --- a/profiles/mojoshader_profile_spirv.c
 +++ b/profiles/mojoshader_profile_spirv.c
 @@ -274,6 +274,12 @@ static uint32 spv_output_location(Context *ctx, uint32 id, uint32 loc)
@@ -1348,7 +1348,30 @@ index 5d5999b..b9e6064 100644
  
          uint32 id_e = spv_bumpid(ctx);
          uint32 id_f = spv_bumpid(ctx);
-@@ -2867,7 +2947,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
+@@ -2178,7 +2258,21 @@ void emit_SPIRV_sampler(Context *ctx, int stage, TextureType ttype, int texbem)
+     else
+         sampler_reg = spv_getreg(ctx, REG_TYPE_SAMPLER, stage);
+ 
+-    uint32 result = sampler_reg->spirv.iddecl;
++    uint32 result;
++    // The stage comes from the shader's own sampler declaration, and a sampler used without being
++    // declared has no register at all. -CNA
++    if (sampler_reg == NULL)
++    {
++        fail(ctx, "Shader uses a sampler stage it never declared.");
++        return;
++    } // if
++    if ((stage < 0) ||
++        (((size_t) stage) >= STATICARRAYLEN(ctx->spirv.sampler_extras)))
++    {
++        fail(ctx, "Sampler stage is out of range.");
++        return;
++    } // if
++    result = sampler_reg->spirv.iddecl;
+ 
+     push_output(ctx, &ctx->mainline_intro);
+     spv_emit(ctx, 4, SpvOpVariable, type, result, SpvStorageClassUniformConstant);
+@@ -2867,7 +2961,13 @@ static void emit_SPIRV_dotproduct(Context *ctx, SpirvResult src0, SpirvResult sr
  {
      SpirvResult result;
  
@@ -1363,7 +1386,7 @@ index 5d5999b..b9e6064 100644
  
      result.tid = spv_get_type(ctx, STI_FLOAT);
      result.id = spv_bumpid(ctx);
-@@ -3141,8 +3227,11 @@ void emit_SPIRV_MAD(Context *ctx)
+@@ -3141,8 +3241,11 @@ void emit_SPIRV_MAD(Context *ctx)
      SpirvResult src0 = spv_load_srcarg_full(ctx, 0);
      SpirvResult src1 = spv_load_srcarg_full(ctx, 1);
      SpirvResult src2 = spv_load_srcarg_full(ctx, 2);
@@ -1377,7 +1400,7 @@ index 5d5999b..b9e6064 100644
      uint32 mul_result = spv_bumpid(ctx);
      SpirvResult result;
      result.tid = src0.tid;
-@@ -3424,7 +3513,11 @@ void emit_SPIRV_SINCOS(Context *ctx)
+@@ -3424,7 +3527,11 @@ void emit_SPIRV_SINCOS(Context *ctx)
  void emit_SPIRV_MOVA(Context *ctx)
  {
      SpirvResult src = spv_load_srcarg_full(ctx, 0);
@@ -1390,7 +1413,7 @@ index 5d5999b..b9e6064 100644
  
      uint32 id_rounded = spv_bumpid(ctx);
  
-@@ -3510,7 +3603,11 @@ void emit_SPIRV_LRP(Context *ctx)
+@@ -3510,7 +3617,11 @@ void emit_SPIRV_LRP(Context *ctx)
      SpirvResult a = spv_load_srcarg_full(ctx, 0); // 'scale'
      SpirvResult y = spv_load_srcarg_full(ctx, 1); // 'end'
      SpirvResult x = spv_load_srcarg_full(ctx, 2); // 'start'
@@ -1403,7 +1426,7 @@ index 5d5999b..b9e6064 100644
      SpirvResult result;
      result.id = spv_bumpid(ctx);
      result.tid = x.tid;
-@@ -3526,8 +3623,12 @@ static void spv_emit_vecXmatrix(Context *ctx, int rows, int writemask)
+@@ -3526,8 +3637,12 @@ static void spv_emit_vecXmatrix(Context *ctx, int rows, int writemask)
  {
      int i;
  
