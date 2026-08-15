@@ -10,6 +10,7 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <set>
 #include <string>
 #include <string_view>
@@ -1181,6 +1182,108 @@ namespace
          "o.position = TransformPosition(skinnedPosition)"},
     }};
 
+    struct RendererPbrCullAudit
+    {
+        const char* name;
+        std::array<const char*, 5> evidence;
+    };
+
+    // GLTF-231/232/379: doubleSided deliberately stays application-owned RasterizerState. This
+    // inventory locks the renderer half of that boundary: CullMode::None reaches native no-cull
+    // state, and the PBR rigid/skinned route consumes that same dynamic state or pipeline key.
+    constexpr std::array<RendererPbrCullAudit, 15> kPbrCullAudits{{
+        {"bgfx", {{
+            "default: cullFlags_ = 0; break",
+            "kMsaaRasterState | blendFlags_ | depthFlags_ | cullFlags_",
+            "SubmitViewProgram(pbr3DProgram_)",
+            "SubmitViewProgram(pbrSkinned3DProgram_)",
+            nullptr}}},
+        {"diligent", {{
+            "state_.raster = PackBytes(cullMode, fillMode, 0, 0)",
+            "cullMode == 0 ? Dg::CULL_MODE_NONE",
+            "PipelineKey key = state_",
+            "case 48: variant = ShaderVariant::Pbr3D; break",
+            "case 68: variant = ShaderVariant::SkinnedPbr3D; break"}}},
+        {"directx9", {{
+            "case CullMode::None: return D3DCULL_NONE",
+            "SetRenderStateCheckedEXT(D3DRS_CULLMODE, CullModeToD3D9(cullMode)",
+            "void DirectX9Renderer::DrawPbrEffectEXT(",
+            "const bool skinned = params.skinned",
+            "device_->DrawIndexedPrimitive(ToD3D9Topology(primitive)"}}},
+        {"directx11", {{
+            "case CullMode::None: return D3D11_CULL_NONE",
+            "desc.CullMode = D3DCommon::CullModeToD3D11(cullMode)",
+            "context_->RSSetState(state.Get())",
+            "variant = params.skinned ? D3DCommon::D3DShaderVariant::PbrSkinned3d",
+            ": D3DCommon::D3DShaderVariant::Pbr3d"}}},
+        {"directx12", {{
+            "currentCullMode_ = cullMode",
+            "case CullMode::None: return D3D11_CULL_NONE",
+            "psoDesc.cullMode = currentCullMode_",
+            "variant = params.skinned ? D3DShaderVariant::PbrSkinned3d : D3DShaderVariant::Pbr3d",
+            "rs.CullMode = static_cast<D3D12_CULL_MODE>(CullModeToD3D11(desc.cullMode))"}}},
+        {"easygl", {{
+            "if (cullMode == 0) { device.set_cull_face_enabled(false); }",
+            "device.set_cull_face(cullMode == 1 ? ::easygl::CullFace::Back : ::easygl::CullFace::Front)",
+            "if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned",
+            "if (params.pbr) return StockProgramShape::Pbr",
+            "Prog3D& p = SelectProgram(layoutStride, params)"}}},
+        {"llgl", {{
+            "case XnaCullMode::None: return LLGL::CullMode::Disabled",
+            "cullMode_ = cullMode",
+            "key = key * 4u + static_cast<std::uint64_t>(cullMode_ & 0x3)",
+            "pipelineDesc.rasterizer.cullMode = MapCullMode(cullMode_)",
+            "pipelineDesc.debugName = pbrSkinned ? \"CNA.PbrSkinned3D\" : pbr ? \"CNA.Pbr3D\""}}},
+        {"magnum", {{
+            "Renderer::setFeature(Renderer::Feature::FaceCulling, false)",
+            "Renderer::setFaceCullingMode(cullMode == 1 ? Renderer::PolygonFacing::Back",
+            "selector.pbr = params.pbr",
+            "programOut = MagnumStockProgram::PbrSkinned",
+            "programOut = MagnumStockProgram::Pbr"}}},
+        {"metal", {{
+            "case K::None: default: return MTLCullModeNone",
+            "impl_->cull=metalCullMode(c)",
+            "[p.encoder setCullMode:p.cull]",
+            "case PipelineKind::Pbr48: vs=@\"cna_v3d_pbr\"; fs=@\"cna_f3d_pbr\"; stride=48; break",
+            "case PipelineKind::SkinnedPbr68: vs=@\"cna_v3d_skinned_pbr\"; fs=@\"cna_f3d_pbr\"; stride=68; break"}}},
+        {"opengl2", {{
+            "if (cullMode == 0) { glDisable(GL_CULL_FACE); }",
+            "glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT)",
+            "const bool pbrSkinned = params && params->pbr && params->skinned && vb->stride == 68",
+            "const bool pbr = params && params->pbr && !params->skinned && vb->stride == 48",
+            "const GLuint program = pbrSkinned ? pbrSkinnedProgram_ : pbr ? pbrProgram_"}}},
+        {"opengl4", {{
+            "if (cullMode == 0) { glDisable(GL_CULL_FACE); }",
+            "glCullFace(cullMode == 1 ? GL_BACK : GL_FRONT)",
+            "if (params.pbr && (strideInBytes == 48 || strideInBytes == 68))",
+            "OpenGL4RawProgram& prog = (strideInBytes == 68) ? pbrSkinned3DProgram_ : pbr3DProgram_",
+            "if (strideInBytes == 68) EnsurePbrSkinned3DProgram(); else EnsurePbr3DProgram()"}}},
+        {"sdl-gpu", {{
+            "default: return SDL_GPU_CULLMODE_NONE",
+            "cullMode_ = cullMode",
+            "command.renderState = CaptureRenderState()",
+            "auto& cache = skinned ? pbrSkinnedPipelines_ : pbrPipelines_",
+            "FillRasterizerState(pipelineInfo.rasterizer_state, renderState, pipelineInfo.primitive_type)"}}},
+        {"vulkan", {{
+            "cullMode_ = cullMode",
+            "d.cullMode = cullMode_",
+            "VkPipeline VulkanRenderer::GetOrCreatePipelinePbr3D(",
+            "VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(",
+            nullptr}}},
+        {"webgpu", {{
+            "default: return WGPUCullMode_None",
+            "cullMode_ = cullMode",
+            "command.cullMode = cullMode_",
+            "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelinePbr3D(",
+            "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D("}}},
+        {"wicked", {{
+            "default: return wig::CullMode::NONE",
+            "state_.cullMode = cullMode",
+            "WickedPipelineKey key = state_",
+            "entry.rasterizer.cull_mode = ToWickedCull(key.cullMode)",
+            "if (key.pbr != 0) { desc.vs = &pbrVertexShaders_[PbrShaderIndex(key)]"}}},
+    }};
+
     struct RendererPbrSkinningAudit
     {
         const char* name;
@@ -1715,6 +1818,88 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrVertexPathConsumesWorldViewProjectio
         const std::string pbrPath = webgpu.substr(begin, end - begin);
         EXPECT_NE(std::string::npos, pbrPath.find("output.position=u.mvp*"));
     }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrRendererHonorsCallerOwnedCullState)
+{
+    const std::filesystem::path repository = RepositoryRoot();
+    const std::filesystem::path renderers = repository / "modules" / "renderers";
+    std::set<std::string> cullInventory;
+    for (const RendererPbrCullAudit& audit : kPbrCullAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        EXPECT_TRUE(cullInventory.emplace(audit.name).second) << "duplicate cull audit row";
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        for (const char* evidence : audit.evidence)
+        {
+            if (evidence == nullptr) { continue; }
+            EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+                << "missing caller-owned PBR cull-state evidence: " << evidence;
+        }
+    }
+    std::set<std::string> pbrInventory;
+    for (const RendererAudit& audit : kAudits) { pbrInventory.emplace(audit.name); }
+    EXPECT_EQ(pbrInventory, cullInventory)
+        << "every renderer discovered by the PBR fallback inventory needs a cull-state row too";
+
+    // RasterizerState is a device/application contract rather than an Effect side effect. Lock
+    // the single public forwarding point as well as the native endpoints above: doubleSided's
+    // consumer selects CullNone, then this call must carry that exact enum to the active renderer.
+    const std::string graphicsDevice = Normalize(ReadFile(
+        repository / "modules" / "graphics" / "src" / "Xna" / "GraphicsDevice.cpp"));
+    EXPECT_NE(std::string::npos, graphicsDevice.find(Normalize(
+        "if (renderer_) renderer_->ApplyRasterizerState("
+        "(int)value.getCullModeProperty(), (int)value.getFillModeProperty(),"
+        "value.getScissorTestEnableProperty(), value.getDepthBiasProperty(),"
+        "value.getSlopeScaleDepthBiasProperty()); rasterizerState_ = value;")));
+
+    // Vulkan and WebGPU each build two immutable PBR pipelines. Scope their owners independently:
+    // an ordinary 3D pipeline with correct culling must not hide a rigid or skinned PBR hardcode.
+    const auto expectScoped = [](const std::string& source, const char* beginMarker,
+                                 const char* endMarker,
+                                 std::initializer_list<const char*> evidence)
+    {
+        const std::size_t begin = source.find(Normalize(beginMarker));
+        const std::size_t end = source.find(Normalize(endMarker), begin);
+        ASSERT_NE(std::string::npos, begin);
+        ASSERT_NE(std::string::npos, end);
+        const std::string owner = source.substr(begin, end - begin);
+        for (const char* fragment : evidence)
+        {
+            EXPECT_NE(std::string::npos, owner.find(Normalize(fragment))) << fragment;
+        }
+    };
+
+    const std::string vulkan = Normalize(ReadFile(
+        renderers / "vulkan" / "src" / "VulkanRenderer.cpp"));
+    expectScoped(vulkan,
+                 "VkPipeline VulkanRenderer::GetOrCreatePipelinePbr3D(",
+                 "void VulkanRenderer::EnsurePbrSkinnedResources()",
+                 {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
+                  "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
+                  "rs.cullMode = vkCull"});
+    expectScoped(vulkan,
+                 "VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(",
+                 "VkPipeline VulkanRenderer::GetOrCreatePipelineInstanced3D(",
+                 {"MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode,",
+                  "VkCullModeFlags vkCull = VK_CULL_MODE_NONE",
+                  "rs.cullMode = vkCull"});
+
+    const std::string webgpu = Normalize(ReadFile(
+        renderers / "webgpu" / "src" / "WebGPURenderer.cpp"));
+    expectScoped(webgpu,
+                 "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelinePbr3D(",
+                 "void WebGPURenderer::QueuePbrDraw(",
+                 {"Make3DPipelineKey(topology, stripIndexFormat, depthTest, depthWrite, depthFunc,"
+                  "blend, blendParams, cullMode, wireframe,",
+                  "pipeline.primitive.cullMode = ToWGPUCullMode(cullMode)"});
+    expectScoped(webgpu,
+                 "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D(",
+                 "void WebGPURenderer::QueueSkinnedPbrDraw(",
+                 {"Make3DPipelineKey(topology, stripIndexFormat, depthTest, depthWrite, depthFunc,"
+                  "blend, blendParams, cullMode, wireframe,",
+                  "pipeline.primitive.cullMode = ToWGPUCullMode(cullMode)"});
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)

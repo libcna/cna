@@ -156,6 +156,37 @@ using column-vector shaders transpose on upload. The audit pins each such conver
 site and its matching shader multiplication, including explicit scoping of both inline WebGPU PBR
 programs so unrelated WGSL cannot produce a false positive.
 
+## Caller-owned double-sided culling (`GLTF-231`, `GLTF-232`, `GLTF-379`)
+
+`doubleSided` is intentionally carried by `PbrEffect`/`SkinnedPbrEffect`, not applied as a hidden
+side effect of `Model::Draw`. The application selects `RasterizerState::CullNone` for a two-sided
+part (or the appropriate front-face cull state for a single-sided/mirrored placement), and
+`GraphicsDevice::setRasterizerStateProperty` forwards that state to the active renderer. The final
+cross-renderer audit locks the native endpoint and PBR route of that contract:
+
+| Renderer | Caller-owned cull carrier consumed by PBR |
+|---|---|
+| Bgfx | draw `cullFlags_`; zero means no cull for rigid and skinned PBR submits |
+| Diligent | `PipelineKey::raster` → `CULL_MODE_NONE`; PBR variants use the same keyed pipeline |
+| DirectX 9 | device `D3DRS_CULLMODE` → `D3DCULL_NONE`; both PBR variants share `DrawPbrEffectEXT` |
+| DirectX 11 | bound rasterizer state → `D3D11_CULL_NONE`; PBR does not replace it |
+| DirectX 12 | `currentCullMode_` → PBR PSO key/descriptor → `D3D12_CULL_MODE_NONE` |
+| EasyGL | GL cull-face enable; `CullNone` disables it before either selected PBR program |
+| LLGL | `cullMode_` in the immutable PBR pipeline key → `LLGL::CullMode::Disabled` |
+| Magnum | Magnum GL face-culling feature; disabled state survives PBR program selection |
+| Metal | tracked `MTLCullModeNone`, rebound on the encoder used by rigid/skinned PBR |
+| OpenGL 2 / 4 | `GL_CULL_FACE` disabled before the rigid/skinned PBR draw |
+| SDL GPU | queued `RenderStateSnapshot` → rigid/skinned PBR pipeline rasterizer state |
+| Vulkan | queued `cullMode` → distinct rigid/skinned PBR pipeline keys → `VK_CULL_MODE_NONE` |
+| WebGPU | queued `cullMode` → distinct rigid/skinned PBR pipeline keys → `WGPUCullMode_None` |
+| Wicked | caller state copied into the PBR `WickedPipelineKey` → `wig::CullMode::NONE` |
+
+The immutable Vulkan and WebGPU rigid/skinned pipeline owners are scoped separately in the test;
+a correct generic pipeline cannot mask a PBR hardcode. The discriminating runtime witness remains
+`EasyGL_Gltf_AlphaBlend`: the ordinary single-sided state culls a deliberately reversed face, then
+the imported `doubleSided` property selects `CullNone` and renders the same face on OPENGLES2 and
+OPENGLES3. This proves the property is consumed without changing the architectural boundary.
+
 ## Skinned palette and influence count (`GLTF-258`, `GLTF-263`, `GLTF-379`)
 
 Every skinned PBR backend receives the same 72-entry column-major palette and XNA's requested
