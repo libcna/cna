@@ -92,6 +92,38 @@ the paths. `EveryPbrShaderHonorsColorSpaceDeclarations` additionally requires al
 and all three shader equations in every one of the 15 PBR implementations. It requires two copies
 for separately stored rigid/skinned fragments, so one corrected variant cannot hide a stale sibling.
 
+## Core material factors (`GLTF-216`–`GLTF-223`, `GLTF-379`)
+
+Texture decoding and channel selection do not prove that the imported factors are actually used.
+Every PBR fragment must independently multiply decoded base RGB by the RGB base-colour factor,
+multiply texture alpha by the alpha factor, multiply the emissive sample by the emissive factor,
+and apply roughness/metallic factors to the required G/B channels. The last two expressions are
+shared with the packed-channel audit above; `EveryPbrShaderConsumesTheCoreMaterialFactors` joins
+them to the three colour-factor expressions in one 15-renderer inventory:
+
+| Renderer | Base RGB / alpha carrier in the fragment | Emissive carrier | Required fragment copies |
+|---|---|---|---:|
+| Bgfx | `u_diffuseColor.rgb / .a` | `u_emissiveColor.xyz` | 1 |
+| Diligent | `g_DiffuseColor.rgb / .a` | `g_PbrEmissiveRoughness.xyz` | 1 |
+| DirectX 9 | `DiffuseColor.rgb / .a` | `EmissiveColor.xyz` | 2 |
+| DirectX 11 | `DiffuseColor.rgb / .a` | `EmissiveRoughness.xyz` | 2 |
+| DirectX 12 | `DiffuseColor.rgb / .a` | `EmissiveRoughness.xyz` | 2 |
+| EasyGL | `uDiffuseColor.rgb / .a` | `uEmissiveColor` | 2 |
+| LLGL | `diffuseColor.rgb / .a` | `emissiveMetallic.xyz` | 3 |
+| Magnum | `uDiffuseColor.rgb / .a` | `uEmissiveColor` | 1 |
+| Metal | `pu.diffuseColor.rgb / .a` | `pu.emissiveColor.xyz` | 1 |
+| OpenGL 2 | `uDiffuse.rgb / .a` | `uEmissiveColor` | 1 |
+| OpenGL 4 | `uDiffuseColor.rgb / .a` | `uEmissiveColor` | 1 |
+| SDL GPU | `pc.diffuseColor.rgb / .a` | `lp.emissiveColor_pad.xyz` | 1 |
+| Vulkan | `pc.diffuseColor.rgb / .a` | `pbr.emissive_roughness.xyz` | 2 |
+| WebGPU | `u.diffuseColor.rgb / .a` | `lp.emissiveColor.xyz` | 2 |
+| Wicked | `cb.diffuse.rgb / .a` | `cb.emissive.rgb` | 1 |
+
+The counts name stored shader variants rather than renderer draw calls. LLGL's three copies are its
+Vulkan-style source, native-GL source and generated native-GL header. Each row asserts the complete
+multiplication expression, not merely the presence of a uniform declaration or CPU upload, so a
+factor that reaches the backend but is shading-inert fails this ordinary no-GPU test.
+
 ## PBR dielectric Fresnel endpoints (`GLTF-343`, `GLTF-344`)
 
 `GpuDrawParams::pbrDielectricF0` carries the RGB normal-incidence endpoint after applying

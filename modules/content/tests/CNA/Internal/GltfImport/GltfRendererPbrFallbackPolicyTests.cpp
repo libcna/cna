@@ -995,6 +995,83 @@ namespace
          "occlusionMap.Sample(sampler0, CnaPbrTransformUv(input.uv, 4)).r", 1},
     }};
 
+    struct RendererPbrMaterialFactorAudit
+    {
+        const char* name;
+        const char* baseRgbFactor;
+        const char* baseAlphaFactor;
+        const char* emissiveFactor;
+        std::size_t shaderCopies;
+    };
+
+    // GLTF-216/218/220/221/223/379: base-colour RGB and alpha are independent linear factors,
+    // emissive is a separate additive factor, and the MR factors are already locked beside their
+    // G/B channel reads in kPbrChannelAudits. Copy counts keep separately stored rigid/skinned
+    // fragments honest; LLGL additionally carries native-GL, Vulkan-style GLSL and its generated
+    // native-GL header.
+    constexpr std::array<RendererPbrMaterialFactorAudit, 15> kPbrMaterialFactorAudits{{
+        {"bgfx",
+         "vec3 albedo = baseColor * u_diffuseColor.rgb",
+         "float alpha = baseColorTex.a * u_diffuseColor.a",
+         "vec3 emissive = u_emissiveColor.xyz * emissiveSample", 1},
+        {"diligent",
+         "float3 albedo = baseColor * g_DiffuseColor.rgb",
+         "float alpha = baseColorTex.a * g_DiffuseColor.a",
+         "float3 emissive = g_PbrEmissiveRoughness.xyz * emissiveSample", 1},
+        {"directx9",
+         "float3 albedo = baseColor * DiffuseColor.rgb",
+         "float alpha = baseColorTex.a * DiffuseColor.a",
+         "float3 emissive = EmissiveColor.xyz * emissiveSample", 2},
+        {"directx11",
+         "float3 albedo = baseColor * DiffuseColor.rgb",
+         "float alpha = baseColorTex.a * DiffuseColor.a",
+         "float3 emissive = EmissiveRoughness.xyz * emissiveSample", 2},
+        {"directx12",
+         "float3 albedo = baseColor * DiffuseColor.rgb",
+         "float alpha = baseColorTex.a * DiffuseColor.a",
+         "float3 emissive = EmissiveRoughness.xyz * emissiveSample", 2},
+        {"easygl",
+         "vec3 albedo=baseRGB*uDiffuseColor.rgb",
+         "float alpha=baseColorTex.a*uDiffuseColor.a",
+         "vec3 emissive=uEmissiveColor*mix(emissiveTex,cnaSrgbToLinear(emissiveTex),uSrgb.y)", 2},
+        {"llgl",
+         "vec3 albedo = baseColor * diffuseColor.rgb",
+         "float alpha = baseColorTex.a * diffuseColor.a",
+         "vec3 emissive = emissiveMetallic.xyz * emissiveSample", 3},
+        {"magnum",
+         "vec3 albedo = baseLinear * uDiffuseColor.rgb",
+         "float alpha = baseColor.a * uDiffuseColor.a",
+         "vec3 emissive = uEmissiveColor * emissiveSample", 1},
+        {"metal",
+         "float3 albedo = baseColor * pu.diffuseColor.rgb",
+         "float alpha = baseColorTex.a * pu.diffuseColor.a",
+         "float3 emissive = pu.emissiveColor.xyz * emissiveSample", 1},
+        {"opengl2",
+         "vec3 albedo=baseColor*uDiffuse.rgb",
+         "float alpha=baseColorTex.a*uDiffuse.a",
+         "vec3 emissive=uEmissiveColor*emissiveSample", 1},
+        {"opengl4",
+         "vec3 albedo = baseColor * uDiffuseColor.rgb",
+         "float alpha = baseColorTex.a * uDiffuseColor.a",
+         "vec3 emissive = uEmissiveColor * emissiveSample", 1},
+        {"sdl-gpu",
+         "vec3 albedo = baseColor * pc.diffuseColor.rgb",
+         "float alpha = baseColorTex.a * pc.diffuseColor.a",
+         "vec3 emissive = lp.emissiveColor_pad.xyz * emissiveSample", 1},
+        {"vulkan",
+         "vec3 albedo = baseColor * pc.diffuseColor.rgb",
+         "float alpha = baseColorTex.a * pc.diffuseColor.a",
+         "vec3 emissive = pbr.emissive_roughness.xyz * emissiveSample", 2},
+        {"webgpu",
+         "let albedo = baseColor * u.diffuseColor.rgb",
+         "let alpha = baseColorSample.a * u.diffuseColor.a",
+         "let emissive = lp.emissiveColor.xyz * emissiveLinear", 2},
+        {"wicked",
+         "const float3 albedo = baseColor * cb.diffuse.rgb",
+         "const float alpha = baseColorTex.a * cb.diffuse.a",
+         "const float3 emissive = cb.emissive.rgb * emissiveSample", 1},
+    }};
+
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
@@ -1369,6 +1446,36 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
     EXPECT_EQ(2u, CountOccurrences(vulkan, Normalize(
         "int mask = int(pbr.textureCoordinateSets.x + 0.5)")))
         << "both Vulkan dual-UV PBR fragment variants must decode the transported selector";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheCoreMaterialFactors)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    static_assert(kPbrMaterialFactorAudits.size() == kPbrChannelAudits.size());
+    for (std::size_t index = 0; index < kPbrMaterialFactorAudits.size(); ++index)
+    {
+        const RendererPbrMaterialFactorAudit& material = kPbrMaterialFactorAudits[index];
+        const RendererPbrChannelAudit& channels = kPbrChannelAudits[index];
+        SCOPED_TRACE(material.name);
+        ASSERT_STREQ(material.name, channels.name)
+            << "the material-factor and packed-channel inventories must stay in the same order";
+        const std::string source = RendererSlotText(renderers, material.name);
+        ASSERT_FALSE(source.empty());
+
+        for (const char* evidence :
+             {material.baseRgbFactor, material.baseAlphaFactor, material.emissiveFactor})
+        {
+            EXPECT_GE(CountOccurrences(source, Normalize(evidence)), material.shaderCopies)
+                << "missing rigid/skinned PBR material-factor evidence: " << evidence;
+        }
+        EXPECT_GE(CountOccurrences(source, Normalize(channels.roughnessGreen)),
+                  channels.shaderCopies)
+            << "roughness factor is not applied to the glTF G channel";
+        EXPECT_GE(CountOccurrences(source, Normalize(channels.metallicBlue)),
+                  channels.shaderCopies)
+            << "metallic factor is not applied to the glTF B channel";
+    }
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)
