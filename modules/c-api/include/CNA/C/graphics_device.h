@@ -5,6 +5,8 @@
 
 #include "CNA/C/display.h"
 #include "CNA/C/graphics_state.h"
+#include "CNA/C/index_resources.h"
+#include "CNA/C/vertex_resources.h"
 #include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
@@ -653,6 +655,242 @@ CNA_C_API CNA_Result cna_graphics_device_set_texture(
 CNA_C_API CNA_Result cna_graphics_device_unbind_texture(
     CNA_Handle graphics_device,
     CNA_Handle texture);
+
+/**
+ * @brief Describes one back-buffer readback window.
+ */
+typedef struct CNA_BackBufferReadback {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` to read @ref source_rectangle instead of the whole back buffer. */
+    CNA_Bool has_source_rectangle;
+
+    /** @brief Reserved bytes; callers must initialize them to zero. */
+    uint8_t reserved[3];
+
+    /** @brief Source region in back-buffer pixels; ignored unless @ref has_source_rectangle. */
+    CNA_Rectangle source_rectangle;
+
+    /** @brief First destination element written, in pixels. */
+    uint64_t start_index;
+
+    /** @brief Number of pixels to read. */
+    uint64_t element_count;
+} CNA_BackBufferReadback;
+
+/**
+ * @brief Clears the back buffer from four floating-point channels.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param r Red channel in the inclusive range 0 through 1.
+ * @param g Green channel in the inclusive range 0 through 1.
+ * @param b Blue channel in the inclusive range 0 through 1.
+ * @param a Alpha channel in the inclusive range 0 through 1.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-finite channel, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_clear_rgba(
+    CNA_Handle graphics_device,
+    float r,
+    float g,
+    float b,
+    float a);
+
+/**
+ * @brief Clears the color and depth buffers.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param color Color value for the color buffer.
+ * @param depth Depth value in the inclusive range 0 through 1. Must be finite.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-finite depth,
+ * `CNA_RESULT_NOT_SUPPORTED` when the backend has no depth buffer, or another documented
+ * handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_clear_color_depth(
+    CNA_Handle graphics_device,
+    CNA_Color color,
+    float depth);
+
+/**
+ * @brief Clears the buffers selected by a `CNA_ClearOptions` mask.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param options Zero or more `CNA_CLEAR_OPTION_*` bits.
+ * @param color Color value for the color buffer.
+ * @param depth Depth value in the inclusive range 0 through 1. Must be finite.
+ * @param stencil Stencil value for the stencil buffer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown option bit or a
+ * non-finite depth, `CNA_RESULT_NOT_SUPPORTED` when the backend cannot clear a selected buffer, or
+ * another documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_clear_options(
+    CNA_Handle graphics_device,
+    CNA_ClearOptions options,
+    CNA_Color color,
+    float depth,
+    int32_t stencil);
+
+/**
+ * @brief Presents the rendered frame to the display.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend cannot present, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_present(CNA_Handle graphics_device);
+
+/**
+ * @brief Resets the device using its current presentation parameters.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend refuses the reset, or a
+ * documented handle/thread/native failure.
+ *
+ * A successful reset raises the device's resetting and reset events in that order.
+ */
+CNA_C_API CNA_Result cna_graphics_device_reset(CNA_Handle graphics_device);
+
+/**
+ * @brief Resets the device with new presentation parameters and an optional adapter.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param parameters Caller-provided versioned presentation parameters.
+ * @param adapter_index Adapter index to switch to, or null to keep the current adapter.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for invalid parameters or an unknown
+ * adapter index, `CNA_RESULT_NOT_SUPPORTED` when the backend refuses the reset, or a documented
+ * handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_reset_with_parameters(
+    CNA_Handle graphics_device,
+    const CNA_PresentationParameters* parameters,
+    const uint32_t* adapter_index);
+
+/**
+ * @brief Reads a window of the back buffer into a caller-owned RGBA8 array.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param readback Versioned window description.
+ * @param destination Caller-owned output pixels, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination measured in pixels.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` when @p capacity cannot hold
+ * `start_index + element_count` pixels, `CNA_RESULT_NOT_SUPPORTED` when the active renderer has no
+ * honest back-buffer readback, or another documented argument/handle/thread/native failure. No
+ * partial pixel array is written.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_backbuffer_data_window(
+    CNA_Handle graphics_device,
+    const CNA_BackBufferReadback* readback,
+    CNA_Color* destination,
+    uint64_t capacity);
+
+/**
+ * @brief Binds one vertex buffer at vertex offset zero.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param vertex_buffer Owned vertex-buffer handle, or `CNA_INVALID_HANDLE` to unbind.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_vertex_buffer(
+    CNA_Handle graphics_device,
+    CNA_VertexBufferHandle vertex_buffer);
+
+/**
+ * @brief Binds one vertex buffer at an explicit vertex offset.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param vertex_buffer Owned vertex-buffer handle, or `CNA_INVALID_HANDLE` to unbind.
+ * @param vertex_offset Offset in vertices; must not be negative.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative offset, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_vertex_buffer_offset(
+    CNA_Handle graphics_device,
+    CNA_VertexBufferHandle vertex_buffer,
+    int32_t vertex_offset);
+
+/**
+ * @brief Binds several vertex buffers at once.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param bindings Caller-owned bindings copied during this call, or null only when
+ * @p binding_count is zero. An empty array unbinds every vertex buffer.
+ * @param binding_count Number of bindings beginning at @p bindings.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a negative offset or frequency,
+ * or a documented handle/thread/native failure. Every binding is validated before any is applied.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_vertex_buffers(
+    CNA_Handle graphics_device,
+    const CNA_VertexBufferBinding* bindings,
+    uint64_t binding_count);
+
+/**
+ * @brief Gets the number of currently bound vertex-buffer bindings.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_count Receives the binding count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_vertex_buffer_count(
+    CNA_Handle graphics_device,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies the currently bound vertex-buffer bindings.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Capacity of @p destination in elements.
+ * @param out_count Receives the required binding count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread/native failure. No partial array is written.
+ *
+ * A binding applied by canonical CNA code reports `CNA_INVALID_HANDLE` in its
+ * @ref CNA_VertexBufferBinding::vertex_buffer field, because no C resource owns that buffer.
+ */
+CNA_C_API CNA_Result cna_graphics_device_copy_vertex_buffers(
+    CNA_Handle graphics_device,
+    CNA_VertexBufferBinding* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Gets the vertex buffer bound in the first slot.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_vertex_buffer Receives the owning C handle, or `CNA_INVALID_HANDLE` when the slot is
+ * empty or was bound by canonical CNA code.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_vertex_buffer(
+    CNA_Handle graphics_device,
+    CNA_VertexBufferHandle* out_vertex_buffer);
+
+/**
+ * @brief Binds the index buffer used by indexed draw calls.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param index_buffer Owned index-buffer handle, or `CNA_INVALID_HANDLE` to unbind.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_index_buffer(
+    CNA_Handle graphics_device,
+    CNA_IndexBufferHandle index_buffer);
+
+/**
+ * @brief Gets the currently bound index buffer.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_index_buffer Receives the owning C handle, or `CNA_INVALID_HANDLE` when no buffer is
+ * bound or it was bound by canonical CNA code.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_index_buffer(
+    CNA_Handle graphics_device,
+    CNA_IndexBufferHandle* out_index_buffer);
 
 #ifdef __cplusplus
 }

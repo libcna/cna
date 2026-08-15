@@ -1294,6 +1294,35 @@
       "tests": "slot-count assertion against the native constant, initial empty slots, bind/read/unbind on both stages, self-unbinding on texture destruction, render-target rejection where the backend binds one, and invalid stage/slot/structure/handle failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F3"
+    },
+    {
+      "id": "graphics-device-frame-control",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Clear|Present|Reset)$",
+      "signature_regex": "^(?:\\(float r, float g, float b, float a\\)|\\(ClearOptions options, const Color &color, float depth, int stencil\\)|\\(const Color &color, float depth\\)|\\(\\)|\\(const PresentationParameters &presentationParameters\\)|\\(const PresentationParameters &presentationParameters, GraphicsAdapter &adapter\\)|\\(const PresentationParameters &presentationParameters, GraphicsAdapter \\*adapter\\))$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_clear_rgba`, `cna_graphics_device_clear_color_depth`, `cna_graphics_device_clear_options`, `cna_graphics_device_present`, `cna_graphics_device_reset` and `cna_graphics_device_reset_with_parameters`. The reference and pointer adapter overloads collapse into one route whose nullable `adapter_index` pointer expresses the optional adapter; the renderer-private device window handle is preserved across a reset because a C caller never supplies it",
+      "tests": "every clear overload including unknown option bits and non-finite channel/depth rejection, present, both reset routes with observed resetting/reset event pairs, invalid parameters and an out-of-range adapter index in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F4"
+    },
+    {
+      "id": "graphics-device-backbuffer-window",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::GetBackBufferData$",
+      "signature_regex": "^(?:\\(Color \\*data, int startIndex, int elementCount\\)|\\(const Rectangle \\*rect, Color \\*data, int startIndex, int elementCount\\))$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_get_backbuffer_data_window` with a versioned `CNA_BackBufferReadback` carrying the optional source rectangle, destination start index and element count. The nullable native rectangle becomes an explicit flag plus value, and an element count smaller than the selected region is decided as `CNA_RESULT_BUFFER_TOO_SMALL` before any native read instead of surfacing as a generic native failure",
+      "tests": "rectangle and full-buffer windows, exact untouched destination bytes outside the window, capacity/structure rejection, undersized-region refusal and honest HEADLESS `NOT_SUPPORTED` in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F4"
+    },
+    {
+      "id": "graphics-device-buffer-binding",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getIndicesProperty|setIndicesProperty|Indices|SetVertexBuffer|SetVertexBuffers|GetVertexBuffer|GetVertexBuffers|SetIndexBuffer|GetIndexBuffer)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_set_vertex_buffer`, `_set_vertex_buffer_offset`, `_set_vertex_buffers`, `_get_vertex_buffer_count`, `_copy_vertex_buffers`, `_get_vertex_buffer`, `_set_index_buffer` and `_get_index_buffer`. The native `std::vector<VertexBufferBinding>` becomes a caller-owned `CNA_VertexBufferBinding` array with a count/copy contract, and the four equivalent index-buffer accessors collapse to one validated get/set pair. Reads report the owning C handle rather than a native pointer; a binding applied by canonical CNA code reports an invalid handle",
+      "tests": "empty-state reads, single and multi-binding application, explicit offsets, unbinding, count/copy capacity atomicity, negative offset/frequency rejection before any binding is applied, wrong-kind handle refusal and honest backend creation refusal in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F4"
     }
   ]
 }

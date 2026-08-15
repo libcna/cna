@@ -197,10 +197,98 @@ There is no standalone C texture collection. The canonical public default constr
 deviceless collection that no device ever consults, so exposing it would add an object with no
 observable effect.
 
+## Frame control and buffer binding
+
+Three clear routes cover the canonical overloads that `cna_game_clear` does not:
+`cna_graphics_device_clear_rgba` takes four floating-point channels,
+`cna_graphics_device_clear_color_depth` clears color and depth together, and
+`cna_graphics_device_clear_options` takes a `CNA_ClearOptions` mask with a depth and stencil value.
+Non-finite channels or depths, and unknown option bits, are `CNA_RESULT_INVALID_ARGUMENT` before the
+device is touched. `cna_graphics_device_present` presents the frame.
+
+`cna_graphics_device_reset` reuses the device's current presentation parameters;
+`cna_graphics_device_reset_with_parameters` takes new ones plus a **nullable** `adapter_index`
+pointer. That single pointer expresses both canonical overloads: a null pointer is the
+keep-the-current-adapter form, a non-null one selects an adapter by the same index the
+`cna_graphics_adapter_*` queries use. The renderer-private device window handle is preserved across
+the reset, because a C caller never supplies it. A successful reset raises the device's resetting
+and reset events in that order, which a C subscriber observes.
+
+`cna_graphics_device_get_backbuffer_data_window` reads a window of the back buffer through a
+versioned `CNA_BackBufferReadback`. The canonical nullable `Rectangle*` becomes an explicit
+`has_source_rectangle` flag plus a value, and `start_index`/`element_count` describe where in the
+caller's array the pixels land. Two capacity rules are decided in C, before any native read:
+the array must hold `start_index + element_count` pixels, and `element_count` must cover the whole
+selected region. Both report `CNA_RESULT_BUFFER_TOO_SMALL`; the canonical routine would otherwise
+surface an undersized count as a generic native failure. Nothing outside the requested window is
+written, and a backend without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
+destination untouched.
+
+Buffer binding replaces the native pointer-and-vector surface:
+
+| C operation | Canonical member |
+|---|---|
+| `cna_graphics_device_set_vertex_buffer` / `_set_vertex_buffer_offset` | both `SetVertexBuffer` overloads |
+| `cna_graphics_device_set_vertex_buffers` | `SetVertexBuffers` |
+| `cna_graphics_device_get_vertex_buffer_count` / `_copy_vertex_buffers` | `GetVertexBuffers` |
+| `cna_graphics_device_get_vertex_buffer` | `GetVertexBuffer` |
+| `cna_graphics_device_set_index_buffer` / `_get_index_buffer` | `SetIndexBuffer`, `GetIndexBuffer`, `Indices` and the `Indices` property pair |
+
+The four canonical index-buffer accessors are one operation in CNA, so they collapse to one
+validated get/set pair. `cna_graphics_device_set_vertex_buffers` validates every binding — a
+negative vertex offset or instance frequency, or an unusable handle — before applying any of them,
+so a rejected call leaves the previous binding set intact. Reads report the owning C handle; as with
+sampler slots, a binding applied by canonical CNA code reports `CNA_INVALID_HANDLE` rather than
+inventing one.
+
+## Frame control and buffer binding
+
+Three clear routes cover the canonical overloads that `cna_game_clear` does not:
+`cna_graphics_device_clear_rgba` takes four floating-point channels,
+`cna_graphics_device_clear_color_depth` clears color and depth together, and
+`cna_graphics_device_clear_options` takes a `CNA_ClearOptions` mask with a depth and stencil value.
+Non-finite channels or depths, and unknown option bits, are `CNA_RESULT_INVALID_ARGUMENT` before the
+device is touched. `cna_graphics_device_present` presents the frame.
+
+`cna_graphics_device_reset` reuses the device's current presentation parameters;
+`cna_graphics_device_reset_with_parameters` takes new ones plus a **nullable** `adapter_index`
+pointer. That single pointer expresses both canonical overloads: a null pointer is the
+keep-the-current-adapter form, a non-null one selects an adapter by the same index the
+`cna_graphics_adapter_*` queries use. The renderer-private device window handle is preserved across
+the reset, because a C caller never supplies it. A successful reset raises the device's resetting
+and reset events in that order, which a C subscriber observes.
+
+`cna_graphics_device_get_backbuffer_data_window` reads a window of the back buffer through a
+versioned `CNA_BackBufferReadback`. The canonical nullable `Rectangle*` becomes an explicit
+`has_source_rectangle` flag plus a value, and `start_index`/`element_count` describe where in the
+caller's array the pixels land. Two capacity rules are decided in C, before any native read: the
+array must hold `start_index + element_count` pixels, and `element_count` must cover the whole
+selected region. Both report `CNA_RESULT_BUFFER_TOO_SMALL`; the canonical routine would otherwise
+surface an undersized count as a generic native failure. Nothing outside the requested window is
+written, and a backend without honest readback returns `CNA_RESULT_NOT_SUPPORTED` with the
+destination untouched.
+
+Buffer binding replaces the native pointer-and-vector surface:
+
+| C operation | Canonical member |
+|---|---|
+| `cna_graphics_device_set_vertex_buffer` / `_set_vertex_buffer_offset` | both `SetVertexBuffer` overloads |
+| `cna_graphics_device_set_vertex_buffers` | `SetVertexBuffers` |
+| `cna_graphics_device_get_vertex_buffer_count` / `_copy_vertex_buffers` | `GetVertexBuffers` |
+| `cna_graphics_device_get_vertex_buffer` | `GetVertexBuffer` |
+| `cna_graphics_device_set_index_buffer` / `_get_index_buffer` | `SetIndexBuffer`, `GetIndexBuffer`, `Indices` and the `Indices` property pair |
+
+The four canonical index-buffer accessors are one operation in CNA, so they collapse to one
+validated get/set pair. `cna_graphics_device_set_vertex_buffers` validates every binding — a
+negative vertex offset or instance frequency, or an unusable handle — before applying any of them,
+so a rejected call leaves the previous binding set intact. Reads report the owning C handle; as with
+sampler slots, a binding applied by canonical CNA code reports `CNA_INVALID_HANDLE` rather than
+inventing one.
+
 ## Not yet in this header
 
 Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. Clear/present/reset, buffer binding, draw submission, SpriteBatch text routes, occlusion queries
-and the `graphics-ext` post-process family are owned by CBIND-035F4 through CBIND-035F7 and are not
+`graphics_state.h`. Draw submission and the CNAEXT device helpers, SpriteBatch text routes, occlusion queries and the
+`graphics-ext` post-process family are owned by CBIND-035F5 through CBIND-035F7 and are not
 callable yet.

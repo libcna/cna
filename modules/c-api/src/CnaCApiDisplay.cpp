@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/display.h"
+#include "CNA/C/graphics_device.h"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/DisplayOrientation.hpp"
@@ -763,5 +764,57 @@ CNA_Result cna_graphics_device_get_native_window_handle(
             CNA_RESULT_NOT_SUPPORTED,
             CNA_ERROR_CATEGORY_NOT_SUPPORTED,
             "Native window handles do not cross the stable CNA C ABI.");
+    });
+}
+
+CNA_Result cna_graphics_device_reset(const CNA_Handle graphicsDeviceHandle)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        graphicsDevice->value->Reset();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_reset_with_parameters(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_PresentationParameters* const parameters,
+    const uint32_t* const adapterIndex)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (!IsPresentationParameters(parameters)) {
+            return InvalidArgument("The PresentationParameters source structure is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        GraphicsAdapter* adapter = nullptr;
+        if (adapterIndex != nullptr) {
+            const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+            if (*adapterIndex >= adapters.size()) {
+                return InvalidArgument("The graphics adapter index is out of range.");
+            }
+            adapter = adapters[*adapterIndex].get();
+        }
+
+        // The canonical window handle is renderer-private state that a C caller never supplies,
+        // so it is preserved across the reset exactly as the set-parameters route does.
+        PresentationParameters nativeParameters =
+            graphicsDevice->value->getPresentationParametersProperty().Clone();
+        const PresentationParameters::IntPtr windowHandle =
+            nativeParameters.getDeviceWindowHandleProperty();
+        ApplyPresentationParameters(*parameters, &nativeParameters);
+        nativeParameters.setDeviceWindowHandleProperty(windowHandle);
+        graphicsDevice->value->Reset(nativeParameters, adapter);
+        return CNA_RESULT_SUCCESS;
     });
 }

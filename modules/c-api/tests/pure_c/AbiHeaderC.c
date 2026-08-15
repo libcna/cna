@@ -665,3 +665,10 @@ _Static_assert(CNA_TEXTURE_COLLECTION_MAX_TEXTURES == UINT32_C(16) &&
                    offsetof(CNA_TextureSlotInfo, reserved) == 9U &&
                    offsetof(CNA_TextureSlotInfo, texture) == 16U,
                "CNA_TextureSlotInfo layout must remain stable");
+_Static_assert(sizeof(CNA_BackBufferReadback) == 48U &&
+                   _Alignof(CNA_BackBufferReadback) == 8U &&
+                   offsetof(CNA_BackBufferReadback, has_source_rectangle) == 8U &&
+                   offsetof(CNA_BackBufferReadback, source_rectangle) == 12U &&
+                   offsetof(CNA_BackBufferReadback, start_index) == 32U &&
+                   offsetof(CNA_BackBufferReadback, element_count) == 40U,
+               "CNA_BackBufferReadback layout must remain stable");

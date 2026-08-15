@@ -717,6 +717,276 @@ static int validate_texture_collections(CNA_Handle graphics_device)
     return 1;
 }
 
+static int create_vertex_buffer(
+    CNA_Handle graphics_device,
+    CNA_VertexBufferHandle* out_vertex_buffer)
+{
+    CNA_VertexElement elements[8];
+    uint64_t element_count = 0U;
+    uint32_t stride = 0U;
+    CNA_VertexDeclarationHandle declaration = CNA_INVALID_HANDLE;
+    if (cna_vertex_type_get_stride(CNA_VERTEX_TYPE_POSITION_COLOR, &stride) !=
+            CNA_RESULT_SUCCESS ||
+        cna_vertex_type_copy_elements(
+            CNA_VERTEX_TYPE_POSITION_COLOR, elements, 8U, &element_count) !=
+            CNA_RESULT_SUCCESS ||
+        cna_vertex_declaration_create_with_stride(
+            (int32_t)stride, elements, element_count, &declaration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    const CNA_VertexBufferCreateInfo info = {
+        sizeof(CNA_VertexBufferCreateInfo), UINT32_C(1), declaration, 3,
+        CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
+    const CNA_Result result =
+        cna_vertex_buffer_create(graphics_device, &info, out_vertex_buffer);
+    if (cna_vertex_declaration_destroy(declaration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return result == CNA_RESULT_SUCCESS && *out_vertex_buffer != CNA_INVALID_HANDLE;
+}
+
+static int is_supported(const CNA_Result result)
+{
+    return result == CNA_RESULT_SUCCESS || result == CNA_RESULT_NOT_SUPPORTED;
+}
+
+static int validate_frame_control(CNA_Handle graphics_device, DeviceState* state)
+{
+    const CNA_Color color = {10U, 20U, 30U, 40U};
+    if (cna_graphics_device_clear_rgba(graphics_device, 0.25F, 0.5F, 0.75F, 1.0F) !=
+            CNA_RESULT_SUCCESS ||
+        cna_graphics_device_clear_rgba(graphics_device, 0.0F, 0.0F, 0.0F, NAN) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_clear_rgba(graphics_device, INFINITY, 0.0F, 0.0F, 1.0F) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !is_supported(cna_graphics_device_clear_color_depth(graphics_device, color, 1.0F)) ||
+        cna_graphics_device_clear_color_depth(graphics_device, color, NAN) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !is_supported(cna_graphics_device_clear_options(
+            graphics_device, CNA_CLEAR_OPTION_TARGET, color, 1.0F, 0)) ||
+        !is_supported(cna_graphics_device_clear_options(
+            graphics_device,
+            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL,
+            color, 1.0F, 3)) ||
+        cna_graphics_device_clear_options(
+            graphics_device, UINT32_C(8), color, 1.0F, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_clear_options(
+            graphics_device, CNA_CLEAR_OPTION_TARGET, color, INFINITY, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        !is_supported(cna_graphics_device_present(graphics_device))) {
+        return 0;
+    }
+
+    /* A successful reset raises both canonical reset events exactly once. */
+    const int previous_resetting = state->counters.device_resetting;
+    const int previous_reset = state->counters.device_reset;
+    const CNA_Result reset = cna_graphics_device_reset(graphics_device);
+    if (!is_supported(reset)) {
+        return 0;
+    }
+    if (reset == CNA_RESULT_SUCCESS &&
+        (state->counters.device_resetting != previous_resetting + 1 ||
+         state->counters.device_reset != previous_reset + 1)) {
+        return 0;
+    }
+
+    CNA_PresentationParameters parameters = {0};
+    parameters.struct_size = sizeof(CNA_PresentationParameters);
+    parameters.struct_version = UINT32_C(1);
+    const uint32_t adapter_index = UINT32_MAX;
+    if (cna_graphics_device_get_presentation_parameters(
+            graphics_device, &parameters) != CNA_RESULT_SUCCESS ||
+        !is_supported(cna_graphics_device_reset_with_parameters(
+            graphics_device, &parameters, 0)) ||
+        cna_graphics_device_reset_with_parameters(graphics_device, 0, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_reset_with_parameters(
+            graphics_device, &parameters, &adapter_index) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_backbuffer_window(CNA_Handle graphics_device)
+{
+    CNA_BackBufferInfo backbuffer = {
+        sizeof(CNA_BackBufferInfo), UINT32_C(1), 0U, 0U, 0U, 0U};
+    if (cna_graphics_device_get_backbuffer_info(graphics_device, &backbuffer) !=
+            CNA_RESULT_SUCCESS ||
+        backbuffer.width == 0U || backbuffer.height == 0U) {
+        return 0;
+    }
+
+    CNA_Color pixels[8];
+    memset(pixels, 0x5A, sizeof(pixels));
+    CNA_BackBufferReadback readback = {
+        sizeof(CNA_BackBufferReadback), UINT32_C(1), CNA_TRUE, {0U, 0U, 0U},
+        {0, 0, 2, 2}, 2U, 4U};
+
+    /* Capacity and structure validation happens before any native readback. */
+    CNA_BackBufferReadback malformed = readback;
+    malformed.struct_version = UINT32_C(2);
+    CNA_BackBufferReadback undersized = readback;
+    undersized.element_count = 3U;
+    if (cna_graphics_device_get_backbuffer_data_window(
+            graphics_device, &malformed, pixels, 8U) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_backbuffer_data_window(graphics_device, 0, pixels, 8U) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_backbuffer_data_window(
+            graphics_device, &readback, pixels, 5U) != CNA_RESULT_BUFFER_TOO_SMALL ||
+        cna_graphics_device_get_backbuffer_data_window(graphics_device, &readback, 0, 8U) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_backbuffer_data_window(
+            graphics_device, &undersized, pixels, 8U) != CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+    for (size_t index = 0U; index < sizeof(pixels); ++index) {
+        if (((const unsigned char*)pixels)[index] != 0x5AU) {
+            return 0;
+        }
+    }
+
+    const CNA_Result windowed = cna_graphics_device_get_backbuffer_data_window(
+        graphics_device, &readback, pixels, 8U);
+    if (windowed == CNA_RESULT_NOT_SUPPORTED) {
+        /* A refusing backend must leave the destination untouched. */
+        for (size_t index = 0U; index < sizeof(pixels); ++index) {
+            if (((const unsigned char*)pixels)[index] != 0x5AU) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    if (windowed != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Only the requested window is written. */
+    if (pixels[0].r != 0x5AU || pixels[1].a != 0x5AU || pixels[6].g != 0x5AU ||
+        pixels[7].b != 0x5AU) {
+        return 0;
+    }
+
+    CNA_BackBufferReadback full = readback;
+    full.has_source_rectangle = CNA_FALSE;
+    full.start_index = 0U;
+    full.element_count = 1U;
+    /* A full-buffer request that cannot hold the whole back buffer is a capacity error, decided
+       before any native read. */
+    return cna_graphics_device_get_backbuffer_data_window(
+               graphics_device, &full, pixels, 8U) == CNA_RESULT_BUFFER_TOO_SMALL;
+}
+
+static int validate_buffer_binding(CNA_Handle graphics_device)
+{
+    CNA_VertexBufferHandle vertex_buffer = CNA_INVALID_HANDLE;
+    CNA_IndexBufferHandle index_buffer = CNA_INVALID_HANDLE;
+    uint64_t count = UINT64_MAX;
+    CNA_VertexBufferHandle bound_vertex = UINT64_C(7);
+    CNA_IndexBufferHandle bound_index = UINT64_C(7);
+
+    /* Every route answers before any buffer exists. */
+    if (cna_graphics_device_get_vertex_buffer_count(graphics_device, &count) !=
+            CNA_RESULT_SUCCESS ||
+        count != 0U ||
+        cna_graphics_device_get_vertex_buffer(graphics_device, &bound_vertex) !=
+            CNA_RESULT_SUCCESS ||
+        bound_vertex != CNA_INVALID_HANDLE ||
+        cna_graphics_device_get_index_buffer(graphics_device, &bound_index) !=
+            CNA_RESULT_SUCCESS ||
+        bound_index != CNA_INVALID_HANDLE ||
+        cna_graphics_device_get_vertex_buffer_count(graphics_device, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_vertex_buffer_offset(
+            graphics_device, CNA_INVALID_HANDLE, -1) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_vertex_buffers(graphics_device, 0, 1U) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (!create_vertex_buffer(graphics_device, &vertex_buffer)) {
+        /* A backend without 3D support refuses buffer creation; nothing else to bind. */
+        return 1;
+    }
+    const CNA_IndexBufferCreateInfo index_info = {
+        sizeof(CNA_IndexBufferCreateInfo), UINT32_C(1), 6,
+        CNA_INDEX_ELEMENT_SIZE_SIXTEEN_BITS, CNA_BUFFER_USAGE_NONE, CNA_FALSE, {0U, 0U, 0U}};
+    if (cna_index_buffer_create(graphics_device, &index_info, &index_buffer) !=
+        CNA_RESULT_SUCCESS) {
+        cna_vertex_buffer_destroy(vertex_buffer);
+        return 0;
+    }
+
+    CNA_VertexBufferBinding bindings[2] = {
+        {CNA_INVALID_HANDLE, 0, 0}, {CNA_INVALID_HANDLE, 0, 0}};
+    int ok =
+        cna_graphics_device_set_vertex_buffer(graphics_device, vertex_buffer) ==
+            CNA_RESULT_SUCCESS &&
+        cna_graphics_device_get_vertex_buffer(graphics_device, &bound_vertex) ==
+            CNA_RESULT_SUCCESS &&
+        bound_vertex == vertex_buffer &&
+        cna_graphics_device_get_vertex_buffer_count(graphics_device, &count) ==
+            CNA_RESULT_SUCCESS &&
+        count == 1U &&
+        cna_graphics_device_copy_vertex_buffers(graphics_device, bindings, 2U, &count) ==
+            CNA_RESULT_SUCCESS &&
+        count == 1U && bindings[0].vertex_buffer == vertex_buffer &&
+        bindings[0].vertex_offset == 0 && bindings[0].instance_frequency == 0 &&
+        cna_graphics_device_copy_vertex_buffers(graphics_device, bindings, 0U, &count) ==
+            CNA_RESULT_BUFFER_TOO_SMALL &&
+        count == 1U &&
+        cna_graphics_device_set_vertex_buffer_offset(graphics_device, vertex_buffer, 1) ==
+            CNA_RESULT_SUCCESS &&
+        cna_graphics_device_copy_vertex_buffers(graphics_device, bindings, 2U, &count) ==
+            CNA_RESULT_SUCCESS &&
+        count == 1U && bindings[0].vertex_offset == 1;
+
+    if (ok) {
+        const CNA_VertexBufferBinding requested[1] = {{vertex_buffer, 2, 0}};
+        const CNA_VertexBufferBinding invalid[1] = {{vertex_buffer, -3, 0}};
+        ok = cna_graphics_device_set_vertex_buffers(graphics_device, requested, 1U) ==
+                CNA_RESULT_SUCCESS &&
+            cna_graphics_device_copy_vertex_buffers(graphics_device, bindings, 2U, &count) ==
+                CNA_RESULT_SUCCESS &&
+            count == 1U && bindings[0].vertex_offset == 2 &&
+            cna_graphics_device_set_vertex_buffers(graphics_device, invalid, 1U) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_graphics_device_copy_vertex_buffers(graphics_device, bindings, 2U, &count) ==
+                CNA_RESULT_SUCCESS &&
+            count == 1U && bindings[0].vertex_offset == 2 &&
+            cna_graphics_device_set_vertex_buffers(graphics_device, 0, 0U) ==
+                CNA_RESULT_SUCCESS &&
+            cna_graphics_device_get_vertex_buffer_count(graphics_device, &count) ==
+                CNA_RESULT_SUCCESS &&
+            count == 0U &&
+            cna_graphics_device_get_vertex_buffer(graphics_device, &bound_vertex) ==
+                CNA_RESULT_SUCCESS &&
+            bound_vertex == CNA_INVALID_HANDLE;
+    }
+
+    if (ok) {
+        ok = cna_graphics_device_set_index_buffer(graphics_device, index_buffer) ==
+                CNA_RESULT_SUCCESS &&
+            cna_graphics_device_get_index_buffer(graphics_device, &bound_index) ==
+                CNA_RESULT_SUCCESS &&
+            bound_index == index_buffer &&
+            cna_graphics_device_set_index_buffer(graphics_device, CNA_INVALID_HANDLE) ==
+                CNA_RESULT_SUCCESS &&
+            cna_graphics_device_get_index_buffer(graphics_device, &bound_index) ==
+                CNA_RESULT_SUCCESS &&
+            bound_index == CNA_INVALID_HANDLE &&
+            cna_graphics_device_set_index_buffer(graphics_device, vertex_buffer) ==
+                CNA_RESULT_INVALID_HANDLE &&
+            cna_graphics_device_set_vertex_buffer(graphics_device, index_buffer) ==
+                CNA_RESULT_INVALID_HANDLE;
+    }
+
+    if (cna_index_buffer_destroy(index_buffer) != CNA_RESULT_SUCCESS ||
+        cna_vertex_buffer_destroy(vertex_buffer) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -730,7 +1000,10 @@ static CNA_Result on_load(
         cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
         !validate_device_state(graphics_device) ||
         !validate_texture_collections(graphics_device) ||
-        !validate_device_events(graphics_device, state)) {
+        !validate_device_events(graphics_device, state) ||
+        !validate_frame_control(graphics_device, state) ||
+        !validate_backbuffer_window(graphics_device) ||
+        !validate_buffer_binding(graphics_device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stale_device = graphics_device;
@@ -761,8 +1034,12 @@ static int validate_device(void)
         &callbacks
     };
     CNA_Handle game = CNA_INVALID_HANDLE;
-    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
-        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1) {
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    if (cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1) {
+        /* Never leave a live game behind: process teardown with one still owned is undefined. */
+        (void)cna_game_destroy(game);
         return 0;
     }
 
@@ -774,11 +1051,12 @@ static int validate_device(void)
         return 0;
     }
 
-    /* Destroying the game disposes the device, which reaches the live Disposing subscription. */
+    /* Destroying the game disposes the device, which reaches the live Disposing subscription.
+       Every successful reset raised its resetting/reset pair; the device was never lost. */
     if (cna_game_destroy(game) != CNA_RESULT_SUCCESS || state.counters.disposing != 1 ||
         state.counters.observed_device != state.stale_device ||
-        state.counters.device_lost != 0 || state.counters.device_reset != 0 ||
-        state.counters.device_resetting != 0) {
+        state.counters.device_lost != 0 ||
+        state.counters.device_reset != state.counters.device_resetting) {
         return 0;
     }
 

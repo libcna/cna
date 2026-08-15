@@ -15,6 +15,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBufferBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
@@ -66,6 +69,8 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::IndexBufferResource;
+using CNA::C::Detail::VertexBufferResource;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::TextureResourceView;
 using Microsoft::Xna::Framework::Color;
@@ -75,6 +80,9 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
+using Microsoft::Xna::Framework::Graphics::VertexBufferBinding;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::TextureCollection;
@@ -342,6 +350,131 @@ struct TextureSlotState final {
                                            : device.getVertexTexturesProperty();
 }
 
+// The same identity problem as the sampler slots: the device reports bound buffers as raw native
+// pointers, so the C handle that bound one is remembered here for read-back.
+struct BoundBufferSlot final {
+    CNA_Handle handle = CNA_INVALID_HANDLE;
+    const void* nativePointer = nullptr;
+};
+
+struct DeviceBindingState final {
+    std::mutex mutex;
+    std::vector<BoundBufferSlot> vertexBindings;
+    CNA_Handle indexBuffer = CNA_INVALID_HANDLE;
+    const void* indexNativePointer = nullptr;
+};
+
+[[nodiscard]] DeviceBindingState& GetDeviceBindingState()
+{
+    static DeviceBindingState state;
+    return state;
+}
+
+[[nodiscard]] CNA_Result GetVertexBuffer(
+    const CNA_VertexBufferHandle handle,
+    std::shared_ptr<VertexBufferResource>* const outBuffer)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::VertexBuffer, outBuffer);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The VertexBuffer handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result GetIndexBuffer(
+    const CNA_IndexBufferHandle handle,
+    std::shared_ptr<IndexBufferResource>* const outBuffer)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::IndexBuffer, outBuffer);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The IndexBuffer handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_VertexBufferHandle RecordedVertexBufferHandle(
+    const VertexBuffer* const nativeBuffer)
+{
+    if (nativeBuffer == nullptr) {
+        return CNA_INVALID_HANDLE;
+    }
+    CNA_Handle candidate = CNA_INVALID_HANDLE;
+    {
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        for (const BoundBufferSlot& slot : state.vertexBindings) {
+            if (slot.nativePointer == nativeBuffer) {
+                candidate = slot.handle;
+                break;
+            }
+        }
+    }
+    if (candidate == CNA_INVALID_HANDLE) {
+        return CNA_INVALID_HANDLE;
+    }
+    std::shared_ptr<VertexBufferResource> buffer;
+    if (GetRuntimeHandles().Get(candidate, ObjectKind::VertexBuffer, &buffer) ==
+            CNA_RESULT_SUCCESS &&
+        buffer->value.get() == nativeBuffer) {
+        return candidate;
+    }
+    return CNA_INVALID_HANDLE;
+}
+
+[[nodiscard]] CNA_IndexBufferHandle RecordedIndexBufferHandle(
+    const IndexBuffer* const nativeBuffer)
+{
+    if (nativeBuffer == nullptr) {
+        return CNA_INVALID_HANDLE;
+    }
+    CNA_Handle candidate = CNA_INVALID_HANDLE;
+    {
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        if (state.indexNativePointer == nativeBuffer) {
+            candidate = state.indexBuffer;
+        }
+    }
+    if (candidate == CNA_INVALID_HANDLE) {
+        return CNA_INVALID_HANDLE;
+    }
+    std::shared_ptr<IndexBufferResource> buffer;
+    if (GetRuntimeHandles().Get(candidate, ObjectKind::IndexBuffer, &buffer) ==
+            CNA_RESULT_SUCCESS &&
+        buffer->value.get() == nativeBuffer) {
+        return candidate;
+    }
+    return CNA_INVALID_HANDLE;
+}
+
+[[nodiscard]] uint64_t RequestedRegionPixels(
+    GraphicsDevice& device,
+    const CNA_BackBufferReadback& readback)
+{
+    if (readback.has_source_rectangle == CNA_TRUE) {
+        if (readback.source_rectangle.width <= 0 || readback.source_rectangle.height <= 0) {
+            return 0U;
+        }
+        return static_cast<uint64_t>(readback.source_rectangle.width) *
+            static_cast<uint64_t>(readback.source_rectangle.height);
+    }
+    const auto& parameters = device.getPresentationParametersProperty();
+    const int32_t width = parameters.getBackBufferWidthProperty();
+    const int32_t height = parameters.getBackBufferHeightProperty();
+    if (width <= 0 || height <= 0) {
+        return 0U;
+    }
+    return static_cast<uint64_t>(width) * static_cast<uint64_t>(height);
+}
+
 struct LiveRegistrations final {
     std::mutex mutex;
     std::vector<std::weak_ptr<DeviceRegistration>> entries;
@@ -424,12 +557,20 @@ void ResetGraphicsDeviceAdapterState() noexcept
         live.entries.clear();
     }
 
-    TextureSlotState& slots = GetTextureSlotState();
-    std::lock_guard lock(slots.mutex);
-    for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
-        slots.pixel[slot] = BoundTextureSlot{};
-        slots.vertex[slot] = BoundTextureSlot{};
+    {
+        TextureSlotState& slots = GetTextureSlotState();
+        std::lock_guard lock(slots.mutex);
+        for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
+            slots.pixel[slot] = BoundTextureSlot{};
+            slots.vertex[slot] = BoundTextureSlot{};
+        }
     }
+
+    DeviceBindingState& bindings = GetDeviceBindingState();
+    std::lock_guard lock(bindings.mutex);
+    bindings.vertexBindings.clear();
+    bindings.indexBuffer = CNA_INVALID_HANDLE;
+    bindings.indexNativePointer = nullptr;
 }
 
 } // namespace CNA::C::Detail
@@ -1041,5 +1182,363 @@ CNA_Result cna_graphics_device_unbind_texture(
             }
         }
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_clear_rgba(
+    const CNA_Handle graphicsDeviceHandle,
+    const float r,
+    const float g,
+    const float b,
+    const float a)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(r) || !std::isfinite(g) || !std::isfinite(b) || !std::isfinite(a)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "A clear color channel is not finite.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.Clear(r, g, b, a);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_clear_color_depth(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Color color,
+    const float depth)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(depth)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The clear depth is not finite.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.Clear(Color(color.r, color.g, color.b, color.a), depth);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_clear_options(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ClearOptions options,
+    const CNA_Color color,
+    const float depth,
+    const int32_t stencil)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        constexpr CNA_ClearOptions ValidOptions =
+            CNA_CLEAR_OPTION_TARGET | CNA_CLEAR_OPTION_DEPTH_BUFFER | CNA_CLEAR_OPTION_STENCIL;
+        if ((options & ~ValidOptions) != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The clear options contain an unknown bit.");
+        }
+        if (!std::isfinite(depth)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The clear depth is not finite.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.Clear(
+                static_cast<NativeGraphics::ClearOptions>(options),
+                Color(color.r, color.g, color.b, color.a),
+                depth,
+                stencil);
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_present(const CNA_Handle graphicsDeviceHandle)
+{
+    return DeviceCommand(graphicsDeviceHandle, [](GraphicsDevice& device) {
+        device.Present();
+    });
+}
+
+CNA_Result cna_graphics_device_get_backbuffer_data_window(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_BackBufferReadback* const readback,
+    CNA_Color* const destination,
+    const uint64_t capacity)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (readback == nullptr || readback->struct_size < sizeof(CNA_BackBufferReadback) ||
+            readback->struct_version != StructureVersion ||
+            (readback->has_source_rectangle != CNA_TRUE &&
+             readback->has_source_rectangle != CNA_FALSE) ||
+            readback->reserved[0] != 0U || readback->reserved[1] != 0U ||
+            readback->reserved[2] != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The back-buffer readback structure is invalid.");
+        }
+        if (destination == nullptr && capacity != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The back-buffer destination is invalid.");
+        }
+        if (readback->start_index > static_cast<uint64_t>(INT32_MAX) ||
+            readback->element_count > static_cast<uint64_t>(INT32_MAX)) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The back-buffer readback window exceeds the native element range.");
+        }
+        if (readback->start_index + readback->element_count > capacity) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the requested back-buffer window.");
+        }
+
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        // The canonical routine reports an undersized element count as a generic native failure.
+        // Deciding it here keeps the C contract deterministic: a window smaller than its region is
+        // a capacity error, reported before any native read begins.
+        const uint64_t regionPixels = RequestedRegionPixels(*graphicsDevice->value, *readback);
+        if (readback->element_count < regionPixels) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The requested element count is smaller than the selected back-buffer region.");
+        }
+
+        // Read into scratch storage first so a native failure cannot leave the caller's array
+        // partially overwritten.
+        std::vector<Color> scratch;
+        scratch.reserve(static_cast<std::size_t>(readback->element_count));
+        for (uint64_t index = 0U; index < readback->element_count; ++index) {
+            scratch.emplace_back(UINT8_C(0), UINT8_C(0), UINT8_C(0), UINT8_C(0));
+        }
+        const Rectangle sourceRectangle = ToNative(readback->source_rectangle);
+        graphicsDevice->value->GetBackBufferData(
+            readback->has_source_rectangle == CNA_TRUE ? &sourceRectangle : nullptr,
+            scratch.empty() ? nullptr : scratch.data(),
+            0,
+            static_cast<int>(readback->element_count));
+        for (std::size_t index = 0U; index < scratch.size(); ++index) {
+            const Color& pixel = scratch[index];
+            destination[readback->start_index + index] = CNA_Color{
+                pixel.getRProperty(),
+                pixel.getGProperty(),
+                pixel.getBProperty(),
+                pixel.getAProperty()};
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffer(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_VertexBufferHandle vertexBuffer)
+{
+    return cna_graphics_device_set_vertex_buffer_offset(graphicsDeviceHandle, vertexBuffer, 0);
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffer_offset(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const int32_t vertexOffset)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (vertexOffset < 0) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The vertex offset must not be negative.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<VertexBufferResource> buffer;
+        if (vertexBufferHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetVertexBuffer(vertexBufferHandle, &buffer);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+
+        VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+        graphicsDevice->value->SetVertexBuffer(native, vertexOffset);
+
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        state.vertexBindings.clear();
+        if (native != nullptr) {
+            state.vertexBindings.push_back(BoundBufferSlot{vertexBufferHandle, native});
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_vertex_buffers(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_VertexBufferBinding* const bindings,
+    const uint64_t bindingCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (bindings == nullptr && bindingCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The vertex-buffer binding array is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        // Everything is validated and resolved before a single native binding is applied.
+        std::vector<VertexBufferBinding> nativeBindings;
+        std::vector<BoundBufferSlot> recorded;
+        nativeBindings.reserve(static_cast<std::size_t>(bindingCount));
+        recorded.reserve(static_cast<std::size_t>(bindingCount));
+        for (uint64_t index = 0U; index < bindingCount; ++index) {
+            const CNA_VertexBufferBinding& binding = bindings[index];
+            if (binding.vertex_offset < 0 || binding.instance_frequency < 0) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "A vertex-buffer binding offset or frequency is negative.");
+            }
+            std::shared_ptr<VertexBufferResource> buffer;
+            if (binding.vertex_buffer != CNA_INVALID_HANDLE) {
+                if (const CNA_Result result = GetVertexBuffer(binding.vertex_buffer, &buffer);
+                    result != CNA_RESULT_SUCCESS) {
+                    return result;
+                }
+            }
+            VertexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+            nativeBindings.push_back(
+                native == nullptr
+                    ? VertexBufferBinding()
+                    : VertexBufferBinding(
+                          native, binding.vertex_offset, binding.instance_frequency));
+            recorded.push_back(BoundBufferSlot{binding.vertex_buffer, native});
+        }
+
+        graphicsDevice->value->SetVertexBuffers(nativeBindings);
+
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        state.vertexBindings = std::move(recorded);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_vertex_buffer_count(
+    const CNA_Handle graphicsDeviceHandle,
+    uint64_t* const outCount)
+{
+    return DeviceQuery(graphicsDeviceHandle, outCount, [](GraphicsDevice& device) {
+        return static_cast<uint64_t>(device.GetVertexBuffers().size());
+    });
+}
+
+CNA_Result cna_graphics_device_copy_vertex_buffers(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_VertexBufferBinding* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The vertex-buffer binding destination or count output is invalid.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const std::vector<VertexBufferBinding> nativeBindings =
+            graphicsDevice->value->GetVertexBuffers();
+        *outCount = static_cast<uint64_t>(nativeBindings.size());
+        if (capacity < nativeBindings.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold every active vertex-buffer binding.");
+        }
+        for (std::size_t index = 0U; index < nativeBindings.size(); ++index) {
+            const VertexBufferBinding& binding = nativeBindings[index];
+            destination[index] = CNA_VertexBufferBinding{
+                RecordedVertexBufferHandle(binding.getVertexBufferProperty()),
+                binding.getVertexOffsetProperty(),
+                binding.getInstanceFrequencyProperty()};
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_vertex_buffer(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_VertexBufferHandle* const outVertexBuffer)
+{
+    return DeviceQuery(graphicsDeviceHandle, outVertexBuffer, [](GraphicsDevice& device) {
+        return RecordedVertexBufferHandle(device.GetVertexBuffer());
+    });
+}
+
+CNA_Result cna_graphics_device_set_index_buffer(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_IndexBufferHandle indexBufferHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<IndexBufferResource> buffer;
+        if (indexBufferHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetIndexBuffer(indexBufferHandle, &buffer);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+
+        const IndexBuffer* const native = buffer == nullptr ? nullptr : buffer->value.get();
+        graphicsDevice->value->SetIndexBuffer(native);
+
+        DeviceBindingState& state = GetDeviceBindingState();
+        std::lock_guard lock(state.mutex);
+        state.indexBuffer = native == nullptr ? CNA_INVALID_HANDLE : indexBufferHandle;
+        state.indexNativePointer = native;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_index_buffer(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_IndexBufferHandle* const outIndexBuffer)
+{
+    return DeviceQuery(graphicsDeviceHandle, outIndexBuffer, [](GraphicsDevice& device) {
+        return RecordedIndexBufferHandle(device.GetIndexBuffer());
     });
 }
