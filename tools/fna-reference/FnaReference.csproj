@@ -69,6 +69,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="EffectReflectionReference.cs" />
+    <Compile Include="EffectStateReference.cs" />
     <Compile Include="JsonWriter.cs" />
     <Compile Include="NonRenderingApiReference.cs" />
     <Compile Include="PackedVectorReference.cs" />

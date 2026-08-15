@@ -123,3 +123,33 @@ MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
 
 `Fna3dCompiledEffectTest.StockFixtureReflectionMatchesTheFnaOracle` reads that checked-in JSON and
 compares CNA's reflection of the same six binaries against it, subtree by subtree.
+
+## `--effect-states`: what FNA installs when a pass is applied (plan_fx.md FX-005)
+
+`FnaReference.exe --effect-states <directory-of-fxb> [output.json]` is the state half of the same
+oracle. Where `--effects` compares the object graph CNA *reads*, this compares what CNA *does* with
+it.
+
+FNA's `Effect.INTERNAL_applyEffect` folds the state changes MojoShader reports through
+`PipelineCache` and assigns the results to the public `GraphicsDevice.BlendState`,
+`DepthStencilState`, `RasterizerState` and `SamplerStates` properties. CNA's
+`Effect::ApplyCompiledPassState` does the same, so those properties compare directly.
+
+This mode needs a real managed `GraphicsDevice`, because that is where `PipelineCache` and the
+property assignments live. It builds one straight from an SDL window rather than through FNA's
+`Game` stack, which keeps the tool free of windowing and content plumbing:
+
+```bash
+SDL_VIDEODRIVER=offscreen \
+LD_LIBRARY_PATH=/tmp/fna3d-shared:$SDLROOT/SDL/build \
+MONO_PATH=/rv/data/library/github.com/FNA-XNA/FNA/bin/Debug \
+  mono tools/fna-reference/bin/Debug/FnaReference.exe --effect-states \
+    modules/renderers/fna3d/effects \
+    tests/fixtures/compiled-effects/fna-effect-states.json
+```
+
+Every pass is applied from the same starting device state (`BlendState.Opaque`,
+`DepthStencilState.Default`, `RasterizerState.CullCounterClockwise`, `SamplerState.LinearWrap` on
+the first four slots), so a pass that assigns nothing is recorded as leaving that selection alone.
+"Unchanged" is as much a result as "replaced", and
+`Fna3dEffectStateOracleTest.EveryPassInstallsTheStateFnaInstalls` checks both.

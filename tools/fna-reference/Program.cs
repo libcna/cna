@@ -35,6 +35,23 @@ namespace CNA.FnaReference
                 return EffectReflectionReference.Run(args[1], effectsOutput);
             }
 
+            // plan_fx.md FX-005: the state half of the oracle -- what FNA itself installs on the
+            // public GraphicsDevice properties when a compiled pass is applied.
+            if (args.Length > 0 && args[0] == "--effect-states")
+            {
+                if (args.Length < 2)
+                {
+                    Console.Error.WriteLine(
+                        "usage: FnaReference.exe --effect-states <directory-of-fxb> [output.json]");
+                    return 2;
+                }
+                string statesOutput = args.Length > 2
+                    ? args[2]
+                    : Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                                   "effect-states.json");
+                return EffectStateReference.Run(args[1], statesOutput);
+            }
+
             string outputPath = args.Length > 0
                 ? args[0]
                 : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "reference-values.json");
