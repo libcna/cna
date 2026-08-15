@@ -4,6 +4,7 @@
 #define CNA_C_GRAPHICS_DEVICE_H
 
 #include "CNA/C/display.h"
+#include "CNA/C/graphics_state.h"
 #include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
@@ -575,6 +576,83 @@ CNA_C_API CNA_Result cna_graphics_device_subscribe_resource_destroyed(
  */
 CNA_C_API CNA_Result cna_graphics_device_unsubscribe(
     CNA_GraphicsDeviceEventRegistrationHandle registration);
+
+/** @brief Number of texture sampler slots in each device texture collection. */
+#define CNA_TEXTURE_COLLECTION_MAX_TEXTURES UINT32_C(16)
+
+/**
+ * @brief Describes one texture sampler slot of a device texture collection.
+ */
+typedef struct CNA_TextureSlotInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when a native texture currently occupies the slot. */
+    CNA_Bool bound;
+
+    /** @brief Reserved bytes; always zero. */
+    uint8_t reserved[7];
+
+    /**
+     * @brief Handle of the texture bound through this API, or `CNA_INVALID_HANDLE`.
+     *
+     * A slot filled by canonical CNA code — a SpriteBatch flush, for example — reports
+     * @ref bound as `CNA_TRUE` with an invalid handle, because no C resource owns that texture.
+     */
+    CNA_Handle texture;
+} CNA_TextureSlotInfo;
+
+/**
+ * @brief Reads one texture sampler slot of a device texture collection.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param stage `CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`.
+ * @param slot Slot index below @ref CNA_TEXTURE_COLLECTION_MAX_TEXTURES.
+ * @param out_info Caller-provided versioned structure to receive the slot description.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown stage, an
+ * out-of-range slot or an invalid structure, or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_texture(
+    CNA_Handle graphics_device,
+    CNA_ShaderStage stage,
+    uint32_t slot,
+    CNA_TextureSlotInfo* out_info);
+
+/**
+ * @brief Binds a texture to one sampler slot of a device texture collection.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param stage `CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`.
+ * @param slot Slot index below @ref CNA_TEXTURE_COLLECTION_MAX_TEXTURES.
+ * @param texture Owned Texture2D, Texture3D, TextureCube or render-target handle, or
+ * `CNA_INVALID_HANDLE` to leave the slot empty.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the texture is disposed or is
+ * currently bound as a render target, `CNA_RESULT_INVALID_ARGUMENT` for an unknown stage or an
+ * out-of-range slot, or a documented handle/thread/native failure.
+ *
+ * Binding stores no ownership: a texture destroyed through its own C route unbinds itself from
+ * every sampler slot, exactly as canonical disposal does.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_texture(
+    CNA_Handle graphics_device,
+    CNA_ShaderStage stage,
+    uint32_t slot,
+    CNA_Handle texture);
+
+/**
+ * @brief Clears every sampler slot of both device collections that holds the given texture.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param texture Owned texture handle to unbind.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure. Unbinding a
+ * texture that occupies no slot succeeds and changes nothing.
+ */
+CNA_C_API CNA_Result cna_graphics_device_unbind_texture(
+    CNA_Handle graphics_device,
+    CNA_Handle texture);
 
 #ifdef __cplusplus
 }

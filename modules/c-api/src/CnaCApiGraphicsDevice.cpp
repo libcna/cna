@@ -2,6 +2,7 @@
 
 #include "CNA/C/graphics_device.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
@@ -14,6 +15,8 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/EventArgs.hpp"
 #include "System/Object.hpp"
@@ -53,14 +56,18 @@ static_assert(
         CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_THROW &&
     NativeOrdinal(CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub) ==
         CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB);
+static_assert(
+    NativeGraphics::TextureCollection::MaxTextures == CNA_TEXTURE_COLLECTION_MAX_TEXTURES);
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetOwnedTexture;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::TextureResourceView;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
@@ -69,6 +76,8 @@ using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
+using Microsoft::Xna::Framework::Graphics::Texture;
+using Microsoft::Xna::Framework::Graphics::TextureCollection;
 using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::Viewport;
 
@@ -273,6 +282,66 @@ private:
     Token token_;
 };
 
+// The canonical collections store raw `Texture*` slots, so a C reader cannot recover the owning C
+// handle from them. These records remember what the C API itself bound; the native pointer is kept
+// only for identity comparison and is never dereferenced.
+struct BoundTextureSlot final {
+    CNA_Handle handle = CNA_INVALID_HANDLE;
+    const Microsoft::Xna::Framework::Graphics::Texture* nativePointer = nullptr;
+};
+
+struct TextureSlotState final {
+    std::mutex mutex;
+    BoundTextureSlot pixel[CNA_TEXTURE_COLLECTION_MAX_TEXTURES];
+    BoundTextureSlot vertex[CNA_TEXTURE_COLLECTION_MAX_TEXTURES];
+};
+
+[[nodiscard]] TextureSlotState& GetTextureSlotState()
+{
+    static TextureSlotState state;
+    return state;
+}
+
+[[nodiscard]] bool IsSupportedShaderStage(const CNA_ShaderStage stage) noexcept
+{
+    return stage == CNA_SHADER_STAGE_PIXEL || stage == CNA_SHADER_STAGE_VERTEX;
+}
+
+[[nodiscard]] BoundTextureSlot* RecordedSlot(
+    const CNA_ShaderStage stage,
+    const uint32_t slot) noexcept
+{
+    TextureSlotState& state = GetTextureSlotState();
+    return stage == CNA_SHADER_STAGE_PIXEL ? &state.pixel[slot] : &state.vertex[slot];
+}
+
+[[nodiscard]] CNA_Result ValidateTextureSlot(
+    const CNA_ShaderStage stage,
+    const uint32_t slot) noexcept
+{
+    if (!IsSupportedShaderStage(stage)) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The shader stage is not recognized.");
+    }
+    if (slot >= CNA_TEXTURE_COLLECTION_MAX_TEXTURES) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The texture sampler slot is out of range.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] TextureCollection& SelectCollection(
+    GraphicsDevice& device,
+    const CNA_ShaderStage stage)
+{
+    return stage == CNA_SHADER_STAGE_PIXEL ? device.getTexturesProperty()
+                                           : device.getVertexTexturesProperty();
+}
+
 struct LiveRegistrations final {
     std::mutex mutex;
     std::vector<std::weak_ptr<DeviceRegistration>> entries;
@@ -342,16 +411,25 @@ template<typename TCallback>
 
 namespace CNA::C::Detail {
 
-void InvalidateGraphicsDeviceSubscriptions() noexcept
+void ResetGraphicsDeviceAdapterState() noexcept
 {
-    LiveRegistrations& live = GetLiveRegistrations();
-    std::lock_guard lock(live.mutex);
-    for (const std::weak_ptr<DeviceRegistration>& entry : live.entries) {
-        if (const std::shared_ptr<DeviceRegistration> registration = entry.lock()) {
-            registration->Invalidate();
+    {
+        LiveRegistrations& live = GetLiveRegistrations();
+        std::lock_guard lock(live.mutex);
+        for (const std::weak_ptr<DeviceRegistration>& entry : live.entries) {
+            if (const std::shared_ptr<DeviceRegistration> registration = entry.lock()) {
+                registration->Invalidate();
+            }
         }
+        live.entries.clear();
     }
-    live.entries.clear();
+
+    TextureSlotState& slots = GetTextureSlotState();
+    std::lock_guard lock(slots.mutex);
+    for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
+        slots.pixel[slot] = BoundTextureSlot{};
+        slots.vertex[slot] = BoundTextureSlot{};
+    }
 }
 
 } // namespace CNA::C::Detail
@@ -831,6 +909,136 @@ CNA_Result cna_graphics_device_unsubscribe(
                 releaseResult,
                 ErrorCategoryForResult(releaseResult),
                 "The graphics-device event-registration handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_get_texture(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ShaderStage stage,
+    const uint32_t slot,
+    CNA_TextureSlotInfo* const outInfo)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInfo == nullptr || outInfo->struct_size < sizeof(CNA_TextureSlotInfo) ||
+            outInfo->struct_version != StructureVersion) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The texture-slot output structure is invalid.");
+        }
+        if (const CNA_Result result = ValidateTextureSlot(stage, slot);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
+        const Texture* const nativeTexture = collection[static_cast<int>(slot)];
+        outInfo->struct_size = static_cast<uint32_t>(sizeof(CNA_TextureSlotInfo));
+        outInfo->struct_version = StructureVersion;
+        outInfo->bound = nativeTexture != nullptr ? CNA_TRUE : CNA_FALSE;
+        std::memset(outInfo->reserved, 0, sizeof(outInfo->reserved));
+        outInfo->texture = CNA_INVALID_HANDLE;
+        if (nativeTexture == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+
+        CNA_Handle recordedHandle = CNA_INVALID_HANDLE;
+        {
+            TextureSlotState& slots = GetTextureSlotState();
+            std::lock_guard lock(slots.mutex);
+            const BoundTextureSlot& recorded = *RecordedSlot(stage, slot);
+            if (recorded.nativePointer == nativeTexture) {
+                recordedHandle = recorded.handle;
+            }
+        }
+        if (recordedHandle == CNA_INVALID_HANDLE) {
+            return CNA_RESULT_SUCCESS;
+        }
+
+        // The record only names a candidate; the handle must still resolve to that exact object.
+        TextureResourceView texture;
+        if (GetOwnedTexture(recordedHandle, &texture) == CNA_RESULT_SUCCESS &&
+            texture.value.get() == nativeTexture) {
+            outInfo->texture = recordedHandle;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_set_texture(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ShaderStage stage,
+    const uint32_t slot,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateTextureSlot(stage, slot);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        TextureResourceView texture;
+        if (textureHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+        }
+
+        TextureCollection& collection = SelectCollection(*graphicsDevice->value, stage);
+        collection(static_cast<int>(slot), texture.value.get());
+
+        TextureSlotState& slots = GetTextureSlotState();
+        std::lock_guard lock(slots.mutex);
+        *RecordedSlot(stage, slot) = BoundTextureSlot{textureHandle, texture.value.get()};
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_graphics_device_unbind_texture(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextureResourceView texture;
+        if (const CNA_Result result = GetOwnedTexture(textureHandle, &texture);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const Texture* const nativeTexture = texture.value.get();
+        graphicsDevice->value->getTexturesProperty().RemoveDisposedTexture(nativeTexture);
+        graphicsDevice->value->getVertexTexturesProperty().RemoveDisposedTexture(nativeTexture);
+
+        TextureSlotState& slots = GetTextureSlotState();
+        std::lock_guard lock(slots.mutex);
+        for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
+            if (slots.pixel[slot].nativePointer == nativeTexture) {
+                slots.pixel[slot] = BoundTextureSlot{};
+            }
+            if (slots.vertex[slot].nativePointer == nativeTexture) {
+                slots.vertex[slot] = BoundTextureSlot{};
+            }
         }
         return CNA_RESULT_SUCCESS;
     });

@@ -658,3 +658,10 @@ _Static_assert(sizeof(CNA_ResourceDestroyedEventInfo) == 32U &&
                    offsetof(CNA_ResourceDestroyedEventInfo, has_tag) == 8U &&
                    offsetof(CNA_ResourceDestroyedEventInfo, name) == 16U,
                "CNA_ResourceDestroyedEventInfo layout must remain stable");
+_Static_assert(CNA_TEXTURE_COLLECTION_MAX_TEXTURES == UINT32_C(16) &&
+                   sizeof(CNA_TextureSlotInfo) == 24U &&
+                   _Alignof(CNA_TextureSlotInfo) == 8U &&
+                   offsetof(CNA_TextureSlotInfo, bound) == 8U &&
+                   offsetof(CNA_TextureSlotInfo, reserved) == 9U &&
+                   offsetof(CNA_TextureSlotInfo, texture) == 16U,
+               "CNA_TextureSlotInfo layout must remain stable");

@@ -578,6 +578,145 @@ static int validate_device_events(CNA_Handle graphics_device, DeviceState* state
     return 1;
 }
 
+static int read_slot(
+    CNA_Handle graphics_device,
+    CNA_ShaderStage stage,
+    uint32_t slot,
+    CNA_TextureSlotInfo* out_info)
+{
+    memset(out_info, 0, sizeof(*out_info));
+    out_info->struct_size = sizeof(CNA_TextureSlotInfo);
+    out_info->struct_version = UINT32_C(1);
+    return cna_graphics_device_get_texture(graphics_device, stage, slot, out_info) ==
+        CNA_RESULT_SUCCESS;
+}
+
+static int validate_texture_collections(CNA_Handle graphics_device)
+{
+    CNA_TextureSlotInfo info;
+    for (uint32_t slot = 0U; slot < CNA_TEXTURE_COLLECTION_MAX_TEXTURES; ++slot) {
+        if (!read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, slot, &info) ||
+            info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE ||
+            !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, slot, &info) ||
+            info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE) {
+            return 0;
+        }
+    }
+
+    /* Unknown stages, out-of-range slots and malformed structures are rejected. */
+    CNA_TextureSlotInfo malformed = {0U, 0U, CNA_FALSE, {0U, 0U, 0U, 0U, 0U, 0U, 0U},
+                                     CNA_INVALID_HANDLE};
+    if (read_slot(graphics_device, UINT32_C(2), 0U, &info) ||
+        read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL,
+                  CNA_TEXTURE_COLLECTION_MAX_TEXTURES, &info) ||
+        cna_graphics_device_get_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 0U, &malformed) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 0U, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_texture(
+            graphics_device, UINT32_C(7), 0U, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_VERTEX, CNA_TEXTURE_COLLECTION_MAX_TEXTURES,
+            CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    const CNA_Texture2DCreateInfo create_info = {
+        sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 2U, 2U, CNA_FALSE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_COLOR
+    };
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    if (cna_texture2d_create(graphics_device, &create_info, &texture) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A bound slot reports the owning C handle on both stages. */
+    if (cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, texture) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, texture) != CNA_RESULT_SUCCESS ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, &info) ||
+        info.bound != CNA_TRUE || info.texture != texture ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, &info) ||
+        info.bound != CNA_TRUE || info.texture != texture ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 4U, &info) ||
+        info.bound != CNA_FALSE) {
+        cna_texture2d_destroy(texture);
+        return 0;
+    }
+
+    /* An invalid handle empties the slot; unbinding clears every slot at once. */
+    if (cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_SUCCESS ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 3U, &info) ||
+        info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE ||
+        cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 5U, texture) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unbind_texture(graphics_device, texture) != CNA_RESULT_SUCCESS ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 5U, &info) ||
+        info.bound != CNA_FALSE ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_VERTEX, 0U, &info) ||
+        info.bound != CNA_FALSE ||
+        cna_graphics_device_unbind_texture(graphics_device, texture) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unbind_texture(graphics_device, CNA_INVALID_HANDLE) !=
+            CNA_RESULT_INVALID_HANDLE) {
+        cna_texture2d_destroy(texture);
+        return 0;
+    }
+
+    /* Destroying a bound texture unbinds it, matching canonical disposal. */
+    if (cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 1U, texture) != CNA_RESULT_SUCCESS ||
+        cna_texture2d_destroy(texture) != CNA_RESULT_SUCCESS ||
+        !read_slot(graphics_device, CNA_SHADER_STAGE_PIXEL, 1U, &info) ||
+        info.bound != CNA_FALSE || info.texture != CNA_INVALID_HANDLE ||
+        cna_graphics_device_set_texture(
+            graphics_device, CNA_SHADER_STAGE_PIXEL, 1U, texture) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* A texture bound as a render target cannot also be sampled. */
+    const CNA_RenderTarget2DCreateInfo target_info = {
+        sizeof(CNA_RenderTarget2DCreateInfo), UINT32_C(1), 8U, 8U, CNA_FALSE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_COLOR, CNA_DEPTH_FORMAT_NONE, 0,
+        CNA_RENDER_TARGET_USAGE_DISCARD_CONTENTS, 0U
+    };
+    CNA_Handle render_target = CNA_INVALID_HANDLE;
+    const CNA_Result created =
+        cna_render_target2d_create(graphics_device, &target_info, &render_target);
+    if (created == CNA_RESULT_SUCCESS) {
+        const CNA_Result bound =
+            cna_graphics_device_set_render_target2d(graphics_device, render_target);
+        if (bound == CNA_RESULT_SUCCESS) {
+            if (cna_graphics_device_set_texture(
+                    graphics_device, CNA_SHADER_STAGE_PIXEL, 2U, render_target) !=
+                    CNA_RESULT_INVALID_STATE ||
+                cna_graphics_device_set_render_target2d(
+                    graphics_device, CNA_INVALID_HANDLE) != CNA_RESULT_SUCCESS ||
+                cna_graphics_device_set_texture(
+                    graphics_device, CNA_SHADER_STAGE_PIXEL, 2U, render_target) !=
+                    CNA_RESULT_SUCCESS ||
+                cna_graphics_device_unbind_texture(
+                    graphics_device, render_target) != CNA_RESULT_SUCCESS) {
+                cna_render_target_destroy(render_target);
+                return 0;
+            }
+        } else if (bound != CNA_RESULT_NOT_SUPPORTED) {
+            cna_render_target_destroy(render_target);
+            return 0;
+        }
+        if (cna_render_target_destroy(render_target) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    } else if (created != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    return 1;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -590,6 +729,7 @@ static CNA_Result on_load(
     if (game_time != 0 ||
         cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
         !validate_device_state(graphics_device) ||
+        !validate_texture_collections(graphics_device) ||
         !validate_device_events(graphics_device, state)) {
         return CNA_RESULT_INVALID_STATE;
     }

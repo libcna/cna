@@ -164,10 +164,43 @@ adapter test rather than by a HEADLESS or SDL_RENDERER device.
 events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module and
 remain owned by CBIND-037.
 
+## Texture sampler collections
+
+A device owns two `TextureCollection` objects — one for pixel-shader samplers and one for
+vertex-shader samplers. Both hold raw `Texture*` slots, which cannot cross the ABI, so the C API
+addresses them by stage and slot instead of handing out a collection object:
+
+| C operation | Canonical member |
+|---|---|
+| `cna_graphics_device_get_texture` | `Textures`/`VertexTextures` `operator[]` |
+| `cna_graphics_device_set_texture` | `Textures`/`VertexTextures` `operator()` |
+| `cna_graphics_device_unbind_texture` | `RemoveDisposedTexture` |
+
+`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` is 16 and is asserted against the canonical
+`TextureCollection::MaxTextures` at compile time. Any slot at or above it, and any stage other than
+`CNA_SHADER_STAGE_PIXEL` or `CNA_SHADER_STAGE_VERTEX`, is `CNA_RESULT_INVALID_ARGUMENT`.
+
+A read fills a versioned `CNA_TextureSlotInfo`. Its two fields answer two different questions:
+`bound` says whether the native slot holds a texture at all, and `texture` names the C handle that
+bound it. They diverge when canonical CNA code fills the slot itself — a SpriteBatch flush, for
+instance — in which case `bound` is `CNA_TRUE` and `texture` is `CNA_INVALID_HANDLE`, because no C
+resource owns that texture and inventing a handle for it would be a lie.
+
+Binding takes any owned texture handle: Texture2D, Texture3D, TextureCube or either render-target
+type. Passing `CNA_INVALID_HANDLE` empties the slot. Binding stores no ownership and no reference
+count: destroying a texture through its own C route unbinds it from every slot first, exactly as
+canonical disposal does, so a destroyed texture can never be left addressable through a sampler.
+Binding a texture that is currently bound as a render target is `CNA_RESULT_INVALID_STATE`, the
+canonical rule.
+
+There is no standalone C texture collection. The canonical public default constructor produces a
+deviceless collection that no device ever consults, so exposing it would add an object with no
+observable effect.
+
 ## Not yet in this header
 
 Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. Texture collections, clear/present/reset, buffer binding, draw submission,
-SpriteBatch text routes, occlusion queries and the `graphics-ext` post-process family are owned by
-CBIND-035F3 through CBIND-035F7 and are not callable yet.
+`graphics_state.h`. Clear/present/reset, buffer binding, draw submission, SpriteBatch text routes, occlusion queries
+and the `graphics-ext` post-process family are owned by CBIND-035F4 through CBIND-035F7 and are not
+callable yet.

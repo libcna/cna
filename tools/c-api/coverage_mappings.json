@@ -1275,6 +1275,25 @@
       "tests": "default-message and custom-message conversion of all three types, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test",
       "status": "implemented",
       "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-texture-collections",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getTexturesProperty|getVertexTexturesProperty)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_get_texture`, `cna_graphics_device_set_texture` and `cna_graphics_device_unbind_texture`, each addressing a collection by `CNA_ShaderStage` plus slot index instead of returning a native collection reference",
+      "tests": "both stages across all 16 slots, bind/read/unbind round trips, unknown-stage and out-of-range rejection and stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F3"
+    },
+    {
+      "id": "texture-collection-slots",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/TextureCollection\\.hpp$",
+      "kinds": ["class", "constant", "constructor", "operator", "method"],
+      "mapping": "`CNA_TEXTURE_COLLECTION_MAX_TEXTURES` freezes the native slot count and the stage-addressed device operations replace the collection object: the indexing operator becomes `cna_graphics_device_get_texture` with a versioned `CNA_TextureSlotInfo`, the call operator becomes `cna_graphics_device_set_texture`, and `RemoveDisposedTexture` becomes `cna_graphics_device_unbind_texture`. No standalone collection is constructible from C, because the canonical default constructor produces a deviceless collection that no device ever consults; a slot filled by canonical CNA code reports as bound with an invalid handle rather than exposing a native `Texture*`",
+      "tests": "slot-count assertion against the native constant, initial empty slots, bind/read/unbind on both stages, self-unbinding on texture destruction, render-target rejection where the backend binds one, and invalid stage/slot/structure/handle failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F3"
     }
   ]
 }
