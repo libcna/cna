@@ -562,7 +562,34 @@
 > those handles will exist. `MediaSmoke.c` builds its fixture files through the **storage API** —
 > the only portable way a strict-C17 test can obtain a real absolute path — with one non-ASCII UTF-8
 > file name. The inventory is now 4,554 implemented, 30 partial, 1,695 planned and 136 N/A; all four
-> trees green at 55/55. **Next: CBIND-037C3**, the 105-row library-entity slice.
+> trees green at 55/55.
+>
+> CBIND-037C3 then lands the whole music catalog in one slice, 117 rows: `MediaLibrary` plus
+> `Album`, `Artist`, `Genre`, `Playlist` and their four collections. It had to be one slice —
+> **none of the entity types is constructible from outside the library**, so a slice that mapped
+> them without it could not have produced a single testable object; `MediaLibrary` was
+> re-partitioned in from `C5` and its six picture rows out to `C4`. The shape decision is that
+> everything except the library is a **borrowed view holding a reference to its library**, so
+> releasing the library handle first is safe and there is no parent-before-child rule; the four
+> structurally identical collections share one C shape rather than four.
+>
+> Two canonical facts came from evidence rather than assumption. Album equality is **not** the name
+> alone — names collide across artists, so the canonical comparison pairs name with artist. And
+> `MediaLibrary(MediaSource*)` **borrows** its argument rather than adopting it: it copies the
+> source's kind and name into an object of its own, so leaving the source to the library leaked 48
+> bytes, which **the sanitizer tree caught** and the C route now avoids by destroying every
+> enumerated source before returning. That is the second time this campaign's ASan tree has paid
+> for itself on a media slice.
+>
+> The test is worth copying for `C4`: it points SDL's user-folder lookup at a generated fixture via
+> `XDG_CONFIG_HOME`, so the library it scans is **deterministic** — two tag-only MP3 files sharing
+> an artist, album and genre plus a folder cover whose exact bytes the album-art routes must return
+> — instead of depending on whatever music the developer's machine holds, and no real user
+> directory is ever read or written. Album art also settles a shape: the canonical members return a
+> caller-owned stream, and C reads it to its end and destroys it inside the call so the image
+> crosses as bytes and **no stream enters the ABI**. The inventory is now 4,646 implemented, 30
+> partial, 1,578 planned and 161 N/A; all four trees green at 56/56. **Next: CBIND-037C4**, the
+> 60-row picture surface, whose one new shape is that `PictureAlbum` is a tree.
 >
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /

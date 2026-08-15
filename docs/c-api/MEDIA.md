@@ -96,3 +96,44 @@ twice is a successful no-op; releasing the handle twice is not.
 The canonical iterator pair and its two type aliases have no C counterpart and are recorded as
 not-applicable — C reads the collection through the count and the indexer, the same decision the
 touch collection already records.
+
+## The media library and its catalog
+
+`media_library.h` maps the catalog: the `CNA_MediaLibraryHandle` and the albums, artists, genres,
+playlists and their collections reached through it.
+
+**Everything except the library itself is a borrowed view, and every view keeps the library alive.**
+None of the canonical entity types can be constructed from outside the library — they exist only as
+the product of a scan — so C never creates one. A handle to an album, artist, genre, playlist, song
+or collection holds a reference to the owning library, which means releasing the library handle
+first is safe: the library object survives until the last handle into it is released. There is no
+parent-before-child ordering rule to remember here.
+
+`cna_media_library_create_from_source` takes the *index* of an enumerated media source rather than a
+source handle, because no source handle exists in this ABI. The canonical constructor **borrows**
+the source it is given — it copies that source's kind and name into an object of its own — so C
+destroys every enumerated source before returning. That is not an assumption about the
+implementation: leaving the selected source to the library leaked it under AddressSanitizer, which
+is how the borrowing was established. A source whose kind is not the local device is refused with
+`CNA_RESULT_NOT_SUPPORTED`, exactly as the canonical constructor refuses it.
+
+Album equality deserves its own note: it is **not** the name alone. Album names collide across
+artists, so the canonical comparison pairs the name with the artist, and two albums with no artist
+match on the name. Artists, genres and playlists compare by name.
+
+An album's artist and genre are optional, and a song's album, artist and genre are optional in the
+same way — a song a caller built from a file path has no library context at all. All of these
+follow the availability-separate-from-the-answer rule: the route succeeds, reports `CNA_FALSE`
+through its availability flag, and leaves the output handle untouched.
+
+**No stream crosses this ABI for album art.** The canonical `GetAlbumArt` and `GetThumbnail` return
+a stream whose caller owns it; `cna_album_get_art_size`/`_copy_art` and the thumbnail pair read that
+stream to its end and destroy it inside the call, so the image crosses as plain bytes. CNA generates
+no separate thumbnail, so the thumbnail is the same image as the cover — canonical behavior, not a C
+limitation. Both refuse an album without art with `CNA_RESULT_INVALID_STATE`; check
+`cna_album_get_has_art` first.
+
+The four entity collections share one C shape because the four canonical types are structurally
+identical. Canonical disposal empties a collection — count zero, every index refused — while its
+elements keep answering, since a collection never owned them. Their iterators and type aliases are
+recorded as not-applicable, like every other collection in this ABI.

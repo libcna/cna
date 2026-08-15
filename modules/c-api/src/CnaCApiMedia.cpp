@@ -2,6 +2,7 @@
 
 #include "CNA/C/media.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiMediaDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Media/MediaSource.hpp"
@@ -105,71 +106,40 @@ template<typename TRead>
     return read(*sources.At(static_cast<std::size_t>(index)));
 }
 
-// A song handle owns its object only when C created it. Several handles -- and any collection
-// holding the song -- share one resource, so releasing one handle never destroys a song another
-// still refers to.
-struct SongResource final {
-    std::unique_ptr<Song> owned;
-    Song* value = nullptr;
-};
-
-// The canonical collection stores non-owning song pointers, so the C resource retains the song
-// resources beside it: a caller that releases its own handles after building a collection cannot
-// leave a dangling element behind.
-struct SongCollectionResource final {
-    std::unique_ptr<SongCollection> value;
-    std::vector<std::shared_ptr<SongResource>> songs;
-};
+using CNA::C::Media::Detail::SongCollectionResource;
+using CNA::C::Media::Detail::SongResource;
 
 [[nodiscard]] CNA_Result BorrowSong(
     const CNA_SongHandle handle,
     std::shared_ptr<SongResource>* const outSong)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
+    return CNA::C::Media::Detail::BorrowMediaChild<Song>(
         handle,
         CNA::C::Detail::ObjectKind::Song,
+        "The song handle is invalid for this call.",
         outSong);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            CNA::C::Detail::ErrorCategoryForResult(result),
-            "The song handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result BorrowSongCollection(
     const CNA_SongCollectionHandle handle,
     std::shared_ptr<SongCollectionResource>* const outCollection)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
+    return CNA::C::Media::Detail::BorrowMediaChild<SongCollection>(
         handle,
         CNA::C::Detail::ObjectKind::SongCollection,
+        "The song collection handle is invalid for this call.",
         outCollection);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            CNA::C::Detail::ErrorCategoryForResult(result),
-            "The song collection handle is invalid for this call.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result PublishSong(
     std::shared_ptr<SongResource> resource,
     CNA_SongHandle* const outSong)
 {
-    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+    return CNA::C::Media::Detail::PublishMediaChild<Song>(
         CNA::C::Detail::ObjectKind::Song,
         std::move(resource),
+        "The song handle could not be created.",
         outSong);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            CNA::C::Detail::ErrorCategoryForResult(result),
-            "The song handle could not be created.");
-    }
-    return CNA_RESULT_SUCCESS;
 }
 
 [[nodiscard]] CNA_Result CreateOwnedSong(
@@ -771,7 +741,7 @@ CNA_Result cna_song_collection_create(
         auto resource = std::make_shared<SongCollectionResource>();
         std::vector<Song*> values;
         values.reserve(static_cast<std::size_t>(count));
-        resource->songs.reserve(static_cast<std::size_t>(count));
+        resource->retained.reserve(static_cast<std::size_t>(count));
         for (uint64_t index = UINT64_C(0); index < count; ++index) {
             std::shared_ptr<SongResource> song;
             if (const CNA_Result result = BorrowSong(songs[index], &song);
@@ -779,20 +749,15 @@ CNA_Result cna_song_collection_create(
                 return result;
             }
             values.push_back(song->value);
-            resource->songs.push_back(std::move(song));
+            resource->retained.push_back(std::move(song));
         }
-        resource->value = std::make_unique<SongCollection>(std::move(values));
-        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+        resource->owned = std::make_unique<SongCollection>(std::move(values));
+        resource->value = resource->owned.get();
+        return CNA::C::Media::Detail::PublishMediaChild<SongCollection>(
             CNA::C::Detail::ObjectKind::SongCollection,
             std::move(resource),
+            "The song collection handle could not be created.",
             outCollection);
-        if (result != CNA_RESULT_SUCCESS) {
-            return Fail(
-                result,
-                CNA::C::Detail::ErrorCategoryForResult(result),
-                "The song collection handle could not be created.");
-        }
-        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -815,19 +780,20 @@ CNA_Result cna_song_collection_get_at(
             index >= static_cast<int32_t>(resource->value->getCountProperty())) {
             return InvalidInput("The song index is out of range.");
         }
-        const Song* const element =
-            (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
-        // The canonical element is a bare pointer; the matching retained resource is what the new
-        // handle must share, so the returned handle keeps the same song alive.
-        for (const std::shared_ptr<SongResource>& song : resource->songs) {
+        Song* const element = (*resource->value)[static_cast<SharpRuntime::intcs>(index)];
+        // A C-built collection retains its songs, so the new handle shares the existing resource
+        // and the song stays alive. A library-owned collection has none, so the new handle becomes
+        // a borrowed view that keeps the library alive instead.
+        for (const std::shared_ptr<void>& retained : resource->retained) {
+            const auto song = std::static_pointer_cast<SongResource>(retained);
             if (song->value == element) {
                 return PublishSong(song, outSong);
             }
         }
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The collection element does not match a retained song.");
+        auto borrowed = std::make_shared<SongResource>();
+        borrowed->library = resource->library;
+        borrowed->value = element;
+        return PublishSong(std::move(borrowed), outSong);
     });
 }
 

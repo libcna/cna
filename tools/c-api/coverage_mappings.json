@@ -4087,6 +4087,118 @@
       "tests": "Doxygen declaration inventory; the index-addressed routes are covered in `MediaSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037C2"
+    },
+    {
+      "id": "media-library",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaLibrary(::(MediaLibrary|Dispose|getIsDisposedProperty|getMediaSourceProperty|getAlbumsProperty|getArtistsProperty|getGenresProperty|getPlaylistsProperty|getSongsProperty|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_MediaLibraryHandle` from `cna_media_library_create` and `cna_media_library_create_from_source`, which takes the index of an enumerated source because the canonical constructor takes ownership of the source object — C hands it the one at that index and destroys the rest of the enumerated list rather than leaking it. `cna_media_library_dispose`/`_destroy` are the canonical disposal-versus-release split, and disposal only sets a flag, so the catalog stays readable. The five collection properties return borrowed collection handles that **keep the library alive**, which is what makes releasing the library handle first safe. The canonical media source is not a handle: its kind and name are read through `cna_media_library_get_media_source_type` and the media-source name count/copy pair, the same shape the enumerated sources use",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. It asserts the scan found exactly two songs, one album, one artist, one genre and no playlist, reads the source kind and name back, checks the fully-qualified type name literally, proves that releasing the library handle leaves entity handles working, and covers the out-of-range source index, null outputs, double release and wrong-thread refusal",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-album",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Album(::(Dispose|getArtistProperty|getDurationProperty|getGenreProperty|getHasArtProperty|getIsDisposedProperty|getNameProperty|getSongsProperty|GetAlbumArt|GetThumbnail|Equals|GetHashCode|ToString|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_AlbumHandle` with the name count/copy pair, duration in ticks, the songs collection, and `cna_album_equals`, whose rule is **not** name alone: album names collide across artists, so the canonical comparison pairs the name with the artist, and two albums with no artist match on the name. The artist and genre are optional, so they follow the availability-separate-from-the-answer rule rather than failing. **The two art members return a stream whose caller owns it; no stream crosses this ABI** — `cna_album_get_art_size`/`_copy_art` and the thumbnail pair read that stream to its end and destroy it inside the call, so the image crosses as bytes. The thumbnail is the same image as the cover, which is canonical behavior rather than a C limitation, and both refuse an album without art with `CNA_RESULT_INVALID_STATE`",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. The album's name, duration, artist, genre and two-song collection are all asserted against the fixture's tags, and the art and thumbnail routes are proven to return **exactly** the twelve fixture cover bytes, with the buffer-too-small case writing nothing",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-album-friend-media-library",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Album::MediaLibrary$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: this is a friendship declaration that lets the canonical media library record which member song carries embedded cover art, not a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-artist",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Artist(::(Dispose|getAlbumsProperty|getIsDisposedProperty|getNameProperty|getSongsProperty|Equals|GetHashCode|ToString|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_ArtistHandle` with the name count/copy pair, the album and song collections, `cna_artist_equals` (canonically name equality), the hash and the type name. Equality and the hash use the name, so the canonical `==` is the same comparison and `!=` its negation",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. The artist's name and its single-album collection are asserted against the fixture, and the album reached through the artist is proven equal — by value and by hash — to the album reached through the library",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-genre",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Genre(::(Dispose|getAlbumsProperty|getIsDisposedProperty|getNameProperty|getSongsProperty|Equals|GetHashCode|ToString|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_GenreHandle` with the same shape as the artist: name count/copy, album and song collections, name-based equality and hash, and the type name",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. The genre reached from the album is asserted to carry the fixture's tag value",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-playlist",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Playlist(::(Dispose|getDurationProperty|getIsDisposedProperty|getNameProperty|getSongsProperty|Equals|GetHashCode|ToString|GetTypeName|operator==|operator!=))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_PlaylistHandle` with the name count/copy pair, duration in ticks, the songs collection, name-based equality and hash, and the type name",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written, which contains no playlist file — so the empty playlist collection and its refusals are what the suite pins, exactly as the zero-device enumerations elsewhere do",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-entity-collections",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::(Album|Artist|Genre|Playlist)Collection(::(Dispose|getCountProperty|getIsDisposedProperty|operator\\[\\]|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "one borrowed collection handle per element type — `CNA_AlbumCollectionHandle`, `CNA_ArtistCollectionHandle`, `CNA_GenreCollectionHandle`, `CNA_PlaylistCollectionHandle` — each with `_get_count`, `_get_at`, `_get_is_disposed`, `_dispose`, `_destroy` and a type-name count/copy pair. All four canonical types are structurally identical, so they share one C shape rather than four; `_get_at` returns a borrowed element handle that keeps the owning library alive, and the index is validated in C before the canonical indexer would throw. Canonical disposal **empties** the collection, so afterwards the count is zero and every index is refused while the elements themselves keep answering",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. Every collection's count is asserted against the fixture, an index at or past the count and a negative index are refused on a populated and on an empty collection, the type name is checked literally, and emptying a collection by disposal is proven not to disturb an element handle taken from it beforehand",
+      "status": "implemented",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "media-entity-collection-iteration",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::(Album|Artist|Genre|Playlist)Collection::(iterator|const_iterator|begin|end)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "No C mapping: a C++ iterator pair and its two type aliases have no C counterpart, and C reads each collection through its count and its indexer instead — the same decision the song and touch collections already record",
+      "tests": "Doxygen declaration inventory; the index-addressed routes are covered in `MediaLibrarySmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037C3"
+    },
+    {
+      "id": "song-library-back-pointers",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::Song::(getAlbumProperty|getArtistProperty|getGenreProperty)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_song_get_album`, `cna_song_get_artist` and `cna_song_get_genre`, each reporting through an availability flag and leaving its output untouched when there is nothing to name. The canonical properties are non-owning back-pointers that are **null for any song not produced by a library scan**, so absence is an ordinary answer rather than a failure. Re-partitioned here from `CBIND-037C2`, which mapped the rest of `Song` before these handles existed",
+      "tests": "`MediaLibrarySmoke.c` points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the library it scans is deterministic — two tag-only MP3 files sharing an artist, album and genre, plus a folder cover image — instead of whatever music the host happens to hold, and no real user directory is ever read or written. A scanned song is asserted to name the fixture's album, artist and genre, and a song the caller built from a file path is asserted to report all three as unavailable with its output handle untouched",
+      "status": "implemented",
+      "task": "CBIND-037C3"
     }
   ]
 }

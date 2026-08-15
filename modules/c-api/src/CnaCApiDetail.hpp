@@ -118,6 +118,15 @@ enum class ObjectKind : uint32_t {
     InputDeviceEventRegistration = 71,
     Song = 72,
     SongCollection = 73,
+    MediaLibrary = 74,
+    Album = 75,
+    AlbumCollection = 76,
+    Artist = 77,
+    ArtistCollection = 78,
+    Genre = 79,
+    GenreCollection = 80,
+    Playlist = 81,
+    PlaylistCollection = 82,
     Test = UINT32_MAX
 };
 

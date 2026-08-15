@@ -56,8 +56,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > mouse/keyboard/touch-device enumerations with their four hot-plug events, the system clipboard
 > and the host power state, and `CBIND-037C1` opens the media module with its identities, the
 > fixed visualization value and the media-source enumeration, and `CBIND-037C2` adds `Song` and
-> `SongCollection` as reference-counted owned handles. The
-> generated inventory currently records 4,554 implemented, 30 partial, 1,695 planned and 136
+> `SongCollection` as reference-counted owned handles, and `CBIND-037C3` adds the whole music
+> catalog: the media library plus albums, artists, genres, playlists and their collections as
+> borrowed views that keep their library alive. The
+> generated inventory currently records 4,646 implemented, 30 partial, 1,578 planned and 161
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and
