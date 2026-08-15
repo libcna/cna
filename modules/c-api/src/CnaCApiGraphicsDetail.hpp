@@ -9,6 +9,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+class IndexBuffer;
 class RenderTargetCube;
 class Texture;
 class Texture2D;
@@ -43,6 +44,12 @@ struct TextureCubeResource final {
 
 struct VertexBufferResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> value;
+    CNA_Handle parentGame;
+    bool dynamic;
+};
+
+struct IndexBufferResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::IndexBuffer> value;
     CNA_Handle parentGame;
     bool dynamic;
 };

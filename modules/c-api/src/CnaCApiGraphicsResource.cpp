@@ -6,6 +6,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
@@ -29,6 +30,7 @@ using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
@@ -36,6 +38,7 @@ using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Graphics::GraphicsResource;
+using Microsoft::Xna::Framework::Graphics::IndexBuffer;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
@@ -153,6 +156,15 @@ private:
         std::shared_ptr<VertexBufferResource> buffer;
         const CNA_Result getResult = GetRuntimeHandles().Get(
             handle, ObjectKind::VertexBuffer, &buffer);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(buffer->value);
+        result.parentGame = buffer->parentGame;
+    } else if (kind == ObjectKind::IndexBuffer) {
+        std::shared_ptr<IndexBufferResource> buffer;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::IndexBuffer, &buffer);
         if (getResult != CNA_RESULT_SUCCESS) {
             return InvalidResource(getResult);
         }

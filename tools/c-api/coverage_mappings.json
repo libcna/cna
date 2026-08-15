@@ -277,6 +277,16 @@
       "task": "CBIND-035C6"
     },
     {
+      "id": "index-buffer-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Dynamic)?IndexBuffer\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "event"],
+      "mapping": "owned game-child `CNA_IndexBufferHandle` resources created as static or dynamic 16/32-bit buffers; versioned create/info and caller-array transfer descriptors; count and window SetData/GetData routes, all dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter",
+      "tests": "16-bit and 32-bit count/source-window/destination-window transfers, static and dynamic construction, Discard/NoOverwrite, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `IndexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035C7"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

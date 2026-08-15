@@ -459,6 +459,25 @@ _Static_assert(sizeof(CNA_VertexBufferTransfer) == 32U &&
                    offsetof(CNA_VertexBufferTransfer, start_index) == 16U &&
                    offsetof(CNA_VertexBufferTransfer, element_count) == 24U,
                "CNA_VertexBufferTransfer layout must remain stable");
+_Static_assert(sizeof(CNA_IndexBufferHandle) == 8U &&
+                   sizeof(CNA_IndexBufferEventRegistrationHandle) == 8U,
+               "CNA index-buffer handles must remain stable");
+_Static_assert(sizeof(CNA_IndexBufferCreateInfo) == 24U &&
+                   _Alignof(CNA_IndexBufferCreateInfo) == 4U &&
+                   offsetof(CNA_IndexBufferCreateInfo, index_count) == 8U &&
+                   offsetof(CNA_IndexBufferCreateInfo, index_element_size) == 12U &&
+                   offsetof(CNA_IndexBufferCreateInfo, dynamic) == 20U,
+               "CNA_IndexBufferCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_IndexBufferInfo) == 24U &&
+                   _Alignof(CNA_IndexBufferInfo) == 4U &&
+                   offsetof(CNA_IndexBufferInfo, index_count) == 8U &&
+                   offsetof(CNA_IndexBufferInfo, dynamic) == 20U,
+               "CNA_IndexBufferInfo layout must remain stable");
+_Static_assert(sizeof(CNA_IndexBufferTransfer) == 32U &&
+                   _Alignof(CNA_IndexBufferTransfer) == 8U &&
+                   offsetof(CNA_IndexBufferTransfer, start_index) == 16U &&
+                   offsetof(CNA_IndexBufferTransfer, element_count) == 24U,
+               "CNA_IndexBufferTransfer layout must remain stable");
 _Static_assert(sizeof(CNA_VertexBufferBinding) == 16U &&
                    _Alignof(CNA_VertexBufferBinding) == 8U,
                "CNA_VertexBufferBinding layout must remain stable");

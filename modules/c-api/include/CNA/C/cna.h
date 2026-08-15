@@ -26,6 +26,7 @@
 #include "CNA/C/graphics3d.h"
 #include "CNA/C/vertex_values.h"
 #include "CNA/C/vertex_resources.h"
+#include "CNA/C/index_resources.h"
 #include "CNA/C/render_target.h"
 #include "CNA/C/texture_volume.h"
 #include "CNA/C/sprite_font.h"

@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035C6 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035C7 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -245,7 +245,7 @@ mechanical wrapper.
 |---|---|---|---|
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
 | CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
-| CBIND-035C | Add texture, buffer and vertex-resource coverage | 🟨 | Complete Texture/Texture2D/3D/Cube transfer variants, vertex/index buffers, declarations/bindings and resource lifetime through validated handles and bulk byte/value operations. Decomposed into CBIND-035C1–C7; C1–C4 are complete. |
+| CBIND-035C | Add texture, buffer and vertex-resource coverage | ✅ | `texture.h`, `texture_volume.h`, `vertex_values.h`, `vertex_resources.h`, `index_resources.h` and the common `graphics_resource.h` map all 402 owned rows through fixed values, generation/type/thread-validated handles, caller-window transfers and explicit backend limits. Decomposed into and completed as CBIND-035C1–C7. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ⬜ | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
@@ -277,7 +277,7 @@ function counts.
 | CBIND-035C4 | 134 | Complete Texture and Texture2D | ✅ | `texture.h` completes all 134 previously unfinished rows plus the two inherited partial Texture properties through standalone/game-owned default, device, file, RGBA8, CPU-only and encoded-memory factories; common/2D/storage snapshots; all 18 native typed full/mip/rectangle transfer representations; the direct raw-RGBA8 `SetDataRGBA` route; format/block/alignment validation; exact type text; and PNG/JPEG count-copy/file routes. Streams and native renderer/weak pointers stay behind the ABI. Strict-C tests cover every route, all 27 formats, dispatch/rejection for every transfer identity, image/file round-trips, lifecycle and atomic failure cases under HEADLESS and SDL_RENDERER; HEADLESS proves mip upload, SDL maps its native mip-upload limit to `NOT_SUPPORTED`, and ASan+UBSan is clean. |
 | CBIND-035C5 | 40 | Complete Texture3D and TextureCube | ✅ | `texture_volume.h` maps all 40 rows through owned game-child handles, versioned 3D/cube snapshots and full mip/box or six-face/rectangle Color transfer descriptors, including raw Texture3D bytes, exact type text, copied-memory DDS decoding, common Texture/GraphicsResource operations and RenderTargetCube inheritance. Native streams and renderer pointers stay private. The strict-C suite covers all faces, regions, capacity atomicity, lifecycle and invalid/stale/wrong-kind/wrong-thread paths under HEADLESS and SDL_RENDERER; both backends truthfully reject Texture3D creation and cube storage, while ASan+UBSan is clean. |
 | CBIND-035C6 | 57 | Complete vertex buffers | ✅ | `vertex_resources.h` maps all 57 static/dynamic VertexBuffer rows through owned game-child handles, copied declaration metadata, versioned info and caller-array transfers for all seven built-in vertex types, raw bytes, all four dynamic option overloads, exact type text, generic GraphicsResource state and a distinct owned ContentLost registration. Count and window overloads preserve caller-array semantics and atomic readback without exposing CPU shadows or renderer pointers. Strict-C HEADLESS tests cover every value/option route, WriteOnly, disposal/events, capacity and invalid/stale/wrong-kind/wrong-thread paths; SDL_RENDERER verifies its no-3D capability as atomic `NOT_SUPPORTED`, and ASan+UBSan is clean. |
-| CBIND-035C7 | 32 | Complete index buffers | ⬜ | Add static/dynamic index buffers and complete 16/32-bit SetData/GetData variants with ownership and thread validation, closing CBIND-035C. |
+| CBIND-035C7 | 32 | Complete index buffers | ✅ | `index_resources.h` maps all 32 static/dynamic IndexBuffer rows through owned game-child handles, versioned metadata and caller-array transfer descriptors for both 16- and 32-bit indices, all dynamic streaming options, exact type text, generic GraphicsResource state and a distinct owned ContentLost registration. Count and window overloads preserve caller-array semantics with copied/aligned input and atomic scratch readback. Strict-C HEADLESS tests cover both widths/kinds/options, WriteOnly, disposal/events, capacity and invalid/stale/wrong-kind/wrong-thread paths; SDL_RENDERER verifies its no-3D capability as atomic `NOT_SUPPORTED`, C/C++ ABI assertions freeze all descriptors and ASan+UBSan is clean. This closes parent CBIND-035C. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -384,8 +384,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035B` and `CBIND-035C1`–`CBIND-035C6` are ✅;
-parents `CBIND-035` and `CBIND-035C` are 🟨, while `CBIND-035C7` through `CBIND-044` remain ⬜. The
+`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035C` and `CBIND-035C1`–`CBIND-035C7` are ✅;
+parent `CBIND-035` remains 🟨, while `CBIND-035D` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -431,4 +431,7 @@ volume/face/mip/region transfer descriptors and copied DDS input; the snapshot i
 implemented, 19 partial, 4,076 planned and 70 not applicable. CBIND-035C6 maps all 57
 VertexBuffer/DynamicVertexBuffer rows through owned handles, copied declarations, typed/raw
 transfers and ContentLost registration; the snapshot is now 2,307 implemented, 19 partial, 4,019
-planned and 70 not applicable, with CBIND-035C7 index buffers next.
+planned and 70 not applicable. CBIND-035C7 maps all 32 IndexBuffer/DynamicIndexBuffer rows through
+owned handles, both index widths, caller-window transfers and ContentLost registration, closing
+parent CBIND-035C; the snapshot is now 2,339 implemented, 19 partial, 3,987 planned and 70 not
+applicable, with CBIND-035D effects, shaders and parameters next.
