@@ -102,6 +102,8 @@ _Static_assert(sizeof(CNA_EffectHandle) == 8U,
                "CNA effect handles must remain stable");
 _Static_assert(sizeof(CNA_DirectionalLightHandle) == 8U,
                "CNA directional-light handles must remain stable");
+_Static_assert(CNA_SKINNED_EFFECT_MAX_BONES == UINT32_C(72),
+               "CNA SkinnedEffect maximum bone count must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

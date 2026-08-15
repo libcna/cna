@@ -50,6 +50,9 @@ typedef uint32_t CNA_EffectParameterType;
 /** @brief Owned handle for a graphics-device effect instance. */
 typedef CNA_Handle CNA_EffectHandle;
 
+/** @brief Maximum number of matrices in a SkinnedEffect bone palette. */
+#define CNA_SKINNED_EFFECT_MAX_BONES UINT32_C(72)
+
 /** @brief Owned standalone or stable effect-member view of a DirectionalLight. */
 typedef CNA_Handle CNA_DirectionalLightHandle;
 
@@ -1834,6 +1837,146 @@ CNA_C_API CNA_Result cna_environment_map_effect_get_fresnel_factor(
 CNA_C_API CNA_Result cna_environment_map_effect_set_fresnel_factor(
     CNA_EffectHandle effect,
     float value);
+
+/**
+ * @brief Creates an owned SkinnedEffect for a borrowed graphics device.
+ * @param graphics_device Callback-scoped graphics-device handle.
+ * @param out_effect Receives the owned effect handle.
+ * @return A CNA result code; failure leaves @p out_effect invalid.
+ */
+CNA_C_API CNA_Result cna_skinned_effect_create(
+    CNA_Handle graphics_device,
+    CNA_EffectHandle* out_effect);
+
+/** @brief Gets the SkinnedEffect diffuse material color. */
+CNA_C_API CNA_Result cna_skinned_effect_get_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the SkinnedEffect diffuse material color. */
+CNA_C_API CNA_Result cna_skinned_effect_set_diffuse_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the SkinnedEffect emissive material color. */
+CNA_C_API CNA_Result cna_skinned_effect_get_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the SkinnedEffect emissive material color. */
+CNA_C_API CNA_Result cna_skinned_effect_set_emissive_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the SkinnedEffect specular material color. */
+CNA_C_API CNA_Result cna_skinned_effect_get_specular_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3* out_value);
+
+/** @brief Sets the SkinnedEffect specular material color. */
+CNA_C_API CNA_Result cna_skinned_effect_set_specular_color(
+    CNA_EffectHandle effect,
+    CNA_Vector3 value);
+
+/** @brief Gets the SkinnedEffect specular power. */
+CNA_C_API CNA_Result cna_skinned_effect_get_specular_power(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the SkinnedEffect specular power without clamping. */
+CNA_C_API CNA_Result cna_skinned_effect_set_specular_power(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets the SkinnedEffect alpha value. */
+CNA_C_API CNA_Result cna_skinned_effect_get_alpha(
+    CNA_EffectHandle effect,
+    float* out_value);
+
+/** @brief Sets the SkinnedEffect alpha value without clamping. */
+CNA_C_API CNA_Result cna_skinned_effect_set_alpha(
+    CNA_EffectHandle effect,
+    float value);
+
+/** @brief Gets whether SkinnedEffect prefers per-pixel lighting. */
+CNA_C_API CNA_Result cna_skinned_effect_get_prefer_per_pixel_lighting(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets whether SkinnedEffect prefers per-pixel lighting. */
+CNA_C_API CNA_Result cna_skinned_effect_set_prefer_per_pixel_lighting(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
+
+/**
+ * @brief Gets the retained SkinnedEffect Texture2D handle.
+ * @param effect SkinnedEffect handle.
+ * @param out_has_texture Receives whether a texture is assigned.
+ * @param out_texture Receives the assigned handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_effect_get_texture(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Assigns and retains a same-device Texture2D, or clears it.
+ * @param effect SkinnedEffect handle.
+ * @param texture Texture2D/RenderTarget2D handle or `CNA_INVALID_HANDLE`.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_effect_set_texture(
+    CNA_EffectHandle effect,
+    CNA_Handle texture);
+
+/** @brief Gets the SkinnedEffect weights-per-vertex value. */
+CNA_C_API CNA_Result cna_skinned_effect_get_weights_per_vertex(
+    CNA_EffectHandle effect,
+    int32_t* out_value);
+
+/** @brief Sets weights per vertex to one, two, or four. */
+CNA_C_API CNA_Result cna_skinned_effect_set_weights_per_vertex(
+    CNA_EffectHandle effect,
+    int32_t value);
+
+/**
+ * @brief Replaces the leading SkinnedEffect bone transforms from a copied array.
+ * @param effect SkinnedEffect handle.
+ * @param transforms Caller-owned row-major matrices.
+ * @param transform_count Matrix count in the inclusive range 1 through 72.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_effect_set_bone_transforms(
+    CNA_EffectHandle effect,
+    const CNA_Matrix* transforms,
+    uint64_t transform_count);
+
+/**
+ * @brief Copies the requested leading SkinnedEffect bone transforms atomically.
+ * @param effect SkinnedEffect handle.
+ * @param requested_count Number of transforms in the inclusive range 1 through 72.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination capacity in matrices.
+ * @param out_count Receives the requested count.
+ * @return A CNA result code; insufficient capacity performs no partial write.
+ */
+CNA_C_API CNA_Result cna_skinned_effect_copy_bone_transforms(
+    CNA_EffectHandle effect,
+    uint64_t requested_count,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Gets the CNA extension that enables per-vertex color on SkinnedEffect. */
+CNA_C_API CNA_Result cna_skinned_effect_get_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool* out_value);
+
+/** @brief Sets the CNA extension that enables per-vertex color on SkinnedEffect. */
+CNA_C_API CNA_Result cna_skinned_effect_set_vertex_color_enabled(
+    CNA_EffectHandle effect,
+    CNA_Bool value);
 
 #ifdef __cplusplus
 }

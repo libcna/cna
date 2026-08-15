@@ -81,6 +81,7 @@ static_assert(sizeof(CNA_EffectTechniqueHandle) == 8U);
 static_assert(sizeof(CNA_EffectTechniqueCollectionHandle) == 8U);
 static_assert(sizeof(CNA_EffectHandle) == 8U);
 static_assert(sizeof(CNA_DirectionalLightHandle) == 8U);
+static_assert(CNA_SKINNED_EFFECT_MAX_BONES == UINT32_C(72));
 static_assert(sizeof(CNA_RendererInfo) == 32U);
 static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));

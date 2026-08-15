@@ -25,7 +25,8 @@ identities, annotation/pass nesting and canonical Apply dispatch, owned base/mat
 stock-sprite effects with cloning, current collections, exact source/type strings, shader uniforms,
 textures and world/view/projection matrices, complete BasicEffect material/fog/lighting/texture
 state and stable standalone/nested directional lights, and complete AlphaTestEffect,
-DualTextureEffect and EnvironmentMapEffect state with retained Texture2D/TextureCube slots, plus
+DualTextureEffect, EnvironmentMapEffect and 72-bone SkinnedEffect state with retained texture
+slots, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
 owned `ContentManager` adds UTF-8 root/cache control and a typed Color Texture2D load route; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability

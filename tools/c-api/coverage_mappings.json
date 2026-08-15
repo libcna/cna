@@ -356,6 +356,16 @@
       "task": "CBIND-035D7"
     },
     {
+      "id": "skinned-effect-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedEffect\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned `CNA_EffectHandle` SkinnedEffect game children with shared clone/dispose/apply/type and reusable IEffectMatrices/IEffectFog/IEffectLights routes; fixed 72-bone maximum, bounded copied set and atomic count/capacity copy operations; complete diffuse/emissive/specular/alpha/per-pixel/weights/vertex-color state; retained same-device Texture2D assignment copied independently by clones. Always-on lighting maps false to INVALID_STATE and renderer-only GpuDrawParams remain private behind Apply/draw",
+      "tests": "exact defaults including all 72 identity bones, type and maximum constant, every generic and concrete property, all valid and invalid weights, bone count bounds, exact round-trip and atomic insufficient-capacity behavior, always-on lighting/default lights, same-device texture ownership and clone retention, Apply, nested-light lifetime, and stale/wrong-kind/wrong-thread paths in strict-C `SkinnedEffectSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze MaxBones",
+      "status": "implemented",
+      "task": "CBIND-035D8"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

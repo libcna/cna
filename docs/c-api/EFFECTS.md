@@ -142,6 +142,20 @@ retained independently. A native clone copies both property state and the C owne
 clearing or destroying the source effect cannot invalidate the clone's resources. The invalid
 handle clears one slot without disturbing the others.
 
+## SkinnedEffect
+
+`cna_skinned_effect_create` returns the same owned effect handle and reuses every matrix, fog and
+lighting operation. Concrete functions expose diffuse, emissive and specular material state,
+alpha, per-pixel-lighting preference, weights per vertex, the CNA vertex-color extension and a
+same-device retained Texture2D. Lighting is always enabled; a false setter returns
+`CNA_RESULT_INVALID_STATE`.
+
+`CNA_SKINNED_EFFECT_MAX_BONES` is 72. Bone transforms cross the ABI as copied `CNA_Matrix` arrays:
+set accepts one through 72 matrices, while copy takes an explicit requested count and caller
+capacity. Insufficient capacity reports the required count without a partial write. New effects
+initialize all 72 entries to identity, and native cloning copies both the palette and retained
+texture ownership.
+
 `EffectAnnotationSmoke.c` covers all metadata and typed getters, raw Boolean/Int32 storage, empty
 fallbacks, exact strings, collection add/count/index/name behavior, copy independence, capacity
 atomicity and invalid/stale/wrong-kind/wrong-thread handles. It runs unchanged under HEADLESS and
@@ -180,3 +194,10 @@ unclamped reference-alpha boundaries; enum, Boolean and texture-index validation
 environment lighting; same-device Texture2D/TextureCube ownership; independent clone retention;
 stable nested-light lifetime; Apply; and stale, wrong-kind and wrong-thread handles. The same
 strict-C test runs under HEADLESS and SDL_RENDERER plus focused ASan+UBSan.
+
+`SkinnedEffectSmoke.c` covers all 72 identity defaults, the fixed maximum, exact copied bone
+round-trips, cloned palettes, insufficient-capacity atomicity, valid and invalid
+weights-per-vertex values, every material/interface/extension property, always-on lighting,
+Texture2D clone retention, stable nested-light lifetime, Apply and stale, wrong-kind and
+wrong-thread handles. It runs unchanged under HEADLESS and SDL_RENDERER plus focused ASan+UBSan;
+C17/C++23 assertions freeze the maximum.

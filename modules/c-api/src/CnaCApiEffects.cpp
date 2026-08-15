@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/IEffectLights.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IEffectMatrices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ShaderEffect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -90,6 +91,7 @@ using Microsoft::Xna::Framework::Graphics::IEffectFog;
 using Microsoft::Xna::Framework::Graphics::IEffectLights;
 using Microsoft::Xna::Framework::Graphics::IEffectMatrices;
 using Microsoft::Xna::Framework::Graphics::ShaderEffect;
+using Microsoft::Xna::Framework::Graphics::SkinnedEffect;
 using Microsoft::Xna::Framework::Graphics::SpriteEffect;
 using Microsoft::Xna::Framework::Graphics::Texture;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
@@ -4709,11 +4711,12 @@ CNA_Result cna_effect_lights_set_enabled(
             return result;
         }
         if (value == CNA_FALSE &&
-            dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr) {
+            (dynamic_cast<EnvironmentMapEffect*>(lights) != nullptr ||
+             dynamic_cast<SkinnedEffect*>(lights) != nullptr)) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "EnvironmentMapEffect lighting cannot be disabled.");
+                "This stock effect's lighting cannot be disabled.");
         }
         lights->setLightingEnabledProperty(value == CNA_TRUE);
         return CNA_RESULT_SUCCESS;
@@ -5843,6 +5846,429 @@ CNA_Result cna_environment_map_effect_set_fresnel_factor(
             return result;
         }
         environmentMap->setFresnelFactorProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The SkinnedEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<SkinnedEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_skinned_effect_get_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect diffuse-color output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(skinned->getDiffuseColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_diffuse_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setDiffuseColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect emissive-color output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(skinned->getEmissiveColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_emissive_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setEmissiveColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_specular_color(
+    const CNA_EffectHandle effectHandle,
+    CNA_Vector3* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect specular-color output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = ToC(skinned->getSpecularColorProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_specular_color(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Vector3 value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setSpecularColorProperty(ToNative(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_specular_power(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect specular-power output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = skinned->getSpecularPowerProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_specular_power(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setSpecularPowerProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_alpha(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect alpha output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = skinned->getAlphaProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_alpha(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setAlphaProperty(value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_prefer_per_pixel_lighting(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect per-pixel-lighting output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = skinned->getPreferPerPixelLightingProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_prefer_per_pixel_lighting(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The SkinnedEffect per-pixel-lighting value is not a CNA_Bool.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setPreferPerPixelLightingProperty(value == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_texture(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("The SkinnedEffect texture outputs are null.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        (void)skinned;
+        return GetRetainedEffectTexture(
+            GetEffectState(effect)->lifetime->stockTexture0,
+            outHasTexture,
+            outTexture,
+            "The SkinnedEffect texture outputs are null.");
+    });
+}
+
+CNA_Result cna_skinned_effect_set_texture(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<EffectResource> effect;
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, &effect, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return SetRetainedEffectTexture2D(
+            effect,
+            GetEffectState(effect)->lifetime->stockTexture0,
+            textureHandle,
+            [skinned](std::shared_ptr<Texture2D> texture) {
+                skinned->SetOwnedTexture(std::move(texture));
+            });
+    });
+}
+
+CNA_Result cna_skinned_effect_get_weights_per_vertex(
+    const CNA_EffectHandle effectHandle,
+    int32_t* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect weights-per-vertex output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = static_cast<int32_t>(skinned->getWeightsPerVertexProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_weights_per_vertex(
+    const CNA_EffectHandle effectHandle,
+    const int32_t value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (value != 1 && value != 2 && value != 4) {
+            return InvalidArgument("SkinnedEffect weights per vertex must be one, two, or four.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->setWeightsPerVertexProperty(static_cast<int>(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_bone_transforms(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Matrix* const transforms,
+    const uint64_t transformCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t byteCount = 0U;
+        if (transformCount == 0U || transformCount > CNA_SKINNED_EFFECT_MAX_BONES ||
+            CheckedElementByteCount(
+                transforms, transformCount, sizeof(CNA_Matrix), &byteCount) !=
+                CNA_RESULT_SUCCESS) {
+            return InvalidArgument(
+                "The SkinnedEffect bone-transform array must contain one through 72 matrices.");
+        }
+        (void)byteCount;
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<Matrix> copied;
+        copied.reserve(static_cast<std::size_t>(transformCount));
+        for (uint64_t index = 0U; index < transformCount; ++index) {
+            copied.push_back(ToNative(transforms[index]));
+        }
+        skinned->SetBoneTransforms(copied);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_copy_bone_transforms(
+    const CNA_EffectHandle effectHandle,
+    const uint64_t requestedCount,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U) ||
+            requestedCount == 0U || requestedCount > CNA_SKINNED_EFFECT_MAX_BONES) {
+            return InvalidArgument("The SkinnedEffect bone-transform copy request is invalid.");
+        }
+        *outCount = requestedCount;
+        if (capacity < requestedCount) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the requested bone transforms.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<Matrix> bones = skinned->GetBoneTransforms(
+            static_cast<int>(requestedCount));
+        for (uint64_t index = 0U; index < requestedCount; ++index) {
+            destination[index] = ToC(bones[static_cast<std::size_t>(index)]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_get_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    CNA_Bool* const outValue)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The SkinnedEffect vertex-color output is null.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = skinned->VertexColorEnabled ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_effect_set_vertex_color_enabled(
+    const CNA_EffectHandle effectHandle,
+    const CNA_Bool value)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsBool(value)) {
+            return InvalidArgument("The SkinnedEffect vertex-color value is not a CNA_Bool.");
+        }
+        SkinnedEffect* skinned = nullptr;
+        if (const CNA_Result result = GetStockEffect(
+                effectHandle, nullptr, &skinned, "SkinnedEffect");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        skinned->VertexColorEnabled = value == CNA_TRUE;
         return CNA_RESULT_SUCCESS;
     });
 }
