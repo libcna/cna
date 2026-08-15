@@ -788,3 +788,17 @@ static_assert(alignof(CNA_GestureSample) == 8U);
 static_assert(offsetof(CNA_GestureSample, timestamp_ticks) == 24U);
 static_assert(offsetof(CNA_GestureSample, delta2) == 56U);
 static_assert(sizeof(CNA_TouchState) == 16U + (sizeof(CNA_TouchLocation) * CNA_TOUCH_MAX_TOUCHES));
+
+static_assert(sizeof(CNA_HapticDeviceHandle) == 8U);
+static_assert(sizeof(CNA_HapticFeature) == sizeof(uint32_t));
+static_assert(CNA_HAPTIC_FEATURE_ALL == UINT32_C(0x000F8FFF));
+static_assert(CNA_HAPTIC_EFFECT_TYPE_MAXIMUM == UINT32_C(12));
+static_assert(CNA_HAPTIC_DIRECTION_TYPE_MAXIMUM == UINT32_C(3));
+static_assert(CNA_HAPTIC_EFFECT_INFINITE_LENGTH == UINT32_C(4294967295));
+static_assert(sizeof(CNA_HapticDirection) == 16U);
+static_assert(sizeof(CNA_HapticCapabilities) == 28U);
+static_assert(offsetof(CNA_HapticCapabilities, max_effects) == 16U);
+static_assert(sizeof(CNA_HapticEffect) == 108U);
+static_assert(alignof(CNA_HapticEffect) == 4U);
+static_assert(offsetof(CNA_HapticEffect, direction) == 16U);
+static_assert(offsetof(CNA_HapticEffect, fade_level) == 106U);

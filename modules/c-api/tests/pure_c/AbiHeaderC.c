@@ -1028,3 +1028,57 @@ _Static_assert(sizeof(CNA_TouchState) ==
                    CNA_TOUCH_MAX_TOUCHES == UINT32_C(8) &&
                    sizeof(CNA_TouchLocation) == 32U,
                "CNA touch collection storage must remain stable");
+
+_Static_assert(sizeof(CNA_HapticDeviceHandle) == 8U &&
+                   sizeof(CNA_HapticFeature) == sizeof(uint32_t) &&
+                   CNA_HAPTIC_FEATURE_NONE == UINT32_C(0) &&
+                   CNA_HAPTIC_FEATURE_CONSTANT == UINT32_C(0x00000001) &&
+                   CNA_HAPTIC_FEATURE_LEFT_RIGHT == UINT32_C(0x00000800) &&
+                   CNA_HAPTIC_FEATURE_CUSTOM == UINT32_C(0x00008000) &&
+                   CNA_HAPTIC_FEATURE_GAIN == UINT32_C(0x00010000) &&
+                   CNA_HAPTIC_FEATURE_PAUSE == UINT32_C(0x00080000) &&
+                   CNA_HAPTIC_FEATURE_ALL == UINT32_C(0x000F8FFF),
+               "CNA haptic feature identities must remain stable");
+
+_Static_assert(sizeof(CNA_HapticEffectType) == sizeof(uint32_t) &&
+                   CNA_HAPTIC_EFFECT_TYPE_CONSTANT == UINT32_C(0) &&
+                   CNA_HAPTIC_EFFECT_TYPE_LEFT_RIGHT == UINT32_C(11) &&
+                   CNA_HAPTIC_EFFECT_TYPE_CUSTOM == UINT32_C(12) &&
+                   CNA_HAPTIC_EFFECT_TYPE_MAXIMUM == UINT32_C(12) &&
+                   sizeof(CNA_HapticDirectionType) == sizeof(uint32_t) &&
+                   CNA_HAPTIC_DIRECTION_TYPE_POLAR == UINT32_C(0) &&
+                   CNA_HAPTIC_DIRECTION_TYPE_STEERING_AXIS == UINT32_C(3) &&
+                   CNA_HAPTIC_DIRECTION_TYPE_MAXIMUM == UINT32_C(3) &&
+                   CNA_HAPTIC_EFFECT_INFINITE_LENGTH == UINT32_C(4294967295),
+               "CNA haptic effect identities must remain stable");
+
+_Static_assert(sizeof(CNA_HapticDirection) == 16U &&
+                   _Alignof(CNA_HapticDirection) == 4U &&
+                   offsetof(CNA_HapticDirection, values) == 4U,
+               "CNA_HapticDirection layout must remain stable");
+
+_Static_assert(sizeof(CNA_HapticCapabilities) == 28U &&
+                   _Alignof(CNA_HapticCapabilities) == 4U &&
+                   offsetof(CNA_HapticCapabilities, features) == 8U &&
+                   offsetof(CNA_HapticCapabilities, axis_count) == 12U &&
+                   offsetof(CNA_HapticCapabilities, max_effects) == 16U &&
+                   offsetof(CNA_HapticCapabilities, max_effects_playing) == 20U &&
+                   offsetof(CNA_HapticCapabilities, is_open) == 24U &&
+                   offsetof(CNA_HapticCapabilities, rumble_supported) == 25U &&
+                   offsetof(CNA_HapticCapabilities, reserved) == 26U,
+               "CNA_HapticCapabilities layout must remain stable");
+
+_Static_assert(sizeof(CNA_HapticEffect) == 108U &&
+                   _Alignof(CNA_HapticEffect) == 4U &&
+                   offsetof(CNA_HapticEffect, type) == 8U &&
+                   offsetof(CNA_HapticEffect, direction) == 16U &&
+                   offsetof(CNA_HapticEffect, length) == 32U &&
+                   offsetof(CNA_HapticEffect, level) == 42U &&
+                   offsetof(CNA_HapticEffect, ramp_start) == 52U &&
+                   offsetof(CNA_HapticEffect, right_saturation) == 56U &&
+                   offsetof(CNA_HapticEffect, center) == 86U &&
+                   offsetof(CNA_HapticEffect, large_magnitude) == 92U &&
+                   offsetof(CNA_HapticEffect, custom_period) == 96U &&
+                   offsetof(CNA_HapticEffect, custom_channels) == 98U &&
+                   offsetof(CNA_HapticEffect, fade_level) == 106U,
+               "CNA_HapticEffect layout must remain stable");

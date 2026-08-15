@@ -3569,6 +3569,191 @@
       "tests": "`InputSnapshotsSmoke.c` writes a slot and observes the exact scaled touch after the frame advances, observes the released frame after clearing it, asserts the raised event is dropped with no display size and never reaches the snapshot with one, drains whatever gesture the detector produced, and asserts the reset really does clear the display metrics and window handle; the out-of-range slot, undefined state and wrong-thread refusals are covered too",
       "status": "implemented",
       "task": "CBIND-037B5"
+    },
+    {
+      "id": "haptic-feature",
+      "qualified_name_regex": "^CNA::Input::HapticFeatureEXT(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_HapticFeature` bit set with one `CNA_HAPTIC_FEATURE_*` macro per canonical value at its canonical bit — including the deliberate gaps between `LeftRight` at bit 11, `Custom` at bit 15 and the four global capabilities at bits 16 through 19 — plus `CNA_HAPTIC_FEATURE_ALL` for validation. The identities and the mask are pinned by C and C++ ABI assertions",
+      "tests": "`HapticsSmoke.c` composes feature sets, and every capabilities snapshot a device reports is asserted to contain no bit outside `CNA_HAPTIC_FEATURE_ALL`",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-feature-operators",
+      "qualified_name_regex": "^CNA::Input::operator(\\||&|~|\\|=|&=)$",
+      "signature_regex": "^\\(HapticFeatureEXT.*\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "No separate route: this identity is a real bit set, so C composes and masks it with its own bitwise operators, the same reasoning as the gesture-type and key-modifier flags. Routes that accept a feature set validate against `CNA_HAPTIC_FEATURE_ALL`",
+      "tests": "`HapticsSmoke.c` builds a combined feature set with C's own `|` and compares capability values that differ only in it",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-effect-type",
+      "qualified_name_regex": "^CNA::Input::HapticEffectTypeEXT(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_HapticEffectType` with one `CNA_HAPTIC_EFFECT_TYPE_*` macro per canonical value at its canonical ordinal, plus `CNA_HAPTIC_EFFECT_TYPE_MAXIMUM`. Unlike the feature set this is an identity rather than a bit set, and an out-of-range value is refused",
+      "tests": "`HapticsSmoke.c` round-trips every one of the thirteen identities through an effect value and refuses the first undefined one",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-direction",
+      "qualified_name_regex": "^CNA::Input::HapticDirection(TypeEXT(::[A-Za-z]+)?|EXT(::(type|values))?)$",
+      "kinds": [
+        "enum",
+        "enum-value",
+        "struct",
+        "field"
+      ],
+      "mapping": "a `CNA_HapticDirectionType` identity and a fixed 16-byte `CNA_HapticDirection` value carrying the type and all three components, with `cna_haptic_direction_init` producing the canonical polar default. A value rather than a handle, because the canonical type is a plain copyable aggregate",
+      "tests": "`HapticsSmoke.c` asserts the canonical default and the null-output refusal, and the layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-direction-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const HapticDirectionEXT &left, const HapticDirectionEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_haptic_direction_equals`, with the canonical `!=` expressed as its negation. All three components are compared whatever the type says is meaningful, exactly as the canonical comparison does",
+      "tests": "`HapticsSmoke.c` proves a polar direction still separates on its unused third component, separates on the type, and covers the undefined-type and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-effect-value",
+      "qualified_name_regex": "^CNA::Input::HapticEffectEXT(::(InfiniteLengthEXT|type|direction|length|delay|button|interval|level|period|magnitude|offset|phase|rampStart|rampEnd|rightSaturation|leftSaturation|rightCoefficient|leftCoefficient|deadband|center|largeMagnitude|smallMagnitude|customChannels|customPeriod|customData|attackLength|attackLevel|fadeLength|fadeLevel))?$",
+      "kinds": [
+        "struct",
+        "field",
+        "constant"
+      ],
+      "mapping": "one fixed 108-byte `CNA_HapticEffect` value flattening every family exactly as the canonical descriptor does, with `cna_haptic_effect_init` producing the canonical defaults and `CNA_HAPTIC_EFFECT_INFINITE_LENGTH` carrying the play-forever length. **One representational difference is documented rather than hidden:** the canonical descriptor owns its custom waveform in a vector, while C passes that buffer *beside* the value on every route that takes an effect, so the C value stays a plain copyable POD with no heap ownership",
+      "tests": "`HapticsSmoke.c` asserts every field of the default value, and the layout of all 28 fields is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-effect-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const HapticEffectEXT &left, const HapticEffectEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_haptic_effect_equals`, which takes both custom sample buffers alongside the two values so it reproduces the canonical comparison including the waveform. The canonical `!=` is its negation. Every field is compared regardless of which family the type selects, exactly as the canonical comparison does",
+      "tests": "`HapticsSmoke.c` proves two effects separate on a field their own family ignores, that the sample buffers participate in the comparison by content and by length, and covers the undefined-identity, invalid-structure and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-capabilities-value",
+      "qualified_name_regex": "^CNA::Input::HapticCapabilitiesEXT(::(isOpen|name|features|axisCount|maxEffects|maxEffectsPlaying|rumbleSupported))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "a fixed 28-byte `CNA_HapticCapabilities` value plus `cna_haptic_capabilities_init` for the canonical defaults, whose two effect counts are **-1 rather than zero** because a closed device reports \"unknown\", which is deliberately distinguishable from \"none\". The canonical `name` field is the one member left out of the value: a string does not belong inside a POD, so it is read through `cna_haptic_device_get_name_size`/`_copy_name` instead",
+      "tests": "`HapticsSmoke.c` asserts the canonical defaults including both -1 counts, and every capability snapshot read from a device is checked to agree with that device's open state and to carry no undefined feature bit",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-capabilities-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const HapticCapabilitiesEXT &left, const HapticCapabilitiesEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "`cna_haptic_capabilities_equals`, which takes the two device names alongside the two values because the C value deliberately does not carry one. Supplying them reproduces the canonical comparison exactly rather than quietly comparing fewer fields than the canonical operator does. The canonical `!=` is its negation",
+      "tests": "`HapticsSmoke.c` proves two otherwise identical values separate on the name alone and on a feature bit, and covers the invalid-structure, invalid-UTF-8 and null-argument refusals",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-info",
+      "qualified_name_regex": "^CNA::Input::HapticInfoEXT(::(id|name))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "the index-addressed enumeration `cna_haptics_get_count` plus `cna_haptics_get_id_at`, `cna_haptics_get_name_size_at` and `cna_haptics_copy_name_at`. The descriptor's two fields are exposed directly rather than as a value, because one of them is a string and the count/copy protocol is how a name crosses this ABI. The enumeration is a point-in-time snapshot taken by each call, so an index is only valid until the device set changes",
+      "tests": "`HapticsSmoke.c` enumerates every device this machine reports, round-trips each identifier and name, and refuses an index at or past the count — which pins the zero-device case that every verification tree actually has",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-info-operators",
+      "qualified_name_regex": "^CNA::Input::operator(==|!=)$",
+      "signature_regex": "^\\(const HapticInfoEXT &left, const HapticInfoEXT &right\\)$",
+      "kinds": [
+        "operator"
+      ],
+      "mapping": "No separate route: the canonical comparison is an integer equality and a string equality over the two fields the enumeration already hands out, so C compares the identifier with `==` and the copied name bytes with `memcmp`. Inventing a route would add an ABI entry point that does nothing C cannot already do",
+      "tests": "`HapticsSmoke.c` compares enumerated identifiers and copied names directly while walking the enumeration",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptics-facade",
+      "qualified_name_regex": "^CNA::Input::Haptics(::(GetHapticsEXT|OpenEXT|OpenFromJoystickEXT|OpenFromMouseEXT|IsJoystickHapticEXT|IsMouseHapticEXT))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "free `cna_haptics_*` routes rather than a handle, because the canonical constructor is deleted and every member is static — the same shape as `Mouse`, `Keyboard`, `TextInputEXT` and `TouchPanel`. Each takes an active game handle, because CNA is event-driven and a device query is only meaningful on the game thread of a running game. **The three open routes never fail for want of hardware:** they always hand back a real owned handle whose `cna_haptic_device_get_is_open` reports whether anything is behind it, exactly as the canonical factories return a closed device. As a `CNA::Input` surface with no XNA counterpart, the whole header takes no `_ext` suffixes, following `core_ext.h`",
+      "tests": "`HapticsSmoke.c` enumerates and opens every reported device, opens a deliberately nonexistent identifier, the mouse and a joystick, asserts each yields a usable handle, and covers the null-output and wrong-thread refusals under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-device-handle",
+      "qualified_name_regex": "^CNA::Input::HapticDevice(::(~HapticDevice|Dispose|IsOpenEXT|GetNameEXT|GetCapabilitiesEXT|IsEffectSupportedEXT|InitRumbleEXT|PlayRumbleEXT|StopRumbleEXT|CreateEffectEXT|UpdateEffectEXT|RunEffectEXT|StopEffectEXT|DestroyEffectEXT|GetEffectStatusEXT|StopAllEffectsEXT|SetGainEXT|SetAutocenterEXT|PauseEXT|ResumeEXT))?$",
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_HapticDeviceHandle`. The canonical destructor becomes `cna_haptic_device_destroy` and `Dispose` its own idempotent route, so a caller can close the device without giving up the handle — the same split `MouseCursor` uses. A closed device is not an error state: every route on it succeeds and answers `CNA_FALSE`, zero or -1 through its output, which is what makes the family usable with no force-feedback hardware. Two canonical pass-throughs are preserved: the rumble strength, the gain and the autocenter are handed to the platform unvalidated, and freeing an unknown effect identifier is a successful no-op because the canonical operation reports nothing. `RunEffectEXT`'s defaulted iteration count is passed explicitly, since C has no defaulted arguments",
+      "tests": "`HapticsSmoke.c` drives every route on a closed device and on any real device the machine supplies, asserts the -1 effect identifier and the false answers a closed device must give, proves disposal is idempotent and leaves the handle usable, and covers double release, a never-created handle and every null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan with leak detection on",
+      "status": "implemented",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-device-native-constructor",
+      "qualified_name_regex": "^CNA::Input::HapticDevice::HapticDevice$",
+      "signature_regex": "^\\(SDL_Haptic \\*handle\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: this constructor adopts a raw `SDL_Haptic*`, a native backend pointer that must never cross the ABI. C obtains devices through the three `cna_haptics_open*` routes, which is the same set of devices the canonical factories can produce",
+      "tests": "Doxygen declaration inventory; all three C-reachable open paths are covered by `HapticsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037B6"
+    },
+    {
+      "id": "haptic-device-moves",
+      "qualified_name_regex": "^CNA::Input::HapticDevice::(HapticDevice|operator=)$",
+      "signature_regex": "^\\(HapticDevice &&other\\)( noexcept)?$",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: a handle is the only name C has for a device, so there is no second name to move from. The canonical move operations exist so the C++ factories can return by value, which the C factories express by handing back an owned handle instead — the same reasoning recorded for `MouseCursor`",
+      "tests": "Doxygen declaration inventory; ownership transfer is covered by the open/destroy round trips in `HapticsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037B6"
     }
   ]
 }

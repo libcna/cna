@@ -456,6 +456,26 @@
 > than stored or dropped silently. Five rows are `not-applicable` with reasons: the four iterator
 > overloads and the class-local `intcs` alias. The inventory is now 4,284 implemented, 30 partial,
 > 1,975 planned and 126 N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B6 then adds the haptics extension family, 126 rows — the first input slice with no XNA
+> counterpart at all, so the whole header maps `CNA::Input` and takes no `_ext` suffixes, following
+> `core_ext.h`. It is also the first input slice to produce an **owned handle** rather than a value:
+> `HapticDevice` becomes `CNA_HapticDeviceHandle` (`ObjectKind` 68) with the destructor/`Dispose`
+> split `MouseCursor` established. The design point that makes the family usable at all is that a
+> **closed device is not an error state**: the three open routes never fail for want of hardware,
+> they hand back a real handle whose open flag says whether anything is behind it, and every route
+> on a closed device answers `CNA_FALSE`, zero or -1 through its output. That is what lets the whole
+> surface be tested on machines with no force-feedback hardware, which is every verification tree.
+> Two representational decisions are documented rather than hidden: a custom waveform travels
+> **beside** the effect value instead of inside it, so the C value stays a plain copyable POD with no
+> heap ownership, and the device name is left out of the capability value and read through the
+> count/copy pair — which is why the capability comparison takes both names as arguments, so it
+> reproduces the canonical comparison exactly instead of quietly comparing fewer fields. The
+> canonical pass-throughs are preserved: rumble strength, gain and autocenter reach the platform
+> unvalidated, and freeing an unknown effect identifier is a successful no-op. Three rows are
+> `not-applicable` with reasons: the `SDL_Haptic*` constructor and the two move operations. The
+> inventory is now 4,407 implemented, 30 partial, 1,849 planned and 129 N/A; all four trees stay
+> green, now at 52/52 with the new `CApi_HapticsSmoke` target.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 
