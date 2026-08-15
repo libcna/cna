@@ -60,9 +60,19 @@ function(cna_configure_tinygl)
     # OpenMP_C_FOUND. Attach the target ourselves when available; its compile option defines
     # _OPENMP and its link interface resolves the resulting runtime references. With no target the
     # guarded pragmas compile out and no runtime dependency is created.
-    if(TARGET OpenMP::OpenMP_C)
+    #
+    # MSVC is excluded deliberately. Upstream's clip.c and vertex.c use `#pragma omp simd`, an
+    # OpenMP 4.0 construct; MSVC's default /openmp implements 2.0 and rejects it with C7660,
+    # asking for /openmp:experimental. Taking an acceleration that is optional by design (see
+    # TINYGL-21) in exchange for a dependency on an experimental compiler switch is a bad trade,
+    # so Windows/MSVC builds take the same complete single-threaded path that TINYGL-21 already
+    # tests: 14/14 suites pass with no OpenMP, and the archive carries no OpenMP references.
+    if(TARGET OpenMP::OpenMP_C AND NOT MSVC)
         target_link_libraries(tinygl-static PUBLIC OpenMP::OpenMP_C)
         message(STATUS "CNA: TinyGL OpenMP acceleration enabled")
+    elseif(MSVC)
+        message(STATUS "CNA: TinyGL OpenMP skipped on MSVC (omp simd needs OpenMP 4.0); "
+                       "using the complete single-threaded path")
     else()
         message(STATUS "CNA: TinyGL OpenMP unavailable; using the complete single-threaded path")
     endif()

@@ -36,7 +36,7 @@ Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
 Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, while Windows/MSVC
 x86_64 configures successfully and is still working through portability debt in the pinned
 `sharp-runtime`, before CNA or the TinyGL tests are compiled. Each cycle advances through a
-*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 of 596 so far.
+*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 → 168 → 257 of 596 so far; all of `sharp-runtime` now compiles.
 
 ## Implemented
 
@@ -229,6 +229,8 @@ executables, pushed to `develop`, then pinned by its full SHA in the workflow.
 | `498a1304` | `FileSystemInfo.cpp` C2039/C3861, `file_clock::to_sys`/`from_sys` absent (step 91/596) | *superseded — see below* |
 | `391563f1` | the above fix broke the green macOS job | preprocessor split on `_MSVC_STL_VERSION` |
 | `062b9286` | `Socket.cpp`/`TcpClient.cpp` C2589/C4003, `windows.h` `min`/`max` macros (step 154/596) | `NOMINMAX`, plus two Winsock narrowings CI had not yet reached |
+| `f23ded28` | `HttpDateParser.hpp` C4477, `sscanf_s` size passed as `size_t` (step 168/596) | narrowed to `unsigned`, the type the UCRT reads back |
+| *(CNA-side)* | upstream TinyGL `clip.c` C7660, `#pragma omp simd` needs OpenMP 4.0 (step 257/596) | MSVC takes the single-threaded TinyGL path |
 
 Matching CNA pin commits: `1faefcd4b`, `3d5303410`, `9ad2194d9`, `5e4457e27`, `4dd97692c`,
 `b7a9cb532`. Linux/GCC x86_64 and macOS/AppleClang arm64 passed 14/14 in every one of these runs

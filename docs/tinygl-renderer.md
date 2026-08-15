@@ -205,6 +205,9 @@ cmake --build cmake-build-tinygl -j4
 TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/tinygl` points at an
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
+MSVC always takes that single-threaded path: upstream's `#pragma omp simd` is an OpenMP 4.0
+construct, MSVC's default `/openmp` implements 2.0 and rejects it (C7660), and an optional
+acceleration is not worth a dependency on `/openmp:experimental`.
 
 Fourteen suites, 113 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
