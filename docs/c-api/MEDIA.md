@@ -165,3 +165,35 @@ is still saved, with zero width and height, exactly as the canonical operation r
 picture joins the library's saved-picture collection and can be found again by its token —
 `cna_media_library_get_picture_from_token`, where an unknown token is a successful "not found"
 rather than a failure.
+
+## Playback: the media player and its queue
+
+`media_player.h` maps the static `MediaPlayer` as free `cna_media_player_*` routes, each taking an
+active game handle — the player is process-wide state a running game owns, the same reason the input
+captures take one.
+
+Two canonical behaviors are preserved rather than tightened: the volume setter **clamps** to 0
+through 1 instead of refusing an out-of-range value, and the indexed `play` overload does **not**
+range-check its index — an out-of-range one simply leaves no active song. The two static events
+become owned registrations with one shared `cna_media_player_unsubscribe_ext`, and the canonical
+deferred raises are exposed so a C application can observe its own wiring without waiting for a song
+to change.
+
+**The queue is one process-lifetime object**, so `cna_media_player_get_queue` hands back a *view* of
+it — the same shape a stock mouse cursor uses — and there is no route that constructs, moves or
+destroys a queue, because C never can.
+
+Two deviations inside the queue are forced by ownership and are worth knowing:
+
+- **A queue entry crosses as an independently owned copy, not a view.** The canonical queue destroys
+  its entries whenever it is cleared, which every `play` route does, so a borrowed handle would
+  dangle. The copy carries the same file and name and therefore compares equal to the entry — song
+  equality is the file path.
+- **`cna_media_queue_add` appends a copy** for the mirror-image reason: the canonical `Add` adopts
+  the pointer it is given, and C cannot hand a handle's object away without leaving the caller
+  holding a stale handle. Appending a copy is exactly what the canonical player itself does when it
+  enqueues a song.
+
+Whether playback actually starts depends on the platform's ability to decode the file, not on this
+ABI. `cna_media_player_get_state` reports what really happened, so a C application should read the
+state back rather than assume `play` began playing.

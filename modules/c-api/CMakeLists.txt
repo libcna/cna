@@ -38,6 +38,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiMath.cpp
     src/CnaCApiMedia.cpp
     src/CnaCApiMediaLibrary.cpp
+    src/CnaCApiMediaPlayer.cpp
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
     src/CnaCApiNet.cpp
@@ -903,6 +904,31 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE cna_c_api)
     target_link_libraries(cna_c_api_media_library_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_media_library_smoke)
+    add_executable(cna_c_api_media_player_smoke
+        tests/pure_c/MediaPlayerSmoke.c
+    )
+    set_target_properties(cna_c_api_media_player_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_compile_definitions(cna_c_api_media_player_smoke PRIVATE
+        CNA_C_API_MEDIA_FIXTURE_MUSIC="${CNA_C_API_MEDIA_FIXTURE_ROOT}/Music"
+    )
+    target_link_libraries(cna_c_api_media_player_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_media_player_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_media_player_smoke)
+    add_test(NAME CApi_MediaPlayerSmoke COMMAND cna_c_api_media_player_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy;XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+        )
+    else()
+        set_tests_properties(CApi_MediaPlayerSmoke PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy;XDG_CONFIG_HOME=${CNA_C_API_MEDIA_FIXTURE_ROOT}/config"
+        )
+    endif()
+
     add_test(NAME CApi_MediaLibrarySmoke COMMAND cna_c_api_media_library_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_MediaLibrarySmoke PROPERTIES

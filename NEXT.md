@@ -608,6 +608,27 @@
 > planned and 173 N/A; all four trees green at 56/56. **Next: CBIND-037C6**, `MediaPlayer` and
 > `MediaQueue` (44 rows) — a static event surface, so the process-wide registration shape applies.
 >
+> CBIND-037C6 then maps that playback surface. The player becomes free game-scoped routes (C has no
+> static class) and the queue becomes a **view of one process-lifetime object**, so there is no
+> route to construct, move or destroy a queue — four rows recorded as a stated limitation rather
+> than an oversight. Two canonical behaviors are preserved rather than tightened: the volume setter
+> **clamps** instead of refusing, and the indexed play overload is **not** range-checked. Two
+> deviations are forced by ownership and documented in both the header and the coverage rule: a
+> **queue entry crosses as an independently owned copy** rather than a borrowed view, because the
+> canonical queue destroys its entries on every clear — which every play route does — so a borrowed
+> handle would dangle; and **append copies** for the mirror reason, since the canonical `Add` adopts
+> the pointer it is given and C cannot hand a handle's object away without leaving the caller a
+> stale handle. Both copies carry the same file and name, so they compare equal to the original,
+> which is exactly what the canonical player does when it enqueues a song.
+>
+> The test asserts the playback transitions **as a relationship**, not a fixed answer: whether a
+> play call really starts playing depends on the platform's ability to decode the fixture file, so
+> the paused/playing round trip is asserted when playback began and the no-op contract otherwise.
+> Every process-wide setting it touches is restored. The inventory is now 4,734 implemented, 30
+> partial, 1,474 planned and 177 N/A; all four trees green at 57/57. **Next: CBIND-037C7**, `Video`
+> and `VideoPlayer` (42 rows), which closes the media module — FFmpeg is available in all four
+> trees, and it is the one media family that touches the graphics device.
+>
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
 > TextureCube, input events and other families that later slices implemented. It belongs to

@@ -413,7 +413,7 @@ module list stays exactly what the C API adapts.
 | CBIND-037C3 | 117 | Complete the library catalog: MediaLibrary, albums, artists, genres, playlists | ✅ | `media_library.h`, `CnaCApiMediaLibrary.cpp` and `MediaLibrarySmoke.c` map `MediaLibrary` and the four entity families with their collections (`ObjectKind` 74–82). **Re-partitioned on arrival:** `MediaLibrary` moved here from `CBIND-037C5` and its six picture rows moved to `CBIND-037C4`, because none of the entity types is constructible from outside the library — a slice that mapped them without it could not have produced a single testable object. The shape decision is that **everything except the library is a borrowed view holding a reference to its library**, so releasing the library handle first is safe and there is no parent-before-child rule to remember; the four structurally identical collection types therefore share one C shape rather than four. Album equality is **not** the name alone: names collide across artists, so the canonical comparison pairs name with artist. Optional entities — an album's artist and genre, a song's album, artist and genre — follow the availability-separate-from-the-answer rule. **No stream crosses the ABI:** the canonical art members hand back a caller-owned stream, so C reads it to the end and destroys it inside the call and the image crosses as bytes; the thumbnail is the same image, which is canonical rather than a C limitation. The sanitizer tree earned its keep here — it proved that `MediaLibrary(MediaSource*)` **borrows** its argument (it copies the kind and name into an object of its own) rather than adopting it, so the C route destroys every enumerated source before returning. Twenty-five rows are `not-applicable`: the `Album::MediaLibrary` friend declaration and the four collections' iterator pairs and aliases. The test points SDL's user-folder lookup at a generated fixture through `XDG_CONFIG_HOME`, so the scanned library is **deterministic** — two tag-only MP3 files sharing an artist, album and genre plus a folder cover whose exact bytes the art routes must return — instead of depending on whatever music the host holds, and no real user directory is read or written. Green in all four trees (56/56) and under ASan+UBSan with leak detection on. |
 | CBIND-037C4 | 60 | Complete pictures, picture albums and the library's picture surface | ✅ | `media_library.h` grows `CNA_PictureHandle`, `CNA_PictureAlbumHandle` and their two collections (`ObjectKind` 83–86), plus the six `MediaLibrary` picture rows re-partitioned in from `CBIND-037C3`. Two shapes are new. **The picture-album tree is the only tree in the media family**, and the root's absent parent is what makes it walkable: `cna_picture_album_get_parent` reports availability rather than failing, so a caller climbs until the flag turns false; `cna_media_library_get_root_picture_album` answers the same way, because a device with no readable picture location has no tree at all. And **a picture's date is the ABI's first point in time**: durations elsewhere are 100-nanosecond ticks from zero, so the date uses the same tick counted from the Unix epoch — the canonical clock's own epoch — rather than inventing a second time unit. Everything else reuses shapes already settled: image and thumbnail bytes follow the album-art contract (the canonical caller-owned stream is read to its end and destroyed inside the call, so no stream enters the ABI, and the thumbnail is the same image), and the collections are the same six-route shape the music collections use. `cna_media_library_save_picture_from_stream` takes a **storage stream handle**, since a storage stream is the only byte source this ABI owns — the same decision `content_readers.h` made — borrowed for the call and left the caller's to close. Twelve rows are `not-applicable`: the two collections' iterator pairs and aliases. The `CBIND-037C3` fixture is extended with a one-pixel BMP, so the picture side is as deterministic as the music side; the suite deletes the picture it saves so repeated runs start from the same state. Green in all four trees (56/56) and under ASan+UBSan with leak detection on. |
 | CBIND-037C5 | 0 | Complete MediaLibrary | ✅ | **Absorbed into `CBIND-037C3`** (music surface) and `CBIND-037C4` (picture surface). `MediaLibrary` could not be a slice of its own in either direction: its members return the entity collections, and none of those entities can be obtained without it. |
-| CBIND-037C6 | 44 | Complete MediaPlayer and MediaQueue | ⬜ | Map the `MediaPlayer` statics, its events and the active queue. Expect the process-wide event registration shape the mouse, text-input and joystick surfaces already use. |
+| CBIND-037C6 | 44 | Complete MediaPlayer and MediaQueue | ✅ | `media_player.h` and `CnaCApiMediaPlayer.cpp` map the static `MediaPlayer` as free game-scoped routes and the queue as a **view of one process-lifetime object** (`ObjectKind` 87, registrations 88). Two canonical behaviors are preserved rather than tightened — the volume setter clamps instead of refusing, and the indexed `Play` overload is not range-checked — and two deviations are forced by ownership and documented: **a queue entry crosses as an independently owned copy** rather than a borrowed view, because the canonical queue destroys its entries on every clear (which every play route does) and a borrowed handle would dangle, and **`cna_media_queue_add` appends a copy** because the canonical `Add` adopts the pointer it is given, which C cannot do without leaving the caller a stale handle. Both copies carry the same file and name, so they compare equal to the original — and appending a copy is exactly what the canonical player itself does when it enqueues a song. Four rows are `not-applicable` with a stated limitation: the queue's constructor, destructor and move operations, since exactly one queue exists and C never constructs, moves or destroys it. The test asserts the playback transitions **as a relationship**, because whether `play` actually starts playing depends on the platform's ability to decode the fixture rather than on the C API — the paused/playing round trip is asserted when playback began and the no-op contract otherwise. Green in all four trees (57/57) and under ASan+UBSan with leak detection on. |
 | CBIND-037C7 | 42 | Complete Video and VideoPlayer | ⬜ | Map `Video` and `VideoPlayer`, the only media rows that touch the graphics device. FFmpeg is available in all four verification trees, so the decoder is real rather than compiled out; the per-frame texture must reuse the existing `CNA_Texture2DHandle` contract rather than inventing a second one. |
 
 #### CBIND-036B content implementation slices
@@ -549,8 +549,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037C4`):** 414 headers / 6,415 symbols —
-**4,694 implemented, 30 partial, 1,518 planned, 173 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037C6`):** 414 headers / 6,415 symbols —
+**4,734 implemented, 30 partial, 1,474 planned, 177 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -566,7 +566,7 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,518 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,474 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -574,7 +574,7 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037C` media | 86 (after `C1`–`C5`) | sub-partitioned into `C1`–`C7`; `C1`–`C5` are done, `C6` MediaPlayer/MediaQueue is next |
+| 1 | `CBIND-037C` media | 42 (after `C1`–`C6`) | only `C7` Video/VideoPlayer left, which closes the media module |
 | 2 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
 | 3 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
 | 4 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
@@ -930,7 +930,14 @@ parent is an availability answer rather than a failure, and the ABI's first **po
 picture's date as 100-nanosecond ticks from the Unix epoch, reusing the existing tick rather than
 inventing a second time unit. The stream-taking save overload accepts a storage stream handle, the
 only byte source this ABI owns. The snapshot is now 4,694 implemented, 30 partial, 1,518 planned and
-173 not applicable.
+173 not applicable. CBIND-037C6 then maps playback: the static `MediaPlayer` as game-scoped free
+routes and the queue as a view of one process-lifetime object. Its two deviations are both forced by
+ownership — a queue entry crosses as an owned copy because the canonical queue destroys its entries
+on every clear, and appending copies because the canonical `Add` adopts the pointer it is given —
+and both copies compare equal to the original, which is exactly what the canonical player does when
+it enqueues a song. The playback transitions are asserted as a relationship, because whether a play
+call really starts playing depends on the platform's decoder rather than on the C API. The snapshot
+is now 4,734 implemented, 30 partial, 1,474 planned and 177 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -943,20 +950,19 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037C6`, `MediaPlayer` and `MediaQueue` — **44 rows**. `C1`–`C5` are done, so
-  the whole media catalog exists: songs, the library, the music entities and the picture tree, all
-  reachable and tested against a deterministic generated fixture.
+- **Next task:** `CBIND-037C7`, `Video` and `VideoPlayer` — **42 rows**, the last of the media
+  module. `C1`–`C6` are done, so songs, the library, the music entities, the picture tree and
+  playback all exist and are tested against a deterministic generated fixture.
 
-  `MediaPlayer` is a **static** surface with events, so expect the process-wide registration shape
-  the mouse, text-input, joystick and device families already use — subscribe routes returning an
-  owned registration, one shared unsubscribe, and a raise route per event where the canonical class
-  offers one. `MediaQueue` is the player's active queue and is reached through it. Two things to
-  check in the canonical `.cpp` before designing: whether playback actually starts without an audio
-  device (the audio slice's `NOT_SUPPORTED` contract may apply), and whether `MediaPlayer` holds the
-  songs it plays or borrows them — that decides whether a queue entry is a borrowed view like a
-  library song or a retained one like a C-built song collection. `CBIND-037C7` (Video and
-  VideoPlayer, 42 rows) then closes the media module; FFmpeg is available in all four trees, so its
-  decoder is real rather than compiled out.
+  What to know before starting: **FFmpeg is available in all four verification trees**, so
+  `VideoPlayer` is real rather than compiled out — `modules/media/CMakeLists.txt` excludes
+  `VideoDecoder.cpp`, `VideoPlayer.cpp` and `Video.cpp` only when `CNA_FFMPEG_AVAILABLE` is false,
+  and every tree's cache has it. This is the one media family that touches the graphics device: the
+  player produces a texture per frame, so it must reuse the existing `CNA_Texture2DHandle` contract
+  rather than inventing a second one, and the borrowed-device rule from `graphics.h` applies. The
+  fixture mechanism is already there if a video file is needed; generating a decodable one in C is
+  harder than the tag-only MP3 was, so decide early whether the slice can be evidenced with an
+  undecodable file plus the honest failure path, the way the audio slice handles a missing device.
 - **`CBIND-037D` has an environment decision already made by the owner (2026-08-15):** the entire
   `devices-ext` public surface is wrapped in `#ifdef CNA_DEVICES`, and that option is **OFF in all
   four verification trees**, so 83 of that slice's rows would otherwise only ever be tested in
@@ -983,7 +989,7 @@ order:
 | `include/CNA/C/<family>.h` | the public surface. One header per family — 51 today (`media_library.h`, `media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
 | `src/CnaCApi<Family>.cpp` | the adapter — 41 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
-| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 87**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
+| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 89**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
 | `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (56 tests today). |
 | `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 51 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |

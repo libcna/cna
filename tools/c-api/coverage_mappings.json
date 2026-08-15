@@ -4261,6 +4261,45 @@
       "tests": "`MediaLibrarySmoke.c` extends the generated fixture library with a one-pixel BMP, so the picture side is as deterministic as the music side and no real user directory is read or written. Saving the fixture image produces a live picture that joins the saved-picture collection, whose token then finds it again and whose bytes read back identically; the null-buffer and null-output refusals are covered, an unknown token is proven to be a successful \"not found\", and the suite deletes the file it saved so a later run starts from the same state",
       "status": "implemented",
       "task": "CBIND-037C4"
+    },
+    {
+      "id": "media-player",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaPlayer(::(ActiveSongChanged|MediaStateChanged|getGameHasControlProperty|getIsMutedProperty|setIsMutedProperty|getIsRepeatingProperty|setIsRepeatingProperty|getIsShuffledProperty|setIsShuffledProperty|getPlayPositionProperty|getQueueProperty|getStateProperty|getVolumeProperty|setVolumeProperty|getIsVisualizationEnabledProperty|setIsVisualizationEnabledProperty|MoveNext|MovePrevious|Pause|Play|Resume|Stop|GetVisualizationData|Update|OnActiveSongChanged|OnMediaStateChanged|ProgramExit|DetectSongEndedByElapsedTime))?$",
+      "kinds": [
+        "class",
+        "event",
+        "method"
+      ],
+      "mapping": "free `cna_media_player_*` routes, because C has no static class. Every route takes an active game handle for the same reason the input captures do — the player is process-wide state a running game owns. The three `Play` overloads become `_play_song`, `_play_songs` and `_play_songs_from`; **the canonical player copies the song it is given into its queue rather than taking it**, so a caller's handle is unaffected. Two canonical behaviors are preserved rather than tightened: the volume setter **clamps** to 0 through 1 instead of refusing, and the indexed `Play` overload does not range-check its index. The two static `EventHandler` events become owned registrations with one shared `cna_media_player_unsubscribe_ext`, and the canonical deferred raises are exposed as `_raise_active_song_changed_ext`/`_raise_media_state_changed_ext` so a C application can observe its own wiring. `Update`, `ProgramExit` and the elapsed-time song-end detector keep `_ext` suffixes, being CNA extensions; the detector's canonical rule is preserved exactly — a song whose duration is unknown never reports ended",
+      "tests": "`MediaPlayerSmoke.c` round-trips every flag and restores it, since these are process-wide settings the suite does not own; proves the volume clamp at both ends; drives the queue through `play`, `pause`, `resume` and `stop` asserting the transitions **as a relationship** — whether playback actually starts depends on the platform's ability to decode the file, not on the C API, so the suite asserts the paused/playing round trip only when playback began and the no-op contract otherwise; covers both event registrations end to end with per-registration detach; and proves the song-end detector reports nothing for an unknown duration and reports ended once a known one is exceeded",
+      "status": "implemented",
+      "task": "CBIND-037C6"
+    },
+    {
+      "id": "media-queue",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaQueue(::(getActiveSongProperty|getActiveSongIndexProperty|setActiveSongIndexProperty|getCountProperty|operator\\[\\]|Add|Clear|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "a borrowed `CNA_MediaQueueHandle` from `cna_media_player_get_queue` — a view of the one process-lifetime queue, like a stock mouse cursor — with count, active index get/set, `_get_at`, `_get_active_song`, `_add`, `_clear` and a type-name pair. **Two deliberate deviations, both forced by ownership.** A queue entry crosses as an *independently owned copy* rather than a borrowed view, because the canonical queue destroys its entries whenever it is cleared — which every play route does — so a borrowed handle would dangle; the copy carries the same file and name and therefore compares equal to the entry. And `cna_media_queue_add` appends a *copy* too, because the canonical `Add` adopts the pointer it is given and C cannot hand a handle's object away without leaving the caller a stale handle — appending a copy is exactly what the canonical player itself does when it enqueues a song. The active index setter stores its value unchecked, as the canonical one does",
+      "tests": "`MediaPlayerSmoke.c` proves the empty queue's -1 active index and unavailable active song, that appending leaves the caller's handle working and yields an entry equal to it, that an out-of-range index is refused in both directions, the exact type name, and that clearing empties the queue",
+      "status": "implemented",
+      "task": "CBIND-037C6"
+    },
+    {
+      "id": "media-queue-lifetime",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaQueue::(MediaQueue|~MediaQueue|operator=)$",
+      "kinds": [
+        "constructor",
+        "destructor",
+        "operator"
+      ],
+      "mapping": "No C mapping, and this is a real limitation rather than an oversight: there is exactly one media queue, created and owned by the media player for the lifetime of the process, so C never constructs, moves or destroys one. `cna_media_player_get_queue` hands back a view of that singleton, and `cna_media_queue_clear` produces the empty state the default constructor would",
+      "tests": "Doxygen declaration inventory; the singleton's observable state is covered in `MediaPlayerSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037C6"
     }
   ]
 }

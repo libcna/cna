@@ -59,8 +59,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `SongCollection` as reference-counted owned handles, and `CBIND-037C3` adds the whole music
 > catalog: the media library plus albums, artists, genres, playlists and their collections as
 > borrowed views that keep their library alive, and `CBIND-037C4` adds the picture surface:
-> pictures, the picture-album tree, both collections and the library's picture and save routes. The
-> generated inventory currently records 4,694 implemented, 30 partial, 1,518 planned and 173
+> pictures, the picture-album tree, both collections and the library's picture and save routes, and
+> `CBIND-037C6` adds playback: every `MediaPlayer` static, both of its events and a view of the
+> process-wide media queue. The
+> generated inventory currently records 4,734 implemented, 30 partial, 1,474 planned and 177
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

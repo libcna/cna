@@ -55,5 +55,6 @@
 #include "CNA/C/audio.h"
 #include "CNA/C/media.h"
 #include "CNA/C/media_library.h"
+#include "CNA/C/media_player.h"
 
 #endif
