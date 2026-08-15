@@ -124,6 +124,37 @@ Vulkan-style source, native-GL source and generated native-GL header. Each row a
 multiplication expression, not merely the presence of a uniform declaration or CPU upload, so a
 factor that reaches the backend but is shading-inert fails this ordinary no-GPU test.
 
+## Skinned palette and influence count (`GLTF-258`, `GLTF-263`, `GLTF-379`)
+
+Every skinned PBR backend receives the same 72-entry column-major palette and XNA's requested
+`WeightsPerVertex` value (1, 2 or 4). The vertex shader always starts with pair zero, adds pair one
+only at `>=2`, and adds pairs two and three only at `>=4`. This matters even though glTF imports
+four stored components: an application may set the effect's public influence count after loading,
+and stale tail values must not silently contribute. The per-renderer carriers are:
+
+| Renderer | Palette carrier | Influence-count carrier used by the PBR vertex shader |
+|---|---|---|
+| Bgfx | `u_bones` | `u_weightsPerVertex.x` |
+| Diligent | `g_Bones` | `g_PbrFlags.w` |
+| DirectX 9 | `Bones` vertex constants | `FogParams.w` |
+| DirectX 11 | PBR skinned `Bones` constant buffer | `EyePosWeights.w` |
+| DirectX 12 | PBR skinned `Bones` constant buffer | `EyePosWeights.w` |
+| EasyGL | `uBones[72]` | `uWeightsPerVertex` |
+| LLGL | `bones` storage block | `roughnessWeightsPad.y` |
+| Magnum | `uBones` | `uWeightsPerVertex` |
+| Metal | vertex bone buffer | `SkinnedPbrTransform::skinParams.x` |
+| OpenGL 2 | `uBones[72]` | `uWeightsPerVertex` |
+| OpenGL 4 | `uBones[72]` | `uWeightsPerVertex` |
+| SDL GPU | `bb.bones` | `lp.eyePos_weightsPerVertex.w` |
+| Vulkan | `bb.bones` | `pbr.fogColorEnabled.w` |
+| WebGPU | `sk.bones` | `sk.weightsPerVertex.x` |
+| Wicked | `bones.boneColumns` | `bones.skinParams.x` |
+
+`EverySkinnedPbrShaderConsumesThePaletteAndInfluenceCount` locks each CPU upload plus both gates.
+It is paired with `EverySkinnedPbrShaderInverseTransposesTheJointMatrix`, whose PBR-specific
+inventory proves that the gated blend is the matrix the actual PBR direction path consumes; a
+generic stock skinning shader elsewhere in the same renderer cannot substitute for that evidence.
+
 ## PBR dielectric Fresnel endpoints (`GLTF-343`, `GLTF-344`)
 
 `GpuDrawParams::pbrDielectricF0` carries the RGB normal-incidence endpoint after applying

@@ -1072,6 +1072,98 @@ namespace
          "const float3 emissive = cb.emissive.rgb * emissiveSample", 1},
     }};
 
+    struct RendererPbrSkinningAudit
+    {
+        const char* name;
+        const char* paletteUpload;
+        const char* weightCountUpload;
+        const char* twoWeightGate;
+        const char* fourWeightGate;
+    };
+
+    // GLTF-258/263/379: the inverse-transpose audit below proves each PBR vertex path uses its
+    // blended joint matrix for directions. This adjacent inventory proves how that matrix is
+    // formed: the real 72-entry palette reaches the backend, and only the first requested 1/2/4
+    // influence pairs contribute. The CPU-upload fragments are PBR-specific where a backend has
+    // multiple stock skinning paths; the shader gates are paired with the PBR evidence below.
+    constexpr std::array<RendererPbrSkinningAudit, 15> kPbrSkinningAudits{{
+        {"bgfx",
+         "bgfx::setUniform(bonesUnif_, params.boneTransforms, static_cast<uint16_t>(params.boneCount))",
+         "bgfx::setUniform(weightsPerVertex3DUnif_, weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0) skinMat += u_bones[int(a_indices.y)] * a_weight.y",
+         "if (weightsPerVertex >= 4.0) skinMat += u_bones[int(a_indices.z)] * a_weight.z"},
+        {"diligent",
+         "UploadBoneTransforms(*params)",
+         "constants.flags[3] = static_cast<float>(params->weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0) skin += g_Bones[indices.y] * weights.y",
+         "if (weightsPerVertex >= 4.0) skin += g_Bones[indices.z] * weights.z"},
+        {"directx9",
+         "UploadBonesVS(device_.Get(), vsRegs, vsCount, params)",
+         "0.0f, 0.0f, 0.0f, static_cast<float>(params.weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0) skinning += Bones[vin.BoneIndices.y] * vin.BoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinning += Bones[vin.BoneIndices.z] * vin.BoneWeights.z"},
+        {"directx11",
+         "std::memcpy(bones.Bones, params.boneTransforms",
+         "lights.EyePosWeights[3] = params.skinned ? static_cast<float>(params.weightsPerVertex) : 0.0f",
+         "if (weightsPerVertex >= 2.0) skinMat += Bones[input.BoneIndices.y] * input.BoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += Bones[input.BoneIndices.z] * input.BoneWeights.z"},
+        {"directx12",
+         "std::memcpy(bones.Bones, params.boneTransforms",
+         "lights.EyePosWeights[3] = params.skinned ? static_cast<float>(params.weightsPerVertex) : 0.0f",
+         "if (weightsPerVertex >= 2.0) skinMat += Bones[input.BoneIndices.y] * input.BoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += Bones[input.BoneIndices.z] * input.BoneWeights.z"},
+        {"easygl",
+         "glUniformMatrix4fv(::metagl::UniformLocation{p.loc_bones}, params.boneCount, 0, params.boneTransforms)",
+         "p.prog.set_uniform(p.loc_weightsPerVertex, params.weightsPerVertex)",
+         "if(uWeightsPerVertex>=2) skinMat+=uBones[aBoneIndices.y]*aBoneWeights.y",
+         "if(uWeightsPerVertex>=4) skinMat+=uBones[aBoneIndices.z]*aBoneWeights.z"},
+        {"llgl",
+         "std::memcpy(bones, params.boneTransforms",
+         "uniforms[45] = static_cast<float>(params.weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0) skinMat += bones[aBoneIndices.y] * aBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bones[aBoneIndices.z] * aBoneWeights.z"},
+        {"magnum",
+         "program.SetMatrix4Array(program.LocationOf(\"uBones\"), params.boneTransforms",
+         "program.SetInt(program.LocationOf(\"uWeightsPerVertex\")",
+         "if (uWeightsPerVertex >= 2) skin += uBones[aBoneIndices.y] * aBoneWeights.y",
+         "if (uWeightsPerVertex >= 4)"},
+        {"metal",
+         "newBufferWithBytes:params->boneTransforms length:sizeof(float)*72*16",
+         "t.skinParams[0]=(float)params.weightsPerVertex",
+         "if (weightsPerVertex >= 2) skinMat += bones[in.boneIndices.y] * in.boneWeights.y",
+         "if (weightsPerVertex >= 4) skinMat += bones[in.boneIndices.z] * in.boneWeights.z"},
+        {"opengl2",
+         "glUniformMatrix4fv(glGetUniformLocation(program, \"uBones[0]\"), params->boneCount",
+         "glUniform1i(glGetUniformLocation(program, \"uWeightsPerVertex\"), params->weightsPerVertex)",
+         "if(uWeightsPerVertex>=2) skinMat+=uBones[i1]*aBoneWeight.y",
+         "if(uWeightsPerVertex>=4) skinMat+=uBones[i2]*aBoneWeight.z"},
+        {"opengl4",
+         "gl4_glUniformMatrix4fv(bonesLoc, params.boneCount, GL_FALSE, params.boneTransforms)",
+         "gl4_glUniform1i(weightsLoc, params.weightsPerVertex)",
+         "if (uWeightsPerVertex >= 2) skinMat += uBones[aBoneIndices.y] * aBoneWeights.y",
+         "if (uWeightsPerVertex >= 4)"},
+        {"sdl-gpu",
+         "out[i] = p.boneTransforms[i]",
+         "command.lightUniforms[39] = static_cast<float>(params.weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[inBoneIndices.y] * inBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[inBoneIndices.z] * inBoneWeights.z"},
+        {"vulkan",
+         "d.boneMatrices.assign(params.boneTransforms, params.boneTransforms + count * 16)",
+         "FillPbrUboData(d.pbrUboData, params, static_cast<float>(params.weightsPerVertex))",
+         "if (weightsPerVertex >= 2.0) skinMat += bb.bones[aBoneIndices.y] * aBoneWeights.y",
+         "if (weightsPerVertex >= 4.0) skinMat += bb.bones[aBoneIndices.z] * aBoneWeights.z"},
+        {"webgpu",
+         "out[4 + i] = p.boneTransforms[i]",
+         "out[0] = static_cast<float>(p.weightsPerVertex)",
+         "if (sk.weightsPerVertex.x >= 2.0)",
+         "if (sk.weightsPerVertex.x >= 4.0)"},
+        {"wicked",
+         "std::copy_n(params->boneTransforms, static_cast<std::size_t>(boneCount) * 16",
+         "boneConstants.skinParams[0] = static_cast<float>(params->weightsPerVertex)",
+         "if (weightsPerVertex >= 2.0f)",
+         "if (weightsPerVertex >= 4.0f)"},
+    }};
+
     std::string RendererSlotText(const std::filesystem::path& renderers, const char* name)
     {
         std::string source = RendererText(renderers / name);
@@ -1532,6 +1624,30 @@ TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJoi
     EXPECT_NE(std::string::npos, skinnedPbr.find(Normalize(
         "normalMatrix * pbrSkinNormal(skinMat3, input.normal)")))
         << "WebGPU's actual SkinnedPbrEffect WGSL must inverse-transpose the joint matrix";
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderConsumesThePaletteAndInfluenceCount)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrSkinningAudit& audit : kPbrSkinningAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        for (const char* evidence :
+             {audit.paletteUpload, audit.weightCountUpload,
+              audit.twoWeightGate, audit.fourWeightGate})
+        {
+            EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+                << "missing skinned-PBR palette/influence evidence: " << evidence;
+        }
+    }
+
+    // These aggregate-source gates are paired with the PBR-specific inverse-transpose inventory
+    // above. Keep its inventory in exact lockstep, so a new backend cannot satisfy the generic
+    // weight gates without also proving that its actual PBR path consumes the resulting matrix.
+    static_assert(kPbrSkinningAudits.size() == 15);
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsIntoTangentHandedness)
