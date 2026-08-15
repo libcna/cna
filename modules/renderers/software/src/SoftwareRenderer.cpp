@@ -329,6 +329,25 @@ namespace CNA::Internal::Renderers::Software
             return count;
         }
 
+        /// Clips a line segment against the same near-plane half-space as triangles.  A point is
+        /// accepted by checking its W against this boundary directly in the draw path.
+        bool ClipLineNearPlane(ClipVertex& a, ClipVertex& b)
+        {
+            constexpr float kNearEpsilon = 1e-5f;
+            const bool aIn = a.w > kNearEpsilon;
+            const bool bIn = b.w > kNearEpsilon;
+            if (!aIn && !bIn)
+                return false;
+            if (aIn && bIn)
+                return true;
+
+            const float t = (kNearEpsilon - a.w) / (b.w - a.w);
+            const ClipVertex intersection = LerpClipVertex(a, b, t);
+            if (!aIn) a = intersection;
+            else      b = intersection;
+            return true;
+        }
+
         /// REMED-GFX-079: the XNA/FNA viewport transform parameters used to map a post-perspective-
         /// divide NDC position into framebuffer pixel coordinates -- Viewport.X/Y (pixel origin of
         /// the viewport within the active target), Viewport.Width/Height (pixel extent the NDC
@@ -2042,6 +2061,87 @@ namespace CNA::Internal::Renderers::Software
             }
         }
 
+        /// Builds the fragment state for line and point primitives.  Their one-dimensional or
+        /// zero-dimensional footprint has no triangle derivatives, so texture/cube LOD resolves
+        /// deterministically to level zero (the same fallback used by a degenerate triangle).
+        ShadedContext MakeLinearShadedContext(
+            const GpuDrawParams& params, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, int colorWriteMask,
+            unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
+            const SoftwareSamplerState& sampler1)
+        {
+            const auto* texture0 = dynamic_cast<const SoftwareColorSurface*>(params.texture0);
+            const auto* texture1 = dynamic_cast<const SoftwareColorSurface*>(params.texture1);
+#ifndef CNA_SOFTWARE_2D_ONLY
+            const auto* envMap = dynamic_cast<const SoftwareTextureCubeRenderer*>(params.envMap);
+#else
+            const SoftwareTextureCubeRenderer* envMap = nullptr;
+#endif
+            const bool useDualTexture = params.dualTexture && texture0 != nullptr && texture1 != nullptr;
+#ifndef CNA_SOFTWARE_2D_ONLY
+            const bool useEnvMap = params.envMapping && envMap != nullptr;
+#else
+            constexpr bool useEnvMap = false;
+#endif
+            const bool needUV = useDualTexture || useEnvMap ||
+                                (params.textureEnabled && texture0 != nullptr);
+            return ShadedContext{params, texture0, texture1, envMap, useDualTexture, useEnvMap,
+                                 needUV, blendState, blendFactor, depthState, stencilState,
+                                 colorWriteMask, multiSampleMask, sampler0, sampler1,
+                                 true, true, 0.0f, 0.0f, true, 0.0f};
+        }
+
+        /// Rasterizes one one-pixel-wide line through the same depth, texture, material and blend
+        /// fragment path as triangles.  CullMode and FillMode do not apply to line primitives.
+        void RasterizeLineShaded(
+            SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
+            const RasterClipRect& clip, const RasterVertex& a, const RasterVertex& b,
+            int colorWriteMask, unsigned int multiSampleMask,
+            const SoftwareSamplerState& sampler0, const SoftwareSamplerState& sampler1)
+        {
+            const ShadedContext ctx = MakeLinearShadedContext(
+                params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
+                multiSampleMask, sampler0, sampler1);
+            WalkWireEdge(clip, a, b, [&](int x, int y, float t) {
+                const float invW = a.invW + t * (b.invW - a.invW);
+                WriteShadedFragment(
+                    fb, ctx, clip, x, y, a.depth + t * (b.depth - a.depth), invW,
+                    a.r + t * (b.r - a.r), a.g + t * (b.g - a.g),
+                    a.b + t * (b.b - a.b), a.a + t * (b.a - a.a),
+                    a.u + t * (b.u - a.u), a.v + t * (b.v - a.v),
+                    a.wpx + t * (b.wpx - a.wpx), a.wpy + t * (b.wpy - a.wpy),
+                    a.wpz + t * (b.wpz - a.wpz), a.nx + t * (b.nx - a.nx),
+                    a.ny + t * (b.ny - a.ny), a.nz + t * (b.nz - a.nz));
+            });
+        }
+
+        /// Rasterizes an XNA/CNA point as one framebuffer pixel centered on the transformed
+        /// coordinate.  Like GPU point-list paths, it is unaffected by culling and FillMode.
+        void RasterizePointShaded(
+            SoftwareFramebuffer& fb, const RasterDepthState& depthState,
+            const RasterStencilState& stencilState, const SoftwareBlendState& blendState,
+            const std::array<float, 4>& blendFactor, const GpuDrawParams& params,
+            const RasterClipRect& clip, const RasterVertex& point, int colorWriteMask,
+            unsigned int multiSampleMask, const SoftwareSamplerState& sampler0,
+            const SoftwareSamplerState& sampler1)
+        {
+            if (!std::isfinite(point.x) || !std::isfinite(point.y))
+                return;
+            const ShadedContext ctx = MakeLinearShadedContext(
+                params, depthState, stencilState, blendState, blendFactor, colorWriteMask,
+                multiSampleMask, sampler0, sampler1);
+            WriteShadedFragment(fb, ctx, clip,
+                                static_cast<int>(std::floor(point.x)),
+                                static_cast<int>(std::floor(point.y)),
+                                point.depth, point.invW,
+                                point.r, point.g, point.b, point.a, point.u, point.v,
+                                point.wpx, point.wpy, point.wpz,
+                                point.nx, point.ny, point.nz);
+        }
+
         /// General-purpose triangle fill for the DrawPrimitivesEx/DrawIndexedPrimitivesEx and
         /// SpriteBatch paths: adds nearest-neighbor texture sampling, diffuseColor modulation, and
         /// the complete XNA BlendState equation on top of RasterizeTriangle's
@@ -2968,8 +3068,10 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-nonindexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawPrimitivesEx: only TriangleList is supported in v1");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+            primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawPrimitivesEx: unsupported primitive topology");
         // Stock PBR and Skinned effects deliberately keep texturing enabled when their optional
         // base map is unbound. The native shader backends bind white in that case; this rasterizer's
         // existing null-texture branch is the exact CPU equivalent (factor/vertex colour unchanged).
@@ -3055,6 +3157,33 @@ namespace CNA::Internal::Renderers::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
+            if (primitive == PrimitiveType::PointListEXT)
+            {
+                const CombinedVertexReader raw = fetchVertex(i);
+                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                if (cv.w > 1e-5f)
+                    RasterizePointShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
+            {
+                const std::int64_t first =
+                    (primitive == PrimitiveType::LineList) ? static_cast<std::int64_t>(i) * 2 : i;
+                ClipVertex a = BuildGenericClipVertex(
+                    fetchVertex(first), stride, combined, params);
+                ClipVertex b = BuildGenericClipVertex(
+                    fetchVertex(first + 1), stride, combined, params);
+                if (ClipLineNearPlane(a, b))
+                    RasterizeLineShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
@@ -3101,8 +3230,10 @@ namespace CNA::Internal::Renderers::Software
         RequireFaithfulDeclarationEXT(vb, "ordinary-indexed");
         if (primitiveCount <= 0)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: primitiveCount must be > 0");
-        if (primitive != PrimitiveType::TriangleList)
-            throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: only TriangleList is supported in v1");
+        if (primitive != PrimitiveType::TriangleList && primitive != PrimitiveType::LineList &&
+            primitive != PrimitiveType::LineStrip && primitive != PrimitiveType::PointListEXT)
+            throw std::runtime_error(
+                "SoftwareRenderer::DrawIndexedPrimitivesEx: unsupported primitive topology");
         // See DrawPrimitivesEx: an unbound optional base map is the white fallback, not an error.
         if (params.dualTexture && params.texture1 == nullptr)
             throw std::runtime_error("SoftwareRenderer::DrawIndexedPrimitivesEx: dualTexture=true but texture1 is null");
@@ -3189,6 +3320,33 @@ namespace CNA::Internal::Renderers::Software
 
         for (int i = 0; i < primitiveCount; ++i)
         {
+            if (primitive == PrimitiveType::PointListEXT)
+            {
+                const CombinedVertexReader raw = fetchVertex(i);
+                const ClipVertex cv = BuildGenericClipVertex(raw, stride, combined, params);
+                if (cv.w > 1e-5f)
+                    RasterizePointShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params,
+                        clip, ClipVertexToRasterVertex(cv, vpT), colorWriteMask_, multiSampleMask_,
+                        GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+            if (primitive == PrimitiveType::LineList || primitive == PrimitiveType::LineStrip)
+            {
+                const std::int64_t first =
+                    (primitive == PrimitiveType::LineList) ? static_cast<std::int64_t>(i) * 2 : i;
+                ClipVertex a = BuildGenericClipVertex(
+                    fetchVertex(first), stride, combined, params);
+                ClipVertex b = BuildGenericClipVertex(
+                    fetchVertex(first + 1), stride, combined, params);
+                if (ClipLineNearPlane(a, b))
+                    RasterizeLineShaded(
+                        fb, depthState, RasterStencilState{}, blendState, blendFactor, params, clip,
+                        ClipVertexToRasterVertex(a, vpT), ClipVertexToRasterVertex(b, vpT),
+                        colorWriteMask_, multiSampleMask_, GetSamplerState(0), GetSamplerState(1));
+                continue;
+            }
+
             ClipVertex cv[3];
             for (int k = 0; k < 3; ++k)
             {
