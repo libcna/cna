@@ -78,43 +78,61 @@ suspicious.
 
 ---
 
-## 2. `OPENGL33` segfaults in a glTF scene-graph test
+## 2. `OPENGL33` segfaults in a glTF scene-graph test — NOT REPRODUCIBLE at HEAD
 
 **Where:** `modules/content/tests/CNA/Internal/GltfImport/GltfSceneGraphBonesTests.cpp`, test
 `GltfSceneGraphBones.SharedMeshGetsOneBonePerInstancingNode`.
 
-**Status:** open, **confirmed pre-existing**.
+**Status: could not be reproduced on 2026-08-15**, in any of four combinations. The original report
+stated the crash was reproducible even in isolation. It is not, here, now.
 
-### What was found
+### What was tried
 
-Running the full `CnaTests` corpus with `OPENGL33` as the renderer segfaults (exit 139). The crash is
-reproducible in isolation by filtering to `GltfSceneGraphBones.*`: the suite runs one test, then dies
-entering `SharedMeshGetsOneBonePerInstancingNode`.
+An `OPENGL33` build did not exist on this machine at all — which is why the renderer went unexercised
+through the whole campaign, every gate having used `OPENGLES3`, `HEADLESS`, `SOFTWARE`,
+`SDL_RENDERER` or `VULKAN`. One was built (`cmake-build-opengl33`) specifically for this.
 
-### Why it is not caused by the renderer-selection work
+| Scenario | Result |
+|---|---|
+| `GltfSceneGraphBones.*` on the real display `:0` | 6/6 passed, 776 ms |
+| `GltfSceneGraphBones.*` under Xvfb `:99` | 6/6 passed, 480 ms |
+| Full corpus on `:0` | **ran to completion**, 6417 tests, 6365 passed, no crash |
+| Full corpus under Xvfb `:99` | ran to completion, 6417 tests, 6368 passed, no crash |
 
-Verified directly rather than assumed. `modules/` and `cmake/` were checked out at `c5045553b` — the
-commit immediately **before** phase P11 — a single-renderer `OPENGL33` build was made from that
-state, and the identical crash occurred in the identical test.
+The context is a real GL 4.6 core profile (Mesa 25.0.7), so this is not a driver falling back below
+what the renderer needs.
 
-The reason it surfaced only now is that `OPENGL33` had never been run against the corpus during this
-campaign. Every earlier gate used `OPENGLES3`, `HEADLESS`, `SOFTWARE`, `SDL_RENDERER` or `VULKAN`.
-It was first exercised when phase P11 made the five GL identities coexist and the `OPENGL33` profile
-became worth verifying on its own.
+### What the crash had been hiding
 
-### What was done about it
+Because the run always died early, **nobody had ever seen a complete `OPENGL33` corpus result**. The
+first full run shows four failures on the real display:
 
-Nothing. It is a defect in that renderer's own glTF path, not in renderer selection, and fixing it
-inside an unrelated change would bury it. Recorded in `plan_runtimerenderer.md` next to phase P11 and
-here.
+- `NonIndexedDrawRangeTest.EverySupportedTopologyHonorsVertexStartAndExactCount`
+- `NonIndexedDrawRangeTest.TopologySwitchesKeepTheirOwnRangesInOneFrame`
+- `PointListPrimitiveTest.PointListRespectsViewportScissorAndBlendState`
+- `Texture2DCacheReconstructionTest.RenderTargetReadbackComesFromTheSurfaceNotAnUploadShadow`
 
-### How to investigate
+They are **specific to the real display**, not to load and not to this campaign's changes:
 
-Build single-renderer `OPENGL33` and run
-`CnaTests --gtest_filter="GltfSceneGraphBones.*"` under a debugger or ASAN. The crash is immediate
-and does not need the full corpus, so the reproduction is cheap.
+| Run | `:0` | Xvfb `:99` |
+|---|---|---|
+| inside the full corpus | 4 fail | 0 fail |
+| the same four, standalone | 3 fail | 0 fail |
 
----
+Standalone reproduction on `:0` rules out test-order contamination; passing under Xvfb rules out a
+renderer defect independent of the display. This is the same shape as the compositor-specific
+failure this repository already documents for `EasyGL_RealWindowResize` (REMED-BUILD-010): a real
+GNOME/Mutter compositor, not an isolated X server.
+
+Three of the four suites were converted to runtime gating earlier the same day, so "it was probably
+always like this" was not assumed — the display split is what settles it, since a conversion defect
+could not pass under one X server and fail under another.
+
+### What this means
+
+The finding as originally written is no longer true and should not be carried forward as an open
+crash. What replaces it is narrower and verified: **`OPENGL33` has four display-dependent pixel
+failures on a real compositor**, worth their own investigation, and no crash.
 
 ## 3. The Emscripten build does not configure, for two reasons in `sharp-runtime`
 
@@ -198,7 +216,7 @@ kind**:
 | # | Issue | Confirmed? | Caused by renderer-selection work? | Fixed? |
 |---|---|---|---|---|
 | 1 | `WEBGL1` may take ES 3.0 paths | no — needs a browser | no | no, preserved verbatim and documented |
-| 2 | `OPENGL33` glTF segfault | yes, at `c5045553b` | no | no |
+| 2 | `OPENGL33` glTF segfault | **no longer reproducible** (4 scenarios, 2026-08-15) | no | superseded: 4 display-dependent pixel failures instead |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | **fixed upstream**, `sharp-runtime` `bc8dbf41` |
 | 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |
 | 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | behaviour preserved |
