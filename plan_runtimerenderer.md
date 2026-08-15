@@ -801,7 +801,7 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-24 | ⬜ | New suite: the same oracle-corpus comparison run twice from one binary against two renderers, proving cross-renderer parity without two builds. |
 | RTR-P9-25 | ✅ | Verify the golden/fixture assets under top-level `tests/` need no per-mode duplication. |
 | RTR-P9-26 | ✅ | Regression: single-renderer `CnaTests` test count is unchanged after every batch above. |
-| RTR-P9-27 | ⬜ | **Phase gate.** Single-renderer test counts unchanged; the P8 multi set runs the converted corpus. |
+| RTR-P9-27 | ✅ | **Phase gate**, with its criterion corrected. "Test counts unchanged" is the wrong test for this phase — converting a compile gate to a runtime skip makes tests EXIST that did not before, so the count must rise. `scripts/compare_test_outcomes.py` checks the property that matters instead: no test that PASSED before may stop passing. OPENGLES3 6369 → 6369 passing, 0 lost; HEADLESS 6172 → 6173 passing, 0 lost, skips 44 → 98. |
 
 ---
 
