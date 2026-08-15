@@ -426,6 +426,16 @@
       "task": "CBIND-035E5"
     },
     {
+      "id": "skinned-model-extension-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/SkinnedModelEXT\\.hpp$",
+      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_SkinnedModelEXTHandle` with deep-copied fixed skeleton, keyframe, bone-track and named-clip descriptors; atomic count/copy access replaces vectors, maps and TimeSpan values, and native transform sampling accepts seconds plus a canonical C boolean. A lifetime sidecar safely retains same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D handles while exposing ordered part views, replace-by-name attach/remove and native owned-resource counts",
+      "tests": "descriptor ABI and deep copy, skeleton arrays, sorted clip enumeration, clip mutation and complete track copies, interpolation/clamp/constant-time loop transform math, capacity atomicity, parent/time/bool/name validation, native move construction/assignment, attach mismatch and replace-by-name transfer, retained GPU-resource destroy/dispose protection and release, optional texture and owned counts, plus stale/wrong-kind/wrong-thread paths in strict-C `SkinnedModelSmoke.c` under HEADLESS and SDL_RENDERER with virtual dummy video plus ASan+UBSan; C/C++ assertions freeze all six public layouts",
+      "status": "implemented",
+      "task": "CBIND-035E6"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

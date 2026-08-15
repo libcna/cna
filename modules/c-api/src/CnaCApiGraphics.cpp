@@ -309,7 +309,7 @@ CNA_Result CreateOwnedTexture2DWithKind(
     }
     *outTexture = CNA_INVALID_HANDLE;
     const auto resource = std::make_shared<Texture2DResource>(
-        Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U});
+        Texture2DResource{std::move(texture), parentGame, 0U, 0U, 0U, 0U});
     const CNA_Result result = GetRuntimeHandles().Create(kind, resource, outTexture);
     if (result != CNA_RESULT_SUCCESS) {
         return Fail(
@@ -836,11 +836,12 @@ CNA_Result cna_texture2d_destroy(const CNA_Handle textureHandle)
         }
         if (texture->activeBatchReferenceCount != 0U ||
             texture->activeFontReferenceCount != 0U ||
-            texture->activeEffectReferenceCount != 0U) {
+            texture->activeEffectReferenceCount != 0U ||
+            texture->activeModelReferenceCount != 0U) {
             return Fail(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
-                "The Texture2D is retained by an active SpriteBatch, SpriteFont or EffectParameter.");
+                "The Texture2D is retained by an active SpriteBatch, SpriteFont, effect or model.");
         }
         texture->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(textureHandle);

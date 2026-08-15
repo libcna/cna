@@ -38,6 +38,14 @@ explicit recovery path: it cancels unflushed deferred commands, releases texture
 invalidates the batch handle. Immediate-mode commands already sent to the renderer cannot be
 undone. Texture commands are rejected unless texture and batch belong to the same game.
 
+An owned `CNA_SkinnedModelEXTHandle` may retain complete same-device render bundles consisting of
+a VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D. The caller still owns each
+original handle, but typed destroy and generic graphics-resource disposal fail while a live model
+part retains the resource. Replace-by-name attach, explicit part removal, model move replacement
+and final model destruction release the corresponding retained references. Indexed mesh-part
+queries return a new owned alias; optional texture queries return the existing handle whose
+lifetime remains protected by the model.
+
 An owned C `ContentManager` is created from a callback-scoped graphics device but survives that
 callback as a game child. It must be destroyed before the game. Each successful typed content load
 returns a separate owned C resource handle; that handle remains valid after manager `Unload` or

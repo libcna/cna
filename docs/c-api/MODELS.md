@@ -125,3 +125,36 @@ remains a separate sidecar. Re-upload requires an attached VertexBuffer with suf
 LINEAR/STEP/Hermite evaluation, blend math, normal normalization, untouched UV bytes, output
 atomicity, malformed inputs, part attachment/upload, transitive lifetime and invalid, stale,
 wrong-kind and wrong-thread paths under HEADLESS and SDL_RENDERER plus ASan+UBSan.
+
+## GPU-skinned model extensions
+
+`CNA_SkinnedModelEXTHandle` owns an independent GPU-skinned skeleton, animation-clip map and
+ordered render-part list. Skeleton creation and replacement copy one parent index, local bind
+matrix and inverse global bind matrix per bone. Parent indices must be `-1` or refer to an earlier
+bone, preserving the native topological-order requirement before transform computation can index
+the hierarchy.
+
+Keyframes, bone tracks, clips and named construction clips cross the ABI through fixed descriptors.
+All nested pointer/count arrays and UTF-8 names are validated and deeply copied. Clip enumeration
+is lexicographically sorted so the native unordered map does not leak nondeterministic iteration
+order. Count/copy operations expose complete tracks and skeleton arrays without a C++ container or
+`System::TimeSpan`; seconds are range-checked and converted internally. Transform computation
+delegates interpolation, endpoint clamping, constant-time loop wrapping and inverse-bind
+composition to `SkinnedModelEXT::ComputeBoneTransformsEXT`, copying output only after capacity is
+sufficient.
+
+The native part method consumes `unique_ptr` resources, which cannot safely consume independently
+owned stable C handles. The C adapter therefore uses an equivalent lifetime sidecar: each added
+part retains its same-device VertexBuffer, IndexBuffer, ModelMeshPart and optional Texture2D,
+blocks premature destroy/dispose, and rebuilds the native non-owning `PartEXT` views. A part cannot
+simultaneously belong to ModelMesh or another SkinnedModelEXT. Attach transfers sidecar entries,
+removes all same-named destination entries first, and leaves the source with no parts; remove
+releases every matching bundle. Indexed part aliases remain owned C handles, while returned
+texture handles remain retained by the model until removal or destruction.
+
+`SkinnedModelSmoke.c` covers all descriptor layouts, deep copying, skeleton/clip access and
+mutation, exact interpolation/clamp/loop transforms, move construction/assignment, capacity
+atomicity, malformed hierarchy/time/boolean input, attach mismatch and replace-by-name transfer,
+optional texture and resource-count behavior, disposal protection and release, plus stale,
+wrong-kind and wrong-thread calls. The strict-C test runs under HEADLESS and SDL_RENDERER using
+SDL's dummy virtual video driver, with a focused ASan+UBSan run.

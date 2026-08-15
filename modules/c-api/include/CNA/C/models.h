@@ -111,6 +111,69 @@ typedef struct CNA_MorphTargetDataEXTDescriptor {
     CNA_MorphWeightTrackEXTDescriptor weight_track;
 } CNA_MorphTargetDataEXTDescriptor;
 
+/** @brief Owned stable handle for a CNA GPU-skinned model extension. */
+typedef CNA_Handle CNA_SkinnedModelEXTHandle;
+
+/** @brief Fixed-layout bone animation keyframe. */
+typedef struct CNA_KeyframeEXT {
+    /** @brief Finite keyframe time in seconds representable by a native TimeSpan. */
+    double time_seconds;
+    /** @brief Bone-local translation. */
+    CNA_Vector3 translation;
+    /** @brief Bone-local rotation quaternion. */
+    CNA_Quaternion rotation;
+    /** @brief Bone-local scale. */
+    CNA_Vector3 scale;
+} CNA_KeyframeEXT;
+
+/** @brief Borrowed keyframe array driving one skeleton bone. */
+typedef struct CNA_BoneTrackEXTDescriptor {
+    /** @brief Signed bone index; out-of-range tracks retain native skip behavior. */
+    int32_t bone_index;
+    /** @brief Reserved padding; initialize to zero. */
+    uint32_t reserved;
+    /** @brief Keyframes borrowed for the call. */
+    const CNA_KeyframeEXT* keyframes;
+    /** @brief Number of keyframes. */
+    uint64_t keyframe_count;
+} CNA_BoneTrackEXTDescriptor;
+
+/** @brief Borrowed bone-track array and finite clip duration. */
+typedef struct CNA_AnimationClipEXTDescriptor {
+    /** @brief Finite clip duration in seconds. */
+    double duration_seconds;
+    /** @brief Bone tracks borrowed for the call. */
+    const CNA_BoneTrackEXTDescriptor* tracks;
+    /** @brief Number of bone tracks. */
+    uint64_t track_count;
+} CNA_AnimationClipEXTDescriptor;
+
+/** @brief Copied UTF-8 clip name paired with a borrowed clip descriptor. */
+typedef struct CNA_NamedAnimationClipEXTDescriptor {
+    /** @brief Exact UTF-8 clip name copied by the call. */
+    CNA_StringView name;
+    /** @brief Clip state copied by the call. */
+    CNA_AnimationClipEXTDescriptor clip;
+} CNA_NamedAnimationClipEXTDescriptor;
+
+/** @brief Complete copied skeleton and clip state for skinned-model construction. */
+typedef struct CNA_SkinnedModelEXTDescriptor {
+    /** @brief Non-negative skeleton bone count. */
+    int32_t bone_count;
+    /** @brief Reserved padding; initialize to zero. */
+    uint32_t reserved;
+    /** @brief Parent indices borrowed for the call; one per bone. */
+    const int32_t* parent_bone_indices;
+    /** @brief Local bind-pose matrices borrowed for the call; one per bone. */
+    const CNA_Matrix* bind_pose_local;
+    /** @brief Inverse global bind-pose matrices borrowed for the call; one per bone. */
+    const CNA_Matrix* inverse_bind_pose_global;
+    /** @brief Named animation clips borrowed for the call. */
+    const CNA_NamedAnimationClipEXTDescriptor* clips;
+    /** @brief Number of named clips. */
+    uint64_t clip_count;
+} CNA_SkinnedModelEXTDescriptor;
+
 /**
  * @brief Releases caller state retained as a model-owned resource bundle.
  * @param context Opaque caller context supplied during registration.
@@ -1141,6 +1204,269 @@ CNA_C_API CNA_Result cna_model_mesh_part_set_morph_weights_ext(
     CNA_ModelMeshPartHandle part,
     const float* weights,
     uint64_t weight_count);
+
+/** @brief Creates an owned empty skinned model. */
+CNA_C_API CNA_Result cna_skinned_model_ext_create_default(
+    CNA_SkinnedModelEXTHandle* out_model);
+
+/**
+ * @brief Creates an owned skinned model by deeply copying skeleton and clip descriptors.
+ * @param descriptor Complete borrowed construction state.
+ * @param out_model Receives the owned model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_create(
+    const CNA_SkinnedModelEXTDescriptor* descriptor,
+    CNA_SkinnedModelEXTHandle* out_model);
+
+/** @brief Releases an owned skinned-model handle. */
+CNA_C_API CNA_Result cna_skinned_model_ext_destroy(CNA_SkinnedModelEXTHandle model);
+
+/**
+ * @brief Move-constructs a new model and leaves the source valid but empty.
+ * @param source Source model consumed by native move construction.
+ * @param out_model Receives the new owned model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_create_move(
+    CNA_SkinnedModelEXTHandle source,
+    CNA_SkinnedModelEXTHandle* out_model);
+
+/**
+ * @brief Move-assigns one model into another and leaves the source valid but empty.
+ * @param destination Existing destination model.
+ * @param source Source model consumed by native move assignment.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_move_assign(
+    CNA_SkinnedModelEXTHandle destination,
+    CNA_SkinnedModelEXTHandle source);
+
+/**
+ * @brief Atomically replaces skeleton arrays while retaining clips and parts.
+ * @param model Skinned-model handle.
+ * @param bone_count Non-negative number of bones.
+ * @param parent_bone_indices Parent indices; one per bone.
+ * @param bind_pose_local Local bind matrices; one per bone.
+ * @param inverse_bind_pose_global Inverse global bind matrices; one per bone.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_set_skeleton(
+    CNA_SkinnedModelEXTHandle model,
+    int32_t bone_count,
+    const int32_t* parent_bone_indices,
+    const CNA_Matrix* bind_pose_local,
+    const CNA_Matrix* inverse_bind_pose_global);
+
+/** @brief Gets the skinned model's bone count. */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_bone_count(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t* out_bone_count);
+
+/** @brief Copies all parent-bone indices atomically. */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_parent_bone_indices(
+    CNA_SkinnedModelEXTHandle model,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies all local bind-pose matrices atomically. */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_bind_pose_local(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies all inverse global bind-pose matrices atomically. */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_inverse_bind_pose_global(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Inserts or replaces a named animation clip by deep copy.
+ * @param model Skinned-model handle.
+ * @param name Exact UTF-8 clip name.
+ * @param clip Borrowed clip descriptor.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_set_clip(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name,
+    const CNA_AnimationClipEXTDescriptor* clip);
+
+/**
+ * @brief Removes a named animation clip if present.
+ * @param model Skinned-model handle.
+ * @param name Exact UTF-8 clip name.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_remove_clip(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name);
+
+/** @brief Gets the number of animation clips. */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_clip_count(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t* out_clip_count);
+
+/** @brief Gets the exact byte count of a sorted clip name at an index. */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_clip_name_byte_count_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t clip_index,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Copies a sorted clip name at an index without a terminator.
+ * @param model Skinned-model handle.
+ * @param clip_index Zero-based index in lexicographically sorted clip names.
+ * @param destination Destination bytes, or null only for zero capacity.
+ * @param capacity Destination capacity in bytes.
+ * @param out_byte_count Receives the required byte count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_clip_name_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t clip_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets one named clip's duration and track count.
+ * @param model Skinned-model handle.
+ * @param name Exact UTF-8 clip name.
+ * @param out_found Receives whether the clip exists.
+ * @param out_duration_seconds Receives its duration, or zero when absent.
+ * @param out_track_count Receives its track count, or zero when absent.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_clip_info(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name,
+    CNA_Bool* out_found,
+    double* out_duration_seconds,
+    uint64_t* out_track_count);
+
+/**
+ * @brief Copies one named clip track and all of its keyframes atomically.
+ * @param model Skinned-model handle.
+ * @param name Exact UTF-8 clip name.
+ * @param track_index Zero-based track index.
+ * @param out_bone_index Receives the signed driven-bone index.
+ * @param destination Destination keyframes, or null only for zero capacity.
+ * @param capacity Destination capacity in keyframes.
+ * @param out_keyframe_count Receives the required keyframe count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_clip_track(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name,
+    uint64_t track_index,
+    int32_t* out_bone_index,
+    CNA_KeyframeEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Computes final skinning matrices for a named clip.
+ * @param model Skinned-model handle.
+ * @param clip_name Exact UTF-8 clip name.
+ * @param position_seconds Finite playback position in seconds.
+ * @param loop Whether to wrap instead of clamp; must be a canonical C boolean.
+ * @param destination Destination matrices, or null only for zero capacity.
+ * @param capacity Destination capacity in matrices.
+ * @param out_bone_count Receives the required matrix count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_compute_bone_transforms(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView clip_name,
+    double position_seconds,
+    CNA_Bool loop,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_bone_count);
+
+/**
+ * @brief Adds and retains one renderable part and its owned graphics resources.
+ * @param model Skinned-model handle.
+ * @param name Copied UTF-8 part name.
+ * @param vertex_buffer Required same-device VertexBuffer handle.
+ * @param index_buffer Required same-device IndexBuffer handle.
+ * @param part Required unowned ModelMeshPart handle.
+ * @param texture Optional same-device Texture2D handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_add_part(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name,
+    CNA_VertexBufferHandle vertex_buffer,
+    CNA_IndexBufferHandle index_buffer,
+    CNA_ModelMeshPartHandle part,
+    CNA_Handle texture);
+
+/** @brief Moves all parts from a same-skeleton model with replace-by-name semantics. */
+CNA_C_API CNA_Result cna_skinned_model_ext_attach_parts(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_SkinnedModelEXTHandle other);
+
+/** @brief Removes every named part and releases its retained graphics resources. */
+CNA_C_API CNA_Result cna_skinned_model_ext_remove_part(
+    CNA_SkinnedModelEXTHandle model,
+    CNA_StringView name);
+
+/** @brief Gets the current number of renderable parts. */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_part_count(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t* out_part_count);
+
+/** @brief Gets the exact byte count of a part name at an index. */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_part_name_byte_count_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t part_index,
+    uint64_t* out_byte_count);
+
+/** @brief Copies a part name at an index without a terminator. */
+CNA_C_API CNA_Result cna_skinned_model_ext_copy_part_name_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t part_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets an owned part alias and optional retained texture handle at an index.
+ * @param model Skinned-model handle.
+ * @param part_index Zero-based part index.
+ * @param out_part Receives an owned ModelMeshPart alias.
+ * @param out_has_texture Receives whether the part has a texture.
+ * @param out_texture Receives the retained texture handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_part_at(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t part_index,
+    CNA_ModelMeshPartHandle* out_part,
+    CNA_Bool* out_has_texture,
+    CNA_Handle* out_texture);
+
+/**
+ * @brief Gets owned-resource counts in native testing-method order.
+ * @param model Skinned-model handle.
+ * @param out_vertex_buffers Receives the owned vertex-buffer count.
+ * @param out_index_buffers Receives the owned index-buffer count.
+ * @param out_parts Receives the owned mesh-part count.
+ * @param out_textures Receives the owned texture count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
+    CNA_SkinnedModelEXTHandle model,
+    uint64_t* out_vertex_buffers,
+    uint64_t* out_index_buffers,
+    uint64_t* out_parts,
+    uint64_t* out_textures);
 
 #ifdef __cplusplus
 }

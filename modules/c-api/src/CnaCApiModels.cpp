@@ -16,6 +16,8 @@
 #include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/MorphTargetEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SkinnedModelEXT.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
 #include <algorithm>
@@ -41,6 +43,7 @@ using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::ObjectKind;
 using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::AddOwnedGraphicsResource;
+using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::BoundingSphere;
 using Microsoft::Xna::Framework::Matrix;
@@ -53,6 +56,10 @@ using Microsoft::Xna::Framework::Graphics::Model;
 using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
 using Microsoft::Xna::Framework::Graphics::MorphWeightKeyframeEXT;
 using Microsoft::Xna::Framework::Graphics::MorphWeightTrackEXT;
+using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
+using Microsoft::Xna::Framework::Graphics::BoneTrackEXT;
+using Microsoft::Xna::Framework::Graphics::KeyframeEXT;
+using Microsoft::Xna::Framework::Graphics::SkinnedModelEXT;
 
 struct MorphDataResource final {
     std::shared_ptr<MorphTargetDataEXT> value;
@@ -134,6 +141,7 @@ struct PartResource final {
     CNA_ModelMeshPartTag tag = 0U;
     std::shared_ptr<MorphDataResource> morphData;
     MeshResource* parentMesh = nullptr;
+    uint64_t activeSkinnedModelReferenceCount = 0U;
 
     ~PartResource()
     {
@@ -182,6 +190,63 @@ struct ModelResource final {
     std::shared_ptr<BoneNode> root;
     CNA_ModelTag tag = 0U;
     bool supportsThreeD = true;
+};
+
+struct SkinnedPartEntry final {
+    std::string name;
+    std::shared_ptr<PartResource> part;
+    CNA_Handle textureHandle = CNA_INVALID_HANDLE;
+    std::shared_ptr<Texture2DResource> texture;
+
+    SkinnedPartEntry() = default;
+    SkinnedPartEntry(const SkinnedPartEntry&) = delete;
+    SkinnedPartEntry& operator=(const SkinnedPartEntry&) = delete;
+
+    SkinnedPartEntry(SkinnedPartEntry&& other) noexcept
+        : name(std::move(other.name)),
+          part(std::move(other.part)),
+          textureHandle(other.textureHandle),
+          texture(std::move(other.texture))
+    {
+        other.textureHandle = CNA_INVALID_HANDLE;
+    }
+
+    SkinnedPartEntry& operator=(SkinnedPartEntry&& other) noexcept
+    {
+        if (this != &other) {
+            Reset();
+            name = std::move(other.name);
+            part = std::move(other.part);
+            textureHandle = other.textureHandle;
+            texture = std::move(other.texture);
+            other.textureHandle = CNA_INVALID_HANDLE;
+        }
+        return *this;
+    }
+
+    ~SkinnedPartEntry()
+    {
+        Reset();
+    }
+
+    void Reset() noexcept
+    {
+        if (part != nullptr && part->activeSkinnedModelReferenceCount != 0U) {
+            --part->activeSkinnedModelReferenceCount;
+        }
+        if (texture != nullptr && texture->activeModelReferenceCount != 0U) {
+            --texture->activeModelReferenceCount;
+        }
+        part.reset();
+        texture.reset();
+        textureHandle = CNA_INVALID_HANDLE;
+    }
+};
+
+struct SkinnedModelResource final {
+    std::shared_ptr<SkinnedModelEXT> value = std::make_shared<SkinnedModelEXT>();
+    std::vector<SkinnedPartEntry> parts;
+    CNA_Handle parentGame = CNA_INVALID_HANDLE;
 };
 
 [[nodiscard]] const std::vector<std::shared_ptr<PartResource>>& PartList(
@@ -555,6 +620,230 @@ MeshResource::~MeshResource()
             "The owned MorphTargetDataEXT handle could not be created.");
 }
 
+[[nodiscard]] CNA_Result GetSkinnedModel(
+    const CNA_SkinnedModelEXTHandle handle,
+    std::shared_ptr<SkinnedModelResource>* const outModel)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::SkinnedModelEXT, outModel);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The SkinnedModelEXT handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateSkinnedModelHandle(
+    std::shared_ptr<SkinnedModelResource> model,
+    CNA_SkinnedModelEXTHandle* const outModel)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::SkinnedModelEXT, std::move(model), outModel);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned SkinnedModelEXT handle could not be created.");
+}
+
+void RebuildSkinnedParts(SkinnedModelResource& model)
+{
+    std::vector<SkinnedModelEXT::PartEXT> rebuilt;
+    rebuilt.reserve(model.parts.size());
+    for (const SkinnedPartEntry& entry : model.parts) {
+        rebuilt.push_back(SkinnedModelEXT::PartEXT{
+            entry.name,
+            entry.part == nullptr ? nullptr : entry.part->value.get(),
+            entry.texture == nullptr ? nullptr : entry.texture->value.get()});
+    }
+    model.value->Parts = std::move(rebuilt);
+}
+
+[[nodiscard]] CNA_Result CopySkinnedName(
+    const std::string& name,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount,
+    const char* const invalidMessage,
+    const char* const smallMessage)
+{
+    if (outByteCount == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument(invalidMessage);
+    }
+    *outByteCount = static_cast<uint64_t>(name.size());
+    if (capacity < name.size()) {
+        return Fail(CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE, smallMessage);
+    }
+    if (!name.empty()) {
+        std::memcpy(destination, name.data(), name.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] std::vector<std::string> SortedClipNames(
+    const SkinnedModelEXT& model)
+{
+    std::vector<std::string> names;
+    names.reserve(model.Clips.size());
+    for (const auto& [name, ignored] : model.Clips) {
+        static_cast<void>(ignored);
+        names.push_back(name);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+constexpr double MaxTimeSpanSeconds = 922337203685.0;
+
+[[nodiscard]] bool IsValidTimeSpanSeconds(const double value) noexcept
+{
+    return std::isfinite(value) && value >= -MaxTimeSpanSeconds &&
+        value <= MaxTimeSpanSeconds;
+}
+
+[[nodiscard]] CNA_Result CopyAnimationClipDescriptor(
+    const CNA_AnimationClipEXTDescriptor& descriptor,
+    AnimationClipEXT* const outClip)
+{
+    if (!IsValidTimeSpanSeconds(descriptor.duration_seconds)) {
+        return InvalidArgument("The AnimationClipEXT duration must fit a finite TimeSpan.");
+    }
+    std::size_t trackBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor.tracks, descriptor.track_count,
+            sizeof(CNA_BoneTrackEXTDescriptor), &trackBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The AnimationClipEXT track array is invalid or too large.");
+    }
+    static_cast<void>(trackBytes);
+
+    AnimationClipEXT copied;
+    copied.Duration = System::TimeSpan::FromSeconds(descriptor.duration_seconds);
+    if (descriptor.track_count > copied.Tracks.max_size()) {
+        return Fail(
+            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+            "The AnimationClipEXT track count is too large.");
+    }
+    copied.Tracks.reserve(static_cast<std::size_t>(descriptor.track_count));
+    for (uint64_t trackIndex = 0U; trackIndex < descriptor.track_count; ++trackIndex) {
+        const CNA_BoneTrackEXTDescriptor& sourceTrack = descriptor.tracks[trackIndex];
+        if (sourceTrack.reserved != 0U) {
+            return InvalidArgument("CNA_BoneTrackEXTDescriptor.reserved must be zero.");
+        }
+        std::size_t keyframeBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                sourceTrack.keyframes, sourceTrack.keyframe_count,
+                sizeof(CNA_KeyframeEXT), &keyframeBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The BoneTrackEXT keyframe array is invalid or too large.");
+        }
+        static_cast<void>(keyframeBytes);
+        BoneTrackEXT copiedTrack;
+        copiedTrack.BoneIndex = sourceTrack.bone_index;
+        if (sourceTrack.keyframe_count > copiedTrack.Keys.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "The BoneTrackEXT keyframe count is too large.");
+        }
+        copiedTrack.Keys.reserve(static_cast<std::size_t>(sourceTrack.keyframe_count));
+        double previousTime = 0.0;
+        for (uint64_t keyIndex = 0U; keyIndex < sourceTrack.keyframe_count; ++keyIndex) {
+            const CNA_KeyframeEXT& sourceKey = sourceTrack.keyframes[keyIndex];
+            if (!IsValidTimeSpanSeconds(sourceKey.time_seconds)) {
+                return InvalidArgument("BoneTrackEXT keyframe times must fit a finite TimeSpan.");
+            }
+            if (keyIndex != 0U && sourceKey.time_seconds < previousTime) {
+                return InvalidArgument("BoneTrackEXT keyframe times must be in ascending order.");
+            }
+            previousTime = sourceKey.time_seconds;
+            KeyframeEXT copiedKey;
+            copiedKey.Time = System::TimeSpan::FromSeconds(sourceKey.time_seconds);
+            copiedKey.Translation = {
+                sourceKey.translation.x, sourceKey.translation.y,
+                sourceKey.translation.z};
+            copiedKey.Rotation = {
+                sourceKey.rotation.x, sourceKey.rotation.y,
+                sourceKey.rotation.z, sourceKey.rotation.w};
+            copiedKey.Scale = {
+                sourceKey.scale.x, sourceKey.scale.y, sourceKey.scale.z};
+            copiedTrack.Keys.push_back(copiedKey);
+        }
+        copied.Tracks.push_back(std::move(copiedTrack));
+    }
+    *outClip = std::move(copied);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result CopySkeleton(
+    const int32_t boneCount,
+    const int32_t* const parentBoneIndices,
+    const CNA_Matrix* const bindPoseLocal,
+    const CNA_Matrix* const inverseBindPoseGlobal,
+    std::vector<int>* const outParents,
+    std::vector<Matrix>* const outBindPose,
+    std::vector<Matrix>* const outInverseBindPose)
+{
+    if (boneCount < 0) {
+        return InvalidArgument("The SkinnedModelEXT bone count cannot be negative.");
+    }
+    const uint64_t count = static_cast<uint64_t>(boneCount);
+    std::size_t ignoredBytes = 0U;
+    const struct {
+        const void* pointer;
+        std::size_t elementSize;
+        const char* message;
+    } arrays[] = {
+        {parentBoneIndices, sizeof(*parentBoneIndices),
+         "The SkinnedModelEXT parent-index array is invalid or too large."},
+        {bindPoseLocal, sizeof(*bindPoseLocal),
+         "The SkinnedModelEXT bind-pose array is invalid or too large."},
+        {inverseBindPoseGlobal, sizeof(*inverseBindPoseGlobal),
+         "The SkinnedModelEXT inverse-bind-pose array is invalid or too large."}};
+    for (const auto& array : arrays) {
+        if (const CNA_Result result = CheckedElementByteCount(
+                array.pointer, count, array.elementSize, &ignoredBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(result, ErrorCategoryForResult(result), array.message);
+        }
+    }
+
+    std::vector<int> copiedParents;
+    std::vector<Matrix> copiedBindPose;
+    std::vector<Matrix> copiedInverseBindPose;
+    copiedParents.reserve(static_cast<std::size_t>(count));
+    copiedBindPose.reserve(static_cast<std::size_t>(count));
+    copiedInverseBindPose.reserve(static_cast<std::size_t>(count));
+    for (int32_t index = 0; index < boneCount; ++index) {
+        const int32_t parent = parentBoneIndices[index];
+        if (parent < -1 || parent >= index) {
+            return InvalidArgument(
+                "SkinnedModelEXT parent indices must be -1 or precede their child.");
+        }
+        copiedParents.push_back(parent);
+        copiedBindPose.push_back(ToNative(bindPoseLocal[index]));
+        copiedInverseBindPose.push_back(ToNative(inverseBindPoseGlobal[index]));
+    }
+    *outParents = std::move(copiedParents);
+    *outBindPose = std::move(copiedBindPose);
+    *outInverseBindPose = std::move(copiedInverseBindPose);
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_KeyframeEXT ToCKeyframe(const KeyframeEXT& key) noexcept
+{
+    return CNA_KeyframeEXT{
+        key.Time.getTotalSecondsProperty(),
+        {key.Translation.X, key.Translation.Y, key.Translation.Z},
+        {key.Rotation.X, key.Rotation.Y, key.Rotation.Z, key.Rotation.W},
+        {key.Scale.X, key.Scale.Y, key.Scale.Z}};
+}
+
 template<typename T>
 [[nodiscard]] CNA_Result CopyInputArray(
     const T* const source,
@@ -923,6 +1212,13 @@ void AddMeshEffect(
     const std::shared_ptr<PartResource>& part,
     const CNA_VertexBufferHandle bufferHandle)
 {
+    if (part->activeSkinnedModelReferenceCount != 0U &&
+        bufferHandle != part->vertexBuffer.handle) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "A SkinnedModelEXT-owned part cannot replace its VertexBuffer.");
+    }
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetVertexBuffer(nullptr);
         if (part->detachedValue != nullptr) {
@@ -962,6 +1258,13 @@ void AddMeshEffect(
     const std::shared_ptr<PartResource>& part,
     const CNA_IndexBufferHandle bufferHandle)
 {
+    if (part->activeSkinnedModelReferenceCount != 0U &&
+        bufferHandle != part->indexBuffer.handle) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "A SkinnedModelEXT-owned part cannot replace its IndexBuffer.");
+    }
     if (bufferHandle == CNA_INVALID_HANDLE) {
         part->value->SetIndexBuffer(nullptr);
         if (part->detachedValue != nullptr) {
@@ -1046,6 +1349,12 @@ void AddMeshEffect(
                 CNA_RESULT_INVALID_STATE,
                 CNA_ERROR_CATEGORY_STATE,
                 "A ModelMeshPart cannot belong to more than one live ModelMesh.");
+        }
+        if (part->activeSkinnedModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "A SkinnedModelEXT-owned part cannot also belong to a ModelMesh.");
         }
         const PartRetainedSlot* const slots[] = {
             &part->effect, &part->vertexBuffer, &part->indexBuffer};
@@ -3593,6 +3902,853 @@ CNA_Result cna_model_mesh_part_set_morph_weights_ext(
         }
         Microsoft::Xna::Framework::Graphics::SetMorphWeightsEXT(
             *part->value, copiedWeights);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create_default(
+    CNA_SkinnedModelEXTHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The SkinnedModelEXT output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        return CreateSkinnedModelHandle(
+            std::make_shared<SkinnedModelResource>(), outModel);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create(
+    const CNA_SkinnedModelEXTDescriptor* const descriptor,
+    CNA_SkinnedModelEXTHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (descriptor == nullptr || outModel == nullptr) {
+            return InvalidArgument("The SkinnedModelEXT descriptor or output is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        if (descriptor->reserved != 0U) {
+            return InvalidArgument("CNA_SkinnedModelEXTDescriptor.reserved must be zero.");
+        }
+        std::vector<int> parents;
+        std::vector<Matrix> bindPose;
+        std::vector<Matrix> inverseBindPose;
+        if (const CNA_Result result = CopySkeleton(
+                descriptor->bone_count, descriptor->parent_bone_indices,
+                descriptor->bind_pose_local, descriptor->inverse_bind_pose_global,
+                &parents, &bindPose, &inverseBindPose);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::size_t clipBytes = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                descriptor->clips, descriptor->clip_count,
+                sizeof(CNA_NamedAnimationClipEXTDescriptor), &clipBytes);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinnedModelEXT clip array is invalid or too large.");
+        }
+        static_cast<void>(clipBytes);
+
+        auto resource = std::make_shared<SkinnedModelResource>();
+        resource->value->BoneCount = descriptor->bone_count;
+        resource->value->ParentBoneIndices = std::move(parents);
+        resource->value->BindPoseLocal = std::move(bindPose);
+        resource->value->InverseBindPoseGlobal = std::move(inverseBindPose);
+        if (descriptor->clip_count > resource->value->Clips.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "The SkinnedModelEXT clip count is too large.");
+        }
+        resource->value->Clips.reserve(static_cast<std::size_t>(descriptor->clip_count));
+        for (uint64_t index = 0U; index < descriptor->clip_count; ++index) {
+            const CNA_NamedAnimationClipEXTDescriptor& source = descriptor->clips[index];
+            std::string name;
+            if (const CNA_Result result = CopyStringView(source.name, true, &name);
+                result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result, ErrorCategoryForResult(result),
+                    "A SkinnedModelEXT clip name is not valid UTF-8 text.");
+            }
+            if (resource->value->Clips.contains(name)) {
+                return InvalidArgument("SkinnedModelEXT construction clip names must be unique.");
+            }
+            AnimationClipEXT clip;
+            if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            resource->value->Clips.emplace(std::move(name), std::move(clip));
+        }
+        return CreateSkinnedModelHandle(std::move(resource), outModel);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_destroy(
+    const CNA_SkinnedModelEXTHandle modelHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned SkinnedModelEXT handle could not be released.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_create_move(
+    const CNA_SkinnedModelEXTHandle sourceHandle,
+    CNA_SkinnedModelEXTHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The moved SkinnedModelEXT output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        std::shared_ptr<SkinnedModelResource> source;
+        if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto moved = std::make_shared<SkinnedModelResource>();
+        moved->value = std::make_shared<SkinnedModelEXT>(std::move(*source->value));
+        moved->parts = std::move(source->parts);
+        moved->parentGame = source->parentGame;
+        RebuildSkinnedParts(*moved);
+        source->value = std::make_shared<SkinnedModelEXT>();
+        source->parts.clear();
+        source->parentGame = CNA_INVALID_HANDLE;
+        return CreateSkinnedModelHandle(std::move(moved), outModel);
+    });
+}
+
+CNA_Result cna_skinned_model_ext_move_assign(
+    const CNA_SkinnedModelEXTHandle destinationHandle,
+    const CNA_SkinnedModelEXTHandle sourceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (destinationHandle == sourceHandle) {
+            return InvalidArgument("A SkinnedModelEXT cannot be move-assigned to itself.");
+        }
+        std::shared_ptr<SkinnedModelResource> destination;
+        std::shared_ptr<SkinnedModelResource> source;
+        if (const CNA_Result result = GetSkinnedModel(destinationHandle, &destination);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = GetSkinnedModel(sourceHandle, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *destination->value = std::move(*source->value);
+        destination->parts = std::move(source->parts);
+        destination->parentGame = source->parentGame;
+        RebuildSkinnedParts(*destination);
+        source->value = std::make_shared<SkinnedModelEXT>();
+        source->parts.clear();
+        source->parentGame = CNA_INVALID_HANDLE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_set_skeleton(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const int32_t boneCount,
+    const int32_t* const parentBoneIndices,
+    const CNA_Matrix* const bindPoseLocal,
+    const CNA_Matrix* const inverseBindPoseGlobal)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::vector<int> parents;
+        std::vector<Matrix> bindPose;
+        std::vector<Matrix> inverseBindPose;
+        if (const CNA_Result result = CopySkeleton(
+                boneCount, parentBoneIndices, bindPoseLocal, inverseBindPoseGlobal,
+                &parents, &bindPose, &inverseBindPose);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->BoneCount = boneCount;
+        model->value->ParentBoneIndices = std::move(parents);
+        model->value->BindPoseLocal = std::move(bindPose);
+        model->value->InverseBindPoseGlobal = std::move(inverseBindPose);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_bone_count(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    uint64_t* const outBoneCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBoneCount == nullptr) {
+            return InvalidArgument("The SkinnedModelEXT bone-count output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_parent_bone_indices(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            model->value->ParentBoneIndices, destination, capacity, outCount,
+            [](const int value) noexcept { return static_cast<int32_t>(value); },
+            "The SkinnedModelEXT parent-index output is invalid.",
+            "The destination cannot hold all SkinnedModelEXT parent indices.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_bind_pose_local(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            model->value->BindPoseLocal, destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The SkinnedModelEXT bind-pose output is invalid.",
+            "The destination cannot hold all SkinnedModelEXT bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_inverse_bind_pose_global(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            model->value->InverseBindPoseGlobal, destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The SkinnedModelEXT inverse-bind-pose output is invalid.",
+            "The destination cannot hold all SkinnedModelEXT inverse-bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_set_clip(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name,
+    const CNA_AnimationClipEXTDescriptor* const clip)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (clip == nullptr) {
+            return InvalidArgument("The AnimationClipEXT descriptor is null.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationClipEXT name is not valid UTF-8 text.");
+        }
+        AnimationClipEXT copiedClip;
+        if (const CNA_Result result = CopyAnimationClipDescriptor(*clip, &copiedClip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->Clips.insert_or_assign(std::move(copiedName), std::move(copiedClip));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_remove_clip(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationClipEXT name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->value->Clips.erase(copiedName);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_clip_count(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    uint64_t* const outClipCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outClipCount == nullptr) {
+            return InvalidArgument("The AnimationClipEXT count output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outClipCount = static_cast<uint64_t>(model->value->Clips.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_clip_name_byte_count_at(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const uint64_t clipIndex,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The AnimationClipEXT name-size output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*model->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
+        }
+        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_clip_name_at(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const uint64_t clipIndex,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*model->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The AnimationClipEXT index is outside the valid range.");
+        }
+        return CopySkinnedName(
+            names[static_cast<std::size_t>(clipIndex)], destination, capacity,
+            outByteCount, "The AnimationClipEXT name output is invalid.",
+            "The destination cannot hold the complete AnimationClipEXT name.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_clip_info(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    double* const outDurationSeconds,
+    uint64_t* const outTrackCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
+            return InvalidArgument("An AnimationClipEXT info output is null.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationClipEXT name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto iterator = model->value->Clips.find(copiedName);
+        if (iterator == model->value->Clips.end()) {
+            *outFound = CNA_FALSE;
+            *outDurationSeconds = 0.0;
+            *outTrackCount = 0U;
+            return CNA_RESULT_SUCCESS;
+        }
+        *outFound = CNA_TRUE;
+        *outDurationSeconds = iterator->second.Duration.getTotalSecondsProperty();
+        *outTrackCount = static_cast<uint64_t>(iterator->second.Tracks.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_clip_track(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name,
+    const uint64_t trackIndex,
+    int32_t* const outBoneIndex,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outKeyframeCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBoneIndex == nullptr || outKeyframeCount == nullptr ||
+            (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("A BoneTrackEXT output is invalid.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationClipEXT name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto clip = model->value->Clips.find(copiedName);
+        if (clip == model->value->Clips.end()) {
+            return InvalidArgument("The AnimationClipEXT name is unknown.");
+        }
+        if (trackIndex >= clip->second.Tracks.size()) {
+            return InvalidArgument("The BoneTrackEXT index is outside the valid range.");
+        }
+        const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
+        *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
+        if (capacity < track.Keys.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all BoneTrackEXT keyframes.");
+        }
+        *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
+        for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
+            destination[index] = ToCKeyframe(track.Keys[index]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_compute_bone_transforms(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView clipName,
+    const double positionSeconds,
+    const CNA_Bool loop,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBoneCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBoneCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The SkinnedModelEXT transform output is invalid.");
+        }
+        if (loop != CNA_FALSE && loop != CNA_TRUE) {
+            return InvalidArgument("The SkinnedModelEXT loop value is not a canonical C boolean.");
+        }
+        if (!IsValidTimeSpanSeconds(positionSeconds)) {
+            return InvalidArgument("The SkinnedModelEXT playback position must fit a finite TimeSpan.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(clipName, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationClipEXT name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!model->value->Clips.contains(copiedName)) {
+            return InvalidArgument("The AnimationClipEXT name is unknown.");
+        }
+        *outBoneCount = static_cast<uint64_t>(model->value->BoneCount);
+        if (capacity < static_cast<uint64_t>(model->value->BoneCount)) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all computed bone transforms.");
+        }
+        std::vector<Matrix> computed;
+        model->value->ComputeBoneTransformsEXT(
+            copiedName, System::TimeSpan::FromSeconds(positionSeconds),
+            loop == CNA_TRUE, computed);
+        for (std::size_t index = 0U; index < computed.size(); ++index) {
+            destination[index] = ToC(computed[index]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_add_part(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name,
+    const CNA_VertexBufferHandle vertexBufferHandle,
+    const CNA_IndexBufferHandle indexBufferHandle,
+    const CNA_ModelMeshPartHandle partHandle,
+    const CNA_Handle textureHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinnedModelEXT part name is not valid UTF-8 text.");
+        }
+        if (vertexBufferHandle == CNA_INVALID_HANDLE ||
+            indexBufferHandle == CNA_INVALID_HANDLE) {
+            return InvalidArgument("SkinnedModelEXT parts require vertex and index buffers.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        std::shared_ptr<VertexBufferResource> vertexBuffer;
+        std::shared_ptr<IndexBufferResource> indexBuffer;
+        std::shared_ptr<PartResource> part;
+        std::shared_ptr<Texture2DResource> texture;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ResolveVertexBuffer(vertexBufferHandle, &vertexBuffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ResolveIndexBuffer(indexBufferHandle, &indexBuffer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = GetPart(partHandle, &part);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (textureHandle != CNA_INVALID_HANDLE) {
+            if (const CNA_Result result = CNA::C::Detail::GetOwnedTexture2D(
+                    textureHandle, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (texture->value->getIsDisposedProperty()) {
+                return Fail(
+                    CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+                    "A disposed Texture2D cannot be added to a SkinnedModelEXT.");
+            }
+        }
+        const CNA_Handle parentGame = vertexBuffer->parentGame;
+        if (indexBuffer->parentGame != parentGame ||
+            (texture != nullptr && texture->parentGame != parentGame)) {
+            return InvalidArgument(
+                "All SkinnedModelEXT part resources must belong to one graphics device.");
+        }
+        if (model->parentGame != CNA_INVALID_HANDLE && model->parentGame != parentGame) {
+            return InvalidArgument(
+                "All SkinnedModelEXT parts must belong to one graphics device.");
+        }
+        if (part->parentMesh != nullptr || part->activeSkinnedModelReferenceCount != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE,
+                "A ModelMeshPart cannot belong to more than one live model.");
+        }
+        if (part->activeSkinnedModelReferenceCount ==
+                std::numeric_limits<uint64_t>::max() ||
+            (texture != nullptr && texture->activeModelReferenceCount ==
+                std::numeric_limits<uint64_t>::max()) ||
+            (vertexBufferHandle != part->vertexBuffer.handle &&
+             vertexBuffer->activeModelReferenceCount ==
+                std::numeric_limits<uint64_t>::max()) ||
+            (indexBufferHandle != part->indexBuffer.handle &&
+             indexBuffer->activeModelReferenceCount ==
+                std::numeric_limits<uint64_t>::max())) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "A SkinnedModelEXT resource retention count overflowed.");
+        }
+        if (model->parts.size() == model->parts.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "The SkinnedModelEXT part count is too large.");
+        }
+        model->parts.reserve(model->parts.size() + 1U);
+        if (const CNA_Result result = SetPartVertexBuffer(part, vertexBufferHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = SetPartIndexBuffer(part, indexBufferHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        SkinnedPartEntry entry;
+        entry.name = std::move(copiedName);
+        entry.part = std::move(part);
+        entry.textureHandle = textureHandle;
+        entry.texture = std::move(texture);
+        ++entry.part->activeSkinnedModelReferenceCount;
+        if (entry.texture != nullptr) {
+            ++entry.texture->activeModelReferenceCount;
+        }
+        model->parts.push_back(std::move(entry));
+        model->parentGame = parentGame;
+        RebuildSkinnedParts(*model);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_attach_parts(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_SkinnedModelEXTHandle otherHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (modelHandle == otherHandle) {
+            return InvalidArgument("A SkinnedModelEXT cannot attach its own parts.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        std::shared_ptr<SkinnedModelResource> other;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = GetSkinnedModel(otherHandle, &other);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (model->value->BoneCount != other->value->BoneCount) {
+            return InvalidArgument(
+                "Attached SkinnedModelEXT instances must have equal bone counts.");
+        }
+        if (!model->parts.empty() && !other->parts.empty() &&
+            model->parentGame != other->parentGame) {
+            return InvalidArgument(
+                "Attached SkinnedModelEXT parts must belong to one graphics device.");
+        }
+        if (other->parts.empty()) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (other->parts.size() > model->parts.max_size() - model->parts.size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+                "The attached SkinnedModelEXT part count is too large.");
+        }
+        model->parts.reserve(model->parts.size() + other->parts.size());
+        for (SkinnedPartEntry& incoming : other->parts) {
+            model->parts.erase(
+                std::remove_if(
+                    model->parts.begin(), model->parts.end(),
+                    [&](const SkinnedPartEntry& current) {
+                        return current.name == incoming.name;
+                    }),
+                model->parts.end());
+            model->parts.push_back(std::move(incoming));
+        }
+        other->parts.clear();
+        if (model->parentGame == CNA_INVALID_HANDLE) {
+            model->parentGame = other->parentGame;
+        }
+        other->parentGame = CNA_INVALID_HANDLE;
+        RebuildSkinnedParts(*model);
+        RebuildSkinnedParts(*other);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_remove_part(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const CNA_StringView name)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinnedModelEXT part name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->parts.erase(
+            std::remove_if(
+                model->parts.begin(), model->parts.end(),
+                [&](const SkinnedPartEntry& entry) { return entry.name == copiedName; }),
+            model->parts.end());
+        if (model->parts.empty()) {
+            model->parentGame = CNA_INVALID_HANDLE;
+        }
+        RebuildSkinnedParts(*model);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_part_count(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    uint64_t* const outPartCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPartCount == nullptr) {
+            return InvalidArgument("The SkinnedModelEXT part-count output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPartCount = static_cast<uint64_t>(model->parts.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_part_name_byte_count_at(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const uint64_t partIndex,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The SkinnedModelEXT part-name size output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (partIndex >= model->parts.size()) {
+            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
+        }
+        *outByteCount = static_cast<uint64_t>(
+            model->parts[static_cast<std::size_t>(partIndex)].name.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_copy_part_name_at(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const uint64_t partIndex,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (partIndex >= model->parts.size()) {
+            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
+        }
+        return CopySkinnedName(
+            model->parts[static_cast<std::size_t>(partIndex)].name,
+            destination, capacity, outByteCount,
+            "The SkinnedModelEXT part-name output is invalid.",
+            "The destination cannot hold the complete SkinnedModelEXT part name.");
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_part_at(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    const uint64_t partIndex,
+    CNA_ModelMeshPartHandle* const outPart,
+    CNA_Bool* const outHasTexture,
+    CNA_Handle* const outTexture)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPart == nullptr || outHasTexture == nullptr || outTexture == nullptr) {
+            return InvalidArgument("A SkinnedModelEXT part output is null.");
+        }
+        *outPart = CNA_INVALID_HANDLE;
+        *outHasTexture = CNA_FALSE;
+        *outTexture = CNA_INVALID_HANDLE;
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (partIndex >= model->parts.size()) {
+            return InvalidArgument("The SkinnedModelEXT part index is outside the valid range.");
+        }
+        const SkinnedPartEntry& entry = model->parts[static_cast<std::size_t>(partIndex)];
+        if (const CNA_Result result = CreatePartHandle(entry.part, outPart);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (entry.texture != nullptr) {
+            *outHasTexture = CNA_TRUE;
+            *outTexture = entry.textureHandle;
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
+    const CNA_SkinnedModelEXTHandle modelHandle,
+    uint64_t* const outVertexBuffers,
+    uint64_t* const outIndexBuffers,
+    uint64_t* const outParts,
+    uint64_t* const outTextures)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outVertexBuffers == nullptr || outIndexBuffers == nullptr ||
+            outParts == nullptr || outTextures == nullptr) {
+            return InvalidArgument("A SkinnedModelEXT owned-resource count output is null.");
+        }
+        std::shared_ptr<SkinnedModelResource> model;
+        if (const CNA_Result result = GetSkinnedModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const uint64_t partCount = static_cast<uint64_t>(model->parts.size());
+        uint64_t textureCount = 0U;
+        for (const SkinnedPartEntry& entry : model->parts) {
+            if (entry.texture != nullptr) {
+                ++textureCount;
+            }
+        }
+        *outVertexBuffers = partCount;
+        *outIndexBuffers = partCount;
+        *outParts = partCount;
+        *outTextures = textureCount;
         return CNA_RESULT_SUCCESS;
     });
 }

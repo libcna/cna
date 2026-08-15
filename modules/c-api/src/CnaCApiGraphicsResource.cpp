@@ -121,6 +121,7 @@ private:
         result.value = std::static_pointer_cast<GraphicsResource>(texture->value);
         result.parentGame = texture->parentGame;
         result.activeEffectReferenceCount = &texture->activeEffectReferenceCount;
+        result.activeModelReferenceCount = &texture->activeModelReferenceCount;
         result.texture = std::move(texture);
     } else if (kind == ObjectKind::Texture3D) {
         std::shared_ptr<Texture3DResource> texture;

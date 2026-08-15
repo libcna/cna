@@ -140,6 +140,18 @@ _Static_assert(sizeof(CNA_MorphTargetDeltaEXTDescriptor) == 32U,
                "CNA morph delta descriptor size changed");
 _Static_assert(sizeof(CNA_MorphTargetDataEXTDescriptor) == 80U,
                "CNA morph data descriptor size changed");
+_Static_assert(sizeof(CNA_SkinnedModelEXTHandle) == 8U,
+               "CNA skinned-model handle size changed");
+_Static_assert(sizeof(CNA_KeyframeEXT) == 48U,
+               "CNA skinned keyframe size changed");
+_Static_assert(sizeof(CNA_BoneTrackEXTDescriptor) == 24U,
+               "CNA skinned bone-track descriptor size changed");
+_Static_assert(sizeof(CNA_AnimationClipEXTDescriptor) == 24U,
+               "CNA skinned animation-clip descriptor size changed");
+_Static_assert(sizeof(CNA_NamedAnimationClipEXTDescriptor) == 40U,
+               "CNA named skinned animation-clip descriptor size changed");
+_Static_assert(sizeof(CNA_SkinnedModelEXTDescriptor) == 48U,
+               "CNA skinned-model descriptor size changed");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

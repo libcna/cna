@@ -34,6 +34,7 @@ struct Texture2DResource final {
     uint64_t activeBatchReferenceCount;
     uint64_t activeFontReferenceCount;
     uint64_t activeEffectReferenceCount;
+    uint64_t activeModelReferenceCount;
 };
 
 struct RenderTargetCubeResource final {

@@ -311,7 +311,7 @@ copied bulk transfers.
 | CBIND-035E3 | 38 | Complete ModelMesh, ModelMeshCollection and ModelEffectCollection | ✅ | `models.h` maps both game-child ModelMesh constructors, exact UTF-8 names, bounding sphere/tag/retained-parent state, live part/effect views and capability-gated Draw. Retained mesh snapshots expose count/index/find/contains aliases; live effect views preserve duplicate Add, first-match Remove and identity while blocking early effect disposal. Parts belong to one live mesh and switch to synchronized detached native state when its final owner expires, preventing dangling parent access. Strict-C tests cover every route, transitive aliases, resource lifetime, invalid inputs/threading and HEADLESS success versus SDL_RENDERER Draw refusal plus ASan+UBSan; C/C++ assertions freeze all handles/tags. |
 | CBIND-035E4 | 14 | Complete Model | ✅ | `models.h` maps the default, aggregate and explicit parent/root constructors through `CNA_ModelHandle`; bone/mesh/root aliases retain stable objects, tags are opaque 64-bit values, and native `shared_ptr<void>` ownership becomes a C context/release callback with deterministic replacement/clear/destruction. Count/copy local and absolute transforms are capacity-atomic, transform input is copied before mutation, and non-empty Draw is capability-gated. Strict-C tests cover every route, parent composition, transitive lifetime, invalid arrays/root/counts, callback releases and thread/renderer errors under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle/tag widths. |
 | CBIND-035E5 | 20 | Complete morph-target extension values and operations | ✅ | `models.h` maps keyframes, tracks and target deltas through fixed deep-copied descriptors and owns validated MorphTargetDataEXT handles. Atomic count/copy routes expose every nested field without C++ vectors; mutable weights/tracks, LINEAR/STEP/Hermite evaluation, base-byte blending, retained ModelMeshPart attachment and supported VertexBuffer upload map all native operations. Strict-C tests cover ABI, exact blend/evaluation math, malformed shapes/flags/times/counts, capacity atomicity, lifetime and handle/thread errors under HEADLESS and SDL_RENDERER plus ASan+UBSan. |
-| CBIND-035E6 | 36 | Complete SkinnedModelEXT | ⬜ | Map skeleton, clips, parts, owned GPU resources, transform computation, attach/remove and testing counts through stable handles and copied bulk inputs/outputs. |
+| CBIND-035E6 | 36 | Complete SkinnedModelEXT | ✅ | `CNA_SkinnedModelEXTHandle` deeply copies fixed skeleton/keyframe/track/clip descriptors, exposes deterministic count/copy and native transform-sampling routes, and supports normalized native move semantics. A stable lifetime sidecar retains same-device VertexBuffer/IndexBuffer/ModelMeshPart/optional Texture2D resources, blocks premature disposal and maps ordered part access, replace-by-name attach/remove and owned counts. Strict-C tests cover all layouts and operations, exact interpolation/clamp/loop math, validation/capacity atomicity, moves, lifetime and handle/thread failures under HEADLESS and SDL_RENDERER on dummy virtual video plus ASan+UBSan. |
 | CBIND-035E7 | 19 | Complete SkinningData and AnimationPlayer | ⬜ | Map skinning-data construction/clip lookup and animation-player clip/update/position plus copied local/world/skin transforms, closing parent CBIND-035E. |
 
 ##### CBIND-035B2 scalar/vector slices
@@ -420,7 +420,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 ## Current status
 
 `CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035D` and
-`CBIND-035C1`–`CBIND-035E5` are ✅; parent `CBIND-035` and `CBIND-035E` remain open, while
+`CBIND-035C1`–`CBIND-035E6` are ✅; parent `CBIND-035` and `CBIND-035E` remain open, while
 `CBIND-035F` through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
@@ -517,4 +517,8 @@ absolute transforms and capability-gated Draw. The snapshot is now 3,093 impleme
 CBIND-035E5 maps all 20 MorphTargetEXT rows through fixed copied descriptors, an owned validated
 data handle, atomic nested-field copies, mutable weights/tracks, blend/evaluation operations and
 retained ModelMeshPart upload. The snapshot is now 3,113 implemented, 19 partial, 3,213 planned
-and 70 not applicable, with CBIND-035E6 SkinnedModelEXT next.
+and 70 not applicable. CBIND-035E6 maps all 34 applicable SkinnedModelEXT rows through deep-copied
+skeleton/clip descriptors, deterministic bulk access, native transform sampling and stable retained
+GPU-resource sidecars; its deleted copy constructor and copy assignment remain the two established
+not-applicable rows. The snapshot is now 3,147 implemented, 19 partial, 3,179 planned and 70 not
+applicable, with CBIND-035E7 SkinningData and AnimationPlayer next.
