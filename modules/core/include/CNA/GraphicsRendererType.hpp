@@ -8,7 +8,7 @@ namespace CNA
     /** @brief Identifies which CNA graphics renderer was selected for this build (compile-time choice, see CNA_GRAPHICS_RENDERER). */
     enum class GraphicsRendererType
     {
-        /** @brief SDL_Renderer (2D-only). */
+        /** @brief SDL's native 2D renderer (2D-only). */
         SdlRenderer,
 
         /** @brief OpenGL ES 2.0 (desktop/mobile, GLSL ES 1.00), internally implemented by EasyGL. */
@@ -145,7 +145,10 @@ namespace CNA
         OpenVg,
 
         /** @brief PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x). */
-        PortableGL
+        PortableGL,
+
+        /** @brief TinyGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x subset). */
+        TinyGL
     };
 
     /**
@@ -257,6 +260,8 @@ namespace CNA
         return GraphicsRendererType::OpenVg;
 #elif defined(CNA_RENDERER_PORTABLEGL)
         return GraphicsRendererType::PortableGL;
+#elif defined(CNA_RENDERER_TINYGL)
+        return GraphicsRendererType::TinyGL;
 #else
 #error "CNA: no CNA_RENDERER_* compile definition set -- graphics renderer selection (cmake/RendererSelection.cmake) is broken"
 #endif
@@ -327,6 +332,7 @@ namespace CNA
             case GraphicsRendererType::SvgDom:         return "SVG_DOM";
             case GraphicsRendererType::OpenVg:         return "OPENVG";
             case GraphicsRendererType::PortableGL:    return "PORTABLEGL";
+            case GraphicsRendererType::TinyGL:        return "TINYGL";
         }
         return "UNKNOWN";
     }

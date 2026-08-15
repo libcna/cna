@@ -1,7 +1,7 @@
 #include "CNA/Logger.hpp"
 
-#include <SDL3/SDL.h>
-
+#include <cstdio>
+#include <mutex>
 #include <string>
 
 namespace CNA
@@ -14,6 +14,31 @@ namespace CNA
 
     LogLevel Logger::minimumLevel_ = defaultLevel;
 
+    namespace
+    {
+        /// Serialises writes so two threads cannot interleave halves of a line. SDL's logger did
+        /// this internally; owning the sink means owning that guarantee too.
+        std::mutex& SinkMutex()
+        {
+            static std::mutex mutex;
+            return mutex;
+        }
+
+        Logger::Sink& CurrentSink()
+        {
+            static Logger::Sink sink;
+            return sink;
+        }
+
+        /// stderr, never stdout. A terminal-hosted game draws its frame on stdout, so a log line
+        /// there would corrupt the display -- see docs/platform-terminal-analysis.md.
+        void WriteToStandardError(LogLevel, LogCategory, const std::string_view formattedMessage)
+        {
+            std::fwrite(formattedMessage.data(), 1, formattedMessage.size(), stderr);
+            std::fputc('\n', stderr);
+        }
+    }
+
     void Logger::Log(
         LogLevel level,
         std::string_view message,
@@ -21,18 +46,6 @@ namespace CNA
         bool condition
     )
     {
-        // SDL defaults most non-application categories (including RENDER) to a stricter
-        // threshold than its application category. Synchronize SDL's category filters lazily
-        // with CNA's own documented default before the first CNA log message, otherwise a
-        // Logger::Warn(..., LogCategory::RENDER) can be discarded before reaching SDL's output
-        // callback even though Logger::IsEnabled() says it is enabled.
-        static const bool sdlPrioritiesInitialized = [] {
-            SDL_SetLogPriorities(
-                static_cast<SDL_LogPriority>(ToSDLPriority(minimumLevel_)));
-            return true;
-        }();
-        (void)sdlPrioritiesInitialized;
-
         if (!condition)
         {
             return;
@@ -42,9 +55,6 @@ namespace CNA
             return;
         }
 
-        const int sdlCategory = ToSDLCategory(category);
-        const SDL_LogPriority sdlPriority = static_cast<SDL_LogPriority>(ToSDLPriority(level));
-
         std::string finalMessage =
             std::string("[")
             + ToString(level)
@@ -53,7 +63,15 @@ namespace CNA
             + "] "
             + std::string(message);
 
-        SDL_LogMessage(sdlCategory, sdlPriority, "%s", finalMessage.c_str());
+        const std::lock_guard<std::mutex> guard(SinkMutex());
+        if (CurrentSink())
+        {
+            CurrentSink()(level, category, finalMessage);
+        }
+        else
+        {
+            WriteToStandardError(level, category, finalMessage);
+        }
     }
 
     void Logger::Fatal(
@@ -170,64 +188,29 @@ namespace CNA
 
     void Logger::SetMinimumLevel(LogLevel level)
     {
+        // Just CNA's own gate now. The previous implementation also had to push the level into
+        // SDL's process-wide category filters, because SDL defaulted most non-application
+        // categories to a stricter threshold and would otherwise discard a message CNA's own
+        // IsEnabled() had already allowed through. Owning the sink removes that second, hidden
+        // gate entirely.
         minimumLevel_ = level;
-        SDL_SetLogPriorities(static_cast<SDL_LogPriority>(ToSDLPriority(level)));
+    }
+
+    void Logger::SetSink(Sink sink)
+    {
+        const std::lock_guard<std::mutex> guard(SinkMutex());
+        CurrentSink() = std::move(sink);
+    }
+
+    void Logger::ResetSink()
+    {
+        const std::lock_guard<std::mutex> guard(SinkMutex());
+        CurrentSink() = nullptr;
     }
 
     LogLevel Logger::GetMinimumLevel()
     {
         return minimumLevel_;
-    }
-
-    int Logger::ToSDLPriority(LogLevel level)
-    {
-        switch (level)
-        {
-        case LogLevel::FATAL:
-            return SDL_LOG_PRIORITY_CRITICAL;
-        case LogLevel::ERROR:
-            return SDL_LOG_PRIORITY_ERROR;
-        case LogLevel::WARN:
-            return SDL_LOG_PRIORITY_WARN;
-        case LogLevel::INFO:
-            return SDL_LOG_PRIORITY_INFO;
-        case LogLevel::DEBUG:
-        case LogLevel::TRACE:
-        case LogLevel::EXPERIMENT:
-            // DEBUG/TRACE/EXPERIMENT intentionally share SDL_LOG_PRIORITY_DEBUG: this project
-            // does not otherwise use SDL's finer-grained TRACE/VERBOSE priorities anywhere, so
-            // there is nothing for a finer split to plug into yet.
-            return SDL_LOG_PRIORITY_DEBUG;
-        default:
-            return SDL_LOG_PRIORITY_INFO;
-        }
-    }
-
-    int Logger::ToSDLCategory(LogCategory category)
-    {
-        switch (category)
-        {
-        case LogCategory::APPLICATION:
-            return SDL_LOG_CATEGORY_APPLICATION;
-        case LogCategory::ERROR:
-            return SDL_LOG_CATEGORY_ERROR;
-        case LogCategory::SYSTEM:
-            return SDL_LOG_CATEGORY_SYSTEM;
-        case LogCategory::AUDIO:
-            return SDL_LOG_CATEGORY_AUDIO;
-        case LogCategory::VIDEO:
-            return SDL_LOG_CATEGORY_VIDEO;
-        case LogCategory::RENDER:
-            return SDL_LOG_CATEGORY_RENDER;
-        case LogCategory::INPUT:
-            return SDL_LOG_CATEGORY_INPUT;
-        case LogCategory::TEST:
-            return SDL_LOG_CATEGORY_TEST;
-        case LogCategory::GPU:
-            return SDL_LOG_CATEGORY_GPU;
-        default:
-            return SDL_LOG_CATEGORY_APPLICATION;
-        }
     }
 
     bool Logger::IsEnabled(LogLevel level)

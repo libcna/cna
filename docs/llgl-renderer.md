@@ -66,6 +66,19 @@ Post-audit findings:
 - `LLGL-58`: resolved a sanitizer finding in pinned LLGL's deferred OpenGL command buffer by
   supplying a valid pointer for its zero-count clear-value copy at both CNA render-pass call sites.
 
+### Platform boundary
+
+LLGL now receives a CNA-owned `LlglPlatformSurface` built only from `RendererSurfaceInfo`. On the
+supported Linux route it translates the typed X11 display/window pair into `LLGL::NativeHandle`,
+caches the drawable's real X11 visual for the adapter lifetime, and refreshes physical size and
+display scale through `OnSurfaceChanged`. It never resolves or owns the platform window, and the
+renderer target has no direct window-toolkit header, symbol or link dependency. Logical input
+coordinates are scaled to physical drawable units before applying the presentation viewport.
+
+This boundary remains deliberately X11-only because the pinned LLGL build's supported OpenGL/GLX
+route is X11-only. A Wayland or other native handle is rejected immediately with both the expected
+and received native systems in the error.
+
 ## Status
 
 An **experimental** CNA graphics renderer built on [LLGL](https://github.com/LukasBanana/LLGL),
@@ -76,7 +89,7 @@ starts.
 What is implemented and verified today is the **2D pipeline, on both the Vulkan and the OpenGL
 module**:
 
-* real SDL window, `LLGL::RenderSystem`, swap chain (24-bit depth, 8-bit stencil), clear and
+* platform-owned native window, `LLGL::RenderSystem`, swap chain (24-bit depth, 8-bit stencil), clear and
   present;
 * virtual-resolution presentation (all five `CnaPresentationMode` policies share one code path;
   only `FixedHeightDynamicWidth` is pixel-verified) and window↔logical coordinate transforms;
@@ -193,7 +206,7 @@ rather than silently falling back. The Null module is never part of the automati
 
 The choice is probed once per process by actually loading the module, and the answer is cached:
 `GraphicsDevice` needs it before the window exists (only the OpenGL module requires an
-`SDL_WINDOW_OPENGL` window) and the renderer needs it again afterwards, and the two must agree.
+OpenGL-capable native window) and the renderer needs it again afterwards, and the two must agree.
 
 `CNA_LLGL_DEBUG=1` additionally enables LLGL's own debug layer and routes its reports to stdout.
 It validates every command and is far too costly to leave on, but it is the fastest way to find out
@@ -201,7 +214,7 @@ why a draw produced nothing.
 
 ## Platform support
 
-X11 only. A Wayland SDL window is refused with an error naming `SDL_VIDEODRIVER=x11`: LLGL 0.04b
+X11 only. A Wayland native-window snapshot is refused before LLGL device creation: LLGL 0.04b
 compiles Wayland support only when explicitly enabled and this integration does not enable it.
 Handing LLGL a handle it cannot present to would be worse than saying so.
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 // REMED-GFX-117: SDL_GPU indexed draws must propagate the public startIndex/baseVertex arguments
-// to the native SDL_DrawGPUIndexedPrimitives first_index/vertex_offset parameters.
+// to the native indexed-draw first-index/vertex-offset parameters.
 //
 // SDL_GPU implements no backbuffer readback at all, so RenderTarget2D::GetData is this renderer's
 // exact-pixel oracle (the same control REMED-GFX-111 established). Every test in this file renders

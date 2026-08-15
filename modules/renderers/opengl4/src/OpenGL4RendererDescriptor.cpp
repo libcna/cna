@@ -1,14 +1,13 @@
 // plan_runtimerenderer.md RTR-P1-D31: the OpenGL4 family's pre-construction contract.
 //
 // Real desktop OpenGL 4.x core profile, deliberately independent of the EasyGL-backed GL identities
-// (plan_opengl4.md GL4-1). Same SDL_WINDOW_OPENGL requirement.
+// (plan_opengl4.md GL4-1). Same the platform window intent requirement.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 
@@ -29,11 +28,6 @@ namespace CNA::Internal::Renderers::OpenGL4
 
     namespace
     {
-        /// SDL refuses to attach a GL context to a window that was not created with this flag.
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            return static_cast<std::uint32_t>(SDL_WINDOW_OPENGL);
-        }
     }
 
     /**
@@ -49,8 +43,8 @@ namespace CNA::Internal::Renderers::OpenGL4
             .windowKind               = RendererWindowKind::OpenGL,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PrepareWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
+            .glFramebuffer            = { .depthBits = 24, .stencilBits = 8, .doubleBuffered = true },
+            .needsGlContext           = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

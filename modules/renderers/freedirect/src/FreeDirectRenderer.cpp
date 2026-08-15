@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/FreeDirect/FreeDirectRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
 // plan_freedirect.md Design decision 9: <ddraw.h> (and the <windows.h> compatibility shim it pulls in
@@ -707,8 +708,8 @@ namespace CNA::Internal::Renderers::FreeDirect
         const GraphicsRendererCreateArgs& args, const FreeDirectTestHooksEXT& testHooks)
         : impl_(std::make_unique<Impl>(testHooks))
     {
-        if (!args.window) throw std::runtime_error("FreeDirectRenderer initialized with null window.");
-        impl_->window = args.window;
+        impl_->window = CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId);
+        if (!impl_->window) throw std::runtime_error("FreeDirectRenderer initialized with null window.");
         impl_->presentationMode = args.presentationMode;
 
         HRESULT hr = DirectDrawCreate(nullptr, &impl_->dd, nullptr);
@@ -818,15 +819,10 @@ namespace CNA::Internal::Renderers::FreeDirect
             static_cast<int>(impl_->presentationMode)};
     }
 
-    SDL_Window* FreeDirectRenderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
-
     // DX3-68: real letterbox scale+offset transform between physical window pixels and logical
     // (virtual) game pixels. free-direct's own PresentPrimary hardcodes
-    // SDL_LOGICAL_PRESENTATION_LETTERBOX against its internal SDL_Renderer (never exposed to CNA,
-    // GetRendererInternal() always returns nullptr) -- this independently recomputes the exact
+    // SDL_LOGICAL_PRESENTATION_LETTERBOX against its internal SDL_Renderer (never exposed to CNA)
+    // -- this independently recomputes the exact
     // same letterbox math (uniform scale to fit, centered, black bars on the non-fitting axis)
     // from the real physical SDL_Window size queried directly, so it stays correct without ever
     // needing access to free-direct's own internal renderer state.
@@ -896,7 +892,6 @@ namespace CNA::Internal::Renderers::FreeDirect
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -942,7 +937,6 @@ namespace CNA::Internal::Renderers::FreeDirect
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {

@@ -14,7 +14,6 @@
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 
@@ -48,12 +47,6 @@ namespace CNA::Internal::Renderers::EasyGL
 
     namespace
     {
-        /// SDL refuses to attach a GL context to a window that was not created with this flag.
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            return static_cast<std::uint32_t>(SDL_WINDOW_OPENGL);
-        }
-
         /// plan_runtimerenderer.md P11: one descriptor per public GL identity, all served by the
         /// same EasyGL archive. Each pins its own GlProfile, which the renderer publishes as the
         /// thread's active profile on construction -- that is what lets several of the five be
@@ -67,8 +60,7 @@ namespace CNA::Internal::Renderers::EasyGL
                 .windowKind               = RendererWindowKind::OpenGL,
                 .needsWindow              = true,
                 .needsVideoSubsystem      = true,
-                .prepareWindowFlags       = &PrepareWindowFlags,
-                .applyPreWindowAttributes = &NoPreWindowAttributes,
+                .needsGlContext           = true,
                 .isAvailable              = &AlwaysAvailable,
                 .create                   = +[](const GraphicsRendererCreateArgs& args)
                     -> std::unique_ptr<IGraphicsRenderer>

@@ -94,15 +94,29 @@ if(CNA_BUILD_EXAMPLES)
     endif()
 endif()
 
+# A full terminal-platform smoke test.  The Python runner owns a pseudo-terminal so the real demo
+# receives a TTY (unlike ordinary CTest stdout), a resize signal and keyboard input.  It is kept
+# to the one tuple that has a CPU presenter capable of reaching a terminal.
+if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES AND CNA_PLATFORM STREQUAL "TERMINAL"
+   AND CNA_GRAPHICS_RENDERER STREQUAL "BLEND2D" AND TARGET Python3::Interpreter)
+    add_test(NAME TerminalBlend2DDemoIntegration
+        COMMAND Python3::Interpreter
+            "${CMAKE_SOURCE_DIR}/tools/platform/terminal_demo_integration_test.py"
+            "$<TARGET_FILE:cna_demo_2d>")
+    set_tests_properties(TerminalBlend2DDemoIntegration PROPERTIES TIMEOUT 25)
+endif()
+
 if(CNA_BUILD_EXAMPLES AND (CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES3"
         OR CNA_GRAPHICS_RENDERER STREQUAL "OPENGL33"
         OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL1" OR CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2"
-        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"))
-    # ---- 3D house demo (EasyGL and Vulkan) -----------------------------------
-    # The 3D house demo exercises the EasyGL 3D pipeline. Other renderers throw
-    # "3D not supported", so the target is only enabled with a GL-family public renderer
+        OR CNA_GRAPHICS_RENDERER STREQUAL "VULKAN"
+        OR CNA_GRAPHICS_RENDERER STREQUAL "FNA3D"))
+    # ---- 3D house demo --------------------------------------------------------
+    # The 3D house demo exercises the shared BasicEffect 3D path. The target is enabled
+    # only with renderers that support every graphics operation used by the scene: a GL-family
+    # public renderer
     # (OPENGLES2/OPENGLES3/OPENGL33/WEBGL1/WEBGL2, all implemented by EasyGL -- see
-    # plan_glbackends.md) or VULKAN.
+    # plan_glbackends.md), VULKAN, or FNA3D.
     add_executable(cna_house3d_demo house3d_demo.cpp)
 
     if(EMSCRIPTEN)
@@ -167,34 +181,28 @@ if(CNA_BUILD_TESTS)
     add_executable(cna_diag_compare cross_renderer_diagnostic_compare.cpp)
 endif()
 
-# plan_html_dom.md Phase D10: a deliberately renderer-agnostic benchmark
-# (graphics_renderer_benchmark.cpp), built for whichever Emscripten renderer the current
-# configure selected. Comparing HTML_DOM against CANVAS/WEBGL2 means configuring and building this
-# target three times, once per renderer (three separate build directories, e.g.
-# cmake-build-canvas/cmake-build-webgl2/cmake-build-htmldom) -- this file just makes sure the
-# target exists in each, not tied to any single CNA_GRAPHICS_RENDERER value the way the
-# canvas/html-dom renderer example registrations are.
-#
-# Gated on EMSCRIPTEN alone: on a native (non-browser) renderer this benchmark's own JS timing
-# (performance.now()) and result-publishing hooks don't exist, and the point of this benchmark is
-# specifically a browser-vs-browser comparison.
-if(CNA_BUILD_TESTS AND EMSCRIPTEN)
+# plan_html_dom.md Phase D10 and plan_platform.md PLAT-7/120: one renderer-agnostic fixed-scene
+# benchmark, built against whichever renderer this configure selected. Browser builds publish via
+# JavaScript as before; native builds use steady_clock and emit the raw samples as JSON. Keeping
+# this under either examples or tests makes a lean benchmark-only configure possible.
+if((CNA_BUILD_TESTS OR CNA_BUILD_EXAMPLES) AND NOT ANDROID)
     add_executable(cna_bench_graphics_renderer graphics_renderer_benchmark.cpp)
-    target_link_libraries(cna_bench_graphics_renderer PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
-    set_target_properties(cna_bench_graphics_renderer PROPERTIES SUFFIX ".html")
-    target_link_options(cna_bench_graphics_renderer PRIVATE
-        -sALLOW_MEMORY_GROWTH=1
-        -sEXIT_RUNTIME=1
-        -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
-        # Emscripten defaults to -sMAX_WEBGL_VERSION=1; without this, the EasyGL implementation's
-        # ES 3.0/WebGL2
-        # SDL_GL_CONTEXT_MAJOR_VERSION=3 request (EasyGLRenderer.cpp) silently falls back to
-        # a WebGL1 context, which then fails to compile EasyGL's GLSL ES 3.0 shaders. Mirrors the
-        # cna_house3d_demo target's own WEBGL2/VULKAN Emscripten link options above.
+    target_link_libraries(cna_bench_graphics_renderer PRIVATE CNA SHARP_RUNTIME)
+    if(EMSCRIPTEN)
+        target_link_libraries(cna_bench_graphics_renderer PRIVATE SDL3::SDL3)
+        set_target_properties(cna_bench_graphics_renderer PROPERTIES SUFFIX ".html")
         target_link_options(cna_bench_graphics_renderer PRIVATE
-            "-sMIN_WEBGL_VERSION=2"
-            "-sMAX_WEBGL_VERSION=2")
+            -sALLOW_MEMORY_GROWTH=1
+            -sEXIT_RUNTIME=1
+            -sEXPORTED_RUNTIME_METHODS=UTF8ToString)
+        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGL2")
+            # Emscripten defaults to WebGL1; EasyGL's ES 3.0 shaders require WebGL2.
+            target_link_options(cna_bench_graphics_renderer PRIVATE
+                "-sMIN_WEBGL_VERSION=2"
+                "-sMAX_WEBGL_VERSION=2")
+        endif()
+    elseif(TARGET SDL3::SDL3main)
+        target_link_libraries(cna_bench_graphics_renderer PRIVATE SDL3::SDL3main)
     endif()
 endif()
 

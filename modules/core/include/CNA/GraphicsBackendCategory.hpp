@@ -20,7 +20,7 @@ namespace CNA
         /** @brief Compiled against exactly one fixed real graphics API, with no runtime backend negotiation. */
         Native,
 
-        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as Bgfx/LLGL/Sokol/Diligent/Wicked/FNA3D/SDL_Renderer/SDL_GPU/WebGPU), or reimplements another API's surface itself (FreeDirect/OpenVG). */
+        /** @brief An intermediate library picks/abstracts the real backend at runtime (a "portable RHI" such as Bgfx/LLGL/Sokol/Diligent/Wicked/FNA3D/SDL_RENDERER/SDL_GPU/WebGPU), or reimplements another API's surface itself (FreeDirect/OpenVG). */
         TranslationLayer,
 
         /** @brief Renders entirely on the CPU; no real GPU driver is involved. */
@@ -109,6 +109,7 @@ namespace CNA
             case GraphicsRendererType::Skia:
             case GraphicsRendererType::Blend2D:
             case GraphicsRendererType::PortableGL:
+            case GraphicsRendererType::TinyGL:
                 return GraphicsBackendCategory::Software;
 
             case GraphicsRendererType::WebGL1:

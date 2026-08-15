@@ -6,8 +6,6 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-#include <SDL3/SDL.h>
-
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -286,28 +284,22 @@ namespace CNA::Internal::Renderers::Gdi
         };
     } // namespace
 
-    GdiRenderer::GdiRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                           CnaPresentationMode presentationMode)
-        : GdiRenderer(window, virtualWidth, virtualHeight, presentationMode,
-                             CaptureGdiConfigurationFromEnvironment())
+    GdiRenderer::GdiRenderer(const GraphicsRendererCreateArgs& args)
+        : GdiRenderer(args, CaptureGdiConfigurationFromEnvironment())
     {
     }
 
-    GdiRenderer::GdiRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                           CnaPresentationMode presentationMode,
-                                           GdiConfiguration configuration)
+    GdiRenderer::GdiRenderer(const GraphicsRendererCreateArgs& args,
+                             GdiConfiguration configuration)
         : software2D_(std::make_unique<GdiSoftware2DCore>(
-              ValidateGdiFramebufferDimension("virtualWidth", virtualWidth),
-              ValidateGdiFramebufferDimension("virtualHeight", virtualHeight), false, true))
-        , window_(window)
-        , requestedVirtualWidth_(virtualWidth)
-        , requestedVirtualHeight_(virtualHeight)
-        , presentationMode_(ValidatePresentationMode(static_cast<int>(presentationMode)))
+              ValidateGdiFramebufferDimension("virtualWidth", args.virtualWidth),
+              ValidateGdiFramebufferDimension("virtualHeight", args.virtualHeight), false, true))
+        , surface_(args.surface, "GdiRenderer")
+        , requestedVirtualWidth_(args.virtualWidth)
+        , requestedVirtualHeight_(args.virtualHeight)
+        , presentationMode_(ValidatePresentationMode(static_cast<int>(args.presentationMode)))
         , configuration_(configuration)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("GDI graphics renderer requires an SDL window.");
-
         software2D_->SetRasterBoundsCallback(
             [this](int minX, int minY, int maxX, int maxY)
             {
@@ -320,73 +312,18 @@ namespace CNA::Internal::Renderers::Gdi
         software2D_->SetDepthTestEnabled(false);
         software2D_->SetDepthWriteEnabled(false);
 
-        nativeWindow_ = SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-        if (nativeWindow_ == nullptr)
-            throw std::runtime_error("GDI graphics renderer could not obtain an HWND from the SDL window.");
-
-        windowId_ = SDL_GetWindowID(window_);
-        if (windowId_ == 0)
-            throw std::runtime_error("GDI graphics renderer could not obtain the SDL window ID.");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("GDI graphics renderer requires a Win32 native window.");
+        nativeWindow_ = nativeWindow.hwnd;
 
         SynchronizeBackbufferSize();
-        IGraphicsRenderer::RegisterForWindow(window_, this);
-        if (!SDL_AddEventWatch(&GdiRenderer::WindowEventWatch, this))
-        {
-            const char* error = SDL_GetError();
-            IGraphicsRenderer::UnregisterForWindow(window_);
-            throw std::runtime_error(
-                std::string("GDI graphics renderer could not watch window repaint events: ") +
-                (error != nullptr ? error : "unknown SDL error"));
-        }
-        eventWatchRegistered_ = true;
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     GdiRenderer::~GdiRenderer()
     {
-        if (eventWatchRegistered_)
-        {
-            SDL_RemoveEventWatch(&GdiRenderer::WindowEventWatch, this);
-            eventWatchRegistered_ = false;
-        }
-        IGraphicsRenderer::UnregisterForWindow(window_);
-    }
-
-    bool SDLCALL GdiRenderer::WindowEventWatch(void* userdata, SDL_Event* event)
-    {
-        auto* renderer = static_cast<GdiRenderer*>(userdata);
-        if (renderer == nullptr || event == nullptr)
-            return true;
-
-        // A foreground transition is process-wide and can invalidate every retained window.
-        if (event->type == SDL_EVENT_DID_ENTER_FOREGROUND)
-        {
-            renderer->RecordNativeClientInvalidation();
-            return true;
-        }
-
-        switch (event->type)
-        {
-            case SDL_EVENT_WINDOW_SHOWN:
-            case SDL_EVENT_WINDOW_EXPOSED:
-            case SDL_EVENT_WINDOW_RESIZED:
-            case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            case SDL_EVENT_WINDOW_MINIMIZED:
-            case SDL_EVENT_WINDOW_MAXIMIZED:
-            case SDL_EVENT_WINDOW_RESTORED:
-            case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-            case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
-            case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
-            case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
-            case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
-                if (event->window.windowID == renderer->windowId_)
-                    renderer->RecordNativeClientInvalidation();
-                break;
-            default:
-                break;
-        }
-        return true;
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
     }
 
     void GdiRenderer::RecordNativeClientInvalidation()
@@ -398,33 +335,33 @@ namespace CNA::Internal::Renderers::Gdi
 
     bool GdiRenderer::GetDrawablePixelSize(int& width, int& height) const
     {
-        // SDL's drawable-pixel query is the single size authority for both CPU backbuffer sizing
-        // and GDI destination geometry. It is paired with SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED and
-        // describes the real client area that the HWND's HDC presents. Mixing it with
-        // GetClientRect made the event/input and presentation sides use different abstractions.
-        // Some Win32 implementations retain or synthesize a non-zero SDL pixel size while the
-        // HWND is minimized (Wine can report a different aspect entirely). Treat minimized state
-        // as non-drawable before consulting those cached metrics, so dynamic-width storage is not
-        // reallocated and cleared during the transition.
-        if (window_ == nullptr ||
-            (SDL_GetWindowFlags(window_) & SDL_WINDOW_MINIMIZED) != 0 ||
-            !SDL_GetWindowSizeInPixels(window_, &width, &height))
+        // The platform snapshot is the single size authority for CPU storage and native
+        // destination geometry. Win32 can retain a non-zero last client size while iconic, so
+        // reject that state before consulting the snapshot.
+        if (nativeWindow_ == nullptr || IsIconic(static_cast<HWND>(nativeWindow_)))
         {
             width = 0;
             height = 0;
             return false;
         }
+        const auto drawableSize = surface_.GetDrawableSize();
+        width = drawableSize.width;
+        height = drawableSize.height;
         return width > 0 && height > 0;
     }
 
     bool GdiRenderer::GetWindowCoordinateSize(int& width, int& height) const
     {
-        if (window_ == nullptr || !SDL_GetWindowSize(window_, &width, &height))
+        const auto drawableSize = surface_.GetDrawableSize();
+        const float displayScale = surface_.GetDisplayScale();
+        if (drawableSize.width <= 0 || drawableSize.height <= 0 || !(displayScale > 0.0f))
         {
             width = 0;
             height = 0;
             return false;
         }
+        width = static_cast<int>(std::lround(drawableSize.width / displayScale));
+        height = static_cast<int>(std::lround(drawableSize.height / displayScale));
         return width > 0 && height > 0;
     }
 
@@ -482,9 +419,9 @@ namespace CNA::Internal::Renderers::Gdi
         const std::uint64_t invalidationSnapshot =
             nativeInvalidationGeneration_.load(std::memory_order_acquire);
 
-        // The explicit SDL-watch generation is authoritative; GetUpdateRect remains only an
-        // additional native hint because SDL may already have validated WM_PAINT before CNA
-        // receives SDL_EVENT_WINDOW_EXPOSED.
+        // The explicit platform-invalidation generation is authoritative; GetUpdateRect remains
+        // only an additional native hint because the event pump may already have validated
+        // WM_PAINT before CNA receives the corresponding exposure event.
         const bool clientNeedsRepair =
             invalidationSnapshot != presentedNativeInvalidationGeneration_ ||
             GetUpdateRect(static_cast<HWND>(nativeWindow_), nullptr, FALSE) != FALSE;
@@ -550,6 +487,18 @@ namespace CNA::Internal::Renderers::Gdi
     {
         SynchronizeBackbufferSize();
         software2D_->GetViewportSize(width, height);
+    }
+
+    void GdiRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+        RecordNativeClientInvalidation();
+    }
+
+    void GdiRenderer::OnSurfaceInvalidated(const CNA::Platform::WindowId window)
+    {
+        if (window == 0 || window == surface_.GetWindowId())
+            RecordNativeClientInvalidation();
     }
 
     void GdiRenderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -1018,8 +967,7 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Gdi::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        auto renderer = std::make_unique<Gdi::GdiRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        auto renderer = std::make_unique<Gdi::GdiRenderer>(args);
         renderer->ApplyMultiSampleCount(args.multiSampleCount);
         return renderer;
     }

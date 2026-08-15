@@ -7,12 +7,15 @@
 #include "System/IDisposable.hpp"
 
 #include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
 
-// Opaque forward declaration of SDL's haptic handle. This public header wraps an SDL haptic device
-// but must not pull <SDL3/SDL.h> into consumers (mirrors MouseCursor's SDL_Cursor* forward decl). A
-// pointer to the incomplete type is all the public API needs; HapticDevice.cpp includes the real
-// SDL header.
-struct SDL_Haptic;
+namespace CNA::Platform
+{
+    class IPlatform;
+    class IPlatformHapticDevice;
+}
 
 namespace CNA::Input
 {
@@ -20,18 +23,18 @@ namespace CNA::Input
      * @brief CNAEXT — an opened force-feedback (haptic) device.
      *
      * Obtained from `Haptics::OpenEXT`/`OpenFromJoystickEXT`/`OpenFromMouseEXT`. Move-only RAII,
-     * mirroring `Microsoft::Xna::Framework::Input::MouseCursor`: the handle is closed on
+     * mirroring `Microsoft::Xna::Framework::Input::MouseCursor`: the device is closed on
      * destruction/`Dispose()`. A device that failed to open (or was moved-from) reports
      * `IsOpenEXT() == false`, and every other member is then a safe no-op / default-returning call.
      *
      * @note CNAEXT — XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s dual-motor
-     *       rumble; this whole class is a CNA/SDL3 extension.
+     *       rumble; this whole class is a CNA extension.
      */
     CNAEXT class HapticDevice : public System::IDisposable
     {
     public:
-        /** @brief Wraps an already-opened SDL haptic handle (nullptr represents "failed to open"). */
-        CNAEXT explicit HapticDevice(SDL_Haptic* handle);
+        /** @brief Constructs a closed haptic device. */
+        CNAEXT HapticDevice() = default;
 
         HapticDevice(const HapticDevice&)            = delete;
         HapticDevice& operator=(const HapticDevice&) = delete;
@@ -132,7 +135,16 @@ namespace CNA::Input
         CNAEXT bool ResumeEXT();
 
     private:
-        SDL_Haptic* handle_ = nullptr;
+        friend class Haptics;
+
+        HapticDevice(std::unique_ptr<CNA::Platform::IPlatformHapticDevice> effectDevice,
+                     CNA::Platform::IPlatform* platform,
+                     std::optional<std::uint64_t> standaloneId, std::string standaloneName);
+
+        std::unique_ptr<CNA::Platform::IPlatformHapticDevice> effectDevice_;
+        CNA::Platform::IPlatform* platform_ = nullptr;
+        std::optional<std::uint64_t> standaloneId_;
+        std::string standaloneName_;
         bool isDisposed_ = false;
     };
 }

@@ -84,8 +84,6 @@ namespace CNA::Internal::Renderers::DirectX9
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
             .adapterQueries           = {

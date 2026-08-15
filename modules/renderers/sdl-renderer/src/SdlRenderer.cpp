@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/SdlRenderer/SdlRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 #include <cmath>
 #include <cstring>
@@ -16,6 +17,15 @@ namespace CNA::Internal::Renderers::SdlRenderer
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Renderers;
+
+    namespace
+    {
+        [[nodiscard]] SDL_Texture* GetNativeSdlTexture(const ITextureRenderer& texture)
+        {
+            const auto* sdlTexture = dynamic_cast<const ISdlTextureRenderer*>(&texture);
+            return sdlTexture != nullptr ? sdlTexture->GetNativeSdlTexture() : nullptr;
+        }
+    }
 
     // --- SdlTextureRenderer ---
 
@@ -131,9 +141,9 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: texture may be an SdlRenderTargetRenderer (a RenderTarget2D sampled as
         // a Texture2D after unbinding) -- a sibling class of SdlTextureRenderer, NOT a subclass, so
         // an unchecked static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        // GetNativeTexture()/GetWidth()/GetHeight() are virtual on ITextureRenderer and safe for
-        // either concrete renderer.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        // The SDL-specific sibling interface is implemented by both concrete texture kinds; a
+        // foreign renderer texture keeps the established harmless no-draw behaviour.
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
@@ -153,7 +163,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
         // SdlRenderTargetRenderer, a sibling class of SdlTextureRenderer, so an unchecked
         // static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
@@ -200,7 +210,7 @@ namespace CNA::Internal::Renderers::SdlRenderer
         // Task 705 finding: see the (x,y) Draw overload above -- texture may be an
         // SdlRenderTargetRenderer, a sibling class of SdlTextureRenderer, so an unchecked
         // static_cast<const SdlTextureRenderer&> here would be undefined behavior.
-        SDL_Texture* nativeTex = texture.GetNativeTexture();
+        SDL_Texture* nativeTex = GetNativeSdlTexture(texture);
         if (!nativeTex) return;
         SDL_SetTextureScaleMode(nativeTex, scaleMode);
 
@@ -452,13 +462,33 @@ namespace CNA::Internal::Renderers::SdlRenderer
                      "default and can be changed to warn-once safe stubs with "
                      "Unsupported3DGraphicsCallBehavior::WarnAndStub; "
                      "SurfaceFormat: Color only (Task 176)" << std::endl;
+
+        registeredWindowId_ = SDL_GetWindowID(window);
+        IGraphicsRenderer::RegisterForWindow(registeredWindowId_, this);
     }
 
     SdlRenderer::~SdlRenderer()
     {
+        IGraphicsRenderer::UnregisterForWindow(registeredWindowId_);
         if (renderer) SDL_DestroyRenderer(renderer);
         // window is NOT owned by the renderer.
         // No SDL_Quit or subsystem shutdown here - managed centrally.
+    }
+
+    bool SdlRenderer::TransformWindowToLogical(const float windowX, const float windowY,
+                                                float& logicalX, float& logicalY) const
+    {
+        return renderer != nullptr &&
+               SDL_RenderCoordinatesFromWindow(
+                   renderer, windowX, windowY, &logicalX, &logicalY);
+    }
+
+    bool SdlRenderer::TransformLogicalToWindow(const float logicalX, const float logicalY,
+                                                float& windowX, float& windowY) const
+    {
+        return renderer != nullptr &&
+               SDL_RenderCoordinatesToWindow(
+                   renderer, logicalX, logicalY, &windowX, &windowY);
     }
 
     void SdlRenderer::Clear(float r, float g, float b, float a)
@@ -942,6 +972,9 @@ namespace CNA::Internal::Renderers
         return std::make_unique<::CNA::Internal::Renderers::SdlRenderer::SdlRenderer>(
             args.window, args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.swapInterval);
+        return std::make_unique<SdlRenderer::SdlRenderer>(
+            CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId),
+            args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval);
     }
 #endif
 }

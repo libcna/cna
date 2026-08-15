@@ -6,6 +6,7 @@
 // refusal proof SkiaGaneshSurface inherits unconditionally from SkiaGaneshContext.
 
 #include "CNA/Internal/Renderers/Skia/SkiaGaneshSurface.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +15,9 @@
 #include <string_view>
 
 using CNA::Internal::Renderers::Skia::SkiaGaneshSurface;
+using CNA::Examples::SdlTestGlContext;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurface;
 
 namespace
 {
@@ -92,9 +96,16 @@ int main(int argc, char** argv)
         SDL_Quit();
         return 1;
     }
+    SdlTestGlContext glContext(window);
+    const auto makeArgs = [&]
+    {
+        return SdlTestRendererArgs(
+            window, &glContext, nullptr, 0, 0,
+            CNA::Internal::Renderers::CnaPresentationMode::NativeBackBuffer);
+    };
 
     {
-        SkiaGaneshSurface surface(window);
+        SkiaGaneshSurface surface(makeArgs());
         Check(surface.Width() > 0 && surface.Height() > 0,
               "wrapping the default framebuffer reports a positive size");
 
@@ -174,7 +185,7 @@ int main(int argc, char** argv)
         }
         Check(resized, "the real SDL window actually resized (precondition for the next check)");
 
-        surface.Resize();
+        surface.Resize(SdlTestSurface(window));
         Check(surface.Width() != originalWidth || surface.Height() != originalHeight,
               "SkiaGaneshSurface::Resize() rewraps the default framebuffer at its new size");
 
@@ -229,7 +240,7 @@ int main(int argc, char** argv)
             }
             if (fullscreenResized)
             {
-                surface.Resize();
+                surface.Resize(SdlTestSurface(window));
                 SkCanvas* fullscreenCanvas = surface.Canvas();
                 fullscreenCanvas->clear(SkColorSetARGB(255, 200, 0, 200)); // opaque magenta
                 const auto afterFullscreen = SamplePixel(surface, 2, 2);
@@ -258,7 +269,7 @@ int main(int argc, char** argv)
     // reaching here; constructing a second, independent surface on the same window proves no
     // state leaked across instances.
     {
-        SkiaGaneshSurface second(window);
+        SkiaGaneshSurface second(makeArgs());
         // A genuine mid-tone, not a pure primary: this is what first caught the sRGB/linear
         // colour-space bug below (WrapBackbuffer's original SkColorSpace::MakeSRGBLinear() choice
         // silently applied a gamma round-trip that pure 0/255 channel values cannot expose).
@@ -274,7 +285,7 @@ int main(int argc, char** argv)
     {
         // Hold a final, recognizable, freshly-redrawn pattern on screen for a human to actually
         // see -- a third SkiaGaneshSurface, independent of the two already destroyed above.
-        SkiaGaneshSurface smoke(window);
+        SkiaGaneshSurface smoke(makeArgs());
         SkCanvas* canvas = smoke.Canvas();
         canvas->clear(SkColorSetARGB(255, 0, 0, 255));
         SkPaint paint;

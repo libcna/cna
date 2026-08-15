@@ -10,8 +10,6 @@
 
 #include "shaders/sokol_shaders.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -22,7 +20,7 @@
 
 // The GL back-buffer readback below calls glReadPixels directly: sokol_gfx has no readback API of
 // its own, and on this project's target platform (SOKOL_GLCORE on Linux) sokol renders into the
-// SDL window's default framebuffer, which glReadPixels can read straight out of. Restricted to the
+// platform window's default framebuffer, which glReadPixels can read straight out of. Restricted to the
 // GL APIs on purpose -- ReadBackbuffer refuses any other CNA_SOKOL_API rather than pretending.
 #if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
     #define CNA_SOKOL_HAS_GL_READBACK 1
@@ -41,6 +39,30 @@ namespace CNA::Internal::Renderers::Sokol
     namespace
     {
         constexpr const char* kRendererName = "Sokol";
+
+        CNA::Platform::GlContextDescription RequestedContext(const int multiSampleCount)
+        {
+            CNA::Platform::GlContextDescription description;
+#if defined(SOKOL_GLCORE)
+            // sokol_gfx's GLCORE backend assumes OpenGL 4.1 core features.
+            description.majorVersion = 4;
+            description.minorVersion = 1;
+            description.profile = CNA::Platform::GlProfile::Core;
+#elif defined(SOKOL_GLES3)
+            description.majorVersion = 3;
+            description.minorVersion = 0;
+            description.profile = CNA::Platform::GlProfile::Es;
+#else
+            throw std::runtime_error(
+                "SOKOL renderer currently implements only GLCORE/GLES3 platform contexts");
+#endif
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.multisampleBuffers = multiSampleCount > 1 ? 1 : 0;
+            description.multisampleSamples = multiSampleCount > 1 ? multiSampleCount : 0;
+            description.doubleBuffer = true;
+            return description;
+        }
 
         /// Per-frame sprite capacity. 16384 quads is exactly 65536 vertices, the largest run a
         /// uint16 index buffer can address, so this is the natural ceiling for the shared quad
@@ -759,8 +781,6 @@ namespace CNA::Internal::Renderers::Sokol
 
     int SokolTextureRenderer::GetHeight() const { return height_; }
 
-    SDL_Texture* SokolTextureRenderer::GetNativeTexture() const { return nullptr; }
-
     void SokolTextureRenderer::UpdatePixels(const uint8_t* rgba, int stride)
     {
         if (rgba == nullptr) return;
@@ -1305,8 +1325,6 @@ namespace CNA::Internal::Renderers::Sokol
     int SokolRenderTargetRenderer::GetWidth() const { return width_; }
 
     int SokolRenderTargetRenderer::GetHeight() const { return height_; }
-
-    SDL_Texture* SokolRenderTargetRenderer::GetNativeTexture() const { return nullptr; }
 
     void SokolRenderTargetRenderer::BindAsRenderTarget() {}
 
@@ -2475,32 +2493,24 @@ namespace CNA::Internal::Renderers::Sokol
     // ---------------------------------------------------------------------------------------
 
     SokolRenderer::SokolRenderer(const GraphicsRendererCreateArgs& args)
-        : SokolRenderer(args, false, nullptr)
-    {
-    }
-
-    SokolRenderer::SokolRenderer(const GraphicsRendererCreateArgs& args,
-                                                bool forceMakeCurrentFailureEXT,
-                                                int* contextDestroyCountEXT)
-        : window_(args.window)
-        , forceMakeCurrentFailureEXT_(forceMakeCurrentFailureEXT)
-        , contextDestroyCountEXT_(contextDestroyCountEXT)
+        : platformContext_(std::make_unique<PlatformGlContextOwner>(
+              RequirePlatformGlContext(args.glContext, "SOKOL"),
+              RequirePlatformGlWindow(args.surface, "SOKOL"),
+              RequestedContext(args.multiSampleCount)))
+        , surface_(args.surface)
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , sampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 1)
         , swapInterval_(args.swapInterval)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("Sokol renderer: initialized with a null SDL_Window");
+        platformContext_->SetSwapInterval(swapInterval_);
+        const auto granted = platformContext_->GetAttributes();
+        sampleCount_ = granted.multisampleBuffers > 0 && granted.multisampleSamples > 1
+            ? granted.multisampleSamples : 1;
 
-        // plan_sokol.md SOKOL-45: context creation now shares the same transactional cleanup path
-        // as sokol_gfx setup -- a real SDL_GL_CreateContext() succeeding but the following
-        // SDL_GL_MakeCurrent() failing used to throw from inside CreateGpuContext, before this try
-        // block existed around it, leaking the just-created context.
         try
         {
-            CreateGpuContext(window_, sampleCount_);
             SetupSokol();
             CreateSpriteResources();
         }
@@ -2509,16 +2519,15 @@ namespace CNA::Internal::Renderers::Sokol
             // Transactional construction: a partially initialised renderer must never reach the
             // window registry or a caller's unique_ptr.
             if (sg_isvalid()) sg_shutdown();
-            DestroyGpuContextIfAnyEXT();
             throw;
         }
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     SokolRenderer::~SokolRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
 
         if (passActive_)
         {
@@ -2540,75 +2549,6 @@ namespace CNA::Internal::Renderers::Sokol
         }
 #endif
         if (sg_isvalid()) sg_shutdown();
-        DestroyGpuContextIfAnyEXT();
-    }
-
-    void SokolRenderer::DestroyGpuContextIfAnyEXT()
-    {
-        if (glContext_ != nullptr)
-        {
-            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
-            glContext_ = nullptr;
-            if (contextDestroyCountEXT_ != nullptr) ++(*contextDestroyCountEXT_);
-        }
-    }
-
-    void SokolRenderer::CreateGpuContext(SDL_Window* window, int multiSampleCount)
-    {
-#if defined(SOKOL_GLCORE) || defined(SOKOL_GLES3)
-    #if defined(SOKOL_GLCORE)
-        // sokol_gfx's GLCORE renderer targets the OpenGL 4.1 core profile; asking for less would
-        // make sg_setup() fail on features it assumes unconditionally.
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-    #else
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    #endif
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        // Without an explicit request SDL hands out a window with zero stencil bits, which would
-        // make every stencil clear and DepthStencilState.StencilEnable a silent no-op.
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        if (multiSampleCount > 1)
-        {
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-            SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, multiSampleCount);
-        }
-
-        glContext_ = SDL_GL_CreateContext(window);
-        if (glContext_ == nullptr)
-            throw std::runtime_error(std::string("Sokol renderer: SDL_GL_CreateContext failed: ") + SDL_GetError());
-
-        // plan_sokol.md SOKOL-45 test hook: forces this path to behave as if a real
-        // SDL_GL_MakeCurrent() failure happened right after a real SDL_GL_CreateContext() success,
-        // without needing to actually break SDL. glContext_ is deliberately left non-null here,
-        // matching what a genuine MakeCurrent failure leaves behind -- the catch block in the
-        // constructor is what must destroy it, not this function.
-        const bool madeCurrent = SDL_GL_MakeCurrent(window, static_cast<SDL_GLContext>(glContext_))
-                               && !forceMakeCurrentFailureEXT_;
-        if (!madeCurrent)
-            throw std::runtime_error(std::string("Sokol renderer: SDL_GL_MakeCurrent failed: ") +
-                (forceMakeCurrentFailureEXT_ ? "forced failure for test" : SDL_GetError()));
-
-        SDL_GL_SetSwapInterval(swapInterval_);
-
-        // Report back what the driver actually granted rather than what was asked for, matching
-        // FNA3D's "MultiSampleCount reflects the real clamped value" semantics.
-        int grantedSamples = 0;
-        if (SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &grantedSamples))
-            sampleCount_ = grantedSamples > 1 ? grantedSamples : 1;
-        else
-            sampleCount_ = 1;
-#else
-        (void)window;
-        (void)multiSampleCount;
-        throw std::runtime_error(
-            "Sokol renderer: CNA_SOKOL_API is set to a non-GL API, but only the GL context path is "
-            "implemented (plan_sokol.md Phase SOKOL-8)");
-#endif
     }
 
     void SokolRenderer::SetupSokol()
@@ -3035,7 +2975,7 @@ namespace CNA::Internal::Renderers::Sokol
         BeginPassIfNeeded();
         EndPassIfActive();
         sg_commit();
-        SDL_GL_SwapWindow(window_);
+        platformContext_->SwapBuffers();
         // plan_sokol.md SOKOL-24: sg_commit() is sokol_gfx's own frame boundary (it is what
         // advances the internal frame counter sg_update_buffer()'s once-per-frame rule is
         // checked against) -- advance this renderer's own counter right alongside it.
@@ -3048,9 +2988,7 @@ namespace CNA::Internal::Renderers::Sokol
 
     void SokolRenderer::GetPhysicalSizeEXT(int& width, int& height) const
     {
-        width = 0;
-        height = 0;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
+        surface_.GetDrawableSize(width, height);
     }
 
     void SokolRenderer::GetLogicalSizeEXT(int& width, int& height) const
@@ -3082,6 +3020,11 @@ namespace CNA::Internal::Renderers::Sokol
         GetLogicalSizeEXT(width, height);
     }
 
+    void SokolRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+    }
+
     void SokolRenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -3096,7 +3039,7 @@ namespace CNA::Internal::Renderers::Sokol
     void SokolRenderer::SetSwapInterval(int interval)
     {
         swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
     }
 
     bool SokolRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -3109,8 +3052,8 @@ namespace CNA::Internal::Renderers::Sokol
         if (physicalHeight <= 0) return false;
 
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physicalHeight);
-        logX = windowX * scale;
-        logY = windowY * scale;
+        logX = surface_.WindowToDrawable(windowX) * scale;
+        logY = surface_.WindowToDrawable(windowY) * scale;
         return true;
     }
 
@@ -3124,14 +3067,10 @@ namespace CNA::Internal::Renderers::Sokol
         if (physicalHeight <= 0) return false;
 
         const float inverseScale = static_cast<float>(physicalHeight) / static_cast<float>(virtualHeight_);
-        windowX = logX * inverseScale;
-        windowY = logY * inverseScale;
+        windowX = surface_.DrawableToWindow(logX * inverseScale);
+        windowY = surface_.DrawableToWindow(logY * inverseScale);
         return true;
     }
-
-    SDL_Window* SokolRenderer::GetWindowInternal() const { return window_; }
-
-    SDL_Renderer* SokolRenderer::GetRendererInternal() const { return nullptr; }
 
     // ---------------------------------------------------------------------------------------
     // SokolRenderer -- resource creation
@@ -5500,8 +5439,8 @@ namespace CNA::Internal::Renderers::Sokol
     {
         switch (capability)
         {
-            // Real: the swapchain carries a genuine depth-stencil buffer (SDL_GL_DEPTH_SIZE 24 /
-            // SDL_GL_STENCIL_SIZE 8) that the Clear* family writes through pass load actions.
+            // Real: the platform context requests a 24-bit depth/8-bit stencil swapchain that the
+            // Clear* family writes through pass load actions.
             case CNA::GraphicsCapability::DepthStencilBuffer:
                 return true;
             // Real for both the back buffer (sample count negotiated with the GL context at

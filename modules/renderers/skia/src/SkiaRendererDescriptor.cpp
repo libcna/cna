@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D17: the Skia family's pre-construction contract.
 //
-// CPU raster presented through a streaming SDL_Renderer texture -- no GPU context on the window
+// CPU raster presented through a streaming the platform window request texture -- no GPU context on the window
 // itself.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -37,8 +37,7 @@ namespace CNA::Internal::Renderers::Skia
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
+            .needsSurfacePresenter    = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

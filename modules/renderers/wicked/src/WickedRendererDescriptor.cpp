@@ -1,7 +1,7 @@
 // plan_runtimerenderer.md RTR-P1-D34: the Wicked family's pre-construction contract.
 //
 // Wicked Engine's RHI creates its own Vulkan (or D3D12) device from the native window handle, like
-// LLGL's Vulkan module -- no SDL flag, which is just as well since SDL refuses a window that is
+// LLGL's Vulkan module -- no graphics-API window intent, which is just as well since the platform refuses a window that is
 // both OpenGL and Vulkan.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -38,8 +38,6 @@ namespace CNA::Internal::Renderers::Wicked
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

@@ -1,14 +1,13 @@
 // plan_runtimerenderer.md RTR-P1-D04: the Vulkan family's pre-construction contract.
 //
-// Vulkan builds its surface from the SDL window, which must have been created with
-// SDL_WINDOW_VULKAN.
+// Vulkan builds its surface from the platform window, which must have been created with
+// the platform window intent.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 
@@ -29,11 +28,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
     namespace
     {
-        /// SDL refuses to build a Vulkan surface from a window that was not created with this flag.
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            return static_cast<std::uint32_t>(SDL_WINDOW_VULKAN);
-        }
+        /// the platform refuses to build a Vulkan surface from a window that was not created with this flag.
     }
 
     /**
@@ -49,8 +44,7 @@ namespace CNA::Internal::Renderers::Vulkan
             .windowKind               = RendererWindowKind::Vulkan,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PrepareWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
+            .needsVulkanSurface       = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

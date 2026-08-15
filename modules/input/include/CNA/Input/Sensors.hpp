@@ -11,7 +11,7 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — the kind of a host-device motion sensor. Mirrors SDL3's `SDL_SensorType`.
+     * @brief CNAEXT — the kind of a host-device motion sensor, using CNA-owned vocabulary.
      */
     CNAEXT enum class SensorTypeEXT
     {
@@ -36,7 +36,7 @@ namespace CNA::Input
      */
     CNAEXT struct SensorInfoEXT
     {
-        /** @brief The SDL sensor instance id. */
+        /** @brief The platform sensor instance id. */
         std::uint32_t id = 0;
         /** @brief The sensor's human-readable name, or empty if SDL reports none. */
         std::string name;
@@ -67,10 +67,10 @@ namespace CNA::Input
     }
 
     /**
-     * @brief CNAEXT — reads the host device's own motion sensors, backed by SDL3.
+     * @brief CNAEXT — reads the host device's own motion sensors through the selected platform.
      *
      * Distinct from a gamepad's gyro/accelerometer (`GamePad::Get{Gyro,Accelerometer}EXT`): these are
-     * the machine's own sensors (phone/tablet/laptop). Values use SDL's standard units — accelerometer
+     * the machine's own sensors (phone/tablet/laptop). Values use standard units — accelerometer
      * in m/s², gyroscope in rad/s. Platform notes: mainly a mobile feature (Android full; Windows/Linux
      * partial; macOS none; Web permission-gated), so the enumeration is often empty on desktop.
      */

@@ -2,32 +2,35 @@
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 
 #include "CNA/Input/TextInputType.hpp"
-
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/Input/IPlatformTextInput.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 namespace
 {
-    // WindowHandle stores an SDL_Window* as an integer (FNA models it as IntPtr).
-    inline SDL_Window* ToSdlWindow(std::uintptr_t handle)
+    [[nodiscard]] CNA::Platform::IPlatformTextInput* CurrentTextInput()
     {
-        return reinterpret_cast<SDL_Window*>(handle);
+        return CNA::Platform::GetCurrentPlatform().GetTextInput();
     }
 
-    SDL_TextInputType ToSdlTextInputType(CNA::Input::TextInputTypeEXT type)
+    [[nodiscard]] CNA::Platform::TextInputType ToPlatformTextInputType(
+        const CNA::Input::TextInputTypeEXT type)
     {
+        using PlatformType = CNA::Platform::TextInputType;
         switch (type)
         {
-            case CNA::Input::TextInputTypeEXT::Text:                 return SDL_TEXTINPUT_TYPE_TEXT;
-            case CNA::Input::TextInputTypeEXT::TextName:             return SDL_TEXTINPUT_TYPE_TEXT_NAME;
-            case CNA::Input::TextInputTypeEXT::TextEmail:            return SDL_TEXTINPUT_TYPE_TEXT_EMAIL;
-            case CNA::Input::TextInputTypeEXT::TextUsername:         return SDL_TEXTINPUT_TYPE_TEXT_USERNAME;
-            case CNA::Input::TextInputTypeEXT::TextPasswordHidden:   return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_HIDDEN;
-            case CNA::Input::TextInputTypeEXT::TextPasswordVisible:  return SDL_TEXTINPUT_TYPE_TEXT_PASSWORD_VISIBLE;
-            case CNA::Input::TextInputTypeEXT::Number:                return SDL_TEXTINPUT_TYPE_NUMBER;
-            case CNA::Input::TextInputTypeEXT::NumberPasswordHidden:  return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_HIDDEN;
-            case CNA::Input::TextInputTypeEXT::NumberPasswordVisible: return SDL_TEXTINPUT_TYPE_NUMBER_PASSWORD_VISIBLE;
+            case CNA::Input::TextInputTypeEXT::Text:                  return PlatformType::Text;
+            case CNA::Input::TextInputTypeEXT::TextName:              return PlatformType::TextName;
+            case CNA::Input::TextInputTypeEXT::TextEmail:             return PlatformType::TextEmail;
+            case CNA::Input::TextInputTypeEXT::TextUsername:          return PlatformType::TextUsername;
+            case CNA::Input::TextInputTypeEXT::TextPasswordHidden:    return PlatformType::TextPasswordHidden;
+            case CNA::Input::TextInputTypeEXT::TextPasswordVisible:   return PlatformType::TextPasswordVisible;
+            case CNA::Input::TextInputTypeEXT::Number:                return PlatformType::Number;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordHidden:  return PlatformType::NumberPasswordHidden;
+            case CNA::Input::TextInputTypeEXT::NumberPasswordVisible: return PlatformType::NumberPasswordVisible;
         }
-        return SDL_TEXTINPUT_TYPE_TEXT;
+        return PlatformType::Text;
     }
 }
 
@@ -37,6 +40,7 @@ namespace Microsoft::Xna::Framework::Input
     System::MulticastAction<const std::string&, int, int> TextInputEXT::TextEditing;
     System::MulticastAction<const std::vector<std::string>&, int, bool> TextInputEXT::TextEditingCandidatesEXT;
     std::uintptr_t                                  TextInputEXT::windowHandle_ = 0;
+    std::uint32_t                                   TextInputEXT::windowId_ = 0;
 
     std::uintptr_t TextInputEXT::getWindowHandleProperty()
     {
@@ -46,15 +50,22 @@ namespace Microsoft::Xna::Framework::Input
     void TextInputEXT::setWindowHandleProperty(std::uintptr_t value)
     {
         windowHandle_ = value;
+        // A raw handle carries no portable identity. GraphicsDevice publishes the matching id in
+        // a second, explicit call; clearing first prevents an unrelated replacement handle from
+        // inheriting the old window's id during that hand-off.
+        windowId_ = 0;
+    }
+
+    void TextInputEXT::INTERNAL_setWindowId(const std::uint32_t value)
+    {
+        windowId_ = windowHandle_ != 0 ? value : 0;
     }
 
     bool TextInputEXT::IsTextInputActive()
     {
-        if (SDL_Window* window = ToSdlWindow(windowHandle_))
-        {
-            return SDL_TextInputActive(window);
-        }
-        return false;
+        CNA::Platform::IPlatformTextInput* input =
+            windowId_ != 0 ? CurrentTextInput() : nullptr;
+        return input != nullptr && input->IsActive(windowId_);
     }
 
     bool TextInputEXT::IsScreenKeyboardShown()
@@ -64,57 +75,87 @@ namespace Microsoft::Xna::Framework::Input
 
     bool TextInputEXT::IsScreenKeyboardShown(std::uintptr_t window)
     {
-        if (SDL_Window* w = ToSdlWindow(window))
-        {
-            return SDL_ScreenKeyboardShown(w);
-        }
-        return false;
+        // The frozen FNA surface accepts a native handle, but the portable platform contract
+        // intentionally does not. GraphicsDevice publishes the one active input surface as a
+        // handle/id pair, so only that known pair can be queried safely.
+        CNA::Platform::IPlatformTextInput* input =
+            window != 0 && window == windowHandle_ && windowId_ != 0
+                ? CurrentTextInput()
+                : nullptr;
+        return input != nullptr && input->IsScreenKeyboardShown(windowId_);
     }
 
     void TextInputEXT::StartTextInput()
     {
-        // Guard against a null window: WindowHandle is not populated until the window
-        // is created (plan_input.md Task 703). FNA passes the handle straight through.
-        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        CNA::Platform::IPlatformTextInput* input =
+            windowId_ != 0 ? CurrentTextInput() : nullptr;
+        if (input != nullptr)
         {
-            SDL_StartTextInput(window);
+            try
+            {
+                input->Start(windowId_, CNA::Platform::TextInputType::Default);
+            }
+            catch (const CNA::Platform::PlatformException&)
+            {
+                // FNA's void API ignores a native start failure; preserve that public contract.
+            }
         }
     }
 
     void TextInputEXT::StopTextInput()
     {
-        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        CNA::Platform::IPlatformTextInput* input =
+            windowId_ != 0 ? CurrentTextInput() : nullptr;
+        if (input != nullptr)
         {
-            SDL_StopTextInput(window);
+            try
+            {
+                input->Stop(windowId_);
+            }
+            catch (const CNA::Platform::PlatformException&)
+            {
+                // FNA's void API ignores a native stop failure; preserve that public contract.
+            }
         }
     }
 
     void TextInputEXT::StartTextInputWithTypeEXT(CNA::Input::TextInputTypeEXT type)
     {
-        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        CNA::Platform::IPlatformTextInput* input =
+            windowId_ != 0 ? CurrentTextInput() : nullptr;
+        if (input != nullptr)
         {
-            SDL_PropertiesID props = SDL_CreateProperties();
-            SDL_SetNumberProperty(props, SDL_PROP_TEXTINPUT_TYPE_NUMBER, ToSdlTextInputType(type));
-            SDL_StartTextInputWithProperties(window, props);
-            SDL_DestroyProperties(props);
+            try
+            {
+                input->Start(windowId_, ToPlatformTextInputType(type));
+            }
+            catch (const CNA::Platform::PlatformException&)
+            {
+                // FNA's void API ignores a native start failure; preserve that public contract.
+            }
         }
     }
 
     void TextInputEXT::SetInputRectangle(const Microsoft::Xna::Framework::Rectangle& rectangle)
     {
-        if (SDL_Window* window = ToSdlWindow(windowHandle_))
+        CNA::Platform::IPlatformTextInput* input =
+            windowId_ != 0 ? CurrentTextInput() : nullptr;
+        if (input != nullptr)
         {
-            SDL_Rect rect;
-            rect.x = rectangle.X;
-            rect.y = rectangle.Y;
-            rect.w = rectangle.Width;
-            rect.h = rectangle.Height;
-            // Cursor offset 0 matches FNA exactly (SetTextInputRectangle,
-            // SDL3_FNAPlatform.cs:779: `SDL_SetTextInputArea(window, ref rect, 0)`). SDL3's third
-            // argument is the text cursor's x-offset relative to rect->x (an optional IME
-            // placement hint); FNA passes 0 and flags it with its own `// FIXME SDL3: Do we need a
-            // cursor here?` — CNA follows FNA rather than inventing a cursor offset it doesn't have.
-            SDL_SetTextInputArea(window, &rect, 0);
+            // Cursor offset 0 matches FNA's SetTextInputRectangle implementation exactly. The
+            // native API treats it as the text cursor's x-offset relative to the rectangle (an
+            // optional IME placement hint); FNA passes 0 and marks the missing cursor information
+            // as an upstream FIXME. CNA follows that behaviour rather than inventing an offset.
+            try
+            {
+                input->SetInputArea(
+                    windowId_, CNA::Platform::TextInputArea{
+                                   rectangle.X, rectangle.Y, rectangle.Width, rectangle.Height, 0});
+            }
+            catch (const CNA::Platform::PlatformException&)
+            {
+                // FNA's void API ignores a native area-update failure.
+            }
         }
     }
 
@@ -143,5 +184,6 @@ namespace Microsoft::Xna::Framework::Input
         TextEditing  = nullptr;
         TextEditingCandidatesEXT = nullptr;
         windowHandle_ = 0;
+        windowId_ = 0;
     }
 }

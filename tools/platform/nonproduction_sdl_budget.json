@@ -1,0 +1,1113 @@
+{
+  "_comment": "PLAT-123 per-file ceilings for justified SDL use in tests/examples. Entries may be removed or lowered without an override; additions/increases require nonproduction_sdl_audit.py --update --allow-increase.",
+  "entries": {
+    "modules/audio/tests/CNA/Audio/Platform/AudioDeviceConformanceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
+    "modules/audio/tests/CNA/Audio/Platform/AudioMixerPlatformTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 29
+    },
+    "modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
+    "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioDeviceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 19
+    },
+    "modules/audio/tests/CNA/Audio/Platform/Sdl3AudioRecordingDeviceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
+    "modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 24
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/AudioCategoryTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 10
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/AudioEngineTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 3
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/CueTestAccess.hpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/CueTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 18
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstanceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 35
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/MicrophoneTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 2
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/OfflineAudioRenderer.hpp": {
+      "category": "audio-native-integration",
+      "max_references": 15
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/OfflineAudioRendererTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 39
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundBankTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 5
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTestAccess.hpp": {
+      "category": "audio-native-integration",
+      "max_references": 3
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectInstanceTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 8
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/SoundEffectTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 35
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/Audio/WaveBankTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 16
+    },
+    "modules/audio/tests/Microsoft/Xna/Framework/FrameworkDispatcherTests.cpp": {
+      "category": "audio-native-integration",
+      "max_references": 1
+    },
+    "modules/content/tests/Microsoft/Xna/Framework/Content/CnjCapabilityMatrixTests.cpp": {
+      "category": "audio-native-fixture",
+      "max_references": 1
+    },
+    "modules/graphics/examples/backbuffer_pass_order_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/backbuffer_readback_dimension_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/common/PixelTestGame.hpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 21
+    },
+    "modules/graphics/examples/common/SdlTestGraphicsServices.hpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 111
+    },
+    "modules/graphics/examples/graphicsdevice_ordered_clear_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/graphics/examples/house3d_demo.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/present_lifecycle_contract_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/rendertarget_effect_source_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/graphics/examples/rendertarget_msaa_mip_readback_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/graphics/examples/rendertarget_pass_boundary_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/graphics/examples/rendertargetcube_msaa_face_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/graphics/examples/rendertargetcube_usage_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/graphics/examples/texture2d_getdata_transfer_range_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/graphics/examples/unsupported_3d_call_behavior_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/graphics/examples/viewport_reset_after_resize_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputCompileTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 4
+    },
+    "modules/input/tests/Microsoft/Xna/Framework/Input/PublicApiInputSignatureFreezeTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 2
+    },
+    "modules/media/tests/Microsoft/Xna/Framework/Media/MediaPlayerTests.cpp": {
+      "category": "audio-native-fixture",
+      "max_references": 1
+    },
+    "modules/platform/tests/CNA/Platform/ContractIsSdlFreeTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 6
+    },
+    "modules/platform/tests/CNA/Platform/IPlatformTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 2
+    },
+    "modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp": {
+      "category": "platform-sdl2-integration",
+      "max_references": 12
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3EventMapperTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 195
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3InputDevicesTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 1
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3InputServicesTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 55
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3KeyCodeRoundTripTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 23
+    },
+    "modules/platform/tests/CNA/Platform/Sdl3PlatformTests.cpp": {
+      "category": "platform-sdl3-integration",
+      "max_references": 3
+    },
+    "modules/platform/tests/CNA/Platform/TerminalPresenterTests.cpp": {
+      "category": "containment-assertion",
+      "max_references": 1
+    },
+    "modules/renderers/bgfx/examples/bgfx_gfx196_noop_reset_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/blend2d/examples/blend2d_renderer_correctness_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 50
+    },
+    "modules/renderers/blend2d/examples/blend2d_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/canvas/examples/canvas_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/diligent/examples/diligent_alphatest_fog_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_anisotropic_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_backbuffer_readback_bounds_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 25
+    },
+    "modules/renderers/diligent/examples/diligent_capability_consistency_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_clear_readback_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_colored3d_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_depthbias_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_device_selection_integration_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_drawoffset_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_dualtexture_envmap_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_fillmode_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_instance_binding_offsets_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_instanced_stride_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_instanced_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_lighting_fidelity_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_mip_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_model_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_mrt_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_msaa_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_multisamplemask_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_npot_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_occlusionquery_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_pbr_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_referencestencil_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_rendertarget_mipgen_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_rendertarget_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_rendertargetcube_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_scissor_pipelinecache_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_setdataoptions_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_skinned_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/diligent/examples/diligent_vertexlit_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/direct2d/examples/direct2d_2d_parity_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/direct2d/examples/direct2d_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx1/examples/directx1_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx1/examples/directx1_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx1/examples/directx1_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx10/examples/directx10_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/directx11/examples/directx11_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx12/examples/directx12_swapchain_diag.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/directx2/examples/directx2_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx2/examples/directx2_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx2/examples/directx2_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx3/examples/directx3_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx3/examples/directx3_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx3/examples/directx3_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx5/examples/directx5_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx5/examples/directx5_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx5/examples/directx5_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx6/examples/directx6_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx6/examples/directx6_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx6/examples/directx6_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx7/examples/directx7_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx7/examples/directx7_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx7/examples/directx7_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx8/examples/directx8_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/directx8/examples/directx8_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx8/examples/directx8_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/directx9/examples/directx9_hresult_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/directx9/examples/directx9_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/easygl/examples/easygl_backbuffer_resize_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/easygl/examples/easygl_bloom_pipeline_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_fullscreen_field_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_gfx164_bound_msaa_alpha_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 9
+    },
+    "modules/renderers/easygl/examples/easygl_graphicsdevicemanager_vsync_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/easygl/examples/easygl_mrt_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/easygl/examples/easygl_present_interval_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_real_window_resize_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/easygl/examples/easygl_sample_keyboard_cube3d_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_sample_layered_blend_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_sample_moving_quad3d_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_default_char_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_effects_flip_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_effects_rotation_scale_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_multiglyph_spacing_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_newline_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/easygl/examples/easygl_spritefont_single_glyph_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/fna3d/examples/fna3d_device_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 16
+    },
+    "modules/renderers/freedirect/examples/freedirect_logical_transform_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/freedirect/examples/freedirect_resize_transaction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 25
+    },
+    "modules/renderers/freedirect/examples/freedirect_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/freedirect/examples/freedirect_spritefont_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/gdi/examples/gdi_2d_benchmark.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/gdi/examples/gdi_2d_regression_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 23
+    },
+    "modules/renderers/gdi/examples/gdi_applied_state_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_colormatrix_effect_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_dc_release_transaction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 24
+    },
+    "modules/renderers/gdi/examples/gdi_dirty_damage_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_framebuffer_allocation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/gdi/examples/gdi_msaa_contract_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/gdi/examples/gdi_presentation_configuration_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_presentation_mode_transaction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 19
+    },
+    "modules/renderers/gdi/examples/gdi_public_api_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/gdi/examples/gdi_public_stencil_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_repaint_invalidation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 55
+    },
+    "modules/renderers/gdi/examples/gdi_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/gdi/examples/gdi_texture_allocation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_unsupported_features_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/gdi/examples/gdi_window_metrics_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 53
+    },
+    "modules/renderers/glide/examples/glide_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/headless/examples/headless_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/html-dom/examples/htmldom_dispose_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/html-dom/examples/htmldom_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 9
+    },
+    "modules/renderers/llgl/examples/llgl_resize_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/llgl/examples/llgl_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/metal/examples/metal_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/opengl1/examples/opengl1_anisotropic_gl_state_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/opengl1/examples/opengl1_graphics_capability_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/opengl1/examples/opengl1_msaa_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/opengl1/examples/opengl1_presentationmode_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 11
+    },
+    "modules/renderers/opengl1/examples/opengl1_swapinterval_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 11
+    },
+    "modules/renderers/opengl2/examples/opengl2_presentation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/opengl2/examples/opengl2_presentationmode_letterbox_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/opengl2/examples/opengl2_presentationmode_overscan_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/opengl2/examples/opengl2_presentationmode_stretch_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/opengl2/examples/opengl2_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/opengl2/examples/opengl2_texture3d_mip_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/opengl4/examples/opengl4_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 11
+    },
+    "modules/renderers/openvg/examples/openvg_blend_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/openvg/examples/openvg_modern_state_guard_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/openvg/examples/openvg_presentation_viewport_scissor_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 47
+    },
+    "modules/renderers/openvg/examples/openvg_spritebatch_rotation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/openvg/examples/openvg_texture_orientation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 12
+    },
+    "modules/renderers/openvg/examples/openvg_unsupported_3d_behavior_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/portablegl/examples/portablegl_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_constructor_exception_safety_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 37
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_depth_bias_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 17
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_mrt_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_renderstate_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertarget2d_msaa_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertarget_blendfactor_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertarget_lifetime_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertarget_scissor_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertarget_viewport_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_rendertargetcube_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_shadereffect_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_skinned_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 10
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_swapchain_recovery_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 15
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_texture2d_mip_storage_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_texture3d_validity_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-gpu/examples/sdlgpu_texturecube_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_additive_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_alphablend_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_audit_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 18
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_custom_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 13
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_nonpremultiplied_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_blendstate_opaque_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_buffer_construction_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_clearoptions_audit_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_custom_effect_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_devicereset_events_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_disposed_guards_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_double_dispose_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_drawprimitives_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 9
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_drawuserindexedprimitives_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 16
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_drawuserprimitives_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_fullscreen_toggle_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_getbackbufferdata_after_rt_unbind_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_graphics_capability_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_model_draw_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_multisamplecount_decision_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_npot_texture_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_occlusionquery_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_presentationparameters_resize_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_presentinterval_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rasterizer_depthstencil_construction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 1
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_readback_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rendertarget2d_construction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 10
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rendertarget2d_sample_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rendertarget_depth_decision_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rendertarget_usage_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_rendertargets_mrt_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_resource_leak_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_sample_animated_spritesheet_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_sample_bouncing_sprite_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_sample_keyboard_sprite_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_sample_spritefont_text_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_samplerstate_default_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_samplerstate_filter_audit_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_samplerstate_perdraw_switch_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_sprite_effects_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_begin_end_guard_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_deferred_order_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_immediate_flush_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_layerdepth_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_overloads_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_rotation_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_scale_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_sourcerect_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritebatch_texture_sort_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritefont_default_char_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritefont_effects_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritefont_multiglyph_spacing_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritefont_newline_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_spritefont_single_glyph_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_stock3deffects_apply_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 14
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_dispose_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 10
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_fromstream_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_miplevel_throws_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_partial_rect_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 4
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_saveas_roundtrip_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_setdata_getdata_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 9
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture2d_startindex_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture_address_mode_clamp_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 11
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_texture_filter_point_vs_linear_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 6
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_transform_matrix_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 3
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_vertexdeclaration_construction_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/sdl-renderer/examples/sdlrenderer_viewport_project_unproject_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 2
+    },
+    "modules/renderers/skia/examples/skia_display_scale_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 9
+    },
+    "modules/renderers/skia/examples/skia_ganesh_backbuffer_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 42
+    },
+    "modules/renderers/skia/examples/skia_ganesh_mode_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 23
+    },
+    "modules/renderers/skia/examples/skia_ganesh_resource_budget_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 21
+    },
+    "modules/renderers/skia/examples/skia_lifecycle_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 22
+    },
+    "modules/renderers/skia/examples/skia_ownership_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 19
+    },
+    "modules/renderers/skia/examples/skia_presentation_modes_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 24
+    },
+    "modules/renderers/skia/examples/skia_raster_mode_coherence_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 17
+    },
+    "modules/renderers/skia/examples/skia_window_lifecycle_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 24
+    },
+    "modules/renderers/software/examples/software_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/sokol/examples/sokol_gl_context_transactional_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 19
+    },
+    "modules/renderers/sokol/examples/sokol_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 8
+    },
+    "modules/renderers/stub/examples/stub_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/svg-dom/examples/svgdom_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 7
+    },
+    "modules/renderers/tinygl/examples/tinygl_smoke_test.cpp": {
+      "category": "renderer-integration-executable",
+      "max_references": 5
+    }
+  }
+}

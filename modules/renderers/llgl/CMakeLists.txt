@@ -30,11 +30,10 @@ target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 if(CNA_LLGL_COMPILE_DEFINITIONS)
     target_compile_definitions(${RENDERER_TARGET} PUBLIC ${CNA_LLGL_COMPILE_DEFINITIONS})
 endif()
-
 # plan_llgl.md LLGL-27: LlglEffectRenderer needs a REAL runtime GLSL->SPIR-V compile for
 # arbitrary user ShaderEffect source when the Vulkan module is selected at runtime (LLGL's own
 # OpenGL module accepts the same GLSL text directly, no compiler needed there) -- the exact
-# same problem SDL_GPU's own effect renderer already solved with libshaderc, and the
+# same problem another runtime-selected effect renderer already solved with libshaderc, and the
 # same find_library()-then-glob-fallback this environment's own libshaderc1-only (no -dev
 # package) install needs. Duplicated rather than shared with the sdl-gpu module: only the one
 # selected renderer module is ever configured, so the other module's variable is never set here.

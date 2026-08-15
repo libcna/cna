@@ -31,8 +31,9 @@ namespace
         void GetViewportSize(int& width, int& height) override { width = 0; height = 0; }
         void SetVirtualResolution(int, int) override {}
         void SetPresentationMode(int) override {}
-        SDL_Window* GetWindowInternal() const override { return nullptr; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+        // MERGE (plan_platform.md PLAT-8): IGraphicsRenderer no longer exposes the toolkit-native
+        // window/renderer accessors this mock used to override -- the platform contract owns them
+        // now -- so the overrides are gone rather than retyped.
         std::unique_ptr<CNA::Internal::Renderers::ITextureRenderer> CreateTexture(
             const CNA::Internal::Graphics::ImageData&) override { return nullptr; }
         std::unique_ptr<CNA::Internal::Renderers::ISpriteBatchRenderer> CreateSpriteBatch() override

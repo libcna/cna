@@ -37,8 +37,6 @@ namespace CNA::Internal::Renderers::Glide
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

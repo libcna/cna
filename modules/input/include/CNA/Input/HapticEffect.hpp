@@ -14,12 +14,11 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — describes one force-feedback effect, for any `HapticEffectTypeEXT` family.
      *
-     * This is the C++ analog of SDL3's `SDL_HapticEffect` tagged union (`SDL_HapticConstant`,
-     * `SDL_HapticPeriodic`, `SDL_HapticCondition`, `SDL_HapticRamp`, `SDL_HapticLeftRight`,
-     * `SDL_HapticCustom`), flattened into one struct rather than six near-identical types: `type`
+     * This is CNA's platform-neutral haptic-effect record, flattened into one struct rather than
+     * six near-identical tagged-union variants: `type`
      * selects the family, and only the fields documented for that family are meaningful — the rest
-     * are ignored when the effect is built. All strength/level values max at 32767 (`SDL_HAPTIC_
-     * INFINITY`-style caps are not enforced here; SDL itself validates/clamps on create).
+     * are ignored when the effect is built. Strength/level limits are validated or clamped by
+     * the selected platform implementation when the effect is created.
      *
      * Field applicability by `type`:
      * - **Constant**: `direction`, `length`, `delay`, `button`, `interval`, `level`, envelope.
@@ -35,7 +34,7 @@ namespace CNA::Input
      */
     CNAEXT struct HapticEffectEXT
     {
-        /** @brief A `length` value meaning "play forever" (`SDL_HAPTIC_INFINITY`). */
+        /** @brief A `length` value meaning "play forever". */
         static constexpr std::uint32_t InfiniteLengthEXT = 4294967295u;
 
         /** @brief Which effect family this describes. */

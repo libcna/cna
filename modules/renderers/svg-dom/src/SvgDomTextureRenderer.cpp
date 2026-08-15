@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/SvgDom/SvgDomTextureRenderer.hpp"
+#include "CNA/Internal/Graphics/ImageLoader.hpp"
 
 #include "System/ArgumentOutOfRangeException.hpp"
-
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <cmath>
@@ -103,39 +101,8 @@ namespace CNA::Internal::Renderers::SvgDom
 
     std::vector<std::uint8_t> EncodePngEXT(const std::uint8_t* rgba, int width, int height)
     {
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            width, height, SDL_PIXELFORMAT_RGBA32, const_cast<std::uint8_t*>(rgba), width * 4);
-        if (!surface)
-            throw std::runtime_error(std::string("SVG_DOM: SDL_CreateSurfaceFrom failed: ") + SDL_GetError());
-
-        SDL_IOStream* dst = SDL_IOFromDynamicMem();
-        if (!dst)
-        {
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SVG_DOM: SDL_IOFromDynamicMem failed: ") + SDL_GetError());
-        }
-
-        if (!IMG_SavePNG_IO(surface, dst, false))
-        {
-            SDL_CloseIO(dst);
-            SDL_DestroySurface(surface);
-            throw std::runtime_error(std::string("SVG_DOM: IMG_SavePNG_IO failed: ") + SDL_GetError());
-        }
-
-        std::vector<std::uint8_t> png;
-        const Sint64 size = SDL_TellIO(dst);
-        if (size > 0)
-        {
-            auto* buf = static_cast<std::uint8_t*>(
-                SDL_GetPointerProperty(SDL_GetIOProperties(dst),
-                                       SDL_PROP_IOSTREAM_DYNAMIC_MEMORY_POINTER, nullptr));
-            if (buf)
-                png.assign(buf, buf + size);
-        }
-
-        SDL_CloseIO(dst);
-        SDL_DestroySurface(surface);
-        return png;
+        return CNA::Internal::Graphics::ImageLoader::EncodePng(
+            rgba, width, height, width, height);
     }
 
     std::string Base64EncodeEXT(const std::uint8_t* data, std::size_t len)

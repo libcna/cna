@@ -4,7 +4,7 @@
 // SetCooperativeLevel/SetDisplayMode/CreateSurface device bring-up, real Clear()/Present(), real
 // pixel readback. SpriteBatch/Texture2D draws are not yet implemented (Phase X3/X4).
 //
-// Check A -- GetWindowInternal() returns a real, non-null window (unlike HEADLESS/SOFTWARE, DIRECTX3
+// Check A -- GameWindow handle returns a real, non-null window (unlike HEADLESS/SOFTWARE, DIRECTX3
 //   genuinely needs one -- free-direct's SetCooperativeLevel wraps it via reinterpret_cast).
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color
 //   (RGB and alpha), read from DIRECTX3's own Lockable shadow-backbuffer surface (design decision 5's
@@ -56,7 +56,7 @@ protected:
         auto& renderer = static_cast<FreeDirectRenderer&>(dev.GetRenderer());
 
         // Check A: real window.
-        check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the DIRECTX3 renderer");
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the DIRECTX3 renderer");
 
         // Check B: real, correct pixel readback after Clear(), via the shadow-backbuffer surface,
         // including the alpha channel.

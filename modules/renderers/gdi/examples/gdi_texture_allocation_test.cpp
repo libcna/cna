@@ -6,6 +6,7 @@
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareRenderer.hpp"
 #include "CNA/Internal/Renderers/Software/SoftwareTextureAllocation.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 #include "System/ArgumentException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
@@ -199,7 +200,8 @@ int main()
 
     try
     {
-        GdiRenderer renderer(window, 8, 6, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 8, 6, CnaPresentationMode::Stretch));
         ok &= ExerciseLiveTextureCreation(renderer);
     }
     catch (const std::exception& error)

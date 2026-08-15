@@ -82,8 +82,17 @@ TEST(GraphicsRendererDescriptorTest, DefaultsAreInertRatherThanPlausible)
     EXPECT_FALSE(descriptor.needsWindow);
     EXPECT_FALSE(descriptor.needsVideoSubsystem);
     EXPECT_EQ(descriptor.windowKind, RendererWindowKind::None);
-    EXPECT_EQ(descriptor.prepareWindowFlags, nullptr);
-    EXPECT_EQ(descriptor.applyPreWindowAttributes, nullptr);
+    // MERGE (plan_platform.md PLAT-8): the two pre-window hooks became data. An inert default now
+    // means "asks the platform for nothing", which is the same guarantee one step earlier: a
+    // forgotten registry entry cannot silently acquire a high-density backing or a GL visual.
+    EXPECT_FALSE(descriptor.wantsHighDpi);
+    EXPECT_EQ(descriptor.glFramebuffer.depthBits, 0);
+    EXPECT_EQ(descriptor.glFramebuffer.stencilBits, 0);
+    EXPECT_FALSE(descriptor.glFramebuffer.doubleBuffered);
+    EXPECT_FALSE(descriptor.glFramebuffer.wantsMultiSample);
+    EXPECT_FALSE(descriptor.needsSurfacePresenter);
+    EXPECT_FALSE(descriptor.needsGlContext);
+    EXPECT_FALSE(descriptor.needsVulkanSurface);
     EXPECT_EQ(descriptor.isAvailable, nullptr);
     EXPECT_EQ(descriptor.create, nullptr);
 }
@@ -137,7 +146,7 @@ TEST(RendererWindowKindTest, CandidateNeedingAWindowCannotAdoptAWindowThatWasNev
 TEST(RendererWindowKindTest, OpenGLAndVulkanNeverShareAWindow)
 {
     // The concrete case design decision 8 exists for: SDL3 rejects a window created with both
-    // SDL_WINDOW_OPENGL and SDL_WINDOW_VULKAN, so this crossing always costs a window recreation.
+    // an OpenGL and a Vulkan intent, so this crossing always costs a window recreation.
     EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::OpenGL, RendererWindowKind::Vulkan));
     EXPECT_FALSE(AreWindowKindsCompatible(RendererWindowKind::Vulkan, RendererWindowKind::OpenGL));
 }

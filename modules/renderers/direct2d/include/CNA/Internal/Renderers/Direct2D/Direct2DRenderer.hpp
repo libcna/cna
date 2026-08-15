@@ -2,6 +2,7 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
 #include <d2d1_1.h>
 #include <d3d11.h>
@@ -303,7 +304,7 @@ namespace CNA::Internal::Renderers::Direct2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
@@ -396,7 +397,7 @@ namespace CNA::Internal::Renderers::Direct2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
         [[nodiscard]] bool HasDefinedMipLevel(int level) const noexcept override;
@@ -481,7 +482,7 @@ namespace CNA::Internal::Renderers::Direct2D
      *
      * The renderer owns a BGRA-capable D3D11 device and a DXGI flip-model swap chain solely as
      * Direct2D's presentation surface.  All application 2D work is issued through
-     * ID2D1DeviceContext; CNA does not route SpriteBatch through SDL_Renderer.  Direct2D is a 2D
+     * ID2D1DeviceContext. Direct2D is a 2D
      * API, so all 3D construction/draw/clear calls fail explicitly and SupportsCapability() is
      * false for CNA's 3D capabilities.
      */
@@ -491,23 +492,9 @@ namespace CNA::Internal::Renderers::Direct2D
         /**
          * @brief Creates the Direct2D device, pixel-space logical target, and flip-model swap chain.
          *
-         * @param window SDL3 window whose Win32 HWND receives presentation.
-         * @param virtualWidth Requested logical width, or zero with `virtualHeight` for automatic sizing.
-         * @param virtualHeight Requested logical height, or zero with `virtualWidth` for automatic sizing.
-         * @param presentationMode Initial CNA presentation mode.
-         * @param swapInterval Presentation interval from zero through two.
-         * @param contextRecoveryEnabled Whether newly created 2D resources register for recovery.
-         * @param deviceEventCallback Device lost/reset lifecycle callback.
-         * @param backBufferFormat Must identify `SurfaceFormat::Color`.
-         * @param depthStencilFormat Must identify `DepthFormat::None`.
-         * @param multiSampleCount Must request a non-multisampled surface.
+         * @param args Platform surface, logical sizing, presentation, and recovery configuration.
          */
-        Direct2DRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                CnaPresentationMode presentationMode, int swapInterval,
-                                bool contextRecoveryEnabled = true,
-                                std::function<void(RendererDeviceEvent)> deviceEventCallback = nullptr,
-                                int backBufferFormat = 0, int depthStencilFormat = 0,
-                                int multiSampleCount = 0);
+        explicit Direct2DRenderer(const GraphicsRendererCreateArgs& args);
         /** @brief Releases Direct2D, DXGI, and D3D11 presentation resources without throwing. */
         ~Direct2DRenderer() override;
 
@@ -517,14 +504,13 @@ namespace CNA::Internal::Renderers::Direct2D
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logicalX, float& logicalY) const override;
         bool TransformLogicalToWindow(float logicalX, float logicalY,
                                       float& windowX, float& windowY) const override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -777,7 +763,8 @@ namespace CNA::Internal::Renderers::Direct2D
         [[nodiscard]] static D2D1_MATRIX_3X2_F Multiply(const D2D1_MATRIX_3X2_F& left,
                                                          const D2D1_MATRIX_3X2_F& right);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+        HWND hwnd_ = nullptr;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

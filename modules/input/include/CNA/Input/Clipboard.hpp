@@ -8,13 +8,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — system clipboard text access, backed by SDL3.
+     * @brief CNAEXT — system clipboard text access.
      *
      * XNA 4.0 has no clipboard API; this is a CNA extension (whole class `CNAEXT`). It exposes the OS
-     * clipboard's UTF-8 text so games can implement copy/paste in text fields. Requires SDL's video
-     * subsystem to be initialized (it is, once the game window exists). Platform notes: desktop
+     * clipboard's UTF-8 text so games can implement copy/paste in text fields. Platform notes: desktop
      * (Windows/Linux/macOS) and Android support this fully; on the web the browser clipboard is
      * permission- and user-gesture-gated, so `SetTextEXT` may be ignored and `GetTextEXT` may be empty.
+     * A platform with no clipboard at all reports empty and ignores writes, rather than failing.
      */
     CNAEXT class Clipboard
     {

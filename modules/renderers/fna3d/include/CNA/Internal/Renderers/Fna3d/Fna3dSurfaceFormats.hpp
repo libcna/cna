@@ -66,4 +66,30 @@ namespace CNA::Internal::Renderers::Fna3d
      * @return The byte count; 0 for a non-positive extent.
      */
     [[nodiscard]] int FormatRegionByteCount(int surfaceFormat, int width, int height);
+
+    /**
+     * @brief Checks a 2D texture transfer before its coordinates reach FNA3D.
+     *
+     * The subtraction form avoids signed-overflow in `x + width` / `y + height`, which matters
+     * because every FNA3D transfer receives signed 32-bit coordinates.
+     */
+    [[nodiscard]] bool IsValidTextureRegion2D(int levelWidth, int levelHeight, int x, int y,
+                                              int width, int height) noexcept;
+
+    /**
+     * @brief Format-aware 2D region check, including 4x4 block alignment.
+     *
+     * A compressed region must begin on a block boundary. Its right/bottom edge may end in a
+     * partial block only when it is also the mip level's right/bottom edge.
+     */
+    [[nodiscard]] bool IsValidTextureRegion2DForFormat(int surfaceFormat, int levelWidth,
+                                                       int levelHeight, int x, int y, int width,
+                                                       int height) noexcept;
+
+    /**
+     * @brief 3D counterpart of IsValidTextureRegion2D.
+     */
+    [[nodiscard]] bool IsValidTextureRegion3D(int levelWidth, int levelHeight, int levelDepth,
+                                              int x, int y, int z, int width, int height,
+                                              int depth) noexcept;
 }

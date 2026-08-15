@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D15: the HtmlDom family's pre-construction contract.
 //
-// Emscripten-only. Renders into pooled CSS-transformed <div>s over SDL's canvas; no GPU flag.
+// Emscripten-only. Renders into pooled CSS-transformed <div>s over the platform's canvas; no GPU flag.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -36,8 +36,6 @@ namespace CNA::Internal::Renderers::HtmlDom
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

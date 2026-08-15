@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D18: the Blend2D family's pre-construction contract.
 //
-// Same "CPU raster + SDL presentation" shape SKIA established (plan_blend2d.md).
+// Same "CPU raster + platform presentation" shape SKIA established (plan_blend2d.md).
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -36,8 +36,7 @@ namespace CNA::Internal::Renderers::Blend2D
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
+            .needsSurfacePresenter    = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

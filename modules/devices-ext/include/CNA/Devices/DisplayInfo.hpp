@@ -13,23 +13,19 @@ namespace Microsoft::Xna::Framework
 namespace CNA::Devices
 {
     /**
-     * @brief Reports display properties SDL3 exposes that
+     * @brief Reports platform display properties that
      * `Microsoft::Xna::Framework::GameWindow` does not already cover.
      *
      * CNA extension — no XNA/WP7 equivalent exists. Deliberately does **not**
      * duplicate `GameWindow::getCurrentOrientationProperty()`/
      * `getClientBoundsProperty()`, which are already real XNA API covering
      * orientation and window bounds — this class only wraps the two genuinely new
-     * SDL3 capabilities `GameWindow` has no property for: per-window display content
-     * scale (`SDL_GetWindowDisplayScale()`) and the window's safe interactive area
-     * (`SDL_GetWindowSafeArea()`), both from
-     * `third_party/SDL/include/SDL3/SDL_video.h`.
+     * platform capabilities `GameWindow` has no property for: per-window display content
+     * scale and the window's safe interactive area.
      *
      * Every method here takes the game's existing `GameWindow` by reference and
-     * reads from its already-created SDL window (via the `CNAEXT`
-     * `GameWindow::GetNativeSdlWindowEXT()` accessor added for this purpose) — this
-     * class never creates, owns, or queries any `SDL_Window`/`SDL_DisplayID` of its
-     * own.
+     * reads from its already-created platform window. It never creates or owns a window and does
+     * not depend on a native window-system type.
      */
     class DisplayInfo
     {
@@ -43,7 +39,7 @@ namespace CNA::Devices
          *
          * @param window The game window to query.
          * @return The content scale, or 0.0f if it could not be determined (e.g. the
-         * window has no underlying SDL window yet, or the platform does not support
+         * window has no underlying platform window yet, or the platform does not support
          * this query).
          */
         [[nodiscard]] static float getContentScaleProperty(const Microsoft::Xna::Framework::GameWindow& window);

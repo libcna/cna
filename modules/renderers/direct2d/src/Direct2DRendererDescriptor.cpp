@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D13: the Direct2D family's pre-construction contract.
 //
-// Direct2D binds to the window's HWND; no SDL graphics-API flag applies.
+// Direct2D binds to the window's HWND; no graphics-API window intent applies.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -36,8 +36,6 @@ namespace CNA::Internal::Renderers::Direct2D
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

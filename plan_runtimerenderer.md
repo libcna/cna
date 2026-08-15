@@ -147,15 +147,31 @@ namespace CNA::Internal::Renderers
         GraphicsRendererType type;
         std::string_view     name;                 // "VULKAN", matches CNA_GRAPHICS_RENDERER
 
+        RendererWindowKind   windowKind;          // Plain/OpenGL/Vulkan/Metal, or None
         bool                 needsWindow;          // HEADLESS/SOFTWARE/STUB/PORTABLEGL: false
-        bool                 needsVideoSubsystem;  // controls the SDL_INIT_VIDEO call
+        bool                 needsVideoSubsystem;  // controls video-subsystem acquisition
 
-        // Runtime-decided window flags (bgfx/llgl/fna3d/diligent already do this today);
-        // constant-flag renderers get a trivial implementation.
-        std::uint32_t      (*prepareWindowFlags)();
+        // MERGE with plan_platform.md (PLAT-8): the two pre-window HOOKS this design originally
+        // specified -- `std::uint32_t (*prepareWindowFlags)()` and
+        // `void (*applyPreWindowAttributes)(const RendererPreWindowRequest&)` -- became DATA when
+        // the platform contract landed. Both existed only to hand GraphicsDevice values the
+        // windowing library understood, and the platform contract already carries those values on
+        // WindowDescription. Keeping them as hooks would have put SDL back into all 15 descriptors,
+        // which the platform branch's coupling ratchet forbids at a budget of zero.
+        //
+        // Nothing was lost: every prepareWindowFlags() implementation only mapped windowKind onto
+        // flags, which GraphicsDevice now does once; the sole exception (Metal's high-density
+        // backing) is a bool. applyPreWindowAttributes() had exactly one real implementation
+        // (OPENGL1's GLX visual), now the same four values as data.
+        bool                 wantsHighDpi;         // Metal's high-density backing
+        RendererGlFramebufferRequest glFramebuffer;// OPENGL1's GLX visual, and the GL families'
 
-        // Attributes that must be set before SDL_CreateWindow (OPENGL1's GLX visual).
-        void               (*applyPreWindowAttributes)(const RendererPreWindowRequest&);
+        // Which platform services this family is handed at construction. Replaces the
+        // `#if defined(CNA_RENDERER_<X>)` chains the platform branch used in createRenderer(),
+        // which cannot be correct in a multi-renderer binary where several are defined at once.
+        bool                 needsSurfacePresenter;// SKIA, BLEND2D
+        bool                 needsGlContext;       // the EasyGL set, the GL families, DILIGENT
+        bool                 needsVulkanSurface;   // VULKAN
 
         // Cheap, side-effect-free availability probe (loader present, device enumerable).
         bool               (*isAvailable)();
@@ -428,10 +444,10 @@ Still exactly one renderer per build throughout.
 | ID | St | Task |
 |---|---|---|
 | RTR-P1-1 | ✅ | Introduce `CNA::Internal::Renderers::ActiveDescriptor()` — returns the single compiled-in descriptor. Temporary shim so P1 can proceed before the registry exists. |
-| RTR-P1-2 | ✅ | Replace `getRendererWindowFlags()` (`GraphicsDevice.cpp:138`) with `descriptor.prepareWindowFlags()`. Delete all 14 `#ifdef` branches inside it. |
+| RTR-P1-2 | ✅ | Replace `getRendererWindowFlags()` (`GraphicsDevice.cpp:138`) with `descriptor.prepareWindowFlags()`. Delete all 14 `#ifdef` branches inside it. Superseded by the `next` merge: the flags hook became `windowKind` + `wantsHighDpi` data, and `getRendererWindowFlags()` is gone entirely. |
 | RTR-P1-3 | ✅ | Replace the `SDL_INIT_VIDEO` guard (`GraphicsDevice.cpp:317`) with `descriptor.needsVideoSubsystem`. |
 | RTR-P1-4 | ✅ | Replace the no-window branch of `createOrAttachWindow()` (`GraphicsDevice.cpp:2270`) with `descriptor.needsWindow`. |
-| RTR-P1-5 | ✅ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. |
+| RTR-P1-5 | ✅ | Replace the `OPENGL1` `SDL_GL_SetAttribute` block with `descriptor.applyPreWindowAttributes(request)`. Superseded by the `next` merge: the hook became `descriptor.glFramebuffer` data (see the design block above); the GLX finding it encodes is unchanged. |
 | RTR-P1-6 | ✅ | Assert in a test that `modules/graphics/src/Xna/GraphicsDevice.cpp` contains **zero** `CNA_RENDERER_*` occurrences related to window creation (down from 25 total; the `GDI` write-back leaves in P3). |
 | RTR-P1-7 | ✅ | Cross-renderer regression: window flags produced through the descriptor are bit-identical to the previous `#ifdef` result, verified per renderer as its descriptor lands. |
 | RTR-P1-8 | ✅ | Document in `docs/runtime-renderer-selection.md` which four families (`BGFX`, `LLGL`, `FNA3D`, `DILIGENT`) already decided window flags at runtime before this plan, and that the descriptor generalizes their existing mechanism. |
@@ -907,6 +923,28 @@ glTF path, not in renderer selection.
 | P11 EasyGL runtime profile | 7 | 1 | 12 |
 | P12 Documentation and gates | 12 | 0 | 15 |
 | **Total** | **251** | **8** | **295** |
+
+## Merge with the platform campaign (`next`)
+
+Merged 2026-08-16. `plan_platform.md`'s PLAT campaign and this one had independently removed the
+same construct -- `#if defined(CNA_RENDERER_<X>)` chains in `GraphicsDevice.cpp` -- for different
+reasons, so 47 conflicts across 26 files resolved as a synthesis rather than by picking a side.
+
+What changed in THIS plan's design as a result (details in section 4's descriptor block):
+
+| Was | Is | Why |
+|---|---|---|
+| `prepareWindowFlags()` hook | `windowKind` + `wantsHighDpi` data | the hook returned raw windowing-library flags, putting SDL in all 15 descriptors against a zero-reference ratchet |
+| `applyPreWindowAttributes()` hook | `glFramebuffer` data | same reason; it had exactly one real implementation (OPENGL1's GLX visual), whose finding is unchanged |
+| -- | `needsSurfacePresenter` / `needsGlContext` / `needsVulkanSurface` | `next` chose platform services with `#ifdef` chains, which answer for whichever macro is defined rather than for the family being constructed |
+
+Renderer count is now **43 families / 47 identities**: `next` added TINYGL, which arrived without a
+descriptor (the platform branch has no descriptor concept) and gained one here.
+
+Verified on HEADLESS: 6747/6973 pass, the single failure being the known environmental
+`TwoProcessLoopbackTest.HostMigration...` networking timeout. The merge also fixed two failures
+previously tolerated as environmental -- the stdout startup banner and the order-dependent
+`PollEventsClearsStaleCallerContent` -- rather than leaving them tolerated.
 
 Status as of 2026-08-15 (second pass). ✅ = implemented **and** verified against its stated acceptance criteria;
 🟨 = implemented but not verifiable in this environment (a Windows/macOS/Emscripten target, or a

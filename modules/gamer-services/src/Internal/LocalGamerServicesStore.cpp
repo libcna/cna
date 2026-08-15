@@ -24,7 +24,7 @@ namespace CNA::Internal::GamerServices
     namespace
     {
         // Task 4.2: reuses this codebase's existing user-data-directory convention
-        // (StorageDevice::GetStorageRootEXT(), SDL_GetPrefPath-backed) rather than inventing a
+        // (StorageDevice::GetStorageRootEXT(), platform user-data-directory backed) rather than inventing a
         // new one - a plain "GamerServices" subdirectory under it.
         fs::path StoreRoot()
         {

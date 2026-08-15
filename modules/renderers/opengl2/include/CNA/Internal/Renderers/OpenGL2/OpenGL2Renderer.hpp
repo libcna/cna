@@ -1,9 +1,8 @@
 #pragma once
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <memory>
 
@@ -21,20 +20,17 @@ namespace CNA::Internal::Renderers::OpenGL2
     class OpenGL2Renderer final : public IGraphicsRenderer
     {
     public:
-        OpenGL2Renderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode presentationMode, bool contextRecoveryEnabled,
-                               int swapInterval);
+        explicit OpenGL2Renderer(const GraphicsRendererCreateArgs& args);
         ~OpenGL2Renderer() override;
 
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void GetViewportSize(int& width, int& height) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetDefaultViewportRect(int& x, int& y, int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -166,11 +162,12 @@ namespace CNA::Internal::Renderers::OpenGL2
         [[nodiscard]] LogicalViewport ComputeLogicalViewport() const;
 
     private:
-        SDL_Window* window_{};
-        SDL_GLContext context_{};
-        // plan_opengl2.md (context-loss recovery): SDL_GL_SetSwapInterval is per-CONTEXT state --
+        // Declared before every GL resource-owning member so it outlives those resources.
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
+        // plan_opengl2.md (context-loss recovery): the swap interval is per-context state --
         // remembered here so DebugSimulateContextLoss() can reapply the game's actual current
-        // setting to the freshly-created context instead of silently reverting to SDL's own
+        // setting to the freshly-created context instead of silently reverting to the host's
         // context-creation default.
         int swapInterval_{};
         int virtualWidth_{};

@@ -52,11 +52,11 @@ pragma form, and passes an inline qualifier through into the GLSL output complet
 (which is not valid GLSL and fails to compile).
 
 Unlike the Vulkan/D3D device types, Diligent's own OpenGL context object does not create a GL
-context itself — it asserts one is already current on the calling thread and attaches to it. This
-renderer creates and makes current a real SDL GL context (`SDL_GL_CreateContext`/
-`SDL_GL_MakeCurrent`) before ever calling into Diligent's OpenGL device creation, and requests the
-matching SDL window flag (`SDL_WINDOW_OPENGL` vs. `SDL_WINDOW_VULKAN`) by reading the same
-`CNA_DILIGENT_DEVICE` override — SDL3 rejects a window created with both graphics flags set.
+context itself — it asserts one is already current on the calling thread and attaches to it. CNA
+therefore creates, binds and owns that context through `IPlatformGlContext` before entering
+Diligent. Vulkan and Direct3D consume the typed native-window snapshot directly. Window creation
+uses the renderer's platform-neutral OpenGL or Vulkan render intent selected from the same
+`CNA_DILIGENT_DEVICE` override, so incompatible native window capabilities are never combined.
 
 ## Dependencies
 
@@ -95,7 +95,8 @@ CNA Diligent: using DiligentCore v2.5.6, engines: Vulkan;OpenGL
 
 Implemented:
 
-- Device, immediate context and swap chain over a real SDL window, with per-device-type fallback.
+- Device, immediate context and swap chain over a platform-owned native window, with
+  per-device-type fallback.
 - The full clear family (colour/depth/stencil and every combination), `Present`, swap interval,
   runtime resize.
 - Virtual resolution and all five `CnaPresentationMode` policies, including the window↔logical
@@ -173,9 +174,9 @@ Not implemented — each **throws with its own name** rather than rendering an a
 ## Known limitations
 
 - **X11 only on Linux.** Diligent's `LinuxNativeWindow` carries an X11 window id and display (or an
-  XCB connection) and has no Wayland surface member, so a Wayland session must use SDL's X11
-  fallback: `SDL_VIDEODRIVER=x11`. A Wayland session fails at renderer construction with that
-  instruction rather than deep inside Diligent.
+  XCB connection) and has no Wayland surface member. CNA therefore requires an X11 native-window
+  snapshot on Linux and rejects any other native system at renderer construction, before entering
+  Diligent.
 - **OpenGL creates a device and renders most of the baseline; 25 of 31 pixel-proof binaries fully
   pass (`DILIGENT-30`/`DILIGENT-66`), and `ctest -R Diligent` now runs every binary under both
   device types automatically (`DILIGENT-67`).** Two systemic OpenGL-only bugs were root-caused and
@@ -184,7 +185,7 @@ Not implemented — each **throws with its own name** rather than rendering an a
      `glEnable(GL_FRAMEBUFFER_SRGB)` whenever the GL version supports the feature, regardless of
      the swap chain's own requested (non-sRGB) colour format -- on this project's Mesa/llvmpipe
      environment the default window framebuffer happens to be sRGB-capable, so every write was
-     silently gamma-encoded. Fixed by resolving `glDisable` through `SDL_GL_GetProcAddress` and
+     silently gamma-encoded. Fixed by resolving `glDisable` through `IPlatformGlContext` and
      disabling `GL_FRAMEBUFFER_SRGB` right after OpenGL device creation.
   2. **`ReadBackbuffer()`'s Y axis.** Reading the swap chain's own default framebuffer under GL
      (`Texture2D_GL::CopyTexSubimage` → `glCopyTexSubImage2D`) uses GL's native bottom-up row

@@ -3,8 +3,6 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
 #include <bit>
 #include <algorithm>
 #include <cassert>
@@ -42,6 +40,21 @@ namespace CNA::Internal::Renderers::Vulkan
     // -------------------------------------------------------------------------
     namespace
     {
+        CNA::Platform::VulkanInstanceHandle ToPlatformInstance(const VkInstance instance) noexcept
+        {
+            return reinterpret_cast<CNA::Platform::VulkanInstanceHandle>(instance);
+        }
+
+        template<typename TSurface>
+        TSurface FromPlatformSurface(
+            const CNA::Platform::VulkanSurfaceHandle surface) noexcept
+        {
+            if constexpr (std::is_pointer_v<TSurface>)
+                return reinterpret_cast<TSurface>(static_cast<std::uintptr_t>(surface));
+            else
+                return static_cast<TSurface>(surface);
+        }
+
         bool VulkanLifetimeTraceOnEXT()
         {
             static const bool on = [] {
@@ -1027,7 +1040,7 @@ namespace CNA::Internal::Renderers::Vulkan
         // false -- reporting false would raise System::NotSupportedException through the shared
         // layer and tell a caller their renderer cannot read targets, which is untrue and hides the
         // real mistake. `std::out_of_range` matches both the shared `Texture2D::GetData`, which
-        // already raises it for the NEGATIVE end of exactly this range, and the sibling SDL_GPU
+        // already raises it for the NEGATIVE end of exactly this range, and the sibling GPU
         // guard added in REMED-GFX-186.
         //
         // Placed ahead of the capability test below deliberately: REMED-GFX-162's precedence has
@@ -1494,21 +1507,25 @@ namespace CNA::Internal::Renderers::Vulkan
         return VK_SAMPLE_COUNT_1_BIT;
     }
 
-    VulkanRenderer::VulkanRenderer(SDL_Window* window, int multiSampleCount, int swapInterval)
-        : window_(window)
-        , swapInterval_(swapInterval)
+    VulkanRenderer::VulkanRenderer(const GraphicsRendererCreateArgs& args)
+        : surfaceInfo_(args.surface)
+        , platformSurfaceService_(&RequirePlatformVulkanSurface(args.vulkanSurface, "VULKAN"))
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , swapInterval_(args.swapInterval)
     {
-        if (!window_)
-            throw std::runtime_error("VulkanRenderer: null window");
+        if (surfaceInfo_.windowId == 0)
+            throw std::runtime_error("VulkanRenderer: missing platform window id");
+        if (!(surfaceInfo_.displayScale > 0.0f)) surfaceInfo_.displayScale = 1.0f;
 
         CreateInstance();
         if (sEnableValidation) SetupDebugMessenger();
         CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
-        sampleCount_ = PickSampleCount(physicalDevice_, multiSampleCount);
+        sampleCount_ = PickSampleCount(physicalDevice_, args.multiSampleCount);
         if (sampleCount_ > VK_SAMPLE_COUNT_1_BIT)
-            SDL_Log("[Vulkan] MSAA: %d×", static_cast<int>(sampleCount_));
+            std::clog << "[Vulkan] MSAA: " << static_cast<int>(sampleCount_) << "x\n";
         CreateSwapchain();
         CreateImageViews();
         CreateDepthResources();
@@ -1532,7 +1549,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // drawSpritesFor) rather than eagerly here.
         CreateSpriteBuffers();
         initialized_ = true;
-        SDL_Log("[Vulkan] Renderer initialised");
+        IGraphicsRenderer::RegisterForWindow(surfaceInfo_.windowId, this);
+        std::clog << "[Vulkan] Renderer initialised\n";
     }
 
     // =========================================================================
@@ -1561,8 +1579,10 @@ namespace CNA::Internal::Renderers::Vulkan
 
     VulkanRenderer::~VulkanRenderer()
     {
+        IGraphicsRenderer::UnregisterForWindow(surfaceInfo_.windowId);
         if (device_ == VK_NULL_HANDLE) {
-            if (surface_  != VK_NULL_HANDLE) { SDL_Vulkan_DestroySurface(instance_, surface_, nullptr); surface_  = VK_NULL_HANDLE; }
+            surface_ = VK_NULL_HANDLE;
+            platformSurface_.reset();
             if (instance_ != VK_NULL_HANDLE) { vkDestroyInstance(instance_, nullptr);                   instance_ = VK_NULL_HANDLE; }
             return;
         }
@@ -1806,7 +1826,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
             if (fn) { fn(instance_, debugMessenger_, nullptr); debugMessenger_ = VK_NULL_HANDLE; }
         }
-        if (surface_  != VK_NULL_HANDLE) { SDL_Vulkan_DestroySurface(instance_, surface_, nullptr); surface_  = VK_NULL_HANDLE; }
+        surface_ = VK_NULL_HANDLE;
+        platformSurface_.reset();
         if (instance_ != VK_NULL_HANDLE) { vkDestroyInstance(instance_, nullptr);                   instance_ = VK_NULL_HANDLE; }
     }
 
@@ -1825,7 +1846,8 @@ namespace CNA::Internal::Renderers::Vulkan
                 bool found = false;
                 for (const auto& l : layers) if (std::strcmp(l.layerName, name) == 0) { found = true; break; }
                 if (!found) {
-                    SDL_Log("[Vulkan] Validation layer '%s' not available — running without validation", name);
+                    std::cerr << "[Vulkan] Validation layer '" << name
+                              << "' not available - running without validation\n";
                     sEnableValidation = false;
                     break;
                 }
@@ -1840,9 +1862,12 @@ namespace CNA::Internal::Renderers::Vulkan
         app.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         app.apiVersion = VK_API_VERSION_1_1;
 
-        uint32_t sdlN = 0;
-        const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlN);
-        std::vector<const char*> exts(sdlExts, sdlExts + sdlN);
+        const std::vector<std::string> platformExtensions =
+            platformSurfaceService_->GetInstanceExtensions();
+        std::vector<const char*> exts;
+        exts.reserve(platformExtensions.size() + 3);
+        for (const std::string& extension : platformExtensions)
+            exts.push_back(extension.c_str());
         if (sEnableValidation) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
         // REMED-GFX-144: VK_EXT_validation_features is provided by the Khronos layer itself, so it
         // is requested only when that layer is really going in.
@@ -1938,7 +1963,7 @@ namespace CNA::Internal::Renderers::Vulkan
         auto fn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
             vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
         if (!fn || fn(instance_, &info, nullptr, &debugMessenger_) != VK_SUCCESS)
-            SDL_Log("[Vulkan] Warning: could not set up validation debug messenger");
+            std::cerr << "[Vulkan] Warning: could not set up validation debug messenger\n";
     }
 
     VKAPI_ATTR VkBool32 VKAPI_CALL VulkanRenderer::DebugCallback(
@@ -1956,15 +1981,17 @@ namespace CNA::Internal::Renderers::Vulkan
                 renderer->validationMessageIdNames_.emplace_back(
                     d->pMessageIdName != nullptr ? d->pMessageIdName : "");
             }
-            SDL_Log("[Vulkan Validation] %s", d->pMessage);
+            std::cerr << "[Vulkan Validation] "
+                      << (d != nullptr && d->pMessage != nullptr ? d->pMessage : "") << '\n';
         }
         return VK_FALSE;
     }
 
     void VulkanRenderer::CreateSurface()
     {
-        if (!SDL_Vulkan_CreateSurface(window_, instance_, nullptr, &surface_))
-            throw std::runtime_error(std::string("SDL_Vulkan_CreateSurface failed: ") + SDL_GetError());
+        platformSurface_ = std::make_unique<PlatformVulkanSurfaceOwner>(
+            *platformSurfaceService_, ToPlatformInstance(instance_), surfaceInfo_.windowId);
+        surface_ = FromPlatformSurface<VkSurfaceKHR>(platformSurface_->Get());
     }
 
     void VulkanRenderer::PickPhysicalDevice()
@@ -2013,7 +2040,7 @@ namespace CNA::Internal::Renderers::Vulkan
 
         VkPhysicalDeviceProperties p;
         vkGetPhysicalDeviceProperties(physicalDevice_, &p);
-        SDL_Log("[Vulkan] GPU: %s", p.deviceName);
+        std::clog << "[Vulkan] GPU: " << p.deviceName << '\n';
     }
 
     void VulkanRenderer::CreateLogicalDevice()
@@ -2066,7 +2093,7 @@ namespace CNA::Internal::Renderers::Vulkan
             vkGetDeviceProcAddr(device_, "vkCmdInsertDebugUtilsLabelEXT"));
 
         // Task 456: one-time startup capability dump. This renderer previously had NO startup log
-        // at all (unlike EasyGL/Bgfx/SDL_Renderer, which all print something at initialization) --
+        // at all (unlike several sibling renderers, which print something at initialization) --
         // a real, previously-undocumented gap on its own.
         {
             VkPhysicalDeviceProperties devProps{};
@@ -2132,8 +2159,8 @@ namespace CNA::Internal::Renderers::Vulkan
         if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
             ext = caps.currentExtent;
         } else {
-            int w = 0, h = 0;
-            SDL_GetWindowSizeInPixels(window_, &w, &h);
+            const int w = surfaceInfo_.drawableSize.width;
+            const int h = surfaceInfo_.drawableSize.height;
             ext.width  = std::clamp(static_cast<uint32_t>(w), caps.minImageExtent.width,  caps.maxImageExtent.width);
             ext.height = std::clamp(static_cast<uint32_t>(h), caps.minImageExtent.height, caps.maxImageExtent.height);
         }
@@ -2906,8 +2933,8 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::RecreateSwapchain()
     {
-        int w = 0, h = 0;
-        SDL_GetWindowSizeInPixels(window_, &w, &h);
+        const int w = surfaceInfo_.drawableSize.width;
+        const int h = surfaceInfo_.drawableSize.height;
         if (w == 0 || h == 0) return;
         vkDeviceWaitIdle(device_);
         CleanupSwapchain();
@@ -8838,28 +8865,53 @@ namespace CNA::Internal::Renderers::Vulkan
 
     void VulkanRenderer::GetViewportSize(int& width, int& height)
     {
-        // Real fix for the reported resize/viewport bug: this used to call
-        // SDL_GetWindowSize() (logical/DPI-scaled "points"), while the swapchain itself is
-        // always created in PHYSICAL pixels (CreateSwapchain() uses caps.currentExtent or
-        // SDL_GetWindowSizeInPixels() as a fallback -- both real device pixels). On any
-        // display where the OS DPI scale != 1.0 (mobile devices, Retina, Wayland fractional
-        // scaling), that mismatch made GraphicsDevice::UpdateViewportFromWindow() compute a
-        // Viewport smaller than the real framebuffer, rendering into only a corner of the
-        // screen.
-        //
-        // Deliberately still a LIVE query (matching CreateSwapchain()'s own fallback), not a
-        // read of the cached swapchainExtent_ member -- an earlier version of this fix read
-        // swapchainExtent_ directly, which regressed 51 gtest cases (TextureCubeTest,
-        // AlphaTestReferenceScalingTest, etc., confirmed via git-stash to be clean on the
-        // pre-fix baseline): those tests construct many short-lived GraphicsDevice/window
-        // instances in quick succession, and swapchainExtent_ only reflects whatever the
-        // window's real size happened to be at the moment CreateSwapchain() last ran --
-        // wrong/stale if the window wasn't fully realized by the windowing system yet at
-        // that exact moment, with nothing to refresh it until a future resize event. A live
-        // SDL_GetWindowSizeInPixels() query self-corrects on every call, exactly like the
-        // original SDL_GetWindowSize() call this replaces -- just in the correct (physical,
-        // not logical) units.
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
+        width = surfaceInfo_.drawableSize.width;
+        height = surfaceInfo_.drawableSize.height;
+        if (width <= 0 || height <= 0)
+        {
+            width = static_cast<int>(swapchainExtent_.width);
+            height = static_cast<int>(swapchainExtent_.height);
+        }
+    }
+
+    void VulkanRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surfaceInfo_.windowId)
+            throw CNA::Platform::PlatformException(
+                "VulkanRenderer::OnSurfaceChanged", "stable window id changed");
+        const bool sizeChanged = surface.drawableSize.width != surfaceInfo_.drawableSize.width
+                              || surface.drawableSize.height != surfaceInfo_.drawableSize.height;
+        surfaceInfo_ = surface;
+        if (!(surfaceInfo_.displayScale > 0.0f)) surfaceInfo_.displayScale = 1.0f;
+        if (initialized_ && sizeChanged && surfaceInfo_.drawableSize.width > 0
+            && surfaceInfo_.drawableSize.height > 0)
+            RecreateSwapchain();
+    }
+
+    bool VulkanRenderer::TransformWindowToLogical(const float windowX, const float windowY,
+                                                   float& logX, float& logY) const
+    {
+        const int physicalHeight = surfaceInfo_.drawableSize.height;
+        if (surfaceInfo_.windowId == 0 || physicalHeight <= 0) return false;
+        const float scale = virtualHeight_ > 0
+            ? static_cast<float>(virtualHeight_) / physicalHeight : 1.0f;
+        logX = windowX * surfaceInfo_.displayScale * scale;
+        logY = windowY * surfaceInfo_.displayScale * scale;
+        return true;
+    }
+
+    bool VulkanRenderer::TransformLogicalToWindow(const float logX, const float logY,
+                                                   float& windowX, float& windowY) const
+    {
+        const int physicalHeight = surfaceInfo_.drawableSize.height;
+        if (surfaceInfo_.windowId == 0 || !(surfaceInfo_.displayScale > 0.0f)
+            || physicalHeight <= 0)
+            return false;
+        const float inverseScale = virtualHeight_ > 0
+            ? static_cast<float>(physicalHeight) / virtualHeight_ : 1.0f;
+        windowX = logX * inverseScale / surfaceInfo_.displayScale;
+        windowY = logY * inverseScale / surfaceInfo_.displayScale;
+        return true;
     }
 
     void VulkanRenderer::SetVirtualResolution(int width, int height)
@@ -8934,7 +8986,8 @@ namespace CNA::Internal::Renderers::Vulkan
         }
         RecreateSwapchain();
 
-        SDL_Log("[Vulkan] MultiSampleCount reset to %d×", SampleCountToInt(sampleCount_));
+        std::clog << "[Vulkan] MultiSampleCount reset to "
+                  << SampleCountToInt(sampleCount_) << "x\n";
         return SampleCountToInt(sampleCount_);
     }
 
@@ -11823,7 +11876,7 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Vulkan::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Vulkan::VulkanRenderer>(args.window, args.multiSampleCount, args.swapInterval);
+        return std::make_unique<Vulkan::VulkanRenderer>(args);
     }
 #endif
 }

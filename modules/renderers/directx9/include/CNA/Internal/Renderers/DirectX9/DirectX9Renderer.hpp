@@ -10,6 +10,7 @@
 // implicit swap chain (back buffer + optional depth-stencil) in the same call.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "D3D9DefaultPoolResourceEXT.hpp"
 
 #include <d3d9.h>
@@ -112,11 +113,10 @@ namespace CNA::Internal::Renderers::DirectX9
         DirectX9Renderer& operator=(const DirectX9Renderer&) = delete;
 
         // ---- IGraphicsRenderer: pure virtual, real (trivial bookkeeping; no device needed) ----
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /// D9-30/D9-33 (found empirically): GraphicsDevice::Reset() calls this so a
         /// GraphicsDeviceManager preference set AFTER this renderer's initial construction (the
         /// common case) still reaches a real, honored format -- see this method's own base-class
@@ -394,7 +394,7 @@ namespace CNA::Internal::Renderers::DirectX9
         /// reported via UpdatePresentationFormatEXT()) is a device Reset() with updated
         /// width_/height_/format fields. Called lazily from Present() (mirrors D3D11's own
         /// EnsureSwapChainSize(), checked every Present() rather than reacting to an OS resize
-        /// event) when the SDL window's actual pixel size no longer matches what the device was
+        /// event) when the platform surface's actual pixel size no longer matches what the device was
         /// created/last reset at, OR presentationDirty_ was set.
         void EnsureDeviceSize();
         /// D9-34: real XNA device-lost lifecycle. Called every Present() while deviceLost_ is true.
@@ -554,7 +554,8 @@ namespace CNA::Internal::Renderers::DirectX9
         /// `D3D9PbrDraw.cpp`.
         ITextureRenderer* GetOrCreateDefaultWhiteTextureEXT();
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+        HWND hwnd_ = nullptr;
         int width_ = 0;
         int height_ = 0;
         int virtualWidth_ = 0;

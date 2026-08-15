@@ -15,10 +15,13 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 
+namespace CNA::Platform { enum class SensorKind; }
+namespace CNA::Platform { class IPlatform; }
+
 namespace Microsoft::Devices::Sensors::Detail
 {
     template <typename TSensor>
-    class SdlSensorSubsystem;
+    class PlatformSensorSubsystem;
 } // namespace Microsoft::Devices::Sensors::Detail
 
 namespace Microsoft::Devices::Sensors
@@ -31,7 +34,7 @@ namespace Microsoft::Devices::Sensors
      */
     class Gyroscope final : public SensorBase<GyroscopeReading>
     {
-        friend class Detail::SdlSensorSubsystem<Gyroscope>;
+        friend class Detail::PlatformSensorSubsystem<Gyroscope>;
 
     private:
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
@@ -40,17 +43,11 @@ namespace Microsoft::Devices::Sensors
         bool started_;
 
         /**
-         * True once this instance has made its own successful
-         * SDL_InitSubSystem(SDL_INIT_SENSOR) call (on its first successful
-         * Start()). Paired with exactly one SDL_QuitSubSystem() call from
-         * this same instance's Dispose(), regardless of how many other
-         * instances (of this class or Accelerometer) exist — SDL's own
-         * internal ref-counting aggregates all instances' balanced
-         * init/quit pairs correctly (Task P4-8). Never re-set once true; a
-         * later Start() after Stop() does not call SDL_InitSubSystem()
-         * again.
+         * True once this instance acquired the selected platform's sensor subsystem. The hold is
+         * paired with exactly one release from Dispose(), regardless of Stop()/Start() cycles.
          */
         bool subsystemHeld_ = false;
+        CNA::Platform::IPlatform* acquiredPlatform_ = nullptr;
 
         /**
          * Thread IDs of calls currently mid-dispatch into this instance's
@@ -65,8 +62,7 @@ namespace Microsoft::Devices::Sensors
          *
          * Task P5-2: was a single bool (inFlightCallback_) until this
          * task — see Accelerometer.hpp's identical member for the full
-         * rationale (SDL's own documented "may run in a different thread"
-         * event-watch warning).
+         * rationale; platform callbacks may run on different threads.
          *
          * Task P5-3: changed from a plain int counter to a vector of the
          * dispatching thread id(s), so Dispose() can tell "some other
@@ -97,26 +93,17 @@ namespace Microsoft::Devices::Sensors
 
     private:
         /**
-         * @brief Returns this class's shared SDL sensor subsystem manager (Task P5-4).
-         *
-         * Defined in Gyroscope.cpp as a function-local static, so SDL
-         * types never need to appear in this header — same discipline
-         * this class already used for its previous `void* g_sensor_`.
+         * @brief Returns this class's shared platform sensor-session manager (Task P5-4).
          *
          * @return Reference to the single, process-lifetime subsystem instance.
          */
-        static Detail::SdlSensorSubsystem<Gyroscope>& GetSubsystem();
+        static Detail::PlatformSensorSubsystem<Gyroscope>& GetSubsystem();
 
         /**
-         * @brief Returns SDL_SENSOR_GYRO, as a plain int (Task P5-4).
-         *
-         * Kept as an `int`-returning function rather than an
-         * SDL_SensorType-typed constant so this header never needs to
-         * include any SDL header.
-         *
-         * @return SDL_SENSOR_GYRO, cast to int.
+         * @brief Returns the platform-neutral gyroscope kind.
+         * @return SensorKind::Gyroscope.
          */
-        static int GetSdlSensorType();
+        static CNA::Platform::SensorKind GetPlatformSensorKind();
 
         /**
          * Validates the event belongs to this instance's open device
@@ -125,8 +112,7 @@ namespace Microsoft::Devices::Sensors
          * conversion+dispatch. Split out (Task P4-2) so
          * DispatchSensorReading() can be exercised directly by
          * InjectSyntheticSensorUpdate() below without requiring a real,
-         * opened SDL sensor — which never exists in a headless test
-         * environment.
+         * opened hardware sensor, which need not exist in a headless test environment.
          */
         void ProcessSensorUpdateEvent(
             std::int64_t sensorId,
@@ -214,9 +200,9 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Test-only hook (Task P4-2): injects a synthetic sensor
          * update, bypassing the real-hardware-presence checks (shared
-         * subsystem device/sensorId matching) that the real SDL event
+         * subsystem device/sensorId matching) that the real platform event
          * path enforces, so CurrentValueChanged's dispatch logic can be
-         * exercised without a real, opened SDL gyroscope.
+         * exercised without a real, opened gyroscope.
          *
          * Still respects the started/disposed state exactly as the real
          * event path does: a no-op if the instance isn't "started" (see
@@ -232,7 +218,7 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P4-2): directly sets the internal
-         * "started" flag, without requiring a real SDL gyroscope to be
+         * "started" flag, without requiring a real gyroscope to be
          * opened. Lets tests exercise InjectSyntheticSensorUpdate()'s
          * started-state gating — and confirm Stop() correctly disables it,
          * since Stop() always clears this flag regardless of how it was
@@ -261,8 +247,7 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P6-2): exposes whether this instance
-         * currently holds its own successful
-         * SDL_InitSubSystem(SDL_INIT_SENSOR) call — see
+         * currently holds its own successful platform sensor-subsystem acquisition — see
          * Accelerometer.hpp's identical hook for the full rationale.
          *
          * @return True if this instance currently holds the subsystem open.
@@ -306,7 +291,7 @@ namespace Microsoft::Devices::Sensors
             const std::vector<Gyroscope*>& instances, float x, float y, float z);
 
         /**
-         * @brief Test-only hook (Task SDLCORE-003): see
+         * @brief Test-only hook: see
          * Accelerometer::SetEventWatchRegistrationFailureForTesting()'s
          * identical hook for the full rationale.
          *
@@ -315,16 +300,16 @@ namespace Microsoft::Devices::Sensors
         CNAEXT static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
 
         /**
-         * @brief Test-only hook (Task SDLCORE-009): see
+         * @brief Test-only hook: see
          * Accelerometer::GetDispatchExceptionCountForTesting()'s identical
          * hook for the full rationale.
          *
-         * @return The number of exceptions Detail::SdlSensorSubsystem<Gyroscope>::DispatchToInstances() has ever swallowed.
+         * @return The number of exceptions the shared platform dispatch has ever swallowed.
          */
         CNAEXT static int GetDispatchExceptionCountForTesting();
 
         /**
-         * @brief Test-only hook (Task SDLCORE-009): see
+         * @brief Test-only hook: see
          * Accelerometer::GetLastDispatchExceptionMessageForTesting()'s
          * identical hook for the full rationale.
          *
@@ -333,12 +318,12 @@ namespace Microsoft::Devices::Sensors
         CNAEXT static std::string GetLastDispatchExceptionMessageForTesting();
 
         /**
-         * @brief Test-only hook (Task SDLCORE-005): see
+         * @brief Test-only hook: see
          * Accelerometer::IsSensorConnectedForTesting()'s identical hook for
          * the full rationale.
          *
-         * @param sensorId The SDL sensor id to check.
-         * @return true if still present in the current SDL_GetSensors() list.
+         * @param sensorId The stable platform sensor id to check.
+         * @return true if still present in the current platform enumeration.
          */
         CNAEXT static bool IsSensorConnectedForTesting(std::int64_t sensorId);
     };

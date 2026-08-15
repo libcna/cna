@@ -67,7 +67,8 @@ function(cna_renderer_identity_to_namespace identity out_var)
         LLGL         Llgl
         METAL        Metal
         FNA3D        Fna3d
-        OPENVG       OpenVg)
+        OPENVG       OpenVg
+        TINYGL       TinyGL)
 
     list(FIND _map "${identity}" _index)
     if(_index EQUAL -1)

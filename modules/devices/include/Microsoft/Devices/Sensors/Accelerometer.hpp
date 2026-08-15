@@ -21,10 +21,13 @@
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "System/EventHandler.hpp"
 
+namespace CNA::Platform { enum class SensorKind; }
+namespace CNA::Platform { class IPlatform; }
+
 namespace Microsoft::Devices::Sensors::Detail
 {
     template <typename TSensor>
-    class SdlSensorSubsystem;
+    class PlatformSensorSubsystem;
 } // namespace Microsoft::Devices::Sensors::Detail
 
 namespace Microsoft::Devices::Sensors
@@ -37,7 +40,7 @@ namespace Microsoft::Devices::Sensors
      */
     class Accelerometer final : public SensorBase<AccelerometerReading>
     {
-        friend class Detail::SdlSensorSubsystem<Accelerometer>;
+        friend class Detail::PlatformSensorSubsystem<Accelerometer>;
 
     private:
         static constexpr SharpRuntime::bytecs MaxSensorCount = 10;
@@ -46,17 +49,11 @@ namespace Microsoft::Devices::Sensors
         bool started_;
 
         /**
-         * True once this instance has made its own successful
-         * SDL_InitSubSystem(SDL_INIT_SENSOR) call (on its first successful
-         * Start()). Paired with exactly one SDL_QuitSubSystem() call from
-         * this same instance's Dispose(), regardless of how many other
-         * instances (of this class or Gyroscope) exist — SDL's own
-         * internal ref-counting aggregates all instances' balanced
-         * init/quit pairs correctly (Task P4-8). Never re-set once true; a
-         * later Start() after Stop() does not call SDL_InitSubSystem()
-         * again.
+         * True once this instance acquired the selected platform's sensor subsystem. The hold is
+         * paired with exactly one release from Dispose(), regardless of Stop()/Start() cycles.
          */
         bool subsystemHeld_ = false;
+        CNA::Platform::IPlatform* acquiredPlatform_ = nullptr;
 
         /**
          * Thread IDs of calls currently mid-dispatch into this instance's
@@ -69,13 +66,8 @@ namespace Microsoft::Devices::Sensors
          * lifetime end, closing the use-after-free window left open by
          * Task P3-4.
          *
-         * Task P5-2: was a single bool (inFlightCallback_) until this
-         * task — SDL's own SDL_AddEventWatch() documentation warns the
-         * callback "may run in a different thread", and SDL_PushEvent()
-         * (which synchronously invokes it) is documented safe to call
-         * from any thread — nothing rules out the event watch being
-         * re-entered concurrently for this same instance from a second
-         * thread while the first invocation is still mid-dispatch.
+         * Task P5-2: was a single bool (inFlightCallback_) until this task. Platform callbacks may
+         * arrive concurrently, so a counter-equivalent collection is required.
          *
          * Task P5-3: changed from a plain int counter to a vector of the
          * dispatching thread id(s), so Dispose() can tell "some other
@@ -88,7 +80,7 @@ namespace Microsoft::Devices::Sensors
          *
          * Task P8-1: changed from a plain member vector to a `shared_ptr` to
          * a heap-allocated one, created once in the constructor and never
-         * replaced. `Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances()`
+         * replaced. `Detail::PlatformSensorSubsystem<Accelerometer>::DispatchToInstances()`
          * and `InjectSyntheticSensorUpdate()` now copy this `shared_ptr`
          * into their dispatch-cleanup guard *before* invoking the user
          * callback, so that cleanup step (which runs after the callback
@@ -124,26 +116,17 @@ namespace Microsoft::Devices::Sensors
 
     private:
         /**
-         * @brief Returns this class's shared SDL sensor subsystem manager (Task P5-4).
-         *
-         * Defined in Accelerometer.cpp as a function-local static, so SDL
-         * types never need to appear in this header — same discipline
-         * this class already used for its previous `void* g_sensor_`.
+         * @brief Returns this class's shared platform sensor-session manager (Task P5-4).
          *
          * @return Reference to the single, process-lifetime subsystem instance.
          */
-        static Detail::SdlSensorSubsystem<Accelerometer>& GetSubsystem();
+        static Detail::PlatformSensorSubsystem<Accelerometer>& GetSubsystem();
 
         /**
-         * @brief Returns SDL_SENSOR_ACCEL, as a plain int (Task P5-4).
-         *
-         * Kept as an `int`-returning function rather than an
-         * SDL_SensorType-typed constant so this header never needs to
-         * include any SDL header.
-         *
-         * @return SDL_SENSOR_ACCEL, cast to int.
+         * @brief Returns the platform-neutral accelerometer kind.
+         * @return SensorKind::Accelerometer.
          */
-        static int GetSdlSensorType();
+        static CNA::Platform::SensorKind GetPlatformSensorKind();
 
         /**
          * Validates the event belongs to this instance's open device
@@ -152,8 +135,7 @@ namespace Microsoft::Devices::Sensors
          * conversion+dispatch. Split out (Task P4-2) so
          * DispatchSensorReading() can be exercised directly by
          * InjectSyntheticSensorUpdate() below without requiring a real,
-         * opened SDL sensor — which never exists in a headless test
-         * environment.
+         * opened hardware sensor, which need not exist in a headless test environment.
          */
         void ProcessSensorUpdateEvent(
             std::int64_t sensorId,
@@ -236,9 +218,9 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Test-only hook (Task P4-2): injects a synthetic sensor
          * update, bypassing the real-hardware-presence checks (shared
-         * subsystem device/sensorId matching) that the real SDL event
+         * subsystem device/sensorId matching) that the real platform event
          * path enforces, so CurrentValueChanged/ReadingChanged's dispatch
-         * logic can be exercised without a real, opened SDL accelerometer.
+         * logic can be exercised without a real, opened accelerometer.
          *
          * Still respects the started/disposed state exactly as the real
          * event path does: a no-op if the instance isn't "started" (see
@@ -246,7 +228,7 @@ namespace Microsoft::Devices::Sensors
          * resulting reading's Timestamp is always the real wall-clock time
          * of the call (Task P4-7), not a synthetic value.
          *
-         * @param x Raw X-axis sensor value, in m/s^2 (same units SDL reports).
+         * @param x Raw X-axis sensor value, in m/s^2 (the platform contract's units).
          * @param y Raw Y-axis sensor value, in m/s^2.
          * @param z Raw Z-axis sensor value, in m/s^2.
          */
@@ -254,7 +236,7 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P4-2): directly sets the internal
-         * "started" flag, without requiring a real SDL accelerometer to be
+         * "started" flag, without requiring a real accelerometer to be
          * opened. Lets tests exercise InjectSyntheticSensorUpdate()'s
          * started-state gating — and confirm Stop() correctly disables it,
          * since Stop() always clears this flag regardless of how it was
@@ -289,12 +271,8 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P6-2): exposes whether this instance
-         * currently holds its own successful
-         * SDL_InitSubSystem(SDL_INIT_SENSOR) call, without any way to
-         * observe SDL's internal subsystem ref-count directly (no public
-         * SDL API exposes it). Lets tests directly confirm a failed
-         * Start() releases the hold it just acquired, rather than leaking
-         * it until Dispose().
+         * currently holds its own successful platform sensor-subsystem acquisition. Lets tests
+         * confirm a failed Start() releases the hold it just acquired.
          *
          * @return True if this instance currently holds the subsystem open.
          */
@@ -314,7 +292,7 @@ namespace Microsoft::Devices::Sensors
         /**
          * @brief Test-only hook (Task P7-3): registers this instance into
          * the shared subsystem's startedInstances_ list directly, without
-         * requiring a real SDL sensor to be opened (the real Start() always
+         * requiring a real sensor to be opened (the real Start() always
          * throws in a headless environment). Lets tests reproduce
          * multi-instance dispatch-batch scenarios (see
          * DispatchToInstancesForTesting()) that require an instance to be
@@ -338,18 +316,17 @@ namespace Microsoft::Devices::Sensors
 
         /**
          * @brief Test-only hook (Task P7-3): simulates the multi-instance
-         * portion of the real SDL event-watch dispatch path
-         * (Detail::SdlSensorSubsystem<TSensor>::SensorEventWatch()) for a
+         * portion of the real platform callback dispatch path for a
          * caller-supplied list of instances, using the exact same
          * bookkeeping method (DispatchToInstances()) the real path uses —
          * so a test can reproduce a specific batch ordering/interleaving
          * (e.g. one instance's callback disposing a different, not-yet-
-         * dispatched instance in the same simulated batch) that real SDL
+         * dispatched instance in the same simulated batch) that real sensor
          * event timing cannot be controlled to reproduce deterministically
          * in a headless test environment. Dispatches via
          * DispatchSensorReading() directly (bypassing the real
          * hardware-presence gate ProcessSensorUpdateEvent() enforces, the
-         * same way InjectSyntheticSensorUpdate() does), since no real SDL
+         * same way InjectSyntheticSensorUpdate() does), since no real
          * sensor is ever open in this environment.
          *
          * Each instance must already be registered via
@@ -366,10 +343,10 @@ namespace Microsoft::Devices::Sensors
             const std::vector<Accelerometer*>& instances, float x, float y, float z);
 
         /**
-         * @brief Test-only hook (Task SDLCORE-003): forces the next
-         * SDL event-watch registration attempt (inside Start()) to report
-         * failure, without attempting the real SDL_AddEventWatch() call at
-         * all -- the real SDL API offers no way to force it to fail on
+         * @brief Test-only hook: forces the next
+         * platform session registration attempt (inside Start()) to report
+         * failure, without attempting the real platform call at all. The platform API cannot be
+         * forced to fail on
          * demand. Lets a test deterministically exercise Start()'s
          * rollback path (release a freshly-acquired subsystem hold, throw,
          * and leave started_/state_/the shared started-instance registry
@@ -387,40 +364,29 @@ namespace Microsoft::Devices::Sensors
         CNAEXT static void SetEventWatchRegistrationFailureForTesting(bool shouldFail);
 
         /**
-         * @brief Test-only hook (Task SDLCORE-009): total callback exceptions swallowed so far.
+         * @brief Test-only hook: total callback exceptions swallowed so far.
          *
          * Forwards to the shared
-         * Detail::SdlSensorSubsystem<Accelerometer>::dispatchExceptionCountForTesting_
+         * Detail::PlatformSensorSubsystem<Accelerometer>::dispatchExceptionCountForTesting_
          * -- process-wide and never reset, so a test must compare against
          * this value from *before* its own throwing-callback action, not
          * assume it starts at zero.
          *
-         * @return The number of exceptions Detail::SdlSensorSubsystem<Accelerometer>::DispatchToInstances() has ever swallowed.
+         * @return The number of exceptions the shared platform dispatch has ever swallowed.
          */
         CNAEXT static int GetDispatchExceptionCountForTesting();
 
         /**
-         * @brief Test-only hook (Task SDLCORE-009): message from the most recently swallowed callback exception.
+         * @brief Test-only hook: message from the most recently swallowed callback exception.
          *
          * @return `ex.what()` for a swallowed `std::exception`, a fixed placeholder for any other thrown value, or empty if none has been swallowed yet.
          */
         CNAEXT static std::string GetLastDispatchExceptionMessageForTesting();
 
         /**
-         * @brief Test-only hook (Task SDLCORE-005): true if `sensorId` is still enumerated by `SDL_GetSensors()`.
-         *
-         * Forwards to the shared, private
-         * Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected() so
-         * its staleness-detection logic (used by
-         * Detail::SdlSensorSubsystem<Accelerometer>::OpenDefaultSensorLocked()
-         * to invalidate a cached handle whose device has disappeared) has at
-         * least one direct, automated test — this container never has a
-         * real SDL sensor open, so every real id this returns for is
-         * necessarily "not connected"; this hook exists to prove the
-         * plumbing/logic itself, not to simulate a genuine live device.
-         *
-         * @param sensorId The SDL sensor id to check.
-         * @return true if still present in the current SDL_GetSensors() list.
+         * @brief Test-only hook: true if `sensorId` is still enumerated by the platform.
+         * @param sensorId The stable platform sensor id to check.
+         * @return true if still present in the current platform enumeration.
          */
         CNAEXT static bool IsSensorConnectedForTesting(std::int64_t sensorId);
 

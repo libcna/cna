@@ -40,8 +40,12 @@
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 
-struct SDL_Window;
-struct SDL_Renderer;
+namespace CNA::Platform
+{
+    class IPlatform;
+    class IPlatformSurfacePresenter;
+    class IPlatformWindow;
+}
 
 namespace Microsoft::Xna::Framework
 {
@@ -1018,7 +1022,7 @@ namespace Microsoft::Xna::Framework::Graphics
          * current runtime device/driver) supports the given CNA::GraphicsCapability.
          *
          * Query this before relying on a feature that isn't universally supported (e.g. 3D on
-         * the 2D-only SDL_Renderer/DIRECTX3/Canvas/GDI renderers), instead of calling it and handling the
+         * the 2D-only native/DIRECTX3/Canvas/GDI renderers), instead of calling it and handling the
          * resulting exception.
          *
          * @param capability The capability to check.
@@ -1110,8 +1114,20 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void RecreateRendererForMultiSampleCount(int multiSampleCount);
 
     private:
-        SDL_Window* window_;
-        bool ownsWindow_;
+        // Borrowed from Game's enclosing platform (or the ambient lazy default for a bare
+        // GraphicsDevice). The platform outlives both the window and this device.
+        CNA::Platform::IPlatform* platform_;
+        std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow_;
+        /// MERGE (plan_runtimerenderer.md RTR-P5-12 x plan_platform.md PLAT-8): the platform wrapper
+        /// already records whether destroying it destroys the underlying window, so this is no longer
+        /// a lifetime flag. It survives as a policy flag: a caller-supplied window must not be torn
+        /// down and rebuilt for a fallback candidate needing a different window kind, so the device
+        /// still has to know which windows it is allowed to replace.
+        bool ownsWindow_ = false;
+        bool videoSubsystemAcquired_;
+        // Declared before renderer_: reverse destruction keeps presentation alive through the
+        // raster renderer's final destructor calls.
+        std::unique_ptr<CNA::Platform::IPlatformSurfacePresenter> surfacePresenter_;
         std::unique_ptr<CNA::Internal::Renderers::IGraphicsRenderer> renderer_;
         /// plan_runtimerenderer.md RTR-P5: the descriptor this device actually resolved to, which
         /// may differ from the selected one when a fallback chain substituted another renderer.
@@ -1251,8 +1267,8 @@ namespace Microsoft::Xna::Framework::Graphics
             int numVertices, const IndexT* indexData, int indexOffset, int primitiveCount,
             const VertexDeclaration& vertexDeclaration);
 
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const;
-        [[nodiscard]] SDL_Window* GetWindowInternal() const;
+        [[nodiscard]] std::uintptr_t GetWindowHandleInternal() const;
+        [[nodiscard]] CNA::Platform::IPlatformWindow* GetPlatformWindowInternal() const;
 
         void createOrAttachWindow();
         void createRenderer();

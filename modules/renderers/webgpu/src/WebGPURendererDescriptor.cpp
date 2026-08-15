@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D05: the WebGPU family's pre-construction contract.
 //
-// wgpu-native builds its surface from the native window handle, so no SDL graphics-API flag is
+// wgpu-native builds its surface from the native window handle, so no graphics-API window intent is
 // required (plan_webgpu.md).
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -37,8 +37,6 @@ namespace CNA::Internal::Renderers::WebGPU
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

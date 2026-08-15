@@ -113,10 +113,11 @@ protected:
             return;
         }
 
-        SDL_Renderer* renderer = renderer->GetRendererInternal();
+        SDL_Renderer* nativeRenderer = SDL_GetRenderer(window_);
         int outputWidth = 0;
         int outputHeight = 0;
-        Check(renderer != nullptr && SDL_GetRenderOutputSize(renderer, &outputWidth, &outputHeight),
+        Check(nativeRenderer != nullptr
+                  && SDL_GetRenderOutputSize(nativeRenderer, &outputWidth, &outputHeight),
               "Skia SDL renderer reports its physical output size");
         Check(outputWidth > 0 && outputHeight > 0,
               "physical renderer output dimensions are positive");

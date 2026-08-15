@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Media/MediaLibraryPaths.hpp"
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace CNA::Internal::Media
 {
@@ -19,14 +19,11 @@ namespace CNA::Internal::Media
             return path;
         }
 
-        std::string ResolveRealFolder(SDL_Folder folder)
+        std::string ResolveRealFolder(CNA::Platform::UserFolder folder)
         {
-            const char* raw = SDL_GetUserFolder(folder);
-            if (!raw)
-            {
-                return {};
-            }
-            return StripTrailingSeparator(raw);
+            auto* fileSystem = CNA::Platform::GetCurrentPlatform().GetFileSystem();
+            return fileSystem ? StripTrailingSeparator(fileSystem->GetUserFolder(folder))
+                              : std::string();
         }
     }
 
@@ -36,7 +33,7 @@ namespace CNA::Internal::Media
         {
             return musicOverride_;
         }
-        return ResolveRealFolder(SDL_FOLDER_MUSIC);
+        return ResolveRealFolder(CNA::Platform::UserFolder::Music);
     }
 
     std::string MediaLibraryPaths::GetPictureRoot()
@@ -45,7 +42,7 @@ namespace CNA::Internal::Media
         {
             return pictureOverride_;
         }
-        return ResolveRealFolder(SDL_FOLDER_PICTURES);
+        return ResolveRealFolder(CNA::Platform::UserFolder::Pictures);
     }
 
     void MediaLibraryPaths::SetMusicRootOverride(const std::string& path)

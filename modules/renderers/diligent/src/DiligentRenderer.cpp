@@ -4,8 +4,6 @@
 
 #include "CNA/Logger.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -262,21 +260,21 @@ namespace CNA::Internal::Renderers::Diligent
         /// `TryCreateDevice()` always requests `TEX_FORMAT_RGBA8_UNORM` (its own comment: "a
         /// non-sRGB back buffer keeps colours numerically identical to what a game wrote, matching
         /// every other CNA renderer"), but the default window framebuffer this project's Mesa/
-        /// llvmpipe test environment hands back for a plain `SDL_WINDOW_OPENGL` window is itself
+        /// llvmpipe test environment hands back for a plain OpenGL-capable window is itself
         /// sRGB-capable, so that unconditional enable silently gamma-encodes every write regardless
         /// -- every colour this renderer produced under the OpenGL device type read back visibly
         /// brighter than written (confirmed: readback values consistently matched an sRGB decode of
         /// the expected linear value, e.g. expected 204 decodes to 204/255 -> ^(1/2.2) -> *255 ~= 232,
         /// matching the observed 231 to within rounding, across every mismatching check in
         /// `Diligent_Pbr`/`Diligent_LightingFidelity`). Disabled explicitly right after OpenGL
-        /// device/context creation to restore the stated non-sRGB contract; resolved through SDL's
-        /// own `SDL_GL_GetProcAddress()` rather than adding a GL loader dependency to this renderer.
-        void DisableGLFramebufferSrgb()
+        /// device/context creation to restore the stated non-sRGB contract; resolved through the
+        /// platform context service rather than adding a GL loader dependency to this renderer.
+        void DisableGLFramebufferSrgb(CNA::Platform::IPlatformGlContext& service)
         {
             using PFNGLDISABLEPROC = void(CNA_DILIGENT_GLAPI*)(unsigned int);
             constexpr unsigned int kGlFramebufferSrgb = 0x8DB9;
-            auto* glDisableFn =
-                reinterpret_cast<PFNGLDISABLEPROC>(SDL_GL_GetProcAddress("glDisable"));
+            auto* glDisableFn = reinterpret_cast<PFNGLDISABLEPROC>(
+                service.GetProcAddress("glDisable"));
             if (glDisableFn != nullptr)
                 glDisableFn(kGlFramebufferSrgb);
         }
@@ -1447,18 +1445,16 @@ namespace CNA::Internal::Renderers::Diligent
     // ---- DiligentRenderer ----
 
     DiligentRenderer::DiligentRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface, "CNA Diligent")
+        , platformGlContextService_(args.glContext)
         , virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
         , swapInterval_(args.swapInterval)
         , presentationMode_(args.presentationMode)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("CNA Diligent: a live SDL window is required");
-
-        SDL_GetWindowSizeInPixels(window_, &physicalWidth_, &physicalHeight_);
-        if (physicalWidth_ <= 0 || physicalHeight_ <= 0)
-            SDL_GetWindowSize(window_, &physicalWidth_, &physicalHeight_);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        physicalWidth_ = drawableSize.width;
+        physicalHeight_ = drawableSize.height;
 
         CreateDeviceAndSwapChain(args);
         CreateConstantBuffer();
@@ -1486,15 +1482,14 @@ namespace CNA::Internal::Renderers::Diligent
         state_.stencilMasks = PackBytes(0xFF, 0xFF, 0, 0);
         state_.raster = PackBytes(0, 0, 0, 0);
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
         CNA::Logger::Info(std::string("CNA Diligent: device type ") + GetDeviceTypeName(deviceType_),
                           CNA::LogCategory::GPU);
     }
 
     DiligentRenderer::~DiligentRenderer()
     {
-        if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         if (context_)
         {
             context_->Flush();
@@ -1518,12 +1513,7 @@ namespace CNA::Internal::Renderers::Diligent
         context_.Release();
         device_.Release();
         engineFactory_.Release();
-        if (glContext_ != nullptr)
-        {
-            SDL_GL_MakeCurrent(window_, nullptr);
-            SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
-            glContext_ = nullptr;
-        }
+        glContext_.reset();
     }
 
     void DiligentRenderer::CreateDeviceAndSwapChain(const GraphicsRendererCreateArgs& args)
@@ -1559,15 +1549,9 @@ namespace CNA::Internal::Renderers::Diligent
             context_.Release();
             swapChain_.Release();
             engineFactory_.Release();
-            // A failed OpenGL attempt may have gotten as far as creating (and making current) a
-            // real SDL GL context before CreateDeviceAndSwapChainGL() itself threw -- release it
-            // too, or it leaks and stays wrongly current for whatever candidate tries next.
-            if (glContext_ != nullptr)
-            {
-                SDL_GL_MakeCurrent(window_, nullptr);
-                SDL_GL_DestroyContext(reinterpret_cast<SDL_GLContext>(glContext_));
-                glContext_ = nullptr;
-            }
+            // A failed OpenGL attempt may have created a current platform context before
+            // CreateDeviceAndSwapChainGL() threw. Return it before trying the next candidate.
+            glContext_.reset();
         }
 
         throw std::runtime_error("CNA Diligent: no device type could be created -- tried " + failures);
@@ -1592,28 +1576,20 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::NativeWindow nativeWindow{};
 #if defined(__linux__)
-        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        const char* driver = SDL_GetCurrentVideoDriver();
-        if (driver != nullptr && std::strcmp(driver, "x11") == 0)
-        {
-            nativeWindow.pDisplay = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
-            nativeWindow.WindowId = static_cast<Dg::Uint32>(
-                SDL_GetNumberProperty(properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
-            if (nativeWindow.pDisplay == nullptr || nativeWindow.WindowId == 0)
-                throw std::runtime_error("SDL did not expose X11 display/window properties");
-        }
-        else
-        {
-            // Diligent's Linux native window is X11/XCB only; a Wayland session has to go through
-            // SDL's own X11 fallback (SDL_VIDEODRIVER=x11).
-            throw std::runtime_error(std::string("unsupported SDL video driver for Diligent: ") +
-                                     (driver != nullptr ? driver : "unknown"));
-        }
+        CNA::Platform::X11NativeWindow x11;
+        if (!CNA::Platform::TryGetX11(surface_.GetNativeHandle(), x11))
+            throw std::runtime_error(
+                "CNA Diligent: Linux requires an X11 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        nativeWindow.pDisplay = x11.display;
+        nativeWindow.WindowId = static_cast<Dg::Uint32>(x11.window);
 #elif defined(_WIN32)
-        SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        nativeWindow.hWnd = SDL_GetPointerProperty(properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
-        if (nativeWindow.hWnd == nullptr)
-            throw std::runtime_error("SDL did not expose a Win32 HWND");
+        CNA::Platform::Win32NativeWindow win32;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), win32))
+            throw std::runtime_error(
+                "CNA Diligent: Windows requires a Win32 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        nativeWindow.hWnd = win32.hwnd;
 #else
         throw std::runtime_error("native window handling is not implemented on this platform");
 #endif
@@ -1639,19 +1615,12 @@ namespace CNA::Internal::Renderers::Diligent
             {
                 // Unlike Vulkan/D3D, Diligent's own GLContext (GLContextLinux.cpp) does not create a
                 // GL context itself -- it asserts one is already current on this thread
-                // (glXGetCurrentContext()) and attaches to it. SDL owns creating and making it
-                // current; this has to happen before CreateDeviceAndSwapChainGL() even attempts
-                // anything.
-                SDL_GLContext sdlGlContext = SDL_GL_CreateContext(window_);
-                if (sdlGlContext == nullptr)
-                    throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
-                if (!SDL_GL_MakeCurrent(window_, sdlGlContext))
-                {
-                    const std::string message = std::string("SDL_GL_MakeCurrent failed: ") + SDL_GetError();
-                    SDL_GL_DestroyContext(sdlGlContext);
-                    throw std::runtime_error(message);
-                }
-                glContext_ = reinterpret_cast<SDL_GLContextState*>(sdlGlContext);
+                // (glXGetCurrentContext()) and attaches to it. The narrow platform service owns
+                // creating and binding that context before Diligent attempts device creation.
+                CNA::Platform::GlContextDescription description;
+                glContext_ = std::make_unique<PlatformGlContextOwner>(
+                    RequirePlatformGlContext(platformGlContextService_, "CNA Diligent"),
+                    surface_.GetWindowId(), description);
 
                 auto* factory = Dg::GetEngineFactoryOpenGL();
                 Dg::EngineGLCreateInfo createInfo;
@@ -1664,7 +1633,7 @@ namespace CNA::Internal::Renderers::Diligent
                                                     &swapChain_);
                 engineFactory_ = Dg::RefCntAutoPtr<Dg::IEngineFactory>(factory);
                 if (device_ && context_)
-                    DisableGLFramebufferSrgb();
+                    DisableGLFramebufferSrgb(*platformGlContextService_);
                 break;
             }
 #endif
@@ -1939,9 +1908,9 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::SyncSwapChainSize()
     {
-        int width = 0;
-        int height = 0;
-        SDL_GetWindowSizeInPixels(window_, &width, &height);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
         if (width <= 0 || height <= 0)
             return;
         if (width == physicalWidth_ && height == physicalHeight_)
@@ -2227,6 +2196,12 @@ namespace CNA::Internal::Renderers::Diligent
         height = static_cast<int>(std::lround(viewport.logicalHeight));
     }
 
+    void DiligentRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+        SyncSwapChainSize();
+    }
+
     void DiligentRenderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -2254,9 +2229,12 @@ namespace CNA::Internal::Renderers::Diligent
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.width <= 0.0f || viewport.height <= 0.0f)
             return false;
-        logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
-        logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
-        return true;
+        const float drawableX = surface_.WindowToDrawable(windowX);
+        const float drawableY = surface_.WindowToDrawable(windowY);
+        logX = (drawableX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logY = (drawableY - viewport.y) * viewport.logicalHeight / viewport.height;
+        return drawableX >= viewport.x && drawableX < viewport.x + viewport.width
+            && drawableY >= viewport.y && drawableY < viewport.y + viewport.height;
     }
 
     bool DiligentRenderer::TransformLogicalToWindow(float logX, float logY,
@@ -2265,8 +2243,10 @@ namespace CNA::Internal::Renderers::Diligent
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.logicalWidth <= 0.0f || viewport.logicalHeight <= 0.0f)
             return false;
-        windowX = viewport.x + logX * viewport.width / viewport.logicalWidth;
-        windowY = viewport.y + logY * viewport.height / viewport.logicalHeight;
+        windowX = surface_.DrawableToWindow(
+            viewport.x + logX * viewport.width / viewport.logicalWidth);
+        windowY = surface_.DrawableToWindow(
+            viewport.y + logY * viewport.height / viewport.logicalHeight);
         return true;
     }
 
@@ -3506,7 +3486,7 @@ namespace CNA::Internal::Renderers::Diligent
     namespace
     {
         // REMED-GFX-DECL-GUARD: this renderer selects its native input layout from the buffer's
-        // byte stride (DrawInternal's own `switch (stride)`), exactly like Vulkan/SDL_GPU/D3D11,
+        // byte stride (DrawInternal's own `switch (stride)`), exactly like the other native APIs,
         // so the shared stride-inferring rule is the right one to reuse rather than re-derive.
         //
         // The rule is asymmetric on purpose: only the bytes the caller actually declared are

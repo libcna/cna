@@ -203,9 +203,9 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
         bindings.emplace_back(targets.back().get());
     }
     if (CNA_RENDERER_IS(SdlRenderer, FreeDirect, DirectX1, DirectX2, DirectX3, DirectX5,
-                        DirectX6, DirectX7, DirectX8, Gdi))
+                        DirectX6, DirectX7, DirectX8, Gdi, Software))
     {
-    // Task 709 (SDL_Renderer) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
+    // Task 709 (the SDL_RENDERER family) / DX3-27 (DirectDraw, plan_freedirect.md) / DX1-27 (real DirectDraw v1,
     // plan_dx1.md) / DX2-84 (same DirectDraw v1 2D layer, plan_dx2.md) / plan_dx3.md (same 2D
     // layer, now DirectDraw v2) / plan_dx5.md (same 2D layer, now DirectDraw v4): each supports
     // exactly one active render target at a time -- unlike the other, real-MRT-capable renderers,
@@ -213,6 +213,10 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // the first. 4 is still within the MAX_RENDERTARGET_BINDINGS cap
     // this test's name/history (Task 881) refers to, so the throw here comes entirely from the
     // renderer's own single-target limitation, not the cap check.
+    // SOFTWARE belongs here for the same reason as the rest: SoftwareRenderer::SetRenderTargets()
+    // throws for count > 1 because the renderer has one active colour buffer. It was absent, so
+    // this test demanded a clean bind from a renderer that cannot do one; its SupportsCapability()
+    // now reports MultipleRenderTargets as false to match.
     // Sokol left this list at plan_sokol.md SOKOL-26: it is now real-MRT-capable too (a genuine
     // multi-attachment sg_pass, 2-4 RenderTarget2D targets), so 4 real targets bind cleanly here
     // exactly like EasyGL/Vulkan/D3D11/etc. do below.
@@ -241,6 +245,15 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_FourTargets_DoesNotThrow)
     // because RenderTarget2D::GetRenderTargetRenderer() is null, and PortableGLRenderer::
     // SetRenderTargets() refuses a non-empty set as well, so neither layer can accept one silently.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
+    }
+    else if (CNA_RENDERER_IS(TinyGL))
+    {
+        // From `next`: TinyGL keeps IGraphicsRenderer's nullptr CreateRenderTarget2D()/
+        // CreateRenderTargetCube() defaults -- it renders into exactly one ZBuffer and has no
+        // off-screen framebuffer concept -- so GraphicsDevice rejects the bind before reaching the
+        // renderer, and TinyGLRenderer::SetRenderTargets() refuses a non-empty set as well
+        // (modules/renderers/tinygl/examples/tinygl_rejection_test.cpp).
+        EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
     else if (CNA_RENDERER_IS(OpenGLES1))
     {
@@ -283,10 +296,11 @@ TEST(GraphicsDeviceValidationTest, SetRenderTargets_OneTarget_DoesNotThrow)
     GraphicsDevice gd;
     RenderTarget2D rt(gd, 4, 4);
     std::vector<RenderTargetBinding> bindings{ RenderTargetBinding(&rt) };
-    if (CNA_RENDERER_IS(Stub, OpenVg))
+    if (CNA_RENDERER_IS(Stub, OpenVg, TinyGL))
     {
     // Same Stub/OpenVG contract as the four-target case above: no render-target support of any
     // kind, so even a single binding is refused deterministically rather than silently accepted.
+    // TinyGL joins them -- it renders into exactly one ZBuffer and creates no render target at all.
     EXPECT_THROW(gd.SetRenderTargets(bindings), System::NotSupportedException);
     }
     else
@@ -310,7 +324,7 @@ TEST(GraphicsDeviceValidationTest, SetRenderTarget_SingleOverload_MatchesArrayOv
     // this pins for both public entry points.
     GraphicsDevice gd;
     RenderTarget2D target(gd, 4, 4);
-    if (CNA_RENDERER_IS(Stub, PortableGL))
+    if (CNA_RENDERER_IS(Stub, PortableGL, TinyGL))
     {
     EXPECT_THROW(gd.SetRenderTarget(&target), System::NotSupportedException);
     // No partial state: GraphicsDevice must not report the rejected target as bound...
@@ -365,7 +379,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 {
     GraphicsDevice gd;
     // VertexBuffer/DrawPrimitives are inherently 3D concepts -- a permanently 2D-only renderer
-    // (OpenVG, and likewise Canvas/SDL_Renderer/ASCII/GDI/DirectX1/etc. if this test is ever run
+    // (OpenVG, and likewise Canvas/native-2D/ASCII/GDI/DirectX1/etc. if this test is ever run
     // against them) has no real vertex-buffer factory to construct one at all, so there is no
     // "empty vertex-buffer state DrawPrimitives should reject" to observe. Found running this file
     // for the first time against a native, CI-runnable 2D-only renderer (OPENVG) -- this test was
@@ -392,7 +406,7 @@ TEST(GraphicsDeviceValidationTest, SetVertexBuffers_EmptyClearsSingularBinding)
 // Regression test for a real reported crash (cna-template/missing.md): the single-argument
 // Clear(const Color&) overload matches FNA's own semantics by requesting
 // Target|DepthBuffer|Stencil together, which used to forward unconditionally to
-// ClearColorDepthAndStencil() -- a hard throw on SDL_Renderer, since that renderer is entirely
+// ClearColorDepthAndStencil() — a hard throw on the native 2D renderer, since it is entirely
 // 2D-only and never has a depth/stencil buffer at all. GraphicsDevice::Clear(ClearOptions, ...)
 // now masks DepthBuffer/Stencil out of the request when IGraphicsRenderer::SupportsDepthStencil()
 // reports false, degrading to a color-only clear instead of crashing (matching FNA's own

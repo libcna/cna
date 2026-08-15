@@ -10,7 +10,7 @@ namespace CNA::Devices
     /**
      * @brief One user-preferred locale (language + optional country/region).
      *
-     * Mirrors SDL3's `SDL_Locale` (`third_party/SDL/include/SDL3/SDL_locale.h`).
+     * Mirrors the platform contract's preferred-locale record.
      * CNA extension — no XNA/WP7 equivalent exists.
      */
     struct LocaleInfo

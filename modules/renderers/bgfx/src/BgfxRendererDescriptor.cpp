@@ -12,7 +12,7 @@
 #include "CNA/Internal/Renderers/Bgfx/BgfxRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
-#include <SDL3/SDL.h>
+#include <cstdlib>
 
 #include <cstdint>
 
@@ -36,12 +36,12 @@ namespace CNA::Internal::Renderers::Bgfx
         /// plan_runtimerenderer.md RTR-P10-9: the window kind bgfx's OWN runtime choice implies.
         ///
         /// This renderer has two levels of selection above it: CNA picks BGFX, and bgfx then picks
-        /// its native API. Both the descriptor's windowKind and the SDL window flags have to follow
+        /// its native API. Both the descriptor's windowKind and the platform window request have to follow
         /// the SECOND one, and they have to agree with each other -- they are two statements about
         /// the same window.
         [[nodiscard]] RendererWindowKind ResolvedWindowKind()
         {
-            switch (Detail::ResolveRendererType(SDL_getenv("CNA_BGFX_RENDERER")))
+            switch (Detail::ResolveRendererType(std::getenv("CNA_BGFX_RENDERER")))
             {
             case bgfx::RendererType::Vulkan:
                 return RendererWindowKind::Vulkan;
@@ -56,19 +56,6 @@ namespace CNA::Internal::Renderers::Bgfx
             }
         }
 
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            switch (ResolvedWindowKind())
-            {
-            case RendererWindowKind::Vulkan:
-                return static_cast<std::uint32_t>(SDL_WINDOW_VULKAN);
-
-            case RendererWindowKind::OpenGL:
-                return static_cast<std::uint32_t>(SDL_WINDOW_OPENGL);
-
-            default:
-                return 0;
-            }
         }
     }
 
@@ -87,7 +74,7 @@ namespace CNA::Internal::Renderers::Bgfx
             // This was hardcoded to Vulkan, with a comment saying that is what bgfx's default
             // preference order resolves to. On Linux that is simply untrue: Detail::
             // GetDefaultRendererType() returns bgfx::RendererType::OpenGL unconditionally there,
-            // and PrepareWindowFlags() below accordingly asked SDL for SDL_WINDOW_OPENGL. So CNA
+            // and the window request that followed it was therefore an OpenGL one. So CNA
             // recorded the window as Vulkan-kind while creating a GL window -- two contradictory
             // statements about one window, on the platform this renderer is primarily tested on.
             //
@@ -103,8 +90,6 @@ namespace CNA::Internal::Renderers::Bgfx
             .windowKind               = ResolvedWindowKind(),
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PrepareWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

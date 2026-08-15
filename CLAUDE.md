@@ -2,8 +2,9 @@
 
 ## Project Overview
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics renderer
-layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on a CNA-owned platform abstraction
+(SDL3 is the default implementation) and a pluggable graphics renderer layer. It is a framework/runtime and
+abstraction layer — not a game — designed to preserve XNA-style APIs
 (`Microsoft::Xna::Framework`) while using modern C++23 internals.
 
 ### Source Reference
@@ -477,13 +478,48 @@ individual task. Do not push unless the user explicitly asks to push.
 | Renderer implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
 | CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.   |
 
+## Platform Boundary
+
+Platform, renderer and audio selection are three independent CMake axes:
+
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `HEADLESS`, or
+  `TERMINAL`; SDL2/SDL12 are reserved but not implemented).
+- `CNA_GRAPHICS_RENDERER` selects the renderer.
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3` or `NULL`).
+
+New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
+SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
+
+- `modules/platform/src/Sdl3/`;
+- `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
+- renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
+
+A genuinely SDL3-specific test belongs with the SDL3 platform implementation. Consumer tests use
+canned platform services or the parameterized conformance suite, not native event injection.
+Capabilities are promises: unsupported behavior refuses explicitly, and a service is non-null
+exactly when its presence capability is true. Poll events and update input once per frame; never
+put platform calls in a draw/audio/input inner loop.
+
+Run the boundary gates after relevant changes:
+
+```bash
+python3 tools/platform/sdl_inventory.py --check
+python3 tools/platform/sdl_classify.py --check
+python3 tools/platform/renderer_sdl_audit.py --check
+python3 tools/platform/sdl_ratchet.py --check
+python3 tools/platform/hot_path_lint.py
+```
+
+See `docs/platform-abstraction.md` for the contract and implementation checklist. The migration
+task/evidence log is `plan_platform.md`.
+
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
 `MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL`). These are exactly 46
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL`). These are exactly 47
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -495,6 +531,10 @@ is experimental and has a functional native
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
 `plan_diligent.md` and `docs/diligent-renderer.md`.
+`TINYGL` is the fixed-function CPU OpenGL renderer (C-Chads/tinygl) -- the fixed-function
+counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
+not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
+`docs/tinygl-renderer.md` and `plan_tinygl.md` for the full boundary.
 `SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and

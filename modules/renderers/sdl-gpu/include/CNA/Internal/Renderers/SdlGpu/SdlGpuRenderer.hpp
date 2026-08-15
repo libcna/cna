@@ -170,7 +170,7 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// REMED-GFX-176: uploads exactly @p level, sized by that level's own dimensions. An
         /// out-of-range level or a null source is ignored, matching VulkanTextureRenderer's
@@ -327,7 +327,6 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         [[nodiscard]] int GetWidth() const override { return state_->width; }
         [[nodiscard]] int GetHeight() const override { return state_->height; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void BindAsRenderTarget() override;
         void UnbindAsRenderTarget() override;
@@ -1520,11 +1519,6 @@ namespace CNA::Internal::Renderers::SdlGpu
         bool TransformWindowToLogical(float windowX, float windowY, float& logicalX, float& logicalY) const override;
         /** @brief Converts a logical (virtual) game point to physical window coordinates. */
         bool TransformLogicalToWindow(float logicalX, float logicalY, float& windowX, float& windowY) const override;
-
-        /** @brief Returns the SDL window this renderer renders into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null — this renderer does not use `SDL_Renderer`. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

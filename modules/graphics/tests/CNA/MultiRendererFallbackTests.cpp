@@ -24,9 +24,13 @@
 
 #include "System/InvalidOperationException.hpp"
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -45,14 +49,14 @@ namespace
         void SetUp() override
         {
             GraphicsRendererSelection::ResetForTestingEXT();
-            SDL_unsetenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            SDL_unsetenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT");
+            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
         }
 
         void TearDown() override
         {
-            SDL_unsetenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS");
-            SDL_unsetenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT");
+            unsetenv("CNA_DEBUG_UNAVAILABLE_RENDERERS");
+            unsetenv("CNA_DEBUG_FAIL_RENDERER_INIT");
             GraphicsRendererSelection::ResetForTestingEXT();
         }
 
@@ -66,7 +70,7 @@ namespace
                     value += ',';
                 value += CNA::getGraphicsRendererName(type);
             }
-            SDL_setenv_unsafe("CNA_DEBUG_UNAVAILABLE_RENDERERS", value.c_str(), 1);
+            setenv("CNA_DEBUG_UNAVAILABLE_RENDERERS", value.c_str(), 1);
         }
 
         /// Marks renderers as failing during initialization -- after their window already exists.
@@ -79,7 +83,7 @@ namespace
                     value += ',';
                 value += CNA::getGraphicsRendererName(type);
             }
-            SDL_setenv_unsafe("CNA_DEBUG_FAIL_RENDERER_INIT", value.c_str(), 1);
+            setenv("CNA_DEBUG_FAIL_RENDERER_INIT", value.c_str(), 1);
         }
 
         /// The first compiled-in renderer whose window kind differs from @p from's.
@@ -445,18 +449,39 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
     if (crossingChain.empty())
         GTEST_SKIP() << "no renderer of a different window kind is compiled into this build";
 
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO) == false)
-        GTEST_SKIP() << "no SDL video subsystem here: " << SDL_GetError();
+    CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+    try
+    {
+        platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+    }
+    catch (const std::exception& e)
+    {
+        GTEST_SKIP() << "no platform video subsystem here: " << e.what();
+    }
 
     // A plain window, owned by this test and never handed over. Whatever the first candidate's
-    // window kind is, a plain window cannot serve an OpenGL/Vulkan/Metal candidate.
-    SDL_Window* callerWindow = SDL_CreateWindow("RTR-P5-13 caller-owned", 64, 64, 0);
-    ASSERT_NE(nullptr, callerWindow) << SDL_GetError();
+    // window kind is, a plain window cannot serve an OpenGL/Vulkan/Metal candidate -- which is
+    // exactly what leaving renderIntent at None expresses.
+    CNA::Platform::WindowDescription callerDescription;
+    callerDescription.title = "RTR-P5-13 caller-owned";
+    callerDescription.width = 64;
+    callerDescription.height = 64;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> callerWindow;
+    try
+    {
+        callerWindow = platform.CreateWindow(callerDescription);
+    }
+    catch (const std::exception& e)
+    {
+        GTEST_SKIP() << "the platform could not create a plain window here: " << e.what();
+    }
+    ASSERT_NE(nullptr, callerWindow);
+    const std::uintptr_t callerHandle = callerWindow->GetWindowHandle();
 
     Microsoft::Xna::Framework::Graphics::PresentationParameters parameters;
     // IntPtr is a member alias of PresentationParameters (std::uintptr_t), not a namespace-level
     // type -- spelling it Microsoft::Xna::Framework::IntPtr does not compile.
-    parameters.setDeviceWindowHandleProperty(reinterpret_cast<std::uintptr_t>(callerWindow));
+    parameters.setDeviceWindowHandleProperty(callerHandle);
 
     std::string constructionFailure;
     GraphicsRendererSelection::SetFallbackChain(crossingChain);
@@ -481,7 +506,10 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
 
     // The window the caller owns must still be alive: refusing is the point, destroying someone
     // else's window would be the defect.
-    EXPECT_EQ(SDL_GetWindowID(callerWindow), SDL_GetWindowID(callerWindow))
+    // Re-adopting validates the token against the platform's live window list and throws when no
+    // window carries it, so this actually detects a destroyed window. The previous form compared
+    // the handle with itself and could not fail.
+    EXPECT_NO_THROW({ (void)platform.AdoptWindowHandle(callerHandle); })
         << "the caller's window did not survive the attempt";
 
     const auto history = GraphicsRendererSelection::GetFallbackHistory();
@@ -512,7 +540,7 @@ TEST_F(MultiRendererFallbackTest, ACallerSuppliedWindowRefusesACrossKindCandidat
                      << (constructionFailure.empty() ? "<no exception>" : constructionFailure);
     }
 
-    SDL_DestroyWindow(callerWindow);
+    callerWindow.reset();
 }
 
 #endif  // CNA_MULTI_RENDERER

@@ -4,7 +4,7 @@
 // runs a few frames, and asserts genuine rasterized pixel output rather than merely "did not
 // throw":
 //
-// Check A -- SDL's video subsystem WAS initialized and GetWindowInternal() returns a real
+// Check A -- SDL's video subsystem WAS initialized and GameWindow handle returns a real
 //   window -- this renderer genuinely presents to a window (unlike STUB/SOFTWARE/HEADLESS).
 // Check B -- a 3D DrawPrimitives call (VertexBuffer + BasicEffect) throws -- Blend2D has no 3D
 //   pipeline and truthfully rejects it rather than silently no-opping.
@@ -99,7 +99,7 @@ protected:
         {
             // Check A: a real window/video subsystem exists.
             check(SDL_WasInit(SDL_INIT_VIDEO) != 0, "SDL_INIT_VIDEO was initialized under the Blend2D renderer");
-            check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real window under the Blend2D renderer");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real window under the Blend2D renderer");
         }
 
         dev.Clear(Color(0, 0, 64, 255));

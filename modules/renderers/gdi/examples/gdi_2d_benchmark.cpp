@@ -81,7 +81,7 @@ namespace
             Measurements measurements;
             {
                 GraphicsRendererCreateArgs args;
-                args.window = window;
+                args.surface.windowId = SDL_GetWindowID(window);
                 args.virtualWidth = benchmarkCase.width;
                 args.virtualHeight = benchmarkCase.height;
                 args.presentationMode = CnaPresentationMode::Stretch;

@@ -1,14 +1,13 @@
 // plan_runtimerenderer.md RTR-P1-D40: the Metal family's pre-construction contract.
 //
-// Metal owns the renderer directly; SDL provides only the native macOS window and its CAMetalLayer.
-// SDL_WINDOW_HIGH_PIXEL_DENSITY comes with it so the layer is sized in real backing pixels.
+// Metal owns the renderer directly; the platform provides only the native macOS window and its CAMetalLayer.
+// a high-density backing request comes with it so the layer is sized in real backing pixels.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 
@@ -29,12 +28,8 @@ namespace CNA::Internal::Renderers::Metal
 
     namespace
     {
-        /// SDL_WINDOW_METAL creates the CAMetalLayer this renderer draws into;
-        /// SDL_WINDOW_HIGH_PIXEL_DENSITY sizes it in real backing pixels rather than points.
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            return static_cast<std::uint32_t>(SDL_WINDOW_METAL | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-        }
+        /// a Metal window intent creates the CAMetalLayer this renderer draws into;
+        /// the high-density request sizes it in real backing pixels rather than points.
     }
 
     /**
@@ -50,8 +45,7 @@ namespace CNA::Internal::Renderers::Metal
             .windowKind               = RendererWindowKind::Metal,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PrepareWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
+            .wantsHighDpi             = true,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

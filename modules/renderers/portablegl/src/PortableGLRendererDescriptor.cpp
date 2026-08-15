@@ -1,7 +1,7 @@
 // plan_runtimerenderer.md RTR-P1-D10: the PortableGL family's pre-construction contract.
 //
 // PortableGL (rswinkle/PortableGL) is a CPU software OpenGL 3.x implementation writing into its own
-// buffer -- the same "no window, no GPU library, no SDL video subsystem" shape as
+// buffer -- the same "no window, no GPU library, no platform video subsystem" shape as
 // HEADLESS/SOFTWARE/STUB, despite the OpenGL name.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -38,8 +38,6 @@ namespace CNA::Internal::Renderers::PortableGL
             .windowKind               = RendererWindowKind::None,
             .needsWindow              = false,
             .needsVideoSubsystem      = false,
-            .prepareWindowFlags       = &NoWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

@@ -1,7 +1,7 @@
 // plan_runtimerenderer.md RTR-P1-D09: the Stub family's pre-construction contract.
 //
 // Deliberately minimal no-op renderer (plan_stub.md design decision 1): renders nothing, touches no
-// SDL window or video subsystem, keeps no bookkeeping of any kind.
+// platform window or video subsystem, keeps no bookkeeping of any kind.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -37,8 +37,6 @@ namespace CNA::Internal::Renderers::Stub
             .windowKind               = RendererWindowKind::None,
             .needsWindow              = false,
             .needsVideoSubsystem      = false,
-            .prepareWindowFlags       = &NoWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

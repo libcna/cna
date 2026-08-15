@@ -7,7 +7,26 @@
 #include "wiGraphicsDevice_Vulkan.h"
 #include "wiShaderCompiler.h"
 
-#include <SDL3/SDL.h>
+// VK_USE_PLATFORM_XLIB_KHR makes Wicked's bundled Vulkan header include Xlib. Its object-like
+// macros otherwise rewrite CNA enum members such as SetDataOptions::None in this translation unit.
+#ifdef None
+#   undef None
+#endif
+#ifdef Status
+#   undef Status
+#endif
+#ifdef Success
+#   undef Success
+#endif
+#ifdef Bool
+#   undef Bool
+#endif
+#ifdef Always
+#   undef Always
+#endif
+#ifdef Complex
+#   undef Complex
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -1370,16 +1389,13 @@ namespace CNA::Internal::Renderers::Wicked
     // ------------------------------------------------------------------------------------------
 
     WickedRenderer::WickedRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : surface_(args.surface, "Wicked renderer")
         , preferredWidth_(args.virtualWidth)
         , preferredHeight_(args.virtualHeight)
         , presentationMode_(args.presentationMode)
         , requestedMultiSampleCount_(std::max(1, args.multiSampleCount))
         , swapInterval_(args.swapInterval)
     {
-        if (window_ == nullptr)
-            throw std::runtime_error("Wicked renderer: a valid SDL window is required.");
-
         CreateDevice(args);
         CreateSwapChainResources();
         ResolveVirtualResolution();
@@ -1433,13 +1449,12 @@ namespace CNA::Internal::Renderers::Wicked
         state_.colorDstBlend = 5;  // Blend::InverseSourceAlpha
         state_.alphaDstBlend = 5;
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     WickedRenderer::~WickedRenderer()
     {
-        if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
 
         if (device_)
         {
@@ -1468,22 +1483,49 @@ namespace CNA::Internal::Renderers::Wicked
 
     void WickedRenderer::CreateDevice(const GraphicsRendererCreateArgs& args)
     {
+#ifdef WICKED_CNA_PLATFORM
+        CNA::Platform::X11NativeWindow x11;
+        if (!CNA::Platform::TryGetX11(surface_.GetNativeHandle(), x11))
+        {
+            throw std::runtime_error(
+                "Wicked renderer: Linux requires an X11 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        }
+        nativeWindow_.type = wi::platform::NativeWindow::Type::X11;
+        nativeWindow_.display = x11.display;
+        nativeWindow_.window_id = x11.window;
+        nativeWindow_.fullscreen = args.isFullScreen;
+        wickedWindow_ = &nativeWindow_;
+#elif defined(_WIN32)
+        CNA::Platform::Win32NativeWindow win32;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), win32))
+        {
+            throw std::runtime_error(
+                "Wicked renderer: Windows requires a Win32 native window, got " +
+                CNA::Platform::Describe(surface_.GetNativeHandle()));
+        }
+        wickedWindow_ = static_cast<wi::platform::window_type>(win32.hwnd);
+#else
         (void)args;
+        throw std::runtime_error("Wicked renderer: native window handling is unavailable");
+#endif
+        UpdateNativeWindowSnapshot();
+
         // Wicked Engine's Vulkan device is the one device renderer available on every platform CNA
         // targets with this renderer. Its D3D12 device is a Windows-only alternative that additionally
         // needs the engine's own root-signature macro in every shader, which this renderer's HLSL does
         // not yet declare -- tracked as plan_wicked.md WICKED-60, not silently selected here.
         device_ = std::make_unique<wig::GraphicsDevice_Vulkan>(
-            window_, wig::ValidationMode::Disabled, wig::GPUPreference::Discrete);
+            wickedWindow_, wig::ValidationMode::Disabled, wig::GPUPreference::Discrete);
         if (!device_)
             throw std::runtime_error("Wicked renderer: failed to create the Wicked Engine device.");
     }
 
     void WickedRenderer::CreateSwapChainResources()
     {
-        int pixelWidth = 0;
-        int pixelHeight = 0;
-        SDL_GetWindowSizeInPixels(window_, &pixelWidth, &pixelHeight);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        const int pixelWidth = drawableSize.width;
+        const int pixelHeight = drawableSize.height;
 
         swapChainDesc_.width = static_cast<std::uint32_t>(std::max(1, pixelWidth));
         swapChainDesc_.height = static_cast<std::uint32_t>(std::max(1, pixelHeight));
@@ -1496,15 +1538,15 @@ namespace CNA::Internal::Renderers::Wicked
         swapChainDesc_.clear_color[2] = 0.0f;
         swapChainDesc_.clear_color[3] = 1.0f;
 
-        if (!device_->CreateSwapChain(&swapChainDesc_, window_, &swapChain_))
+        if (!device_->CreateSwapChain(&swapChainDesc_, wickedWindow_, &swapChain_))
             throw std::runtime_error("Wicked renderer: failed to create the swap chain.");
     }
 
     void WickedRenderer::ResolveVirtualResolution()
     {
-        int pixelWidth = 0;
-        int pixelHeight = 0;
-        SDL_GetWindowSizeInPixels(window_, &pixelWidth, &pixelHeight);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        int pixelWidth = drawableSize.width;
+        int pixelHeight = drawableSize.height;
         pixelWidth = std::max(1, pixelWidth);
         pixelHeight = std::max(1, pixelHeight);
 
@@ -2338,9 +2380,9 @@ namespace CNA::Internal::Renderers::Wicked
 
         // A window resize invalidates the swap chain's extent; recreating it before the present
         // pass keeps the blit rectangle and the surface in agreement.
-        int pixelWidth = 0;
-        int pixelHeight = 0;
-        SDL_GetWindowSizeInPixels(window_, &pixelWidth, &pixelHeight);
+        const CNA::Platform::WindowSize drawableSize = surface_.GetDrawableSize();
+        int pixelWidth = drawableSize.width;
+        int pixelHeight = drawableSize.height;
         pixelWidth = std::max(1, pixelWidth);
         pixelHeight = std::max(1, pixelHeight);
         if (static_cast<std::uint32_t>(pixelWidth) != swapChainDesc_.width ||
@@ -2439,6 +2481,22 @@ namespace CNA::Internal::Renderers::Wicked
         height = scene_.height;
     }
 
+    void WickedRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+        UpdateNativeWindowSnapshot();
+    }
+
+    void WickedRenderer::UpdateNativeWindowSnapshot()
+    {
+#ifdef WICKED_CNA_PLATFORM
+        const CNA::Platform::WindowSize size = surface_.GetDrawableSize();
+        nativeWindow_.width = size.width;
+        nativeWindow_.height = size.height;
+        nativeWindow_.dpi = surface_.GetDisplayScale() * 96.0f;
+#endif
+    }
+
     void WickedRenderer::SetVirtualResolution(int width, int height)
     {
         preferredWidth_ = width;
@@ -2486,9 +2544,12 @@ namespace CNA::Internal::Renderers::Wicked
         const PresentRect rect = ComputePresentRect();
         if (rect.w <= 0.0f || rect.h <= 0.0f)
             return false;
-        logX = (windowX - rect.x) * static_cast<float>(scene_.width) / rect.w;
-        logY = (windowY - rect.y) * static_cast<float>(scene_.height) / rect.h;
-        return true;
+        const float drawableX = surface_.WindowToDrawable(windowX);
+        const float drawableY = surface_.WindowToDrawable(windowY);
+        logX = (drawableX - rect.x) * static_cast<float>(scene_.width) / rect.w;
+        logY = (drawableY - rect.y) * static_cast<float>(scene_.height) / rect.h;
+        return drawableX >= rect.x && drawableX < rect.x + rect.w
+            && drawableY >= rect.y && drawableY < rect.y + rect.h;
     }
 
     bool WickedRenderer::TransformLogicalToWindow(float logX, float logY,
@@ -2497,8 +2558,10 @@ namespace CNA::Internal::Renderers::Wicked
         const PresentRect rect = ComputePresentRect();
         if (scene_.width <= 0 || scene_.height <= 0)
             return false;
-        windowX = rect.x + logX * rect.w / static_cast<float>(scene_.width);
-        windowY = rect.y + logY * rect.h / static_cast<float>(scene_.height);
+        windowX = surface_.DrawableToWindow(
+            rect.x + logX * rect.w / static_cast<float>(scene_.width));
+        windowY = surface_.DrawableToWindow(
+            rect.y + logY * rect.h / static_cast<float>(scene_.height));
         return true;
     }
 

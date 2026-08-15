@@ -4,7 +4,7 @@
 // so the window flag has to follow that decision rather than a compile-time renderer choice. Only
 // the OpenGL module needs one: it creates a GL context on this very window, which therefore has to
 // have been created with a visual that can carry one. LLGL's Vulkan module builds its surface from
-// the native window handle alone and needs no SDL flag -- which is just as well, since SDL refuses
+// the native window handle alone and needs no graphics-API window intent -- which is just as well, since the platform refuses
 // to create a window that is both.
 //
 // Only the selection header is included, deliberately not the renderer header: this keeps the
@@ -16,7 +16,6 @@
 #include "CNA/Internal/Renderers/Llgl/LlglRendererSelection.hpp"
 #include "CNA/GraphicsRendererType.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 
@@ -37,12 +36,6 @@ namespace CNA::Internal::Renderers::Llgl
 
     namespace
     {
-        [[nodiscard]] std::uint32_t PrepareWindowFlags()
-        {
-            if (Detail::RendererModuleNeedsOpenGLWindow(Detail::ResolveRendererModule()))
-            {
-                return static_cast<std::uint32_t>(SDL_WINDOW_OPENGL);
-            }
             return 0;
         }
     }
@@ -62,8 +55,6 @@ namespace CNA::Internal::Renderers::Llgl
             .windowKind               = RendererWindowKind::OpenGL,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PrepareWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

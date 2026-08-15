@@ -8,6 +8,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PresentationParameters.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -144,6 +145,7 @@ namespace
             const bool resized = SDL_SetWindowSize(window, size[0], size[1]) &&
                                  SDL_SyncWindow(window);
             SDL_PumpEvents();
+            renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
 
             WindowMetrics metrics;
             const bool queried = QueryWindowMetrics(window, metrics);
@@ -288,6 +290,7 @@ namespace
         bool ok = Expect(SDL_SyncWindow(window),
                          "fullscreen entry synchronizes the SDL window");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         WindowMetrics fullscreenMetrics;
         ok &= Expect(QueryWindowMetrics(window, fullscreenMetrics),
                      "fullscreen state exposes positive SDL and Win32 client metrics");
@@ -317,6 +320,7 @@ namespace
         ok &= Expect(leftFullscreen && SDL_SyncWindow(window),
                      "fullscreen exit restores the windowed SDL state");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         WindowMetrics restoredMetrics;
         ok &= Expect(QueryWindowMetrics(window, restoredMetrics),
                      "windowed state exposes positive metrics after fullscreen exit");
@@ -330,6 +334,7 @@ namespace
         bool ok = Expect(SDL_SetWindowSize(window, 63, 37) && SDL_SyncWindow(window),
                          "retention test restores its final odd window size");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         renderer.SetPresentationMode(
             static_cast<int>(CnaPresentationMode::FixedHeightDynamicWidth));
         renderer.Clear(0.125f, 0.25f, 0.5f, 1.0f);
@@ -372,6 +377,7 @@ namespace
         ok &= Expect(SDL_RestoreWindow(window) && SDL_SyncWindow(window),
                      "window restores after retained-backbuffer minimize coverage");
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(CNA::Examples::SdlTestSurface(window));
         int widthRestored = 0;
         int heightRestored = 0;
         renderer.GetViewportSize(widthRestored, heightRestored);
@@ -427,8 +433,9 @@ int main()
                      "metrics test shows and synchronizes its native Win32 client");
         SDL_PumpEvents();
 
-        GdiRenderer renderer(
-            window, 23, 17, CnaPresentationMode::FixedHeightDynamicWidth);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, 23, 17,
+            CnaPresentationMode::FixedHeightDynamicWidth));
         WindowMetrics initialMetrics;
         ok &= Expect(QueryWindowMetrics(window, initialMetrics),
                      "initial window exposes SDL and Win32 metrics");

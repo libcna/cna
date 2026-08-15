@@ -310,7 +310,7 @@ knowledge.
 
 ```bash
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3      # or SDL_RENDERER / VULKAN / BGFX
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 `CNA_GRAPHICS_RENDERER` defaults to `OPENGLES3` on Linux/Emscripten, `SDL_RENDERER` elsewhere. See the

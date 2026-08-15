@@ -10,6 +10,7 @@
 #include "CNA/Internal/Renderers/OpenVg/OpenVgSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenVg/OpenVgTextureRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -28,6 +29,8 @@ using namespace CNA::Internal::Renderers::OpenVg;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Graphics::ImageData;
+using CNA::Examples::SdlTestGlContext;
+using CNA::Examples::SdlTestRendererArgs;
 
 namespace
 {
@@ -83,7 +86,10 @@ int main()
     {
         SDL_Window* window = SDL_CreateWindow("openvg-blend-test", 100, 100, SDL_WINDOW_OPENGL);
         if (!window) throw std::runtime_error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
 
         // Source: straight (non-premultiplied) 50% red, matching this renderer's own always-
         // straight-alpha ImageData convention.
@@ -175,6 +181,7 @@ int main()
                   "ColorWriteChannels masking Red: green/blue still take the source's values");
         }
 
+        }
         SDL_DestroyWindow(window);
     }
     catch (const std::exception& ex)

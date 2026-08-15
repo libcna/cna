@@ -1,60 +1,23 @@
 # NEXT.md
 
-## RUNTIME GRAPHICS RENDERER SELECTION (`feature/graphicsruntimedispatch`, 2026-08-15)
-
-CNA can now be compiled with several graphics renderers and choose between them at runtime, while
-compile-time selection remains the default and recommended mode. Design, decisions and the full
-task breakdown: `plan_runtimerenderer.md`. User-facing documentation:
-`docs/runtime-renderer-selection.md`.
-
-**Verified build sets** (all with the full `CnaTests` suite; 251 of the plan's 295 tasks done,
-8 partial):
-
-| Set | Result |
-|---|---|
-| `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | 6385 passed, 0 failed |
-| `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | 6385 passed — nine renderers, four independent GL families |
-| `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | 6385 passed — three EasyGL GL profiles at once (phase P11) |
-| `OPENGLES3;OPENGLES1;OPENVG;BLEND2D;SOFTWARE;HEADLESS` | 17/17 dispatch tests |
-| `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | one wasm bundle, selection works inside it |
-| `HEADLESS;SOFTWARE;STUB` | 6188 passed (the CI reference set) |
-| `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | 6269 passed |
-| Individually verified alongside `OPENGLES3` | `SOKOL`, `MAGNUM`, `LLGL`, `DILIGENT`, `SKIA`, `WICKED` |
-| Single-renderer `OPENGLES3` / `HEADLESS` / `SOFTWARE` | unchanged: 6369 / 6172 / 6253 |
-
-Some renderers need their own environment, which is their own pre-existing requirement rather than
-anything to do with selection: `LLGL`, `DILIGENT` and `WICKED` need `SDL_VIDEODRIVER=x11`, `WICKED`
-additionally needs `libdxcompiler.so` in the working directory, and `OPENGLES1` needs an
-ES 1.1-capable Mesa (`scripts/opengles1-test-env.sh`).
-
-**Four latent bugs were found only by building combinations**, not by review — each invisible until
-a second renderer was present: `sdl-renderer`'s class/namespace name collision, `opengl4`'s stray
-forward declaration shadowing the real `GraphicsRendererCreateArgs`, EasyGL's descriptor taking its
-identity from the build default, and `CNA_RENDERER_DEFINE` (which rides `cna_build_flags INTERFACE`
-into every module) holding the *last* identity's macro rather than the default's.
-
-**Three issues that are NOT from this campaign** are recorded separately in `threeissues.md`: a
-suspected `WEBGL1` defect (it appears to take OpenGL ES 3.0 paths its context lacks), an `OPENGL33`
-segfault in a glTF test confirmed pre-existing, and the Emscripten build being blocked by two
-problems in the sibling `sharp-runtime` repository.
-
-**What remains** (phase numbers refer to `plan_runtimerenderer.md`):
-
-- **P9 — the test/example corpus.** 892 `#ifdef CNA_RENDERER_*` sites still describe the *default*
-  renderer. That is deliberate and consistent (only the default's macro is project-wide), but it
-  means a multi-renderer build's renderer-gated tests exercise one renderer, not each. Converting
-  them to runtime gating is the largest remaining piece.
-- **P10 — the remaining multi sets.** The heavier middleware families (BGFX, LLGL, DILIGENT, FNA3D,
-  WICKED, SOKOL, MAGNUM, SKIA, WEBGPU), the Windows DirectX sets, and the Emscripten set
-  (`WEBGL2;CANVAS;HTML_DOM;SVG_DOM`) — the last of which has the highest practical payoff, since one
-  wasm bundle could carry every browser renderer.
-- **P11 — EasyGL's GL profile at runtime.** Until then the five GL identities cannot coexist; the
-  configure step rejects that combination with a message pointing here.
-- **P6-3 / P6-6.** `RENDERER_TARGET` is still a scalar naming the default, with
-  `CNA_RENDERER_TARGETS` alongside it. Every one of its ~128 uses means "the default renderer" and
-  is correct as it stands.
-
----
+> **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
+> authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
+> guide, and `NEXT_platform.md` carries detailed continuity notes.
+>
+> Platform, graphics and audio are independent build choices:
+> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
+> does not imply a renderer or audio backend.
+>
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
+> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
+> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
+> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
+>
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
+> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

@@ -34,7 +34,7 @@ namespace CNA::Internal::Renderers::OpenVg
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
 
         /// Raw `VGImage` handle (declared as `void*` here to keep `<VG/openvg.h>` out of this

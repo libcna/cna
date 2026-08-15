@@ -19,11 +19,11 @@
 
 #include "shaders/llgl_shaders.hpp"
 
-#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -386,8 +386,8 @@ namespace CNA::Internal::Renderers::Llgl
         // No libshaderc-dev package is available in this environment (see BackendLibraries.cmake's
         // own find_library fallback comment), so there is no shaderc.h to include -- these
         // extern "C" prototypes are hand-declared to match the real C ABI exactly, the same
-        // minimal subset this project's SDL_GPU renderer already proved correct against the
-        // identical shared library (SdlGpuRenderer.cpp, SDLGPU-42/43). Opaque handles are
+        // minimal subset another renderer already proved correct against the identical shared
+        // library. Opaque handles are
         // all void*; shaderc_shader_kind/shaderc_optimization_level are plain C enums, passed as
         // int.
         extern "C"
@@ -1731,17 +1731,12 @@ namespace CNA::Internal::Renderers::Llgl
 
     LlglRenderer::LlglRenderer(const GraphicsRendererCreateArgs& args)
     {
-        window_ = args.window;
-        if (window_ == nullptr)
-            throw std::runtime_error(std::string(kRendererName) + " renderer: no SDL window was supplied");
-
         presentationMode_ = static_cast<int>(args.presentationMode);
         swapInterval_ = args.swapInterval;
         requestedSampleCount_ = args.multiSampleCount > 1 ? args.multiSampleCount : 1;
 
-        int windowWidth = 0;
-        int windowHeight = 0;
-        SDL_GetWindowSizeInPixels(window_, &windowWidth, &windowHeight);
+        const int windowWidth = args.surface.drawableSize.width;
+        const int windowHeight = args.surface.drawableSize.height;
         virtualWidth_ = args.virtualWidth > 0 ? args.virtualWidth : windowWidth;
         virtualHeight_ = args.virtualHeight > 0 ? args.virtualHeight : windowHeight;
 
@@ -1761,7 +1756,7 @@ namespace CNA::Internal::Renderers::Llgl
         // reports to stdout. Off by default -- the debug layer validates every command and is far
         // too costly to leave on -- but invaluable when a draw silently produces nothing.
         static LLGL::RenderingDebugger debugger;
-        const char* debugRequest = SDL_getenv("CNA_LLGL_DEBUG");
+        const char* debugRequest = std::getenv("CNA_LLGL_DEBUG");
         if (debugRequest != nullptr && debugRequest[0] == '1')
         {
             LLGL::Log::RegisterCallbackStd();
@@ -1779,7 +1774,7 @@ namespace CNA::Internal::Renderers::Llgl
                 (report.GetText() != nullptr ? report.GetText() : "no details") + ")");
         }
 
-        surface_ = std::make_shared<LlglSdlSurface>(window_);
+        surface_ = std::make_shared<LlglPlatformSurface>(args.surface, args.isFullScreen);
 
         LLGL::SwapChainDescriptor swapChainDesc;
         swapChainDesc.resolution = surface_->GetContentSize();
@@ -1802,13 +1797,13 @@ namespace CNA::Internal::Renderers::Llgl
         CreateSpritePipelineResources();
         CreatePrimitivePipelineResources();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_->GetWindowId(), this);
     }
 
     LlglRenderer::~LlglRenderer()
     {
-        if (window_ != nullptr)
-            IGraphicsRenderer::UnregisterForWindow(window_);
+        if (surface_)
+            IGraphicsRenderer::UnregisterForWindow(surface_->GetWindowId());
 
         if (!renderer_)
             return;
@@ -4041,12 +4036,20 @@ namespace CNA::Internal::Renderers::Llgl
         height = static_cast<int>(rect.logicalHeight);
     }
 
+    void LlglRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (!surface_)
+            return;
+        surface_->Update(surface);
+        UpdateSwapChainResolution();
+    }
+
     void LlglRenderer::SetVirtualResolution(int width, int height)
     {
         if (width > 0) virtualWidth_ = width;
         if (height > 0) virtualHeight_ = height;
 
-        // GraphicsDevice::Reset resizes and synchronizes the SDL window before forwarding the
+        // GraphicsDevice::Reset resizes and synchronizes the platform window before forwarding the
         // new virtual resolution here. Keep LLGL's swap chain in step immediately: waiting until
         // Present() left GetViewportSize() and every deferred draw queued during the first frame
         // using the constructor-time surface size, even though the window had already adopted the
@@ -4081,9 +4084,12 @@ namespace CNA::Internal::Renderers::Llgl
         if (rect.width <= 0.0f || rect.height <= 0.0f)
             return false;
 
-        logX = (windowX - rect.x) * rect.logicalWidth / rect.width;
-        logY = (windowY - rect.y) * rect.logicalHeight / rect.height;
-        return true;
+        const float drawableX = surface_->WindowToDrawable(windowX);
+        const float drawableY = surface_->WindowToDrawable(windowY);
+        logX = (drawableX - rect.x) * rect.logicalWidth / rect.width;
+        logY = (drawableY - rect.y) * rect.logicalHeight / rect.height;
+        return drawableX >= rect.x && drawableX < rect.x + rect.width
+            && drawableY >= rect.y && drawableY < rect.y + rect.height;
     }
 
     bool LlglRenderer::TransformLogicalToWindow(float logX, float logY,
@@ -4093,8 +4099,10 @@ namespace CNA::Internal::Renderers::Llgl
         if (rect.logicalWidth <= 0.0f || rect.logicalHeight <= 0.0f)
             return false;
 
-        windowX = rect.x + logX * rect.width / rect.logicalWidth;
-        windowY = rect.y + logY * rect.height / rect.logicalHeight;
+        windowX = surface_->DrawableToWindow(
+            rect.x + logX * rect.width / rect.logicalWidth);
+        windowY = surface_->DrawableToWindow(
+            rect.y + logY * rect.height / rect.logicalHeight);
         return true;
     }
 

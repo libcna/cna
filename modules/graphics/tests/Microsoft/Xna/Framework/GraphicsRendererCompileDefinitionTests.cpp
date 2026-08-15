@@ -169,6 +169,9 @@ TEST(GraphicsRendererCompileDefinitionsTest, ExactlyOneGraphicsRendererIsSelecte
 #ifdef CNA_RENDERER_PORTABLEGL
     ++enabled;
 #endif
+#ifdef CNA_RENDERER_TINYGL
+    ++enabled;
+#endif
 
     // plan_runtimerenderer.md RTR-P7-8: exactly one, in BOTH modes.
     //

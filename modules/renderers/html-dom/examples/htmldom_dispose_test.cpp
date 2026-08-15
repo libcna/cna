@@ -312,7 +312,7 @@ protected:
                   "with exactly one live reference -- this test's own real renderer");
             {
                 HtmlDomRenderer altRenderer(
-                    realRenderer.GetWindowInternal(), 64, 64,
+                    reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), 64, 64,
                     CNA::Internal::Renderers::CnaPresentationMode::FixedHeightDynamicWidth);
                 check(JsRendererRefCount() == 2,
                       "HTMLDOM-114: constructing a second renderer sharing the same window "

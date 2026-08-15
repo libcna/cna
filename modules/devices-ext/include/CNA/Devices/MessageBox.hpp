@@ -3,11 +3,9 @@
 
 #ifdef CNA_DEVICES
 
-#include <memory>
 #include <string>
 #include <vector>
 
-#include "CNA/Devices/Detail/IMessageBoxBackend.hpp"
 #include "CNA/Devices/MessageBoxType.hpp"
 
 namespace CNA::Devices
@@ -15,24 +13,20 @@ namespace CNA::Devices
     /**
      * @brief Shows native, modal OS message/alert dialogs.
      *
-     * CNA extension — no XNA/WP7 equivalent exists. Calls through
-     * `Detail::IMessageBoxBackend` (default: `Detail::SdlMessageBoxBackend`, backed
-     * by SDL3's `SDL_ShowSimpleMessageBox()`/`SDL_ShowMessageBox()`,
-     * `third_party/SDL/include/SDL3/SDL_messagebox.h`) rather than calling SDL3
-     * directly, specifically so tests can inject a fake backend — see
-     * `SetBackendForTesting()`'s own doc comment for why this matters here.
+     * CNA extension — no XNA/WP7 equivalent exists. Calls straight through to the platform's
+     * dialog service. A test that must not show a real dialog installs a platform whose dialog
+     * service records instead of showing (`CNA::Platform::Testing::CannedDialogPlatform`); there
+     * is deliberately no test-only injection hook on this class.
      *
-     * @note Unlike `FileDialog`, every call here is **synchronous**: SDL3's own doc
-     * comment for `SDL_ShowMessageBox()` states it blocks the calling thread until
-     * the user clicks a button or closes the dialog. There is no result callback and
-     * no async lifetime to manage.
+     * @note Unlike `FileDialog`, every call here is **synchronous**: a message box blocks the
+     * calling thread until the user clicks a button or closes the dialog. There is no result
+     * callback and no async lifetime to manage.
      *
-     * @note Real native backends exist for every video backend this project
-     * vendors — Windows, Linux (X11/Wayland), macOS, Android, iOS, and
-     * Web/Emscripten (confirmed by reading
-     * `third_party/SDL/src/video/{windows,x11,wayland,cocoa,android,uikit,emscripten}/`
-     * directly) — the broadest cross-platform reach of any `CNA::Devices` capability.
-     * `getIsSupportedProperty()` is therefore unconditionally true.
+     * @note This has the broadest cross-platform reach of any `CNA::Devices` capability — every
+     * desktop, mobile and web target CNA supports has a native message box. It is nonetheless
+     * capability-gated rather than unconditionally available: a headless or terminal platform has
+     * nowhere to show one, and `getIsSupportedProperty()` reports that honestly so a caller can
+     * fall back rather than silently show nothing.
      */
     class MessageBox
     {
@@ -74,19 +68,6 @@ namespace CNA::Devices
             const std::string& message,
             const std::vector<std::string>& buttonLabels);
 
-        /**
-         * @brief Test-only hook: replaces the real, platform-default backend with a
-         * caller-supplied one (typically a test fake).
-         *
-         * The real backend (`Detail::SdlMessageBoxBackend`) pops a genuine,
-         * interactive, modal native OS dialog and blocks the calling thread until a
-         * human responds — an automated test must never call it directly. This hook
-         * exists specifically so tests never call the real backend at all.
-         *
-         * @param backend Replacement backend; pass nullptr to restore the
-         * platform-default (`Detail::SdlMessageBoxBackend`) behavior.
-         */
-        static void SetBackendForTesting(std::unique_ptr<Detail::IMessageBoxBackend> backend);
 
     private:
         /** @brief Not instantiable — every member is static. */

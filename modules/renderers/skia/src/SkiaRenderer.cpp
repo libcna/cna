@@ -1,4 +1,6 @@
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "CNA/Platform/IPlatformSurfacePresenter.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaBlendMapping.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaEffectRenderer.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaGeneratedBlender.hpp"
@@ -34,17 +36,22 @@ namespace CNA::Internal::Renderers::Skia
             [[nodiscard]] int PixelCount() const override { return 0; }
         };
 
-        [[nodiscard]] SDL_RendererLogicalPresentation ToSdlPresentation(CnaPresentationMode mode)
+        [[nodiscard]] CNA::Platform::PresentScaleMode ToPresentScaleMode(CnaPresentationMode mode)
         {
             switch (mode)
             {
-                case CnaPresentationMode::Letterbox: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
-                case CnaPresentationMode::Overscan: return SDL_LOGICAL_PRESENTATION_OVERSCAN;
-                case CnaPresentationMode::Stretch: return SDL_LOGICAL_PRESENTATION_STRETCH;
-                case CnaPresentationMode::NativeBackBuffer: return SDL_LOGICAL_PRESENTATION_DISABLED;
-                case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+                case CnaPresentationMode::Letterbox:
+                    return CNA::Platform::PresentScaleMode::Letterbox;
+                case CnaPresentationMode::Overscan:
+                    return CNA::Platform::PresentScaleMode::Overscan;
+                case CnaPresentationMode::Stretch:
+                    return CNA::Platform::PresentScaleMode::Stretch;
+                case CnaPresentationMode::NativeBackBuffer:
+                    return CNA::Platform::PresentScaleMode::Native;
+                case CnaPresentationMode::FixedHeightDynamicWidth:
+                    return CNA::Platform::PresentScaleMode::Letterbox;
             }
-            return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+            return CNA::Platform::PresentScaleMode::Letterbox;
         }
 
         struct MaskedBlendUniform
@@ -129,18 +136,23 @@ namespace CNA::Internal::Renderers::Skia
         }
     }
 
-    SkiaRenderer::SkiaRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                             CnaPresentationMode presentationMode, int swapInterval,
-                                             std::function<void(RendererDeviceEvent)> deviceEventCallback,
-                                             SkiaInitializationFailurePointEXT failurePoint)
-        : window_(window)
-        , deviceEventCallback_(std::move(deviceEventCallback))
-        , presentationMode_(presentationMode)
-        , preferredVirtualWidth_(virtualWidth)
-        , preferredVirtualHeight_(virtualHeight)
+    SkiaRenderer::SkiaRenderer(const GraphicsRendererCreateArgs& args,
+                               const SkiaInitializationFailurePointEXT failurePoint)
+        : surfaceInfo_(args.surface)
+        , presenter_(args.surfacePresenter)
+        , deviceEventCallback_(args.deviceEventCallback)
+        , presentationMode_(args.presentationMode)
+        , preferredVirtualWidth_(args.virtualWidth)
+        , preferredVirtualHeight_(args.virtualHeight)
     {
-        if (!window_)
-            throw std::runtime_error("SkiaRenderer initialized with null window.");
+        if (surfaceInfo_.windowId == 0)
+            throw std::runtime_error("SkiaRenderer initialized without a platform window.");
+        if (presenter_ == nullptr)
+        {
+            throw CNA::Platform::PlatformNotSupportedException(
+                CNA::Platform::PlatformCapability::SurfacePresentation, "SKIA");
+        }
+        if (!(surfaceInfo_.displayScale > 0.0f)) surfaceInfo_.displayScale = 1.0f;
 
         bool registered = false;
         try
@@ -152,16 +164,13 @@ namespace CNA::Internal::Renderers::Skia
                     throw std::runtime_error(std::string("Skia injected initialization failure after ") + stage);
             };
 
-            renderer_ = SDL_CreateRenderer(window_, nullptr);
-            if (!renderer_)
-                throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed: ") + SDL_GetError());
             failAt(SkiaInitializationFailurePointEXT::AfterRenderer, "renderer creation");
 
-            SetSwapInterval(swapInterval);
-            RecreateBackbuffer(virtualWidth, virtualHeight);
+            SetSwapInterval(args.swapInterval);
+            RecreateBackbuffer(args.virtualWidth, args.virtualHeight);
             failAt(SkiaInitializationFailurePointEXT::AfterBackbuffer, "backbuffer creation");
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(surfaceInfo_.windowId, this);
             registered = true;
             failAt(SkiaInitializationFailurePointEXT::AfterRegistration, "renderer registration");
             std::cout << kSkiaStartupDiagnostic << std::endl;
@@ -169,30 +178,23 @@ namespace CNA::Internal::Renderers::Skia
         catch (...)
         {
             // A throwing constructor never reaches ~SkiaRenderer(). Unwind every acquired
-            // SDL/registry resource here so the caller-owned window can host a succeeding renderer.
+            // Registry state is the only owned external resource; the presenter remains owned by
+            // GraphicsDevice and can host an immediately succeeding renderer.
             if (registered)
-                IGraphicsRenderer::UnregisterForWindow(window_);
-            DestroyPresentationTexture();
-            if (renderer_)
-            {
-                SDL_DestroyRenderer(renderer_);
-                renderer_ = nullptr;
-            }
+                IGraphicsRenderer::UnregisterForWindow(surfaceInfo_.windowId);
             throw;
         }
     }
 
     SkiaRenderer::~SkiaRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
-        DestroyPresentationTexture();
-        if (renderer_) SDL_DestroyRenderer(renderer_);
+        IGraphicsRenderer::UnregisterForWindow(surfaceInfo_.windowId);
     }
 
     void SkiaRenderer::AssertOwnership(const char* operation) const
     {
         ownership_->AssertOwnerThread(operation);
-        if (!window_ || !renderer_ || SDL_GetRenderer(window_) != renderer_)
+        if (surfaceInfo_.windowId == 0 || presenter_ == nullptr)
         {
             throw std::runtime_error(
                 std::string("Skia presenter ownership violation during ") + operation + ".");
@@ -231,7 +233,40 @@ namespace CNA::Internal::Renderers::Skia
         }
         width = 0;
         height = 0;
-        (void)SDL_GetRenderOutputSize(renderer_, &width, &height);
+        presenter_->GetTargetSize(width, height);
+    }
+
+    SkiaRenderer::PresentationViewport SkiaRenderer::ComputePresentationViewport() const
+    {
+        int outputWidth = 0;
+        int outputHeight = 0;
+        GetPresentationOutputSize(outputWidth, outputHeight);
+        PresentationViewport viewport;
+        if (outputWidth <= 0 || outputHeight <= 0 || LogicalWidth() <= 0 || LogicalHeight() <= 0)
+            return viewport;
+
+        if (presentationMode_ == CnaPresentationMode::NativeBackBuffer)
+        {
+            viewport.width = static_cast<float>(LogicalWidth());
+            viewport.height = static_cast<float>(LogicalHeight());
+            return viewport;
+        }
+        if (presentationMode_ == CnaPresentationMode::Stretch)
+        {
+            viewport.width = static_cast<float>(outputWidth);
+            viewport.height = static_cast<float>(outputHeight);
+            return viewport;
+        }
+
+        const float scaleX = static_cast<float>(outputWidth) / LogicalWidth();
+        const float scaleY = static_cast<float>(outputHeight) / LogicalHeight();
+        const float scale = presentationMode_ == CnaPresentationMode::Overscan
+            ? std::max(scaleX, scaleY) : std::min(scaleX, scaleY);
+        viewport.width = LogicalWidth() * scale;
+        viewport.height = LogicalHeight() * scale;
+        viewport.x = (static_cast<float>(outputWidth) - viewport.width) * 0.5f;
+        viewport.y = (static_cast<float>(outputHeight) - viewport.height) * 0.5f;
+        return viewport;
     }
 
     void SkiaRenderer::RecreateBackbuffer(int requestedWidth, int requestedHeight)
@@ -253,9 +288,6 @@ namespace CNA::Internal::Renderers::Skia
         surface_.Clear(0.0f, 0.0f, 0.0f, 0.0f);
         TraceSkiaState("surface=backbuffer id=%llu size=%dx%d",
                        static_cast<unsigned long long>(surface_.Identity()), width, height);
-        DestroyPresentationTexture();
-        RecreatePresentationTexture();
-
         ApplyLogicalPresentation();
     }
 
@@ -282,61 +314,18 @@ namespace CNA::Internal::Renderers::Skia
         }
     }
 
-    void SkiaRenderer::RecreatePresentationTexture()
-    {
-        presentTexture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA32,
-                                            SDL_TEXTUREACCESS_STREAMING, LogicalWidth(), LogicalHeight());
-        if (!presentTexture_)
-            throw std::runtime_error(std::string("Skia SDL_CreateTexture failed: ") + SDL_GetError());
-    }
-
-    void SkiaRenderer::DestroyPresentationTexture() noexcept
-    {
-        if (!presentTexture_)
-            return;
-        SDL_DestroyTexture(presentTexture_);
-        presentTexture_ = nullptr;
-    }
-
     void SkiaRenderer::RecreatePresentationRenderer()
     {
-        // Skia's selected raster surface and every raster image are CPU-owned, so they have no
-        // GPU/context handle to recreate. The SDL renderer and its streaming texture are the
-        // presentation-only device objects. Rebuild those without calling RecreateBackbuffer(),
-        // which would incorrectly clear the live raster surface and invalidate app resources.
-        DestroyPresentationTexture();
-        if (renderer_)
-        {
-            SDL_DestroyRenderer(renderer_);
-            renderer_ = nullptr;
-        }
-        renderer_ = SDL_CreateRenderer(window_, nullptr);
-        if (!renderer_)
-            throw std::runtime_error(std::string("Skia SDL_CreateRenderer failed during presentation recovery: ")
-                                     + SDL_GetError());
-
-        try
-        {
-            SetSwapInterval(swapInterval_);
-            RecreatePresentationTexture();
-            ApplyLogicalPresentation();
-        }
-        catch (...)
-        {
-            DestroyPresentationTexture();
-            SDL_DestroyRenderer(renderer_);
-            renderer_ = nullptr;
-            throw;
-        }
+        // CPU raster resources survive a presentation reset. The platform owns the presenter, so
+        // recovery re-applies its state without replacing or invalidating the live raster surface.
+        SetSwapInterval(swapInterval_);
+        ApplyLogicalPresentation();
     }
 
     void SkiaRenderer::ApplyLogicalPresentation()
     {
-        if (!SDL_SetRenderLogicalPresentation(renderer_, LogicalWidth(), LogicalHeight(),
-                                              ToSdlPresentation(presentationMode_)))
-        {
-            throw std::runtime_error(std::string("Skia SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
-        }
+        presenter_->SetScaleMode(
+            ToPresentScaleMode(presentationMode_), CNA::Platform::PresentFilter::Linear);
     }
 
     void SkiaRenderer::Clear(float r, float g, float b, float a)
@@ -353,18 +342,8 @@ namespace CNA::Internal::Renderers::Skia
         AssertOwnership("Present");
         surface_.Flush();
         const auto pixels = surface_.SnapshotRgba();
-        if (!SDL_UpdateTexture(presentTexture_, nullptr, pixels.data(), LogicalWidth() * 4))
-            throw std::runtime_error(std::string("Skia SDL_UpdateTexture failed: ") + SDL_GetError());
-        SDL_FRect nativeDestination{
-            0.0f, 0.0f, static_cast<float>(LogicalWidth()), static_cast<float>(LogicalHeight())};
-        const SDL_FRect* destination = presentationMode_ == CnaPresentationMode::NativeBackBuffer
-            ? &nativeDestination : nullptr;
-        if (!SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255) || !SDL_RenderClear(renderer_)
-            || !SDL_RenderTexture(renderer_, presentTexture_, nullptr, destination)
-            || !SDL_RenderPresent(renderer_))
-        {
-            throw std::runtime_error(std::string("Skia SDL presentation failed: ") + SDL_GetError());
-        }
+        presenter_->Present(CNA::Platform::SurfaceFrame{
+            pixels.data(), LogicalWidth(), LogicalHeight(), LogicalWidth() * 4});
 
         // A resize can arrive between draws without a ClientSizeChanged notification. Preserve
         // the just-completed frame, then make the CPU raster surface match the new dynamic width
@@ -381,20 +360,22 @@ namespace CNA::Internal::Renderers::Skia
         height = ActiveSurface().Height();
     }
 
+    void SkiaRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        AssertOwnership("OnSurfaceChanged");
+        if (surface.windowId != surfaceInfo_.windowId)
+            throw CNA::Platform::PlatformException("SkiaRenderer::OnSurfaceChanged",
+                                                   "stable window id changed");
+        surfaceInfo_ = surface;
+        if (!(surfaceInfo_.displayScale > 0.0f)) surfaceInfo_.displayScale = 1.0f;
+        RefreshDynamicBackbufferIfNeeded();
+    }
+
     void SkiaRenderer::SetVirtualResolution(int width, int height)
     {
         AssertOwnership("SetVirtualResolution");
         preferredVirtualWidth_ = width;
         preferredVirtualHeight_ = height;
-
-        // GraphicsDevice::Reset() requests the matching SDL window size immediately before this
-        // call. SDL documents that request as asynchronous on some window systems (notably X11),
-        // while FixedHeightDynamicWidth derives the raster width from the renderer's live output.
-        // Synchronize the pending request so a shrinking window cannot recreate a transiently
-        // narrower backbuffer from the old aspect ratio. A timeout is deliberately non-fatal: the
-        // existing dynamic refresh path will still converge when SDL reports the new output size.
-        if (!SDL_SyncWindow(window_))
-            SDL_ClearError();
 
         RecreateBackbuffer(width, height);
     }
@@ -414,16 +395,9 @@ namespace CNA::Internal::Renderers::Skia
     void SkiaRenderer::SetSwapInterval(int interval)
     {
         AssertOwnership("SetSwapInterval");
-        if (!SDL_SetRenderVSync(renderer_, interval))
-        {
-            if (interval > 1 && SDL_SetRenderVSync(renderer_, 1))
-            {
-                swapInterval_ = 1;
-                return;
-            }
-            throw std::runtime_error(std::string("Skia SDL_SetRenderVSync failed: ") + SDL_GetError());
-        }
-        swapInterval_ = interval;
+        const bool enabled = interval != 0;
+        (void)presenter_->SetVSync(enabled);
+        swapInterval_ = enabled ? 1 : 0;
     }
 
     void SkiaRenderer::DebugSetPresentationOutputSizeEXT(int width, int height)
@@ -448,7 +422,7 @@ namespace CNA::Internal::Renderers::Skia
     {
         AssertOwnership("DebugSimulateContextLoss");
         // A CPU-raster Skia surface cannot incur a real GPU context loss. The useful equivalent
-        // is loss of the SDL presenter: reconstruct its renderer/streaming texture while leaving
+        // is loss of the platform presenter: reapply its state while leaving
         // CPU-owned Texture2D and RenderTarget2D data live. Report only a reset pair, rather than
         // fabricating DeviceLost for a device whose raster resources never became unavailable.
         if (deviceEventCallback_)
@@ -469,19 +443,32 @@ namespace CNA::Internal::Renderers::Skia
                                                         float& logX, float& logY) const
     {
         AssertOwnership("TransformWindowToLogical");
-        // Window coordinates are SDL window-space points, whereas GetRenderOutputSize() reports
-        // physical renderer pixels. Scaling against the latter halves a coordinate on a 2x HiDPI
-        // display and also loses Letterbox/Overscan offsets. SDL owns both conversions for its
-        // active logical-presentation mode, so use the exact same offset- and DPI-aware mapping
-        // as the input bridge and Mouse::SetPosition path.
-        return renderer_ && SDL_RenderCoordinatesFromWindow(renderer_, windowX, windowY, &logX, &logY);
+        const PresentationViewport viewport = ComputePresentationViewport();
+        if (viewport.width <= 0.0f || viewport.height <= 0.0f)
+            return false;
+        const float physicalX = windowX * surfaceInfo_.displayScale;
+        const float physicalY = windowY * surfaceInfo_.displayScale;
+        if (physicalX < viewport.x || physicalX > viewport.x + viewport.width
+            || physicalY < viewport.y || physicalY > viewport.y + viewport.height)
+            return false;
+        logX = (physicalX - viewport.x) * LogicalWidth() / viewport.width;
+        logY = (physicalY - viewport.y) * LogicalHeight() / viewport.height;
+        return true;
     }
 
     bool SkiaRenderer::TransformLogicalToWindow(float logX, float logY,
                                                         float& windowX, float& windowY) const
     {
         AssertOwnership("TransformLogicalToWindow");
-        return renderer_ && SDL_RenderCoordinatesToWindow(renderer_, logX, logY, &windowX, &windowY);
+        const PresentationViewport viewport = ComputePresentationViewport();
+        if (viewport.width <= 0.0f || viewport.height <= 0.0f
+            || LogicalWidth() <= 0 || LogicalHeight() <= 0)
+            return false;
+        const float physicalX = viewport.x + logX * viewport.width / LogicalWidth();
+        const float physicalY = viewport.y + logY * viewport.height / LogicalHeight();
+        windowX = physicalX / surfaceInfo_.displayScale;
+        windowY = physicalY / surfaceInfo_.displayScale;
+        return true;
     }
 
     std::unique_ptr<ITextureRenderer> SkiaRenderer::CreateTexture(const ImageData& data)
@@ -1103,9 +1090,7 @@ namespace CNA::Internal::Renderers
 
     std::unique_ptr<IGraphicsRenderer> Skia::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Skia::SkiaRenderer>(args.window, args.virtualWidth, args.virtualHeight,
-                                                            args.presentationMode, args.swapInterval,
-                                                            args.deviceEventCallback);
+        return std::make_unique<Skia::SkiaRenderer>(args);
     }
 #endif
 } // namespace CNA::Internal::Renderers

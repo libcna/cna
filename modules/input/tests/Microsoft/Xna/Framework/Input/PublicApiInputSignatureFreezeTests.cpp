@@ -325,7 +325,6 @@ namespace
 
     // ----- MouseCursor (class, CNA/CNAEXT) -----
     static_assert(std::is_default_constructible_v<MouseCursor>, "MouseCursor()");
-    static_assert(std::is_constructible_v<MouseCursor, SDL_Cursor*, bool>, "MouseCursor(SDL_Cursor*, bool = false)");
     [[maybe_unused]] constexpr auto z_MouseCursor_FromTexture2D_1 = static_cast<MouseCursor(*)(const Graphics::Texture2D&, int, int)>(&MouseCursor::FromTexture2D);
     static_assert(!std::is_copy_constructible_v<MouseCursor>, "MouseCursor(const MouseCursor&) = delete");
     static_assert(!std::is_copy_assignable_v<MouseCursor>, "MouseCursor& operator=(const MouseCursor&) = delete");
@@ -333,7 +332,6 @@ namespace
     static_assert(std::is_move_assignable_v<MouseCursor>, "MouseCursor& operator=(MouseCursor&&) noexcept");
     static_assert(std::is_destructible_v<MouseCursor>, "~MouseCursor()");
     [[maybe_unused]] constexpr auto z_MouseCursor_Dispose_2 = static_cast<void(MouseCursor::*)()>(&MouseCursor::Dispose);
-    [[maybe_unused]] constexpr auto z_MouseCursor_GetSDLCursor_3 = static_cast<SDL_Cursor*(MouseCursor::*)() const>(&MouseCursor::GetSDLCursor);
     [[maybe_unused]] constexpr auto z_MouseCursor_getArrowProperty_4 = static_cast<MouseCursor&(*)()>(&MouseCursor::getArrowProperty);
     [[maybe_unused]] constexpr auto z_MouseCursor_getCrosshairProperty_5 = static_cast<MouseCursor&(*)()>(&MouseCursor::getCrosshairProperty);
     [[maybe_unused]] constexpr auto z_MouseCursor_getHandProperty_6 = static_cast<MouseCursor&(*)()>(&MouseCursor::getHandProperty);

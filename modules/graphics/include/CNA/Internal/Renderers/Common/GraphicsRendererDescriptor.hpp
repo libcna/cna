@@ -7,7 +7,7 @@
 // The distinction that motivates this file: IGraphicsRenderer is already a wide virtual interface,
 // so everything AFTER construction is already runtime-polymorphic. But the SDL window flags, the
 // decision whether a window is needed at all, whether SDL's video subsystem must be initialized,
-// and the GL attributes that must be set before SDL_CreateWindow are all consumed BEFORE any
+// and the GL attributes that must be fixed before the window exists are all consumed BEFORE any
 // renderer object can exist. A virtual method cannot serve them; a static descriptor can.
 //
 // Four renderers (BGFX, LLGL, FNA3D, DILIGENT) already made these decisions at runtime before this
@@ -28,10 +28,10 @@ namespace CNA::Internal::Renderers
     /**
      * @brief Coarse classification of the window surface a renderer needs.
      *
-     * Deliberately coarser than the exact SDL_WindowFlags bitmask GraphicsRendererDescriptor::
+     * Deliberately coarser than the exact window-flag bitmask GraphicsRendererDescriptor::
      * prepareWindowFlags() returns: this is the granularity at which two renderers can be compared
-     * for window compatibility. SDL3 refuses to create a window carrying both SDL_WINDOW_OPENGL and
-     * SDL_WINDOW_VULKAN, so a fallback that crosses from one kind to another cannot reuse the
+     * for window compatibility. A windowing backend refuses to create one window carrying both an
+     * OpenGL and a Vulkan intent, so a fallback crossing from one kind to another cannot reuse the
      * existing window and must recreate it (plan_runtimerenderer.md design decision 8).
      */
     enum class RendererWindowKind
@@ -39,16 +39,16 @@ namespace CNA::Internal::Renderers
         /** @brief No window at all (HEADLESS, SOFTWARE, STUB, PORTABLEGL). */
         None,
 
-        /** @brief An ordinary SDL window with no graphics-API flag (SDL_RENDERER, the D3D family). */
+        /** @brief An ordinary window with no graphics-API intent (SDL_RENDERER, the D3D family). */
         Plain,
 
-        /** @brief A window created with SDL_WINDOW_OPENGL. */
+        /** @brief A window created with an OpenGL render intent. */
         OpenGL,
 
-        /** @brief A window created with SDL_WINDOW_VULKAN. */
+        /** @brief A window created with a Vulkan render intent. */
         Vulkan,
 
-        /** @brief A window created with SDL_WINDOW_METAL. */
+        /** @brief A window created with a Metal render intent. */
         Metal
     };
 
@@ -102,6 +102,34 @@ namespace CNA::Internal::Renderers
 
         /** @brief Whether the game requested exclusive fullscreen. */
         bool isFullScreen = false;
+    };
+
+    /**
+     * @brief A family's request for framebuffer attributes that must be fixed before the window
+     *        is created.
+     *
+     * Mirrors CNA::Platform::OpenGlFramebufferDescription, but deliberately does not include a
+     * sample count: the requested MSAA level is presentation state, not a family constant, so
+     * GraphicsDevice supplies it from PresentationParameters when wantsMultiSample is set.
+     *
+     * A default-constructed value means "this family has no pre-window request".
+     */
+    struct RendererGlFramebufferRequest
+    {
+        /** @brief Requested depth-buffer bits; 0 means "do not request a depth buffer". */
+        int depthBits = 0;
+
+        /** @brief Requested stencil-buffer bits; 0 means "do not request a stencil buffer". */
+        int stencilBits = 0;
+
+        /** @brief Whether a double-buffered visual is required. */
+        bool doubleBuffered = false;
+
+        /**
+         * @brief Whether the visual must carry the multisample buffer implied by
+         *        PresentationParameters::MultiSampleCount.
+         */
+        bool wantsMultiSample = false;
     };
 
     /**
@@ -186,36 +214,59 @@ namespace CNA::Internal::Renderers
          */
         bool needsVideoSubsystem = false;
 
-        /**
-         * @brief Returns the SDL_WindowFlags this renderer needs, as a raw bitmask.
-         *
-         * Raw std::uint32_t rather than SDL_WindowFlags so this header stays free of SDL includes.
-         * Called once, immediately before SDL_CreateWindow. Renderers whose flags are constant
-         * return a constant; BGFX, LLGL, FNA3D and DILIGENT genuinely compute theirs at runtime
-         * (their native API choice is itself a runtime decision) and this is where that computation
-         * now lives.
-         *
-         * Never called when needsWindow is false.
-         *
-         * @return SDL window flags to OR into the window creation flags.
-         */
-        std::uint32_t (*prepareWindowFlags)() = nullptr;
+        // MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md P2): this used to be
+        // `std::uint32_t (*prepareWindowFlags)()`, returning a raw windowing-library flag bitmask,
+        // which put that library in all 15 renderer descriptors and broke next's decoupling ratchet
+        // (19 files, 94 references over a budget of 0).
+        //
+        // Nothing was lost by dropping it: every descriptor's hook only mapped windowKind onto those
+        // flags, which GraphicsDevice can do once, behind the platform contract. The single
+        // exception was Metal asking for a high-density backing, and that is data, so it is data
+        // here.
+        bool wantsHighDpi = false;
 
         /**
-         * @brief Applies attributes that must be set before SDL_CreateWindow.
+         * @brief Framebuffer attributes that must be fixed before the window exists.
          *
-         * Only OPENGL1 has real work here: it requests a legacy/compatibility GL context, which on
-         * X11 goes through GLX, and GLX fixes the window's visual -- and therefore its
-         * depth/stencil/multisample buffer bits -- at window-creation time. Setting those
-         * attributes from the renderer's own constructor is too late.
+         * MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md P2): this replaces
+         * `void (*applyPreWindowAttributes)(const RendererPreWindowRequest&)`, whose every
+         * implementation called into the windowing library directly. The platform contract already
+         * carries these as data on WindowDescription::openGlFramebuffer, so a hook bought nothing
+         * and cost every descriptor a windowing-library dependency.
          *
-         * Every other family supplies a no-op implementation.
+         * Only families driving a desktop GLX visual need this. GLX fixes the window's visual --
+         * and therefore its depth/stencil/multisample bits -- at window-creation time, so a
+         * renderer constructor asking afterwards is too late and silently gets a 0-bit stencil
+         * buffer, making every DepthStencilState::StencilEnable a permanent no-op. Families on EGL
+         * (the whole EasyGL set) choose their config at context-creation time and leave this zeroed.
          *
-         * Never called when needsWindow is false.
-         *
-         * @param request The presentation state this hook is allowed to read.
+         * All-zero means "no pre-window request", which is the correct default.
          */
-        void (*applyPreWindowAttributes)(const RendererPreWindowRequest& request) = nullptr;
+        RendererGlFramebufferRequest glFramebuffer{};
+
+        /**
+         * @brief Whether this family is handed a platform surface presenter.
+         *
+         * MERGE (plan_platform.md PLAT-8 x plan_runtimerenderer.md design decision 2): next chose
+         * the platform services a renderer receives with `#if defined(CNA_RENDERER_<X>)` chains in
+         * GraphicsDevice::createRenderer(). In a multi-renderer binary those chains answer for
+         * whichever macros are defined rather than for the family being constructed, so the
+         * question moves here, where it is answered per family.
+         *
+         * True for the CPU-raster families that present through the platform (SKIA, BLEND2D).
+         */
+        bool needsSurfacePresenter = false;
+
+        /**
+         * @brief Whether this family is handed the platform's OpenGL context service.
+         *
+         * Context-backed renderers receive only that narrow service plus the surface snapshot;
+         * they never resolve a native window or reach through IPlatform themselves.
+         */
+        bool needsGlContext = false;
+
+        /** @brief Whether this family is handed the platform's Vulkan surface service. */
+        bool needsVulkanSurface = false;
 
         /**
          * @brief Cheap, side-effect-free probe of whether this renderer can run here.

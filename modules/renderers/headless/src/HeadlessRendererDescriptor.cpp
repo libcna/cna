@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D07: the Headless family's pre-construction contract.
 //
-// The Headless renderer never creates a window and never touches SDL's video subsystem at all
+// The Headless renderer never creates a window and never touches the platform's video subsystem at all
 // (plan_headless.md design decision 2), which is what lets it run in a CI container with no display
 // server present -- not merely without a visible window.
 
@@ -38,8 +38,6 @@ namespace CNA::Internal::Renderers::Headless
             .windowKind               = RendererWindowKind::None,
             .needsWindow              = false,
             .needsVideoSubsystem      = false,
-            .prepareWindowFlags       = &NoWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

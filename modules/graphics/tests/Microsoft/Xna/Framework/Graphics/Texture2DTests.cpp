@@ -30,6 +30,7 @@ using namespace CNA::Testing::Renderers;
 #include "System/IO/MemoryStream.hpp"
 #include "System/Environment.hpp"
 #include "System/NotSupportedException.hpp"
+#include "System/ObjectDisposedException.hpp"
 
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
@@ -52,7 +53,6 @@ namespace
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t*, int stride) override
         {
@@ -218,24 +218,44 @@ TEST_F(LevelCountTest, MipMapFalseIsAlwaysOneRegardlessOfSize)
     EXPECT_EQ(Texture2D(gd, 1, 1, false, SurfaceFormat::Color).getLevelCountProperty(), 1);
 }
 
+// TinyGL stores and samples level 0 only, so any request that would actually produce a mip chain
+// is refused at construction (TinyGLTextureRenderer's mipLevels != 1 guard) rather than silently
+// collapsed to one level. A single-level request is still an ordinary success, which is why the
+// 1x1 case below stays an equality assertion on every renderer.
 TEST_F(LevelCountTest, MipMapTrueSquarePowerOfTwo)
 {
     EXPECT_EQ(Texture2D(gd, 1, 1, true, SurfaceFormat::Color).getLevelCountProperty(), 1);
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 2, 2, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 4, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 16, 16, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 2, 2, true, SurfaceFormat::Color).getLevelCountProperty(), 2);
     EXPECT_EQ(Texture2D(gd, 4, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 16, 16, true, SurfaceFormat::Color).getLevelCountProperty(), 5);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonSquarePowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 8, 4, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 1, 8, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 8, 4, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
     EXPECT_EQ(Texture2D(gd, 1, 8, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 TEST_F(LevelCountTest, MipMapTrueNonPowerOfTwo)
 {
+#ifdef CNA_RENDERER_TINYGL
+    EXPECT_THROW(Texture2D(gd, 3, 5, true, SurfaceFormat::Color), System::NotSupportedException);
+    EXPECT_THROW(Texture2D(gd, 7, 11, true, SurfaceFormat::Color), System::NotSupportedException);
+#else
     EXPECT_EQ(Texture2D(gd, 3, 5, true, SurfaceFormat::Color).getLevelCountProperty(), 3);
     EXPECT_EQ(Texture2D(gd, 7, 11, true, SurfaceFormat::Color).getLevelCountProperty(), 4);
+#endif
 }
 
 // -----------------------------------------------------------------------
@@ -249,14 +269,22 @@ TEST(Texture2DMipLevelValidationTest, EveryValidMipKeepsItsDimensionsContentsAnd
 {
     constexpr int kWidth = 13;
     constexpr int kHeight = 7;
-    constexpr int kLevelCount = 4;
     GraphicsDevice gd;
+#ifdef CNA_RENDERER_TINYGL
+    // TinyGL owns level 0 only, so the mipmapped texture this test needs cannot be constructed at
+    // all -- the refusal itself is the contract worth asserting here (see LevelCountTest above).
+    EXPECT_THROW(Texture2D(gd, kWidth, kHeight, true, SurfaceFormat::Color),
+                 System::NotSupportedException);
+    GTEST_SKIP() << "TINYGL stores level 0 only -- no mip chain exists to walk";
+#else
+    constexpr int kLevelCount = 4;
     Texture2D texture(gd, kWidth, kHeight, true, SurfaceFormat::Color);
     ASSERT_EQ(texture.getLevelCountProperty(), kLevelCount);
 
     const std::vector<std::vector<Color>> expected =
         PopulateEveryMip(texture, kWidth, kHeight);
     ExpectEveryMipExact(texture, kWidth, kHeight, expected);
+#endif
 }
 
 TEST(Texture2DMipLevelValidationTest, RejectedSetDataLeavesEveryValidMipAndItsSourceUnchanged)
@@ -806,6 +834,22 @@ TEST(Texture2DTest, SetDataSimpleWithZeroCountDoesNotThrow)
     EXPECT_NO_THROW(tex.SetData(buf, 0));
 }
 
+TEST(Texture2DTest, TransfersAfterDisposeThrowObjectDisposedException)
+{
+    Texture2D tex;
+    tex.Dispose();
+    Color color(1, 2, 3, 4);
+    std::uint8_t rgba[4] = {1, 2, 3, 4};
+
+    EXPECT_THROW(tex.SetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
+    EXPECT_THROW(tex.SetDataRGBA(rgba, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(&color, 1), System::ObjectDisposedException);
+    EXPECT_THROW(tex.GetData(0, nullptr, &color, 0, 1),
+                 System::ObjectDisposedException);
+}
+
 // -----------------------------------------------------------------------
 // SetData(int level, const Rectangle*, const Color*, int, int) — error guards
 //
@@ -1031,7 +1075,7 @@ TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault
 //
 // Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
 // hand-built minimal file (BMP) to empirically confirm which encoded
-// formats Texture2D::FromStream can decode via the linked SDL3_image build.
+// formats Texture2D::FromStream can decode via the vendored stb image backend.
 // -----------------------------------------------------------------------
 
 namespace
@@ -1209,6 +1253,35 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
     EXPECT_EQ(loaded.getHeightProperty(), 4);
 }
 
+TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)
+{
+    Texture2D striped(gd, 8, 4);
+    std::vector<Color> pixels;
+    pixels.reserve(32);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            pixels.emplace_back(x < 2 ? Color(255, 0, 0, 255)
+                                      : x < 6 ? Color(0, 255, 0, 255)
+                                              : Color(0, 0, 255, 255));
+        }
+    }
+    striped.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    MemoryStream encoded;
+    striped.SaveAsPng(&encoded, 8, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream source(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, source, 4, 4, true);
+
+    std::vector<Color> result(16, Color(0, 0, 0, 0));
+    loaded.GetData(result.data(), 0, static_cast<int>(result.size()));
+    EXPECT_TRUE(std::all_of(result.begin(), result.end(), [](const Color& pixel) {
+        return pixel == Color(0, 255, 0, 255);
+    }));
+}
+
 // -----------------------------------------------------------------------
 // SaveAsPng — round-trip verification (Task 263)
 //
@@ -1346,7 +1419,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 //
 // Mirrors the SaveAsPngTest coverage above, adapted for JPEG: lossy colour
 // tolerance instead of exact match, and no alpha preservation (JPEG has no
-// alpha channel — FNA/SDL_image round-trips it back as fully opaque).
+// alpha channel — the reference image decoder round-trips it back as fully opaque).
 // Also verifies FNA_GRAPHICS_JPEG_SAVE_QUALITY is honoured (Task 261 audit
 // found CNA previously hardcoded quality=100, ignoring FNA's env var).
 // -----------------------------------------------------------------------

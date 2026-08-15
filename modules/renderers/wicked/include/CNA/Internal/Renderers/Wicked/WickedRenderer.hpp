@@ -11,6 +11,7 @@
 // not a second engine (plan_wicked.md design decision 1).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -255,8 +256,6 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] int GetWidth() const override;
         /** @brief Height of mip level 0, in texels. */
         [[nodiscard]] int GetHeight() const override;
-        /** @brief Always null — this renderer never creates an SDL_Renderer texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Replaces every texel of mip level 0 with tightly packed RGBA8 rows. */
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         /** @brief Replaces every texel of mip level @p level. */
@@ -447,8 +446,6 @@ namespace CNA::Internal::Renderers::Wicked
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null — this renderer never creates an SDL_Renderer texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Makes this target the destination of subsequent draws. */
         void BindAsRenderTarget() override;
         /** @brief Restores the back buffer as the destination of subsequent draws. */
@@ -962,6 +959,8 @@ namespace CNA::Internal::Renderers::Wicked
          * @param height Receives the logical height.
          */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes the platform surface size and density snapshot. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         /**
          * @brief Changes the logical render size at runtime.
          * @param width  New logical width.
@@ -1000,10 +999,6 @@ namespace CNA::Internal::Renderers::Wicked
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-        /** @brief The SDL window this renderer presents to. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null — this renderer never creates an SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
         /**
          * @brief Reads rendered scene-target pixels back into @p pixels as RGBA8.
          * @param x      Left edge, in logical pixels.
@@ -1346,6 +1341,7 @@ namespace CNA::Internal::Renderers::Wicked
         void CreateBuiltinShaders();
         void CompileShader(wig::ShaderStage stage, const char* entryPoint, wig::Shader& out);
         void ResolveVirtualResolution();
+        void UpdateNativeWindowSnapshot();
 
         void BeginFrame();
         void BeginRenderPass();
@@ -1370,7 +1366,11 @@ namespace CNA::Internal::Renderers::Wicked
                         PrimitiveType primitive, int primitiveCount,
                         const GpuDrawParams* params, int instanceCount = 1);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+#ifdef WICKED_CNA_PLATFORM
+        wi::platform::NativeWindow nativeWindow_;
+#endif
+        wi::platform::window_type wickedWindow_ = {};
         std::unique_ptr<wig::GraphicsDevice> device_;
         wig::SwapChain swapChain_;
         wig::SwapChainDesc swapChainDesc_;

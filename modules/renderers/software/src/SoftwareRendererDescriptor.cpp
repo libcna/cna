@@ -1,7 +1,7 @@
 // plan_runtimerenderer.md RTR-P1-D08: the Software family's pre-construction contract.
 //
 // A real CPU rasterizer that owns its own framebuffer (plan_software.md design decision 4): no
-// window, no GPU library, no SDL video subsystem.
+// window, no GPU library, no platform video subsystem.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptorHelpers.hpp"
@@ -37,8 +37,6 @@ namespace CNA::Internal::Renderers::Software
             .windowKind               = RendererWindowKind::None,
             .needsWindow              = false,
             .needsVideoSubsystem      = false,
-            .prepareWindowFlags       = &NoWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

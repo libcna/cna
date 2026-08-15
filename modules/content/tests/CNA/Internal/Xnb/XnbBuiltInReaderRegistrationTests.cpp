@@ -151,7 +151,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 }
 
 
-// REMED-GFX-135: does THIS build's renderer actually store a cube face? SDL_Renderer, ASCII, Canvas
+// REMED-GFX-135: does THIS build's renderer actually store a cube face? Native 2D, ASCII, Canvas
 // and DIRECTX3 create no cube resource at all and Headless stores no pixel data by design, so
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
@@ -165,7 +165,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 [[nodiscard]] inline bool CubeStorageSupported()
 {
     return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
-                            OpenVg, PortableGL);
+                            OpenVg, PortableGL, TinyGL);
 }
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)

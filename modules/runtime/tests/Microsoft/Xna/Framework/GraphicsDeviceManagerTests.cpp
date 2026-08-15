@@ -1,42 +1,21 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-TEST-002: GraphicsDeviceManager requires a live Game/SDL window/graphics renderer, which is
-// exactly what GraphicsDeviceCapabilityTests.cpp's bare `GraphicsDevice gd;` already constructs
-// successfully in this same CnaTests binary. Following GameWindowTests.cpp's own skip-when-
-// unavailable precedent, a cheap up-front SDL video probe still guards every TEST() here so a
-// genuinely display-less environment skips rather than fails deep inside renderer construction.
+// PLAT-56: GraphicsDeviceManager requires the selected platform/renderer combination to construct
+// its ordinary hidden window. Probe that capability through IPlatform so this suite is unchanged
+// across platform selections and never names a backend API.
 
 #include <gtest/gtest.h>
-
-#include <SDL3/SDL.h>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "System/EventArgs.hpp"
+#include "RuntimePlatformTestSupport.hpp"
 
 using namespace Microsoft::Xna::Framework;
 
 namespace
 {
-    // Matches GameWindowTests.cpp's own probe-then-skip idiom.
-    bool VideoSubsystemAvailable()
-    {
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-        {
-            return false;
-        }
-        SDL_Window* probe = SDL_CreateWindow("cna-gdmtests-probe", 64, 64, SDL_WINDOW_HIDDEN);
-        if (probe == nullptr)
-        {
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-            return false;
-        }
-        SDL_DestroyWindow(probe);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        return true;
-    }
-
     // Runs exactly one frame then exits, giving CreateDevice() a chance to run via
     // Game::DoInitialize() without blocking in the loop.
     class OneFrameGame : public Game
@@ -52,9 +31,9 @@ namespace
 
 TEST(GraphicsDeviceManagerTest, CreateDeviceIsReachableAfterRun)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     OneFrameGame game;
@@ -70,9 +49,9 @@ TEST(GraphicsDeviceManagerTest, CreateDeviceIsReachableAfterRun)
 // must keep working and must not double-raise.
 TEST(GraphicsDeviceManagerTest, ApplyChangesRaisesResettingAndResetExactlyOnce)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     OneFrameGame game;
@@ -101,9 +80,9 @@ TEST(GraphicsDeviceManagerTest, ApplyChangesRaisesResettingAndResetExactlyOnce)
 // on a real device-lost, without requiring D3D9 hardware.
 TEST(GraphicsDeviceManagerTest, RendererDetectedDeviceLostIsForwardedToManagerListeners)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     OneFrameGame game;
@@ -134,9 +113,9 @@ TEST(GraphicsDeviceManagerTest, RendererDetectedDeviceLostIsForwardedToManagerLi
 // was wired up (REMED-CORE-007) -- previously every call site already passed `this` regardless.
 TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     OneFrameGame game;
@@ -163,9 +142,9 @@ TEST(GraphicsDeviceManagerTest, ForwardedDeviceEventsReportTheManagerAsSender)
 // idempotent, independent of ownsGraphicsDevice_).
 TEST(GraphicsDeviceManagerTest, RepeatedDisposeDoesNotReraiseDeviceDisposing)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     OneFrameGame game;

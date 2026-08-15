@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <sstream>
+#include <stdexcept>
 
 #include "CNA/Internal/Audio/WavWrapper.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -49,9 +50,9 @@ namespace CNA::Internal::Xnb
         // of the file's fmt data: bytes at offset 87-88 are 0x00 0x00). This matches FNA's own
         // SoundEffectReader.cs, which never captures the extension for any non-XMA2 format either
         // -- so a real XNA/MonoGame-produced MS-ADPCM asset genuinely has no extension to forward
-        // verbatim. Unlike IMA-ADPCM (SDL3's decoder auto-derives wSamplesPerBlock from
-        // nBlockAlign when absent), SDL3's MS-ADPCM decoder has no such fallback and requires an
-        // explicit, valid coefficient table (SDL_wave.c's MS_ADPCM_Init) -- so this synthesizes
+        // verbatim. Unlike IMA-ADPCM (the bundled decoder auto-derives wSamplesPerBlock from
+        // nBlockAlign when absent), its MS-ADPCM path has no such fallback and requires an
+        // explicit, valid coefficient table -- so this synthesizes
         // one using the same standard preset coefficients as WaveBank.cpp's ADPCM path
         // (CNA::Internal::Audio::BuildStandardMsAdpcmExtension) and a samplesPerBlock computed
         // from nBlockAlign via the MS-ADPCM "Standards Update" formula every encoder (including
@@ -135,7 +136,7 @@ namespace CNA::Internal::Xnb
             }
         }
 
-        // Builds a SoundEffect for any format SDL3's own WAV decoder understands natively (PCM
+        // Builds a SoundEffect for any format the audio module's WAV decoder understands (PCM
         // 8/16-bit, IEEE float, MS/IMA ADPCM) by wrapping the raw bytes in a minimal in-memory WAV
         // file and going through SoundEffect::FromStream -- the same technique WaveBank.cpp uses
         // for its own compressed/8-bit entries (shared via CNA::Internal::Audio::WavWrapper).
@@ -163,8 +164,8 @@ namespace CNA::Internal::Xnb
             std::string s(reinterpret_cast<const char*>(wav.data()), wav.size());
             std::istringstream ss(s);
 
-            // AUD-06-024: SoundEffect::FromStream decodes the synthetic WAV via SDL3's own
-            // decoder, which can reject it (e.g. an invalid sample rate -- AUD-06-013) with a
+            // AUD-06-024: SoundEffect::FromStream decodes the synthetic WAV via the audio module,
+            // which can reject it (e.g. an invalid sample rate -- AUD-06-013) with a
             // raw System::NotSupportedException that names nothing about the .xnb asset it came
             // from. Re-throwing as ContentLoadException(assetContext, inner) preserves the root
             // decoder error verbatim (ContentLoadException's inner-exception constructor appends
@@ -172,6 +173,15 @@ namespace CNA::Internal::Xnb
             // actually needs to find the offending file.
             try
             {
+                // The old direct decoder rejected a zero WAVEFORMATEX rate. The mixer seam may
+                // instead normalize the malformed header to its output rate, which turns corrupt
+                // content into plausible but wrongly-timed audio. Preserve the established XNB
+                // failure contract at the boundary that still owns the original metadata.
+                if (nSamplesPerSec == 0)
+                {
+                    throw std::invalid_argument("Invalid sample rate: zero");
+                }
+
                 std::unique_ptr<SoundEffect> loaded(SoundEffect::FromStream(ss));
                 loaded->setNameProperty(assetName);
                 return std::move(*loaded);
@@ -199,8 +209,8 @@ namespace CNA::Internal::Xnb
         const uint16_t nChannels = Swap16(se, input.ReadUInt16());
         const uint32_t nSamplesPerSec = Swap32(se, input.ReadUInt32());
         // AUD-06-002: previously read-and-discarded ("unused, matches FNA" -- true for FNA's own
-        // FAudio-backed constructor, which recomputes these itself, but CNA's SDL3_mixer-backed
-        // WAV-wrapper path for non-16-bit-PCM formats below genuinely needs them).
+        // FAudio-backed constructor, which recomputes these itself, but CNA's mixer-backed WAV
+        // wrapper path for non-16-bit-PCM formats below genuinely needs them).
         const uint32_t nAvgBytesPerSec = Swap32(se, input.ReadUInt32());
         const uint16_t nBlockAlign = Swap16(se, input.ReadUInt16());
         const uint16_t wBitsPerSample = Swap16(se, input.ReadUInt16());
@@ -246,7 +256,7 @@ namespace CNA::Internal::Xnb
                 // AUD-06-002: captured verbatim (not discarded) -- for MS-ADPCM/IMA-ADPCM this is
                 // exactly the WAVEFORMATEX extension (wSamplesPerBlock, and for MS-ADPCM the
                 // coefficient table) a synthetic WAV's fmt chunk needs to decode correctly via
-                // SDL3's own WAV/ADPCM decoder below. Not byte-swapped for platform=='x': like the
+                // the audio module below. Not byte-swapped for platform=='x': like the
                 // XMA2 branch above, this is unreachable in practice for any fixture this port
                 // targets, and these bytes are only ever re-embedded verbatim into another WAV
                 // fmt chunk, never individually interpreted as multi-byte integers here.
@@ -271,12 +281,10 @@ namespace CNA::Internal::Xnb
         }
 
         // AUD-06-004/006/007/008 (2026-07-17 deep audit, A-01): CNA's SoundEffect raw-buffer
-        // constructors are S16-PCM-only, but SDL3's own WAV loader (used via
-        // SoundEffect::FromStream/MIX_LoadAudio_IO) natively decodes PCM 8/16-bit, IEEE float
-        // 32-bit, and MS/IMA ADPCM (SDL_audio.h's own documented SDL_LoadWAV coverage) -- wrapping
-        // the raw bytes in a synthetic WAV file reaches that decoder instead of requiring CNA to
-        // write its own float/ADPCM decode path. XMA2 remains rejected: no decode path exists
-        // anywhere in this stack (SDL3 doesn't decode XMA2 either).
+        // constructors are S16-PCM-only, but the WAV path behind SoundEffect::FromStream decodes
+        // PCM 8/16-bit, IEEE float 32-bit, and MS/IMA ADPCM. Wrapping the raw bytes in a synthetic
+        // WAV file reaches that decoder instead of requiring CNA's content module to own a second
+        // float/ADPCM decode path. XMA2 remains rejected: no decoder exists anywhere in this stack.
         if (wFormatTag == kWaveFormatPcm && wBitsPerSample == 16)
         {
             // Unchanged fast path: direct construction, no WAV-wrapping overhead.

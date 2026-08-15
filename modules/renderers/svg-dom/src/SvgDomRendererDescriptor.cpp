@@ -1,6 +1,6 @@
 // plan_runtimerenderer.md RTR-P1-D16: the SvgDom family's pre-construction contract.
 //
-// Emscripten-only. Renders into real SVG DOM elements over SDL's canvas (plan_svg_dom.md design
+// Emscripten-only. Renders into real SVG DOM elements over the platform's canvas (plan_svg_dom.md design
 // decision 1); no GPU flag.
 
 #include "CNA/Internal/Renderers/Common/GraphicsRendererDescriptor.hpp"
@@ -37,8 +37,6 @@ namespace CNA::Internal::Renderers::SvgDom
             .windowKind               = RendererWindowKind::Plain,
             .needsWindow              = true,
             .needsVideoSubsystem      = true,
-            .prepareWindowFlags       = &PlainWindowFlags,
-            .applyPreWindowAttributes = &NoPreWindowAttributes,
             .isAvailable              = &AlwaysAvailable,
             .create                   = &CreateGraphicsRenderer,
         };

@@ -243,7 +243,7 @@ TEST_F(MediaPlayerTest, ActiveSongChangedAndMediaStateChangedFireThroughFramewor
 // setter was a no-op, the getter always returned false, and GetVisualizationData left the caller's
 // buffer untouched. That locked a non-functional XNA API in as "expected", the same antipattern
 // MEDIA-129 had to undo elsewhere in this plan. Visualization is now genuinely implemented
-// (MIX_SetPostMixCallback tap + a from-scratch radix-2 FFT), so these assert the real contract.
+// (a mixer post-output tap + a from-scratch radix-2 FFT), so these assert the real contract.
 TEST_F(MediaPlayerTest, IsVisualizationEnabledRoundTrips)
 {
     ASSERT_FALSE(MediaPlayer::getIsVisualizationEnabledProperty()) << "must default to off";
@@ -287,7 +287,7 @@ TEST_F(MediaPlayerTest, EnablingVisualizationIsSafeWithoutAnAudioDevice)
     MediaPlayer::setIsVisualizationEnabledProperty(false);
 }
 
-// plan_media.md MEDIA-220: MIX_SetPostMixCallback returns bool and that result is now acted on.
+// plan_media.md MEDIA-220: callback installation returns bool and that result is now acted on.
 // This asserts the observable contract that follows from it -- IsVisualizationEnabled must never
 // report true when no tap could be installed, because a caller would then poll forever for data
 // that can never arrive. On a machine where the tap DOES install, it must report true.

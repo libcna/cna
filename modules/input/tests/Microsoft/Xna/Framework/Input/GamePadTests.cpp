@@ -1,14 +1,41 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Input/GamePadButtonLabel.hpp"
+#include "CNA/Input/GamePadConnectionState.hpp"
+#include "CNA/Input/PowerState.hpp"
+#include "CNA/Platform/CannedGamepad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 
-using CNA::Internal::Input::SdlInputBridge;
+#include <memory>
+
 using Microsoft::Xna::Framework::Vector3;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
+
+namespace
+{
+    class GamePadPlatformTest : public ::testing::Test
+    {
+    protected:
+        CNA::Platform::Testing::CannedGamepadPlatform platform;
+        std::unique_ptr<CNA::Platform::Testing::ScopedCurrentPlatform> installed;
+
+        void SetUp() override
+        {
+            installed = std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(platform);
+        }
+
+        void Connect(const CNA::Platform::GamepadSnapshot& snapshot,
+                     const CNA::Platform::GamepadCapabilities& capabilities = {})
+        {
+            platform.Canned().SetPendingSnapshot(0, snapshot);
+            platform.Canned().SetCapabilities(0, capabilities);
+            platform.Canned().Update();
+        }
+    };
+}
 
 // --- GamePad::ExcludeAxisDeadZone ---
 
@@ -85,34 +112,193 @@ TEST(GamePadTest, GetGUIDEXTReturnsEmptyStringWhenNoGamePadConnected)
     EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "");
 }
 
-// --- Task 816: GUID formatting (matches FNA's GetGamePadGUID, not the full SDL GUID string) ---
-
-TEST(GamePadTest, FormatGUIDReturnsXinputWhenVendorAndProductAreZero)
+TEST_F(GamePadPlatformTest, StateReadsOneImmutableWholePlatformSnapshot)
 {
-    // XInput controllers report no USB vendor/product; FNA returns the literal "xinput".
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x0000, 0x0000), "xinput");
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.buttons = static_cast<std::uint32_t>(CNA::Platform::GamepadButton::A)
+        | static_cast<std::uint32_t>(CNA::Platform::GamepadButton::DPadLeft);
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftThumbstickX)] = 0.5f;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftThumbstickY)] = -0.25f;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftTrigger)] = 0.75f;
+    snapshot.packetNumber = 17;
+    Connect(snapshot);
+
+    const GamePadState state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
+    EXPECT_TRUE(state.getIsConnectedProperty());
+    EXPECT_TRUE(state.IsButtonDown(Buttons::A));
+    EXPECT_EQ(state.getDPadProperty().getLeftProperty(), ButtonState::Pressed);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.5f);
+    EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().Y, -0.25f);
+    EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.75f);
+    EXPECT_EQ(state.getPacketNumberProperty(), 17);
 }
 
-TEST(GamePadTest, FormatGUIDEmitsVendorThenProductLittleEndianHex)
+TEST_F(GamePadPlatformTest, GuidFormattingCoversXinputHexPaddingAndValveOverrides)
 {
-    // Sony DualShock 4: vendor 0x054C, product 0x05C4 -> bytes 4c 05 c4 05 -> "4c05c405"
-    // (the exact string FNA hard-codes for a Valve-re-exposed PS4 pad).
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x054C, 0x05C4), "4c05c405");
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    Connect(snapshot);
 
-    // Sony DualSense (PS5): vendor 0x054C, product 0x0CE6 -> 4c 05 e6 0c -> "4c05e60c".
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x054C, 0x0CE6), "4c05e60c");
+    CNA::Platform::GamepadInfo info;
+    platform.Canned().SetInfo(0, info);
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "xinput");
 
-    // Microsoft Xbox 360 wired: vendor 0x045E, product 0x028E -> 5e 04 8e 02 -> "5e048e02".
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x045E, 0x028E), "5e048e02");
+    info.vendor = 0x0001;
+    info.product = 0x0002;
+    platform.Canned().SetInfo(0, info);
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "01000200");
 
-    // Arbitrary IDs, to pin the byte order unambiguously.
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x1234, 0x5678), "34127856");
+    info.vendor = 0x1234;
+    info.product = 0x5678;
+    platform.Canned().SetInfo(0, info);
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "34127856");
+
+    info.vendor = 0x28de;
+    info.product = 1;
+    info.model = CNA::Platform::GamepadModel::PlayStation5;
+    platform.Canned().SetInfo(0, info);
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "4c05e60c");
+
+    info.model = CNA::Platform::GamepadModel::XboxOne;
+    platform.Canned().SetInfo(0, info);
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "xinput");
 }
 
-TEST(GamePadTest, FormatGUIDIsAlwaysEightHexCharsForNonZeroIds)
+TEST_F(GamePadPlatformTest, CapabilitiesMapEveryCategoryWithoutNativeQueries)
 {
-    // Low ids must stay zero-padded to the full 8 chars (no truncation).
-    EXPECT_EQ(SdlInputBridge::FormatGamePadGUIDEXT(0x0001, 0x0002), "01000200");
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    CNA::Platform::GamepadCapabilities source;
+    source.connected = true;
+    source.kind = CNA::Platform::GamepadKind::ArcadeStick;
+    source.buttons = static_cast<std::uint32_t>(CNA::Platform::GamepadButton::A)
+        | static_cast<std::uint32_t>(CNA::Platform::GamepadButton::Paddle3);
+    source.axes = CNA::Platform::GamepadAxisBit(CNA::Platform::GamepadAxis::LeftThumbstickX)
+        | CNA::Platform::GamepadAxisBit(CNA::Platform::GamepadAxis::RightTrigger);
+    source.rumble = true;
+    source.triggerRumble = true;
+    source.lightBar = true;
+    source.touchpad = true;
+    source.gyroscope = true;
+    source.accelerometer = true;
+    Connect(snapshot, source);
+
+    const GamePadCapabilities caps = GamePad::GetCapabilities(PlayerIndex::One);
+    EXPECT_TRUE(caps.getIsConnectedProperty());
+    EXPECT_EQ(caps.getGamePadTypeProperty(), GamePadType::ArcadeStick);
+    EXPECT_TRUE(caps.getHasAButtonProperty());
+    EXPECT_TRUE(caps.getHasPaddle3EXTProperty());
+    EXPECT_FALSE(caps.getHasBButtonProperty());
+    EXPECT_TRUE(caps.getHasLeftXThumbStickProperty());
+    EXPECT_TRUE(caps.getHasRightTriggerProperty());
+    EXPECT_FALSE(caps.getHasLeftTriggerProperty());
+    EXPECT_TRUE(caps.getHasLeftVibrationMotorProperty());
+    EXPECT_TRUE(caps.getHasRightVibrationMotorProperty());
+    EXPECT_TRUE(caps.getHasTriggerVibrationMotorsEXTProperty());
+    EXPECT_TRUE(caps.getHasLightBarEXTProperty());
+    EXPECT_TRUE(caps.getHasTouchPadEXTProperty());
+    EXPECT_TRUE(caps.getHasGyroEXTProperty());
+    EXPECT_TRUE(caps.getHasAccelerometerEXTProperty());
+}
+
+TEST_F(GamePadPlatformTest, ActuatorCommandsReachTheNamedPlatformSlot)
+{
+    platform.Canned().SetRumbleResult(true);
+    platform.Canned().SetTriggerRumbleResult(true);
+    platform.Canned().SetLightBarResult(true);
+
+    EXPECT_TRUE(GamePad::SetVibration(PlayerIndex::Three, 0.25f, 0.75f));
+    EXPECT_EQ(platform.Canned().LastSlot(), 2);
+    EXPECT_FLOAT_EQ(platform.Canned().LastLeft(), 0.25f);
+    EXPECT_FLOAT_EQ(platform.Canned().LastRight(), 0.75f);
+    EXPECT_EQ(platform.Canned().LastDuration(), 0u);
+
+    EXPECT_TRUE(GamePad::SetTriggerVibrationEXT(PlayerIndex::Two, 0.4f, 0.6f));
+    EXPECT_EQ(platform.Canned().LastSlot(), 1);
+    EXPECT_EQ(platform.Canned().TriggerRumbleCalls(), 1);
+
+    GamePad::SetLightBarEXT(PlayerIndex::Four, Color(10, 20, 30));
+    EXPECT_EQ(platform.Canned().LastSlot(), 3);
+    EXPECT_EQ(platform.Canned().LastRed(), 10);
+    EXPECT_EQ(platform.Canned().LastGreen(), 20);
+    EXPECT_EQ(platform.Canned().LastBlue(), 30);
+}
+
+TEST_F(GamePadPlatformTest, IdentityPowerConnectionAndLabelsUsePlatformVocabulary)
+{
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    Connect(snapshot);
+    CNA::Platform::GamepadInfo info;
+    info.name = "Canned Pad";
+    info.path = "/dev/canned";
+    info.serial = "ABC123";
+    info.vendor = 0x054c;
+    info.product = 0x0ce6;
+    info.firmwareVersion = 42;
+    info.steamHandle = 99;
+    info.connectionState = CNA::Platform::GamepadConnectionState::Wireless;
+    platform.Canned().SetInfo(0, info);
+    platform.Canned().SetPowerInfo(0, {CNA::Platform::GamepadPowerState::Charging, 64});
+    platform.Canned().SetButtonLabel(0, CNA::Platform::GamepadButtonLabel::Cross);
+
+    EXPECT_EQ(GamePad::GetNameEXT(PlayerIndex::One), "Canned Pad");
+    EXPECT_EQ(GamePad::GetPathEXT(PlayerIndex::One), "/dev/canned");
+    EXPECT_EQ(GamePad::GetSerialEXT(PlayerIndex::One), "ABC123");
+    EXPECT_EQ(GamePad::GetGUIDEXT(PlayerIndex::One), "4c05e60c");
+    EXPECT_EQ(GamePad::GetFirmwareVersionEXT(PlayerIndex::One), 42);
+    EXPECT_EQ(GamePad::GetSteamHandleEXT(PlayerIndex::One), 99u);
+    EXPECT_EQ(GamePad::GetConnectionStateEXT(PlayerIndex::One),
+              CNA::Input::GamePadConnectionStateEXT::Wireless);
+    int percent = -1;
+    EXPECT_EQ(GamePad::GetPowerInfoEXT(PlayerIndex::One, percent),
+              CNA::Input::PowerStateEXT::Charging);
+    EXPECT_EQ(percent, 64);
+    EXPECT_EQ(GamePad::GetButtonLabelEXT(PlayerIndex::One, Buttons::A),
+              CNA::Input::GamePadButtonLabelEXT::Cross);
+    EXPECT_EQ(platform.Canned().LastLabelButton(), CNA::Platform::GamepadButton::A);
+}
+
+TEST_F(GamePadPlatformTest, SensorsPlayerIndexAndTouchpadRoundTripThroughTheContract)
+{
+    platform.Canned().SetSensor(CNA::Platform::GamepadSensor::Gyroscope, {1.0f, 2.0f, 3.0f});
+    platform.Canned().SetSensor(CNA::Platform::GamepadSensor::Accelerometer, {4.0f, 5.0f, 6.0f});
+    platform.Canned().SetPlayerIndexResult(true);
+    platform.Canned().SetPlayerIndexValue(0, 3);
+    platform.Canned().SetTouchpad(0, 1, 2, {true, 0.25f, 0.5f, 0.75f});
+
+    Vector3 gyro;
+    Vector3 acceleration;
+    EXPECT_TRUE(GamePad::GetGyroEXT(PlayerIndex::One, gyro));
+    EXPECT_TRUE(GamePad::GetAccelerometerEXT(PlayerIndex::One, acceleration));
+    EXPECT_EQ(gyro, Vector3(1.0f, 2.0f, 3.0f));
+    EXPECT_EQ(acceleration, Vector3(4.0f, 5.0f, 6.0f));
+    EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::One), 3);
+    EXPECT_TRUE(GamePad::SetPlayerIndexEXT(PlayerIndex::One, 1));
+    EXPECT_EQ(GamePad::GetPlayerIndexEXT(PlayerIndex::One), 1);
+    EXPECT_EQ(GamePad::GetTouchpadCountEXT(PlayerIndex::One), 1);
+    EXPECT_EQ(GamePad::GetTouchpadFingerCountEXT(PlayerIndex::One, 0), 2);
+    bool down = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float pressure = 0.0f;
+    EXPECT_TRUE(GamePad::GetTouchpadFingerEXT(PlayerIndex::One, 0, 0,
+                                              down, x, y, pressure));
+    EXPECT_TRUE(down);
+    EXPECT_FLOAT_EQ(x, 0.25f);
+    EXPECT_FLOAT_EQ(y, 0.5f);
+    EXPECT_FLOAT_EQ(pressure, 0.75f);
+}
+
+TEST_F(GamePadPlatformTest, MissingServiceRefusesEveryOperationDeterministically)
+{
+    platform.SetGamepadAvailable(false);
+    EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
+    EXPECT_FALSE(GamePad::GetCapabilities(PlayerIndex::One).getIsConnectedProperty());
+    EXPECT_FALSE(GamePad::SetVibration(PlayerIndex::One, 1.0f, 1.0f));
+    EXPECT_FALSE(GamePad::SetTriggerVibrationEXT(PlayerIndex::One, 1.0f, 1.0f));
+    EXPECT_EQ(GamePad::GetNameEXT(PlayerIndex::One), "");
 }
 
 // --- GamePadCapabilities ---

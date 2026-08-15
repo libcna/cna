@@ -12,8 +12,8 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
     set(_cna_default_renderer "SDL_RENDERER")
 endif()
-set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES2, OPENGLES3, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, SKIA, BLEND2D, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, SDL_GPU, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, METAL, FNA3D, SVG_DOM, OPENVG, or PORTABLEGL)")
-set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES2" "OPENGLES3" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "BLEND2D" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "SDL_GPU" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL" "FNA3D" "SVG_DOM" "OPENVG" "PORTABLEGL")
+set(CNA_GRAPHICS_RENDERER "${_cna_default_renderer}" CACHE STRING "Graphics renderer to use (SDL_RENDERER, OPENGLES2, OPENGLES3, OPENGL33, WEBGL1, WEBGL2, BGFX, VULKAN, WEBGPU, MAGNUM, HEADLESS, SOFTWARE, STUB, DIRECTX11, DIRECTX12, DIRECT2D, CANVAS, HTML_DOM, SKIA, BLEND2D, FREEDIRECT, DIRECTX9, DIRECTX1, DIRECTX2, DIRECTX3, DIRECTX5, DIRECTX6, DIRECTX7, DIRECTX8, DIRECTX10, SDL_GPU, OPENGLES1, OPENGL4, OPENGL1, OPENGL2, WICKED, SOKOL, DILIGENT, GLIDE, GDI, LLGL, METAL, FNA3D, SVG_DOM, OPENVG, PORTABLEGL, or TINYGL)")
+set_property(CACHE CNA_GRAPHICS_RENDERER PROPERTY STRINGS "SDL_RENDERER" "OPENGLES2" "OPENGLES3" "OPENGL33" "WEBGL1" "WEBGL2" "BGFX" "VULKAN" "WEBGPU" "MAGNUM" "HEADLESS" "SOFTWARE" "STUB" "DIRECTX11" "DIRECTX12" "DIRECT2D" "CANVAS" "HTML_DOM" "SKIA" "BLEND2D" "FREEDIRECT" "DIRECTX9" "DIRECTX1" "DIRECTX2" "DIRECTX3" "DIRECTX5" "DIRECTX6" "DIRECTX7" "DIRECTX8" "DIRECTX10" "SDL_GPU" "OPENGLES1" "OPENGL4" "OPENGL1" "OPENGL2" "WICKED" "SOKOL" "DILIGENT" "GLIDE" "GDI" "LLGL" "METAL" "FNA3D" "SVG_DOM" "OPENVG" "PORTABLEGL" "TINYGL")
 
 option(CNA_RENDERER_SDL_RENDERER "Enable SDL_Renderer graphics renderer" OFF)
 option(CNA_RENDERER_OPENGLES2 "Enable OpenGL ES 2.0 graphics renderer (internally: EasyGL)" OFF)
@@ -40,6 +40,11 @@ option(CNA_RENDERER_STUB "Enable Stub (no-op) graphics renderer" OFF)
 # CPU-only renderer" category as HEADLESS/SOFTWARE/STUB above, but the rasterization/shading
 # pipeline is delegated to real PortableGL API calls rather than a hand-rolled rasterizer.
 option(CNA_RENDERER_PORTABLEGL "Enable PortableGL (rswinkle/PortableGL, CPU software OpenGL 3.x) graphics renderer" OFF)
+# C-Chads/tinygl: a maintained fork of Fabrice Bellard's TinyGL -- a CPU implementation of a
+# fixed-function OpenGL 1.x subset (no shaders at all), same "no GPU, no window" category as
+# HEADLESS/SOFTWARE/STUB/PORTABLEGL above. Where PORTABLEGL is the shader-era CPU GL, TINYGL is the
+# fixed-function one; see plan_tinygl.md and docs/tinygl-renderer.md for the capability boundary.
+option(CNA_RENDERER_TINYGL "Enable TinyGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x) graphics renderer" OFF)
 option(CNA_RENDERER_DIRECTX11 "Enable Direct3D 11 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_DIRECTX12 "Enable Direct3D 12 graphics renderer (Windows only)" OFF)
 option(CNA_RENDERER_DIRECT2D "Enable Direct2D 1.1 graphics renderer (Windows only, 2D-only)" OFF)
@@ -185,7 +190,7 @@ option(CNA_RENDERER_SVG_DOM "Enable SVG DOM graphics renderer (Emscripten only)"
 option(CNA_RENDERER_OPENVG "Enable OpenVG (ShivaVG) 2D vector graphics renderer" OFF)
 
 set(_cna_explicit_renderer_selection OFF)
-if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES2 OR CNA_RENDERER_OPENGLES3 OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_DIRECTX11 OR CNA_RENDERER_DIRECTX12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_BLEND2D OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_DIRECTX9 OR CNA_RENDERER_DIRECTX1 OR CNA_RENDERER_DIRECTX2 OR CNA_RENDERER_DIRECTX3 OR CNA_RENDERER_DIRECTX5 OR CNA_RENDERER_DIRECTX6 OR CNA_RENDERER_DIRECTX7 OR CNA_RENDERER_DIRECTX8 OR CNA_RENDERER_DIRECTX10 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL OR CNA_RENDERER_FNA3D OR CNA_RENDERER_SVG_DOM OR CNA_RENDERER_OPENVG OR CNA_RENDERER_PORTABLEGL)
+if(CNA_RENDERER_SDL_RENDERER OR CNA_RENDERER_OPENGLES2 OR CNA_RENDERER_OPENGLES3 OR CNA_RENDERER_OPENGL33 OR CNA_RENDERER_WEBGL1 OR CNA_RENDERER_WEBGL2 OR CNA_RENDERER_BGFX OR CNA_RENDERER_VULKAN OR CNA_RENDERER_WEBGPU OR CNA_RENDERER_MAGNUM OR CNA_RENDERER_HEADLESS OR CNA_RENDERER_SOFTWARE OR CNA_RENDERER_STUB OR CNA_RENDERER_DIRECTX11 OR CNA_RENDERER_DIRECTX12 OR CNA_RENDERER_DIRECT2D OR CNA_RENDERER_CANVAS OR CNA_RENDERER_HTML_DOM OR CNA_RENDERER_SKIA OR CNA_RENDERER_BLEND2D OR CNA_RENDERER_FREEDIRECT OR CNA_RENDERER_DIRECTX9 OR CNA_RENDERER_DIRECTX1 OR CNA_RENDERER_DIRECTX2 OR CNA_RENDERER_DIRECTX3 OR CNA_RENDERER_DIRECTX5 OR CNA_RENDERER_DIRECTX6 OR CNA_RENDERER_DIRECTX7 OR CNA_RENDERER_DIRECTX8 OR CNA_RENDERER_DIRECTX10 OR CNA_RENDERER_SDL_GPU OR CNA_RENDERER_OPENGLES1 OR CNA_RENDERER_OPENGL4 OR CNA_RENDERER_OPENGL1 OR CNA_RENDERER_OPENGL2 OR CNA_RENDERER_WICKED OR CNA_RENDERER_SOKOL OR CNA_RENDERER_DILIGENT OR CNA_RENDERER_GLIDE OR CNA_RENDERER_GDI OR CNA_RENDERER_LLGL OR CNA_RENDERER_METAL OR CNA_RENDERER_FNA3D OR CNA_RENDERER_SVG_DOM OR CNA_RENDERER_OPENVG OR CNA_RENDERER_PORTABLEGL OR CNA_RENDERER_TINYGL)
     set(_cna_explicit_renderer_selection ON)
 endif()
 
@@ -329,6 +334,9 @@ if(_cna_explicit_renderer_selection)
     if(CNA_RENDERER_PORTABLEGL)
         list(APPEND _cna_enabled_renderers "PORTABLEGL")
     endif()
+    if(CNA_RENDERER_TINYGL)
+        list(APPEND _cna_enabled_renderers "TINYGL")
+    endif()
 
     list(LENGTH _cna_enabled_renderers _cna_enabled_renderers_count)
     if(NOT _cna_enabled_renderers_count EQUAL 1)
@@ -389,6 +397,21 @@ endif()
 # did when this was straight-line code. For a single-identity list the execution is identical.
 macro(cna_configure_renderer_identity)
     set(_cna_identity_defines)
+# PLAT-140: a terminal consumes finished CPU frames through IPlatformSurfacePresenter; it has no
+# graphical native window that a GPU API could bind. This check deliberately precedes every
+# renderer dependency probe below, so an incompatible pair always fails with this explanation
+# instead of, for example, first asking a TERMINAL+VULKAN build to install a Vulkan SDK. SKIA and
+# BLEND2D are included because their rasterization is CPU-side; Phase 4 moves their presentation
+# edge from SDL to the platform surface presenter.
+set(_cna_terminal_renderers SOFTWARE SKIA BLEND2D PORTABLEGL HEADLESS STUB)
+if(CNA_PLATFORM STREQUAL "TERMINAL" AND NOT CNA_GRAPHICS_RENDERER IN_LIST _cna_terminal_renderers)
+    list(JOIN _cna_terminal_renderers ", " _cna_terminal_renderers_text)
+    message(FATAL_ERROR
+        "CNA: CNA_PLATFORM=TERMINAL has no native graphical window, so renderer "
+        "${CNA_GRAPHICS_RENDERER} cannot be selected.\n"
+        "Choose a CPU renderer: ${_cna_terminal_renderers_text}.")
+endif()
+
 # plan_dx.md design decision 2: DIRECTX11/DIRECTX12 genuinely cannot build anywhere but Windows (native or
 # MinGW/MSVC cross-compile) -- d3d11.h/d3d12.h/dxgi.h do not exist elsewhere. Unlike BGFX's soft
 # WARNING-only platform check below, this is a hard FATAL_ERROR. plan_dx9.md design decision 1
@@ -412,11 +435,26 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "GLIDE" AND NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
         "Windows toolchain, for example cmake/toolchains/mingw-w64-i686.cmake.")
 endif()
 
+# plan_apple.md APPLE-4: an iOS configure is rejected here unless CNA actually wires the selected
+# renderer up for iOS. This runs before the individual per-renderer gates below so the failure
+# names the platform rather than a dependency that was never configured for an iOS sysroot.
+# No-op on macOS and on every non-Apple target.
+cna_apple_validate_renderer("${CNA_GRAPHICS_RENDERER}")
+
 # Native Metal is currently available only when targeting macOS. SDL is used only for
 # window/CAMetalLayer integration; all rendering is performed directly through Metal.
+# iOS is Metal's other natural home and the Apple allow-list above already refuses it by default;
+# CNA_APPLE_ALLOW_UNVALIDATED_RENDERER=ON is the single documented escape hatch for experimenting
+# with it there (plan_apple.md APPLE-11), and changes nothing about what is supported.
 if(CNA_GRAPHICS_RENDERER STREQUAL "METAL" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    message(FATAL_ERROR
-        "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    if(CNA_APPLE_IOS AND CNA_APPLE_ALLOW_UNVALIDATED_RENDERER)
+        message(WARNING
+            "CNA: configuring METAL for iOS. The renderer's supported contract covers macOS only "
+            "(docs/metal-renderer.md); its iOS build has no compile, runtime or pixel evidence.")
+    else()
+        message(FATAL_ERROR
+            "CNA: METAL renderer is currently supported only on macOS; iOS and tvOS remain unvalidated.")
+    endif()
 endif()
 
 # plan_canvas.md design decision 1: HTML Canvas 2D is a browser DOM API and cannot exist outside
@@ -920,6 +958,14 @@ elseif(CNA_GRAPHICS_RENDERER STREQUAL "PORTABLEGL")
     set(CNA_RENDERER_DEFINE "CNA_RENDERER_PORTABLEGL")
     include(cmake/ThirdPartyPortableGL.cmake)
     cna_configure_portablegl()
+elseif(CNA_GRAPHICS_RENDERER STREQUAL "TINYGL")
+    message(STATUS "CNA: Using TINYGL (C-Chads/tinygl, CPU fixed-function OpenGL 1.x) graphics renderer")
+    set(RENDERER_DIR "modules/renderers/tinygl")
+    set(RENDERER_TARGET "cna_renderer_tinygl")
+    add_compile_definitions(CNA_RENDERER_TINYGL)
+    set(CNA_RENDERER_DEFINE "CNA_RENDERER_TINYGL")
+    include(cmake/ThirdPartyTinyGL.cmake)
+    cna_configure_tinygl()
 else()
 
     message(FATAL_ERROR "CNA: Unknown graphics renderer: ${CNA_GRAPHICS_RENDERER}")
