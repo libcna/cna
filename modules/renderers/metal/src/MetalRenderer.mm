@@ -470,6 +470,7 @@ struct PbrUniforms {
     float4 fogVector;
     float4 srgbFlags;          // x=base decode, y=emissive decode, z=output encode
     float4 dielectricFresnel;  // xyz=dielectric F0, w=dielectric F90
+    float4 textureTransformRows[10];
 };
 struct VPbrIn { float3 position [[attribute(0)]]; float3 normal [[attribute(1)]]; float4 tangent [[attribute(2)]]; float2 uv [[attribute(3)]]; };
 struct VPbrOut { float4 position [[position]]; float3 normal; float3 tangent; float bitangentSign; float2 uv; float fogFactor; float3 worldPos; };
@@ -516,6 +517,11 @@ inline float3 cna_linear_to_srgb(float3 c) {
     float3 hi = 1.055 * pow(max(c, float3(0.0)), float3(1.0 / 2.4)) - 0.055;
     return mix(lo, hi, step(float3(0.0031308), c));
 }
+inline float2 cna_pbr_transform_uv(float2 uv, int slot, constant PbrUniforms& pu) {
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, pu.textureTransformRows[slot * 2].xyz),
+                  dot(value, pu.textureTransformRows[slot * 2 + 1].xyz));
+}
 fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> tex [[texture(0)]], sampler smp [[sampler(0)]],
     texture2d<float> normalMap [[texture(1)]], sampler normalSmp [[sampler(1)]],
@@ -524,7 +530,7 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     texture2d<float> occlusionMap [[texture(4)]], sampler occlusionSmp [[sampler(4)]],
     constant PbrUniforms& pu [[buffer(2)]])
 {
-    float4 baseColorTex = tex.sample(smp, in.uv);
+    float4 baseColorTex = tex.sample(smp, cna_pbr_transform_uv(in.uv, 0, pu));
     float3 baseColor = mix(baseColorTex.rgb, cna_srgb_to_linear(baseColorTex.rgb), pu.srgbFlags.x);
     float3 albedo = baseColor * pu.diffuseColor.rgb;
     float alpha = baseColorTex.a * pu.diffuseColor.a;
@@ -532,10 +538,10 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     float3 T = normalize(in.tangent - N*dot(N, in.tangent));
     float3 B = cross(N, T) * in.bitangentSign;
     float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = normalMap.sample(normalSmp, in.uv).rgb*2.0 - 1.0;
+    float3 sampledNormal = normalMap.sample(normalSmp, cna_pbr_transform_uv(in.uv, 1, pu)).rgb*2.0 - 1.0;
     sampledNormal.xy *= pu.pbrFactors.z;
     float3 finalNormal = normalize(TBN * sampledNormal);
-    float4 mr = mrMap.sample(mrSmp, in.uv);
+    float4 mr = mrMap.sample(mrSmp, cna_pbr_transform_uv(in.uv, 2, pu));
     float roughness = clamp(mr.g * pu.pbrFactors.y, 0.045, 1.0);
     float metallic = clamp(mr.b * pu.pbrFactors.x, 0.0, 1.0);
     float3 V = normalize(pu.eyePosition.xyz - in.worldPos);
@@ -545,10 +551,10 @@ fragment float4 cna_f3d_pbr(VPbrOut in [[stage_in]],
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light0Dir.xyz), pu.light0Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light1Dir.xyz), pu.light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     Lo += cna_pbr_light(finalNormal, V, normalize(-pu.light2Dir.xyz), pu.light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
-    float occlusionSample = occlusionMap.sample(occlusionSmp, in.uv).r;
+    float occlusionSample = occlusionMap.sample(occlusionSmp, cna_pbr_transform_uv(in.uv, 4, pu)).r;
     float occlusion = 1.0 + pu.pbrFactors.w * (occlusionSample - 1.0);
     float3 ambient = pu.ambientColor.xyz * albedo * occlusion;
-    float3 emissiveSample = emissiveMap.sample(emissiveSmp, in.uv).rgb;
+    float3 emissiveSample = emissiveMap.sample(emissiveSmp, cna_pbr_transform_uv(in.uv, 3, pu)).rgb;
     emissiveSample = mix(emissiveSample, cna_srgb_to_linear(emissiveSample), pu.srgbFlags.y);
     float3 emissive = pu.emissiveColor.xyz * emissiveSample;
     float4 c = float4(ambient + Lo + emissive, alpha);

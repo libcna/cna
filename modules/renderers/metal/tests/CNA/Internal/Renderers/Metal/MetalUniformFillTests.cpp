@@ -87,6 +87,10 @@ namespace
         p.pbrDielectricF0[1] = 66;
         p.pbrDielectricF0[2] = 67;
         p.pbrDielectricF90 = 68;
+        for (int row = 0; row < 10; ++row)
+            for (int component = 0; component < 4; ++component)
+                p.pbrTextureTransformRows[row][component] =
+                    static_cast<float>(69 + row * 4 + component);
         p.lightingEnabled = true;
         return p;
     }
@@ -281,6 +285,10 @@ TEST(MetalUniformFill, PbrUniformsMapEveryFieldCorrectly)
     ExpectVec4Eq(pu.fogVector, 57,58,59,60);
     ExpectVec4Eq(pu.srgbFlags, 0,1,0,0);
     ExpectVec4Eq(pu.dielectricFresnel, 65,66,67,68);
+    for (int row = 0; row < 10; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.textureTransformRows[row][component],
+                        69 + row * 4 + component, kEps);
 }
 
 TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTransform)
@@ -307,6 +315,10 @@ TEST(MetalUniformFill, SkinnedPbrUniformsDelegatesFragmentFieldsAndFillsOwnTrans
         EXPECT_NEAR(pu.srgbFlags[i], referencePu.srgbFlags[i], kEps);
         EXPECT_NEAR(pu.dielectricFresnel[i], referencePu.dielectricFresnel[i], kEps);
     }
+    for (int row = 0; row < 10; ++row)
+        for (int component = 0; component < 4; ++component)
+            EXPECT_NEAR(pu.textureTransformRows[row][component],
+                        referencePu.textureTransformRows[row][component], kEps);
 
     // SkinnedPbrTransform's own fields: wvp/world and the world inverse-transpose copied from the
     // rigid PBR fill, plus skinParams (which plain PbrTransform has no equivalent of).
