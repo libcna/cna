@@ -657,19 +657,19 @@ namespace
         {"directx11",
          "std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows",
          "TextureTransformRows[slot * 2 + 1].xyz",
-         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(input.UV, 0))",
-           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1))",
-           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(input.UV, 2))",
-           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(input.UV, 3))",
-           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4))"}}, 2},
+         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(CNA_PBR_UV(0), 0))",
+           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1))",
+           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(CNA_PBR_UV(2), 2))",
+           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(CNA_PBR_UV(3), 3))",
+           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4))"}}, 2},
         {"directx12",
          "std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows",
          "TextureTransformRows[slot * 2 + 1].xyz",
-         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(input.UV, 0))",
-           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1))",
-           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(input.UV, 2))",
-           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(input.UV, 3))",
-           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4))"}}, 2},
+         {{"uTexture.Sample(uTextureSampler, CnaPbrTransformUv(CNA_PBR_UV(0), 0))",
+           "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1))",
+           "uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(CNA_PBR_UV(2), 2))",
+           "uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(CNA_PBR_UV(3), 3))",
+           "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4))"}}, 2},
         {"easygl",
          "const float* values = params.pbrTextureTransformRows[row]",
          "uTextureTransformRows[slot*2+1].xyz",
@@ -937,15 +937,15 @@ namespace
          "mr.b * MetallicRoughnessFactor.x",
          "tex2D(OcclusionMap, CnaPbrTransformUv(pin.UV, 4)).r", 2},
         {"directx11",
-         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1)).rgb * 2.0 - 1.0",
+         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1)).rgb * 2.0 - 1.0",
          "mr.g * EmissiveRoughness.w",
          "mr.b * AmbientMetallic.w",
-         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4)).r", 2},
+         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4)).r", 2},
         {"directx12",
-         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1)).rgb * 2.0 - 1.0",
+         "uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(CNA_PBR_UV(1), 1)).rgb * 2.0 - 1.0",
          "mr.g * EmissiveRoughness.w",
          "mr.b * AmbientMetallic.w",
-         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4)).r", 2},
+         "uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(CNA_PBR_UV(4), 4)).r", 2},
         {"easygl",
          "texture(uNormalMap,cnaSampleUV(cnaPbrTransformUV(\" + normalUv + \",1),uRtFlipV.y)).rgb*2.0-1.0",
          "mr.g*uRoughnessFactor",
@@ -1215,8 +1215,8 @@ namespace
             "case CullMode::None: return D3D11_CULL_NONE",
             "desc.CullMode = D3DCommon::CullModeToD3D11(cullMode)",
             "context_->RSSetState(state.Get())",
-            "variant = params.skinned ? D3DCommon::D3DShaderVariant::PbrSkinned3d",
-            ": D3DCommon::D3DShaderVariant::Pbr3d"}}},
+            "variant = params.skinned",
+            "D3DCommon::D3DShaderVariant::PbrSkinned3dDualUv"}}},
         {"directx12", {{
             "currentCullMode_ = cullMode",
             "case CullMode::None: return D3D11_CULL_NONE",
@@ -1751,6 +1751,33 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
     EXPECT_EQ(2u, CountOccurrences(vulkan, Normalize(
         "int mask = int(pbr.textureCoordinateSets.x + 0.5)")))
         << "both Vulkan dual-UV PBR fragment variants must decode the transported selector";
+
+    // GLTF-386 applies the same complete contract to DirectX11. D3D12 intentionally keeps its
+    // existing stride-48/68 variants; the distinct DXBC variants prevent changing its input
+    // signatures merely because both backends share these HLSL sources.
+    const std::string directx11 = RendererSlotText(renderers, "directx11");
+    for (const char* evidence : {
+             "stride != 48 && stride != 60",
+             "stride != 68 && stride != 76",
+             "D3DShaderVariant::Pbr3dDualUv",
+             "D3DShaderVariant::PbrSkinned3dDualUv",
+             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 48, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
+             R"({ "TEXCOORD", 1, DXGI_FORMAT_R32G32_FLOAT, 0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 })",
+             "static_cast<float>(params.pbrTextureCoordinateSetMask & 0x1fu)"})
+    {
+        EXPECT_NE(std::string::npos, directx11.find(Normalize(evidence)))
+            << "DirectX11 dual-UV PBR path is missing: " << evidence;
+    }
+    for (std::size_t slot = 0; slot < 5; ++slot)
+    {
+        const std::string sample = "CNA_PBR_UV(" + std::to_string(slot) + ")";
+        EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(sample)))
+            << "DirectX11 rigid/skinned shaders do not select the authored UV set for map slot "
+            << slot;
+    }
+    EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(
+        "int mask = int(TextureCoordinateSets.x + 0.5)")))
+        << "both DirectX11 dual-UV PBR fragment variants must decode the transported selector";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheCoreMaterialFactors)

@@ -1337,14 +1337,14 @@ namespace CNA::Internal::Renderers::DirectX11
         // plan_cnj.md CNB-58 follow-up: pbr3d.vert.hlsl (unskinned) is stride 48
         // (VertexPositionNormalTangentTexture); pbr_skinned3d.vert.hlsl (SkinnedPbrEffect) is
         // stride 68 (VertexPositionNormalTangentTextureSkinned).
-        if (needsPbr && !params.skinned && stride != 48)
+        if (needsPbr && !params.skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
-                "DirectX11Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 "
-                "(VertexPositionNormalTangentTexture)");
-        if (needsPbr && params.skinned && stride != 68)
+                "DirectX11Renderer::DrawPrimitivesEx: PbrEffect (pbr3d) requires stride 48 or 60 "
+                "(VertexPositionNormalTangentTexture with optional TEXCOORD_1)");
+        if (needsPbr && params.skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
                 "DirectX11Renderer::DrawPrimitivesEx: SkinnedPbrEffect (pbr_skinned3d) requires "
-                "stride 68 (VertexPositionNormalTangentTextureSkinned)");
+                "stride 68 or 76 (VertexPositionNormalTangentTextureSkinned with optional TEXCOORD_1)");
 
         D3DCommon::D3DShaderVariant variant;
         if (needsAlphaTest)
@@ -1355,8 +1355,11 @@ namespace CNA::Internal::Renderers::DirectX11
         else if (needsEnvMap)
             variant = D3DCommon::D3DShaderVariant::EnvMap3d;
         else if (needsPbr)
-            variant = params.skinned ? D3DCommon::D3DShaderVariant::PbrSkinned3d
-                                      : D3DCommon::D3DShaderVariant::Pbr3d;
+            variant = params.skinned
+                ? ((stride == 76) ? D3DCommon::D3DShaderVariant::PbrSkinned3dDualUv
+                                  : D3DCommon::D3DShaderVariant::PbrSkinned3d)
+                : ((stride == 60) ? D3DCommon::D3DShaderVariant::Pbr3dDualUv
+                                  : D3DCommon::D3DShaderVariant::Pbr3d);
         else if (needsSkinned)
             // plan_graphics.md Phase 80 (Task 1106): real XNA renders SkinnedEffect's lit path
             // per-vertex by default (PreferPerPixelLighting == false), not per-pixel. CNB-67:
@@ -1602,6 +1605,8 @@ namespace CNA::Internal::Renderers::DirectX11
             perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
             std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
                         sizeof(perDraw.TextureTransformRows));
+            perDraw.TextureCoordinateSets[0] =
+                static_cast<float>(params.pbrTextureCoordinateSetMask & 0x1fu);
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

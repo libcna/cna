@@ -4,7 +4,8 @@
 // applied to Position/Normal/Tangent before the World transform, mirroring skinned3d.vert.hlsl's
 // own skinning math exactly.
 // Stride 68: VertexPositionNormalTangentTextureSkinned (the stride-48 PbrEffect layout with the
-// stride-52 skinning suffix -- BlendWeight, BlendIndices -- appended).
+// stride-52 skinning suffix -- BlendWeight, BlendIndices -- appended). CNA_PBR_DUAL_UV adds the
+// canonical stride-76 TEXCOORD_1 suffix after the complete skinned prefix.
 
 cbuffer PerDraw : register(b0)
 {
@@ -41,6 +42,9 @@ struct VSInput
     float2 UV           : TEXCOORD0;
     float4 BoneWeights  : BLENDWEIGHT0;
     uint4  BoneIndices  : BLENDINDICES0;
+#ifdef CNA_PBR_DUAL_UV
+    float2 UV1          : TEXCOORD1;
+#endif
 };
 
 struct VSOutput
@@ -51,6 +55,9 @@ struct VSOutput
     float2 UV        : TEXCOORD2;
     float  FogFactor : TEXCOORD3;
     float3 WorldPos  : TEXCOORD4;
+#ifdef CNA_PBR_DUAL_UV
+    float2 UV1       : TEXCOORD5;
+#endif
 };
 
 // REMED-GFX-006: HLSL has no built-in inverse()/mat3(mat4); this returns transpose(inverse(m))
@@ -105,6 +112,9 @@ VSOutput main(VSInput input)
                                 * CnaDirectionHandedness(skinNormalMat));
 
     output.UV = input.UV;
+#ifdef CNA_PBR_DUAL_UV
+    output.UV1 = input.UV1;
+#endif
     output.WorldPos = mul(skinnedPos, World).xyz;
 
     // REMED-GFX-005/010: FNA view-space fog. FogVector now carries EffectHelpers.SetFogVector
