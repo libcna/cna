@@ -13,6 +13,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -1072,6 +1073,114 @@ namespace
          "const float3 emissive = cb.emissive.rgb * emissiveSample", 1},
     }};
 
+    struct RendererPbrTransformAudit
+    {
+        const char* name;
+        const char* mvpCompose;
+        const char* mvpUpload;
+        const char* worldUpload;
+        const char* rigidClipPosition;
+        const char* skinnedClipPosition;
+    };
+
+    // GLTF-266/366/379: L6 locks the values at the effect boundary; this table locks the next
+    // renderer-specific hop. Every backend must compose XNA's row-vector World*View*Projection,
+    // upload it to the PBR carrier, retain World independently for world-space shading, and use
+    // the combined matrix for both rigid and post-skin positions. Whitespace is deliberately
+    // ignored, but each native carrier/expression remains backend-specific.
+    constexpr std::array<RendererPbrTransformAudit, 15> kPbrTransformAudits{{
+        {"bgfx",
+         "const Matrix wvp = world * view * projection",
+         "bgfx::setUniform(wvpUniform_, wvp_col)",
+         "bgfx::setUniform(world3DUnif_, params.worldColMajor)",
+         "gl_Position = mul(u_wvp, vec4(a_position, 1.0))",
+         "gl_Position = mul(u_wvp, skinnedPos)"},
+        {"diligent",
+         "MatrixToFloats(world * view * projection, constants.worldViewProj)",
+         "UploadConstants(constants)",
+         "MatrixToFloats(world, constants.world)",
+         "psIn.Pos = mul(float4(vsIn.Pos, 1.0), g_WorldViewProj)",
+         "psIn.Pos = mul(skinnedPos, g_WorldViewProj)"},
+        {"directx9",
+         "world * view * projection",
+         "UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, \"WorldViewProj\", world * view * projection)",
+         "UploadMatrixConstantVS(device_.Get(), vsRegs, vsCount, \"World\", world)",
+         "vout.Position = mul(float4(vin.Position, 1.0), WorldViewProj)",
+         "vout.Position = mul(float4(skinnedPos, 1.0), WorldViewProj)"},
+        {"directx11",
+         "const Matrix wvp = world * view * projection",
+         "D3DCommon::D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
+         "world.ToColumnMajor(perDraw.World)",
+         "output.Position = mul(float4(input.Position, 1.0), Mvp)",
+         "output.Position = mul(skinnedPos, Mvp)"},
+        {"directx12",
+         "const Matrix wvp = world * view * projection",
+         "D3DPbrPerDrawConstants perDraw{}; wvp.ToColumnMajor(perDraw.Mvp)",
+         "world.ToColumnMajor(perDraw.World)",
+         "output.Position = mul(float4(input.Position, 1.0), Mvp)",
+         "output.Position = mul(skinnedPos, Mvp)"},
+        {"easygl",
+         "const Matrix wvp = world * view * projection",
+         "p.prog.set_uniform_matrix4(p.loc_wvp, wvp_col)",
+         "p.prog.set_uniform_matrix4(p.loc_world, params.worldColMajor)",
+         "gl_Position=uWVP*cnaPos",
+         "gl_Position=uWVP*cnaPos"},
+        {"llgl",
+         "const Matrix combined = world * view * projection",
+         "FillPbrUniforms(pbrUniforms, matrix, *params)",
+         "std::memcpy(uniforms + 16, params.worldColMajor, sizeof(float) * 16)",
+         "gl_Position = mvpMatrix * vec4(position, 1.0)",
+         "gl_Position = mvpMatrix * skinnedPos"},
+        {"magnum",
+         "const Matrix worldViewProjection = world * view * projection",
+         "program.SetMatrix4(program.LocationOf(\"uWVP\"), columnMajor)",
+         "program.SetMatrix4(program.LocationOf(\"uWorld\"), params.worldColMajor)",
+         "gl_Position = uWVP * cnaPosition",
+         "gl_Position = uWVP * cnaPosition"},
+        {"metal",
+         "Mat4 wvp=transpose(multiply(multiply(fromXna(w),fromXna(v)),fromXna(pr)))",
+         "fillPbrUniforms(t, pu, wvp, *params)",
+         "std::memcpy(t.world, params.worldColMajor, sizeof(t.world))",
+         "o.position = t.wvp * float4(in.position, 1.0)",
+         "o.position = t.wvp * skinnedPos"},
+        {"opengl2",
+         "ComputeColumnMajorWVP(world, view, projection, wvp)",
+         "glUniformMatrix4fv(glGetUniformLocation(program, \"uWVP\"), 1, GL_FALSE, wvp)",
+         "glUniformMatrix4fv(glGetUniformLocation(program, \"uWorld\"), 1, GL_FALSE, worldColMajor)",
+         "gl_Position=uWVP*vec4(aPosition,1.0)",
+         "gl_Position=uWVP*skinnedPos"},
+        {"opengl4",
+         "const Matrix wvp = world * view * projection",
+         "setM4(\"uWorldViewProj\", wvpCol)",
+         "setM4(\"uWorld\", worldCol)",
+         "gl_Position = uWorldViewProj * vec4(aPos, 1.0)",
+         "gl_Position = uWorldViewProj * skinnedPos"},
+        {"sdl-gpu",
+         "const Matrix wvp = world * view * projection",
+         "FillExtUniforms(command.uniforms, wvp, params)",
+         "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
+         "gl_Position = pc.mvp * vec4(inPos, 1.0)",
+         "gl_Position = pc.mvp * skinnedPos"},
+        {"vulkan",
+         "const Matrix wvp = world * view * projection",
+         "FillExtPushConst(d.pushConst, wvp, params)",
+         "for (int wi = 0; wi < 16; ++wi) out[16 + wi] = p.worldColMajor[wi]",
+         "gl_Position = pc.mvp * vec4(aPos, 1.0)",
+         "gl_Position = pc.mvp * skinnedPos"},
+        {"webgpu",
+         "const Matrix wvp = world * view * projection",
+         "FillExtUniforms(command.uniforms, wvp, params)",
+         "for (int wi = 0; wi < 16; ++wi) out[20 + wi] = p.worldColMajor[wi]",
+         "output.position = u.mvp * vec4f(input.position, 1.0)",
+         "output.position = u.mvp * skinnedPos"},
+        {"wicked",
+         "instanced ? view * projection : world * view * projection",
+         "WriteMatrixColumns(instanced ? view * projection : world * view * projection, constants.mvp)",
+         "WriteMatrixColumns(world, constants.world)",
+         "o.position = TransformPosition(position)",
+         "o.position = TransformPosition(skinnedPosition)"},
+    }};
+
     struct RendererPbrSkinningAudit
     {
         const char* name;
@@ -1567,6 +1676,44 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderConsumesTheCoreMaterialFactors
         EXPECT_GE(CountOccurrences(source, Normalize(channels.metallicBlue)),
                   channels.shaderCopies)
             << "metallic factor is not applied to the glTF B channel";
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EveryPbrVertexPathConsumesWorldViewProjection)
+{
+    const std::filesystem::path renderers =
+        RepositoryRoot() / "modules" / "renderers";
+    for (const RendererPbrTransformAudit& audit : kPbrTransformAudits)
+    {
+        SCOPED_TRACE(audit.name);
+        const std::string source = RendererSlotText(renderers, audit.name);
+        ASSERT_FALSE(source.empty());
+        for (const char* evidence :
+             {audit.mvpCompose, audit.mvpUpload, audit.worldUpload,
+              audit.rigidClipPosition, audit.skinnedClipPosition})
+        {
+            EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+                << "missing PBR transform evidence: " << evidence;
+        }
+    }
+
+    // The two WebGPU programs are inline in one translation unit and share common expression
+    // spellings with other stock shaders. Scope both PBR owners explicitly so a non-PBR WGSL
+    // occurrence cannot keep this test green after either path drifts.
+    const std::string webgpu = Normalize(ReadFile(
+        renderers / "webgpu" / "src" / "WebGPURenderer.cpp"));
+    for (const auto& markers : {
+             std::pair{"void WebGPURenderer::CreatePbrResources()",
+                       "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelinePbr3D"},
+             std::pair{"void WebGPURenderer::CreateSkinnedPbrResources()",
+                       "WGPURenderPipeline WebGPURenderer::GetOrCreatePipelineSkinnedPbr3D"}})
+    {
+        const std::size_t begin = webgpu.find(Normalize(markers.first));
+        const std::size_t end = webgpu.find(Normalize(markers.second), begin);
+        ASSERT_NE(std::string::npos, begin);
+        ASSERT_NE(std::string::npos, end);
+        const std::string pbrPath = webgpu.substr(begin, end - begin);
+        EXPECT_NE(std::string::npos, pbrPath.find("output.position=u.mvp*"));
     }
 }
 

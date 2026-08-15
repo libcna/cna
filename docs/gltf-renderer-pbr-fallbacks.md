@@ -124,6 +124,38 @@ Vulkan-style source, native-GL source and generated native-GL header. Each row a
 multiplication expression, not merely the presence of a uniform declaration or CPU upload, so a
 factor that reaches the backend but is shading-inert fails this ordinary no-GPU test.
 
+## World/View/Projection transport (`GLTF-266`, `GLTF-366`, `GLTF-379`)
+
+The L6 oracle proves that imported World and the caller's View/Projection reach the effect boundary
+unchanged. `EveryPbrVertexPathConsumesWorldViewProjection` locks the next hop in every renderer:
+the CPU composes XNA's row-vector `World * View * Projection`, uploads the combined matrix and an
+independent World matrix, and both the rigid position and the post-skin position consume that
+combined matrix for clip-space output. This is deliberately a PBR-path audit; a matching stock
+basic or generic skinning shader elsewhere cannot satisfy it.
+
+| Renderer | Combined clip-transform carrier | Independent World carrier |
+|---|---|---|
+| Bgfx | `u_wvp` | `u_world` |
+| Diligent | `g_WorldViewProj` | `g_World` |
+| DirectX 9 | `WorldViewProj` vertex constants | `World` vertex constants |
+| DirectX 11 / 12 | PBR per-draw `Mvp` | PBR per-draw `World` |
+| EasyGL | `uWVP` | `uWorld` |
+| LLGL | `PbrParams::mvpMatrix` | `PbrParams::worldMatrix` |
+| Magnum | `uWVP` | `uWorld` |
+| Metal | rigid/skinned PBR transform `wvp` | transform `world` |
+| OpenGL 2 | `uWVP` | `uWorld` |
+| OpenGL 4 | `uWorldViewProj` | `uWorld` |
+| SDL GPU | primary constants `mvp` | `LitLightParams::world` |
+| Vulkan | push constants `mvp` | `PbrParams::world` |
+| WebGPU | primary uniforms `mvp` | `LitLightParams::world` |
+| Wicked | `cb.mvp0..3` | `cb.world0..3` |
+
+The carriers are native-API representations, not a claim of byte-identical matrix storage. For
+example, LLGL applies its required clip-range correction after XNA composition, while backends
+using column-vector shaders transpose on upload. The audit pins each such conversion at the CPU
+site and its matching shader multiplication, including explicit scoping of both inline WebGPU PBR
+programs so unrelated WGSL cannot produce a false positive.
+
 ## Skinned palette and influence count (`GLTF-258`, `GLTF-263`, `GLTF-379`)
 
 Every skinned PBR backend receives the same 72-entry column-major palette and XNA's requested
