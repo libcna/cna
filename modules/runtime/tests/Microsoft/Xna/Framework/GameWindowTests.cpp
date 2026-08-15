@@ -1,37 +1,58 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include <SDL3/SDL.h>
-
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+
 using namespace Microsoft::Xna::Framework;
 
-TEST(GameWindowTest, SetAndGetTitle_UsingSdlWindow)
+namespace
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    CNA::Platform::WindowDescription MakeDescription(const std::string& title)
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        CNA::Platform::WindowDescription description;
+        description.title = title;
+        description.width = 64;
+        description.height = 64;
+        description.visible = false;
+        return description;
     }
 
-    SDL_Window* nativeWindow = SDL_CreateWindow("initial-title", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!nativeWindow)
+    struct BorrowedHeadlessGameWindow
     {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
+        explicit BorrowedHeadlessGameWindow(const std::string& title)
+            : platform(CNA::Platform::PlatformFactory::Create("Headless"))
+            , platformWindow(platform->CreateWindow(MakeDescription(title)))
+            , window(platformWindow.get())
+        {
+        }
 
-    GameWindow window(nativeWindow);
+        std::unique_ptr<CNA::Platform::IPlatform> platform;
+        std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow;
+        GameWindow window;
+    };
+}
 
-    window.setTitleProperty("new-title");
-    EXPECT_EQ(window.getTitleProperty(), "new-title");
+TEST(GameWindowTest, SetAndGetTitleUsingPlatformWindow)
+{
+    BorrowedHeadlessGameWindow fixture("initial-title");
 
-    window.setTitleProperty("");
-    EXPECT_EQ(window.getTitleProperty(), "");
+    fixture.window.setTitleProperty("new-title");
+    EXPECT_EQ(fixture.window.getTitleProperty(), "new-title");
+    EXPECT_EQ(fixture.platformWindow->GetTitle(), "new-title");
 
-    SDL_DestroyWindow(nativeWindow);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    fixture.window.setTitleProperty("");
+    EXPECT_EQ(fixture.window.getTitleProperty(), "");
+    EXPECT_EQ(fixture.platformWindow->GetTitle(), "");
 }
 
 TEST(GameWindowTest, NullWindow_IsSafeAndReturnsEmptyTitle)
@@ -58,6 +79,42 @@ TEST(GameWindowTest, NullWindow_HandleIsNullptr)
 {
     GameWindow window;
     EXPECT_EQ(window.getHandleProperty(), 0);
+}
+
+TEST(GameWindowTest, NullWindow_NativeHandleIsUnknownAndEmpty)
+{
+    const GameWindow window;
+    const CNA::Platform::NativeWindowHandle handle = window.GetNativeWindowHandleEXT();
+
+    EXPECT_EQ(handle.system, CNA::Platform::NativeWindowSystem::Unknown);
+    EXPECT_EQ(handle.display, nullptr);
+    EXPECT_EQ(handle.window, nullptr);
+    EXPECT_EQ(handle.surface, nullptr);
+    EXPECT_EQ(handle.windowId, 0u);
+}
+
+TEST(GameWindowTest, NativeHandleComesFromTheBorrowedPlatformWindow)
+{
+    BorrowedHeadlessGameWindow fixture("native-handle");
+
+    const CNA::Platform::NativeWindowHandle handle = fixture.window.GetNativeWindowHandleEXT();
+    EXPECT_EQ(handle.system, CNA::Platform::NativeWindowSystem::Headless);
+}
+
+TEST(GameWindowTest, DestroyingTheWrapperDoesNotDestroyTheBorrowedPlatformWindow)
+{
+    const std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    const std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(MakeDescription("caller-owned"));
+
+    {
+        const GameWindow window(platformWindow.get());
+        EXPECT_EQ(window.getTitleProperty(), "caller-owned");
+    }
+
+    EXPECT_NO_THROW(platformWindow->SetTitle("still-alive"));
+    EXPECT_EQ(platformWindow->GetTitle(), "still-alive");
 }
 
 TEST(GameWindowTest, NullWindow_ScreenDeviceNameIsEmpty)
@@ -116,31 +173,46 @@ TEST(GameWindowTest, NullWindow_RestoreEXTIsSafe)
     EXPECT_NO_THROW(window.RestoreEXT());
 }
 
-TEST(GameWindowTest, MinimizeAndRestoreEXT_UsingSdlWindow)
+TEST(GameWindowTest, MinimizeAndRestoreEXTUsingPlatformWindow)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    BorrowedHeadlessGameWindow fixture("minimize-restore-test");
 
-    SDL_Window* nativeWindow = SDL_CreateWindow("minimize-restore-test", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!nativeWindow)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
+    EXPECT_NO_THROW(fixture.window.MinimizeEXT());
+    EXPECT_TRUE(fixture.platformWindow->IsMinimized());
 
-    GameWindow window(nativeWindow);
-
-    EXPECT_NO_THROW(window.MinimizeEXT());
-    EXPECT_NO_THROW(window.RestoreEXT());
-
-    SDL_DestroyWindow(nativeWindow);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_NO_THROW(fixture.window.RestoreEXT());
+    EXPECT_FALSE(fixture.platformWindow->IsMinimized());
 }
 
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
+}
+
+TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
+{
+    Game game;
+    GameWindow& window = game.getWindowProperty();
+    if (window.GetNativeWindowHandleEXT().system == CNA::Platform::NativeWindowSystem::Unknown)
+    {
+        GTEST_SKIP() << "The selected renderer intentionally creates no platform window.";
+    }
+
+    EXPECT_EQ(window.getTitleProperty(), "Game");
+    EXPECT_TRUE(window.getAllowUserResizingProperty());
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
+
+    window.setTitleProperty("platform-window");
+    EXPECT_EQ(window.getTitleProperty(), "platform-window");
+    window.setAllowUserResizingProperty(false);
+    EXPECT_FALSE(window.getAllowUserResizingProperty());
+    window.setIsBorderlessEXTProperty(true);
+    EXPECT_TRUE(window.getIsBorderlessEXTProperty());
+
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange("virtual-display", 320, 240);
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 320, 240));
+    EXPECT_NO_THROW(window.MinimizeEXT());
+    EXPECT_NO_THROW(window.RestoreEXT());
 }

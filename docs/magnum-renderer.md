@@ -1,10 +1,10 @@
 # MAGNUM graphics renderer
 
 CNA's `MAGNUM` renderer renders through [Magnum](https://github.com/mosra/magnum)'s typed OpenGL
-wrappers (`Magnum::GL`) on a desktop OpenGL 3.3 core context. SDL3 stays the window and GL-context
-owner, exactly as in every other windowed CNA renderer; Magnum is handed that already-current context
-through `Platform::GLContext` and from then on every resource, state change and draw goes through
-`Magnum::GL` rather than through raw GL calls.
+wrappers (`Magnum::GL`) on a desktop OpenGL 3.3 core context. CNA's active platform owns the window
+and creates the context through `IPlatformGlContext`; Magnum is handed that already-current context
+through `Platform::GLContext`. From then on every resource, state change and draw goes through
+`Magnum::GL` rather than through raw GL or a window-toolkit API.
 
 Select it with:
 
@@ -57,9 +57,10 @@ sudo apt-get install -y libegl1-mesa-dev                        # additionally, 
 
 ## What is implemented
 
-- **Context and presentation** — SDL3 GL 3.3 core context with a stencil buffer, back-buffer MSAA
-  requested from the context itself (no manual resolve), swap interval, virtual resolution and the
-  full `CnaPresentationMode` set, window/logical coordinate transforms.
+- **Context and presentation** — platform-created GL 3.3 core context with a stencil buffer,
+  back-buffer MSAA requested from the context itself (no manual resolve), swap interval, virtual
+  resolution and the full `CnaPresentationMode` set, including high-DPI window/logical coordinate
+  transforms based on the platform surface snapshot.
 - **Clears** — colour, depth, stencil and every combination, with XNA's rule that a clear ignores
   `BlendState`'s colour write masks and `DepthStencilState`'s write enables and then restores them.
 - **Textures** — `Texture2D` (full mip-chain storage, sub-level upload, readback), `TextureCube`,

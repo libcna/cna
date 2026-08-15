@@ -9,7 +9,7 @@ using CNA::Devices::UrlLauncher;
 
 // This headless container has no real browser/desktop session to observe launching,
 // and no test here can verify a URL actually opened -- only that the call completes
-// (does not crash or hang) and returns a bool, per SDL_OpenURL()'s own documented
+// (does not crash or hang) and returns a bool, per the platform contract's documented
 // contract ("a successful result does not mean the URL loaded, just that we launched
 // *something* to handle it"). Honestly documenting this limitation rather than
 // claiming more coverage than exists.

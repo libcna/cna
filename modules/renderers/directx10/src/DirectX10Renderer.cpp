@@ -1,6 +1,7 @@
 // plan_d3d10.md: real Direct3D 10 graphics renderer implementation. See the header's own class-level
 // doc comment for the architecture summary; design decisions are recorded in plan_d3d10.md itself.
 #include "CNA/Internal/Renderers/DirectX10/DirectX10Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -326,7 +327,6 @@ namespace CNA::Internal::Renderers::DirectX10
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -432,7 +432,7 @@ namespace CNA::Internal::Renderers::DirectX10
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t*, int) override {}
 
         [[nodiscard]] bool GetData(int /*level*/, int x, int y, int w, int h, void* data, int /*dataLength*/) const override
@@ -878,7 +878,12 @@ namespace CNA::Internal::Renderers::DirectX10
 
     struct DirectX10Renderer::Impl
     {
-        SDL_Window* window = nullptr;
+        explicit Impl(const RendererSurfaceInfo& surfaceInfo)
+            : surface(surfaceInfo, "DirectX10Renderer")
+        {
+        }
+
+        PlatformRendererSurfaceState surface;
         HWND hwnd = nullptr;
         ID3D10Device* device = nullptr;
         IDXGISwapChain* swapChain = nullptr;
@@ -937,20 +942,20 @@ namespace CNA::Internal::Renderers::DirectX10
     };
 
     DirectX10Renderer::DirectX10Renderer(const GraphicsRendererCreateArgs& args)
-        : impl_(std::make_unique<Impl>())
+        : impl_(std::make_unique<Impl>(args.surface))
     {
-        if (!args.window) throw std::runtime_error("DirectX10Renderer initialized with null window.");
-        impl_->window = args.window;
         impl_->presentationMode = args.presentationMode;
         impl_->virtualWidth = args.virtualWidth;
         impl_->virtualHeight = args.virtualHeight;
 
-        impl_->hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(impl_->window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!impl_->hwnd)
-            throw std::runtime_error("DirectX10Renderer: could not obtain a real HWND from the SDL window.");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(impl_->surface.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX10Renderer requires a Win32 native window.");
+        impl_->hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
-        SDL_GetWindowSizeInPixels(impl_->window, &impl_->width, &impl_->height);
+        const auto drawableSize = impl_->surface.GetDrawableSize();
+        impl_->width = drawableSize.width;
+        impl_->height = drawableSize.height;
         if (impl_->width <= 0) impl_->width = args.virtualWidth > 0 ? args.virtualWidth : 640;
         if (impl_->height <= 0) impl_->height = args.virtualHeight > 0 ? args.virtualHeight : 480;
 
@@ -1032,15 +1037,14 @@ namespace CNA::Internal::Renderers::DirectX10
 
     void DirectX10Renderer::GetViewportSize(int& width, int& height)
     {
-        if (impl_->window)
-        {
-            SDL_GetWindowSizeInPixels(impl_->window, &width, &height);
-        }
-        else
-        {
-            width = impl_->width;
-            height = impl_->height;
-        }
+        const auto drawableSize = impl_->surface.GetDrawableSize();
+        width = drawableSize.width > 0 ? drawableSize.width : impl_->width;
+        height = drawableSize.height > 0 ? drawableSize.height : impl_->height;
+    }
+
+    void DirectX10Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        impl_->surface.Update(surface);
     }
 
     void DirectX10Renderer::ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels)
@@ -1099,7 +1103,6 @@ namespace CNA::Internal::Renderers::DirectX10
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
     }
 
-    SDL_Window* DirectX10Renderer::GetWindowInternal() const { return impl_->window; }
 
     std::unique_ptr<ITextureRenderer> DirectX10Renderer::CreateTexture(const ImageData& data)
     {

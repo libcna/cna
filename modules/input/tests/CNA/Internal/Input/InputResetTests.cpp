@@ -8,9 +8,9 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Internal/Input/InputManager.hpp"
-#include "CNA/Internal/Input/SdlInputBridge.hpp"
+#include "CNA/Internal/Input/PlatformInputBridge.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
-#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
@@ -26,11 +26,19 @@
 using CNA::Internal::Input::InputManager;
 using SharpRuntime::charcs;
 using Microsoft::Xna::Framework::Vector2;
-using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::Keys;
 using Microsoft::Xna::Framework::Input::Mouse;
 using Microsoft::Xna::Framework::Input::TextInputEXT;
 using namespace Microsoft::Xna::Framework::Input::Touch;
+
+namespace
+{
+    // ResetAllForTests owns InputManager state; the public Keyboard now owns a platform snapshot.
+    struct Keyboard
+    {
+        static auto GetState() { return InputManager::GetKeyboardState(); }
+    };
+}
 
 TEST(InputResetAllForTests, ClearsAccumulatedInputManagerState)
 {
@@ -46,7 +54,7 @@ TEST(InputResetAllForTests, ClearsTouchPanelDisplayMetricsAndTouches)
 {
     TouchPanel::setDisplayWidthProperty(1234);
     TouchPanel::setDisplayHeightProperty(567);
-    InputManager::SetTouchState(1, TouchLocationState::Pressed, Vector2(3, 4));
+    TouchPanel::INTERNAL_setTouchState(1, TouchLocationState::Pressed, Vector2(3, 4));
 
     InputManager::ResetAllForTests();
 
@@ -124,7 +132,7 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
     InputManager::SetMousePosition(50, 60);
     InputManager::AddScrollWheelDelta(240);
     {
-        const auto before = Mouse::GetState();
+        const auto before = InputManager::GetMouseState();
         ASSERT_EQ(before.getLeftButtonProperty(), ButtonState::Pressed);
         ASSERT_EQ(before.getXProperty(), 50);
         ASSERT_EQ(before.getYProperty(), 60);
@@ -133,7 +141,7 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
 
     InputManager::ResetAllForTests();
 
-    const auto after = Mouse::GetState();
+    const auto after = InputManager::GetMouseState();
     EXPECT_EQ(after.getLeftButtonProperty(),    ButtonState::Released);
     EXPECT_EQ(after.getXButton2Property(),      ButtonState::Released);
     EXPECT_EQ(after.getRightButtonProperty(),   ButtonState::Released);
@@ -146,29 +154,31 @@ TEST(InputResetAllForTests, ClearsAccumulatedMouseButtonsPositionAndWheel)
 
 TEST(InputResetAllForTests, ResetsSequentialTouchIdCounterViaBridge)
 {
-    using CNA::Internal::Input::SdlInputBridge;
+    using CNA::Internal::Input::PlatformInputBridge;
+    using CNA::Platform::TouchEvent;
+    using CNA::Platform::TouchEventKind;
 
-    auto fingerDown = [](SDL_FingerID id) {
-        SDL_Event e{};
-        e.type = SDL_EVENT_FINGER_DOWN;
-        e.tfinger.fingerID = id;
-        e.tfinger.x = 0.5f;
-        e.tfinger.y = 0.5f;
-        SdlInputBridge::ProcessEvent(e);
+    auto fingerDown = [](const std::uint64_t id) {
+        TouchEvent event{};
+        event.fingerId = id;
+        event.kind = TouchEventKind::Down;
+        event.x = 0.5f;
+        event.y = 0.5f;
+        PlatformInputBridge::ProcessEvent(event);
     };
 
     TouchPanel::setDisplayWidthProperty(100);
     TouchPanel::setDisplayHeightProperty(100);
 
     fingerDown(42);
-    const int firstId = InputManager::GetTouchState()[0].getIdProperty();
+    const int firstId = TouchPanel::GetState()[0].getIdProperty();
 
     InputManager::ResetAllForTests();
     TouchPanel::setDisplayWidthProperty(100);
     TouchPanel::setDisplayHeightProperty(100);
 
-    fingerDown(99); // different SDL finger id, but the compact counter restarts at 1 after reset
-    const int afterResetId = InputManager::GetTouchState()[0].getIdProperty();
+    fingerDown(99); // different platform finger id, but the compact counter restarts after reset
+    const int afterResetId = TouchPanel::GetState()[0].getIdProperty();
 
     EXPECT_EQ(firstId, afterResetId)
         << "ResetAllForTests must clear the finger->touch map and restart the id counter";

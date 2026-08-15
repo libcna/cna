@@ -10,7 +10,7 @@ namespace CNA::Internal::Renderers::Skia
     /**
      * Stable owner-thread identity shared with renderer-local resource adapters.
      *
-     * Skia's CPU raster canvas and SDL presenter are both single-owner objects. A weak reference
+     * Skia's CPU raster canvas and platform presenter are both single-owner objects. A weak reference
      * to this token additionally lets a SpriteBatch reject use after graphics-renderer destruction
      * before touching any of its raw pointers into renderer state.
      */

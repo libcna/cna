@@ -8,8 +8,8 @@ namespace CNA::Input
     /**
      * @brief CNAEXT — the position of a joystick's POV hat (D-pad-like 8-way switch).
      *
-     * Mirrors SDL3's `SDL_HAT_*` values, which combine an up/down bit with a left/right bit; the
-     * nine reachable combinations are enumerated here rather than exposed as a bit flag set.
+     * Native APIs often encode hats as combined direction bits; the nine reachable combinations
+     * are enumerated here so no native layout becomes public API.
      */
     CNAEXT enum class JoystickHatPositionEXT
     {

@@ -30,7 +30,7 @@ than re-defining them. A member/type belongs to exactly one tier:
   `MouseCursor` as a whole, `KeyboardState::ToString`, value-struct default constructors, `FromButtonArray`).
   Tagged with the `CNAEXT` marker macro.
 - **INTERNAL** — `CNA::Internal::*` implementation (`SdlInputBridge`, `InputManager`, `GestureDetector`,
-  `ISdlGamepadBackend`, …). **Not public API**; must never appear in a public XNA header or signature
+  `ISdlHapticBackend`, …). **Not public API**; must never appear in a public XNA header or signature
   (enforced by the `PublicApiInputCompileTests` SDL/Internal-leak guard).
 
 ## Freeze scope
@@ -252,13 +252,11 @@ override must be added.
 
 ### `MouseCursor` — class (CNA / CNAEXT; entire class is non-XNA)
 - `MouseCursor();` — CNAEXT
-- `explicit MouseCursor(SDL_Cursor*, bool = false);` — CNAEXT (SDL type is opaque/forward-declared)
 - `static MouseCursor FromTexture2D(const Graphics::Texture2D&, int, int);` — CNAEXT
 - `MouseCursor(const MouseCursor&) = delete;` / `operator=(const MouseCursor&) = delete;` — CNAEXT
 - `MouseCursor(MouseCursor&&) noexcept;` / `operator=(MouseCursor&&) noexcept;` — CNAEXT
 - `~MouseCursor() override;` — CNAEXT
 - `void Dispose() override;` — CNAEXT
-- `SDL_Cursor* GetSDLCursor() const;` — CNAEXT
 - Stock-cursor singletons (CNAEXT, each `static MouseCursor& get…Property()`): `Arrow`, `Crosshair`,
   `Hand`, `IBeam`, `No`, `SizeAll`, `SizeNESW`, `SizeNS`, `SizeNWSE`, `SizeWE`, `Wait`, `WaitArrow`
 

@@ -4,11 +4,11 @@
 // pixel reads at the new resolution -- not just a check that the bookkeeping numbers changed.
 //
 // UpdateSwapChainResolution() (LlglRenderer.cpp) only runs at the top of Present(), so
-// every resize step below is followed by SyncWindowAndPresent() before any pixel is read --
+// every resize step below is followed by PresentAfterSynchronizedWindowChange() before any pixel is read --
 // without it the swap chain itself never actually resizes, only ApplyChanges()'s own presentation
-// parameters would appear to have changed. SDL_SetWindowSize() is not guaranteed synchronous under
-// X11 either (see SyncWindowAndPresent()'s own comment), so a bare Present() right after
-// ApplyChanges() is not enough by itself.
+// parameters would appear to have changed. The preceding GameWindow transition synchronizes the
+// selected platform window before ApplyChanges() returns; the extra Present() then performs the
+// renderer-side swap-chain update.
 //
 // Check A -- the initial size: GetViewportSize() reports the configured back buffer size, and a
 //   full clear reads back correctly at the centre.
@@ -82,19 +82,13 @@ class LlglResizeTest : public Game
         return ChannelNear(rgba[0], r) && ChannelNear(rgba[1], g) && ChannelNear(rgba[2], b);
     }
 
-    // SDL_SetWindowSize() (issued by GameWindow::EndScreenDeviceChange(), reached from both the
-    // very first CreateDevice() and every later ApplyChanges()) is not guaranteed synchronous
-    // under X11: the window manager (or, under a bare Xvfb with none, the X server itself) applies
-    // it asynchronously, so a Vulkan/GL driver's own surface-size query can still observe the OLD
-    // size for a moment after the call returns. SDL_SyncWindow() blocks until SDL considers the
-    // pending change applied; UpdateSwapChainResolution() (which only runs inside Present()) is
-    // what actually resizes the swap chain once the real window size has caught up.
-    void SyncWindowAndPresent()
+    // GameWindow::EndScreenDeviceChange(), reached from both the first CreateDevice() and every
+    // later ApplyChanges(), synchronizes the selected IPlatformWindow after requesting its size.
+    // UpdateSwapChainResolution() only runs inside Present(), so one presentation is still needed
+    // before the renderer observes that synchronized platform-window size. Keeping this example
+    // on the GameWindow contract avoids reopening the SDL_Window escape hatch removed by PLAT-51.
+    void PresentAfterSynchronizedWindowChange()
     {
-        SDL_Window* window = getWindowProperty().GetNativeSdlWindowEXT();
-        SDL_PumpEvents();
-        SDL_SyncWindow(window);
-        SDL_PumpEvents();
         getGraphicsDeviceProperty().Present();
     }
 
@@ -115,10 +109,10 @@ protected:
         auto& device = getGraphicsDeviceProperty();
         auto& renderer = static_cast<LlglRenderer&>(device.GetRenderer());
 
-        // The very first CreateDevice() already issued its own SDL_SetWindowSize() (for
-        // kInitialWidth/kInitialHeight) before this Draw() ever ran; settle it the same way every
-        // later resize below is settled, so Check A observes the real, final initial size.
-        SyncWindowAndPresent();
+        // The first CreateDevice() already issued and synchronized its platform size request for
+        // kInitialWidth/kInitialHeight before this Draw() ran. Present once so the swap chain sees
+        // that final initial size, exactly as it does after each later ApplyChanges().
+        PresentAfterSynchronizedWindowChange();
 
         // --- Check A: the initial size ------------------------------------------------------------
         {
@@ -138,7 +132,7 @@ protected:
             gdm_->setPreferredBackBufferWidthProperty(kGrownWidth);
             gdm_->setPreferredBackBufferHeightProperty(kGrownHeight);
             gdm_->ApplyChanges();
-            SyncWindowAndPresent();   // drives UpdateSwapChainResolution() -- the real resize happens here
+            PresentAfterSynchronizedWindowChange(); // drives UpdateSwapChainResolution()
 
             int width = 0, height = 0;
             renderer.GetViewportSize(width, height);
@@ -159,7 +153,7 @@ protected:
             gdm_->setPreferredBackBufferWidthProperty(kShrunkWidth);
             gdm_->setPreferredBackBufferHeightProperty(kShrunkHeight);
             gdm_->ApplyChanges();
-            SyncWindowAndPresent();
+            PresentAfterSynchronizedWindowChange();
 
             int width = 0, height = 0;
             renderer.GetViewportSize(width, height);

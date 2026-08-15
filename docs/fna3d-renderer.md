@@ -51,9 +51,10 @@ functional Vulkan stack cannot silently change which driver the assertions were 
 
 Driver selection happens *before* the window exists, because
 `FNA3D_PrepareWindowAttributes()` also primes the GL attributes the window's visual is chosen
-from. `GraphicsDevice::getRendererWindowFlags()` therefore calls
-`Fna3d::Detail::PrepareWindowFlags()` while assembling the SDL window flags — the same
-runtime-decides-the-flag shape LLGL, Diligent and bgfx already use.
+from. `GraphicsDevice` therefore calls `Fna3d::Detail::PrepareWindowNeedsOpenGl()` while assembling
+the platform-neutral `WindowDescription`. The FNA3D implementation interprets its SDL flags at
+the renderer edge and exposes only the resulting OpenGL requirement to graphics — the same
+runtime-decides-the-intent shape LLGL, Diligent and bgfx use.
 
 ## Shaders: the one thing FNA3D constrains
 

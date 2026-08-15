@@ -2,6 +2,7 @@
 // ID3D12Device + command queue + descriptor heaps + per-frame command allocators/command list +
 // fence-based synchronization. Clear()/Present()/draw calls are still honest "not yet implemented"
 // stubs -- see DirectX12Renderer.hpp's class doc comment for exactly why and what's next.
+#include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX12/DirectX12Renderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Textures.hpp"
@@ -11,8 +12,6 @@
 #include "CNA/Internal/Renderers/DirectX12/D3D12EffectRenderer.hpp"
 #include "CNA/Internal/Renderers/DirectX12/D3D12Texture3D.hpp"
 #include "CNA/Internal/Renderers/D3DCommon/D3DConstantBuffers.hpp"
-
-#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -94,10 +93,19 @@ namespace CNA::Internal::Renderers::DirectX12
     }
 
     DirectX12Renderer::DirectX12Renderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
-        , virtualWidth_(args.virtualWidth)
+        : virtualWidth_(args.virtualWidth)
         , virtualHeight_(args.virtualHeight)
     {
+        if (args.surface.windowId != 0 || CNA::Platform::HasNativeWindow(args.surface.nativeHandle))
+        {
+            surface_ = std::make_unique<PlatformRendererSurfaceState>(args.surface,
+                                                                       "DirectX12Renderer");
+            CNA::Platform::Win32NativeWindow nativeWindow;
+            if (!CNA::Platform::TryGetWin32(surface_->GetNativeHandle(), nativeWindow))
+                throw std::runtime_error("DirectX12Renderer requires a Win32 native window.");
+            hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+        }
+
         // DX-116: mirrors DirectX11Renderer's own constructor exactly.
         vsyncEnabled_ = args.swapInterval > 0;
 
@@ -120,9 +128,9 @@ namespace CNA::Internal::Renderers::DirectX12
         CreateFenceResources();
 
         // DX-102: only attempted when a real window is supplied -- an off-screen construction
-        // (args.window == nullptr, what the primary D3D12 CTest suite always uses on this Wine dev
+        // (args.surface.windowId == 0, what the primary D3D12 CTest suite uses on this Wine dev
         // loop, see modules/renderers/directx12/examples/directx12_smoke_test.cpp) never touches CreateSwapChainForHwnd at all.
-        if (window_)
+        if (hwnd_)
         {
             CreateSwapChainResources();
             // DX-116: only when CreateSwapChainForHwnd actually succeeded -- swapChainAvailable_
@@ -132,12 +140,12 @@ namespace CNA::Internal::Renderers::DirectX12
                 CreateWindowSizeDependentViews();
         }
 
-        SDL_Log("[D3D12] Device-lifetime resources created (plan_dx.md DX-102/103/104/105) -- "
-                "feature level 0x%04x, debug layer %s, tearing %s, swap chain %s.",
-                static_cast<unsigned>(featureLevel_),
-                debugLayerEnabled_ ? "enabled" : "disabled",
-                allowTearingSupported_ ? "supported" : "unsupported",
-                swapChainAvailable_ ? "available" : "unavailable");
+        CNA::Logger::Info(
+            "D3D12 device resources created; feature level " + FormatHr(featureLevel_) +
+                ", debug layer " + (debugLayerEnabled_ ? "enabled" : "disabled") +
+                ", tearing " + (allowTearingSupported_ ? "supported" : "unsupported") +
+                ", swap chain " + (swapChainAvailable_ ? "available" : "unavailable"),
+            CNA::LogCategory::RENDER);
     }
 
     DirectX12Renderer::~DirectX12Renderer()
@@ -178,7 +186,8 @@ namespace CNA::Internal::Renderers::DirectX12
             }
             else
             {
-                SDL_Log("[D3D12] D3D12 debug layer unavailable; continuing without it.");
+                CNA::Logger::Warn("D3D12 debug layer unavailable; continuing without it.",
+                                  CNA::LogCategory::RENDER);
             }
         }
 
@@ -321,18 +330,20 @@ namespace CNA::Internal::Renderers::DirectX12
 
     void DirectX12Renderer::CreateSwapChainResources()
     {
-        HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(window_), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!hwnd)
+        if (!hwnd_)
         {
-            SDL_Log("[D3D12] Could not obtain HWND from SDL window; swap chain unavailable.");
             swapChainAvailable_ = false;
             return;
         }
 
         width_ = virtualWidth_ > 0 ? virtualWidth_ : 1024;
         height_ = virtualHeight_ > 0 ? virtualHeight_ : 768;
-        SDL_GetWindowSizeInPixels(window_, &width_, &height_);
+        if (surface_)
+        {
+            const auto drawableSize = surface_->GetDrawableSize();
+            if (drawableSize.width > 0) width_ = drawableSize.width;
+            if (drawableSize.height > 0) height_ = drawableSize.height;
+        }
 
         DXGI_SWAP_CHAIN_DESC1 desc{};
         desc.Width = static_cast<UINT>(width_);
@@ -351,13 +362,13 @@ namespace CNA::Internal::Renderers::DirectX12
 
         ComPtr<IDXGISwapChain1> swapChain1;
         HRESULT hr = factory_->CreateSwapChainForHwnd(
-            commandQueue_.Get(), hwnd, &desc, nullptr, nullptr, swapChain1.ReleaseAndGetAddressOf());
+            commandQueue_.Get(), hwnd_, &desc, nullptr, nullptr, swapChain1.ReleaseAndGetAddressOf());
         if (FAILED(hr))
         {
-            SDL_Log("[D3D12] CreateSwapChainForHwnd failed, hr=%s; continuing off-screen "
-                    "(plan_dx.md DX-102's own documented Wine limitation -- real verification is "
-                    "DX-114's job, on real Windows hardware).",
-                    FormatHr(hr).c_str());
+            CNA::Logger::Warn(
+                "D3D12 CreateSwapChainForHwnd failed, hr=" + FormatHr(hr) +
+                    "; continuing off-screen (documented Wine limitation)",
+                CNA::LogCategory::RENDER);
             swapChainAvailable_ = false;
             return;
         }
@@ -365,8 +376,10 @@ namespace CNA::Internal::Renderers::DirectX12
         hr = swapChain1.As(&swapChain_);
         if (FAILED(hr))
         {
-            SDL_Log("[D3D12] IDXGISwapChain1 -> IDXGISwapChain3 QueryInterface failed, hr=%s; "
-                    "continuing off-screen.", FormatHr(hr).c_str());
+            CNA::Logger::Warn(
+                "D3D12 IDXGISwapChain1 -> IDXGISwapChain3 failed, hr=" + FormatHr(hr) +
+                    "; continuing off-screen",
+                CNA::LogCategory::RENDER);
             swapChainAvailable_ = false;
             return;
         }
@@ -571,7 +584,8 @@ namespace CNA::Internal::Renderers::DirectX12
         if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
         {
             const HRESULT reason = device_ ? device_->GetDeviceRemovedReason() : hr;
-            SDL_Log("[D3D12] Device removed/reset! reason=%s (plan_dx.md DX-110)", FormatHr(reason).c_str());
+            CNA::Logger::Error("D3D12 device removed/reset; reason=" + FormatHr(reason),
+                               CNA::LogCategory::RENDER);
         }
     }
 
@@ -687,20 +701,20 @@ namespace CNA::Internal::Renderers::DirectX12
         CreateDescriptorHeapResources();
         CreateCommandListResources();
         CreateFenceResources();
-        if (window_)
+        if (hwnd_)
         {
             CreateSwapChainResources();
             if (swapChainAvailable_)
                 CreateWindowSizeDependentViews();
         }
 
-        SDL_Log("[D3D12] RecreateDeviceEXT(): device-lifetime resources fully recreated after a "
-                "(real or forced) device-removed event (plan_dx.md DX-110) -- feature level 0x%04x, "
-                "debug layer %s, tearing %s, swap chain %s.",
-                static_cast<unsigned>(featureLevel_),
-                debugLayerEnabled_ ? "enabled" : "disabled",
-                allowTearingSupported_ ? "supported" : "unsupported",
-                swapChainAvailable_ ? "available" : "unavailable");
+        CNA::Logger::Info(
+            "D3D12 device resources recreated after device removal; feature level " +
+                FormatHr(featureLevel_) + ", debug layer " +
+                (debugLayerEnabled_ ? "enabled" : "disabled") + ", tearing " +
+                (allowTearingSupported_ ? "supported" : "unsupported") + ", swap chain " +
+                (swapChainAvailable_ ? "available" : "unavailable"),
+            CNA::LogCategory::RENDER);
     }
 
     void DirectX12Renderer::BindOffscreenColorTargetEXT(ID3D12Resource* resource,
@@ -1178,6 +1192,21 @@ namespace CNA::Internal::Renderers::DirectX12
     {
         width = virtualWidth_;
         height = virtualHeight_;
+    }
+
+    void DirectX12Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface_)
+        {
+            surface_->Update(surface);
+            return;
+        }
+
+        surface_ = std::make_unique<PlatformRendererSurfaceState>(surface, "DirectX12Renderer");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_->GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX12Renderer requires a Win32 native window.");
+        hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
     }
 
     void DirectX12Renderer::SetVirtualResolution(int width, int height)

@@ -77,7 +77,7 @@ protected:
             Check(true, "frames 1.." + std::to_string(kInduceFailureFrame - 1) + " rendered with no exception");
 
             SDL_GPUDevice* device = renderer.Device();
-            SDL_Window* window = renderer.GetWindowInternal();
+            SDL_Window* window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
 
             // Un-claims the window from the GPU device -- the next
             // SDL_WaitAndAcquireGPUSwapchainTexture call on it now genuinely fails (returns false),

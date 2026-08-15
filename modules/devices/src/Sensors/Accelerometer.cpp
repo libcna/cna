@@ -13,95 +13,46 @@
 #include <string>
 #include <utility>
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_init.h>
-#include <SDL3/SDL_sensor.h>
-
-#include "CNA/Platform.hpp"
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Devices/Sensors/Detail/AndroidSensorOrientation.hpp"
-#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
+#include "Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "System/DateTimeOffset.hpp"
 #include "System/ObjectDisposedException.hpp"
 
 namespace Microsoft::Devices::Sensors
 {
-    Detail::SdlSensorSubsystem<Accelerometer>& Accelerometer::GetSubsystem()
+    Detail::PlatformSensorSubsystem<Accelerometer>& Accelerometer::GetSubsystem()
     {
-        // Task P5-4: function-local static, not a class-static member —
-        // keeps SDL_Sensor*/SDL_SensorType and everything else
-        // SdlSensorSubsystem.hpp touches out of Accelerometer.hpp
-        // entirely, same discipline this class already used for its
-        // previous `void* g_sensor_`.
-        static Detail::SdlSensorSubsystem<Accelerometer> subsystem;
+        static Detail::PlatformSensorSubsystem<Accelerometer> subsystem;
         return subsystem;
     }
 
-    int Accelerometer::GetSdlSensorType()
+    CNA::Platform::SensorKind Accelerometer::GetPlatformSensorKind()
     {
-        return static_cast<int>(SDL_SENSOR_ACCEL);
+        return CNA::Platform::SensorKind::Accelerometer;
     }
 
     bool Accelerometer::getIsSupportedProperty()
     {
-        // Task ACCEL-007 (desktop support policy, decided 2026-07-06):
-        // Desktop is deliberately treated the same as Android/iOS here —
-        // if SDL genuinely detects a real SDL_SENSOR_ACCEL device (e.g. a
-        // 2-in-1 laptop with a hardware accelerometer), this returns true
-        // and Start() actually works, exactly like a phone. There is no
-        // XNA/WP7-specific reason to special-case or fake-disable desktop
-        // hardware that genuinely exists — XNA itself never ran on a
-        // desktop with a real accelerometer, so there is no compatibility
-        // *requirement* either way; "fully supported wherever SDL exposes
-        // hardware" was chosen over a permanent desktop no-op because it's
-        // strictly more useful and costs nothing extra (the real SDL probe
-        // below already reports false on desktops with no such hardware).
-        // `Platform::Web` (Emscripten) is excluded even though SDL itself
-        // has a real `SDL_SENSOR_EMSCRIPTEN` backend
-        // (third_party/SDL/src/sensor/emscripten/) — this exclusion
-        // predates this task and was not re-examined here; a future task
-        // wanting to support browser accelerometer access should treat that
-        // as its own separate decision, not an implied consequence of this
-        // one.
-        const CNA::Platform currentPlatform = CNA::getCurrentPlatform();
+        // Desktop is deliberately treated like Android/iOS: if the selected platform reports a
+        // real accelerometer (for example in a 2-in-1 laptop), CNA uses it. Browser support remains
+        // excluded by the established target policy and requires a separate compatibility choice.
+        const CNA::TargetPlatform currentPlatform = CNA::getCurrentPlatform();
 
-        if (!(currentPlatform == CNA::Platform::Android ||
-            currentPlatform == CNA::Platform::iOS ||
-            currentPlatform == CNA::Platform::Desktop))
+        if (!(currentPlatform == CNA::TargetPlatform::Android ||
+            currentPlatform == CNA::TargetPlatform::iOS ||
+            currentPlatform == CNA::TargetPlatform::Desktop))
         {
             return false;
         }
 
-        // Task P6-9: ProbeIsSupported() calls real SDL sensor-subsystem
-        // functions (SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
-        // SDL_CloseSensor/SDL_QuitSubSystem) with no synchronization of
-        // its own. SDL3's own documentation states SDL_InitSubSystem()
-        // "should only be called on the main thread" and
-        // SDL_QuitSubSystem() "is not thread safe" — calling this from
-        // multiple threads at once (e.g. concurrently constructing several
-        // Accelerometer instances, which each call this from their own
-        // constructor) reliably corrupted the heap under real stress
-        // testing (a P6-1 regression test constructing instances from 8
-        // threads at once reproduced glibc's "unaligned tcache chunk
-        // detected"/"malloc(): unaligned tcache chunk detected" abort in
-        // roughly 1 in 4 runs).
-        //
-        // Task P7-1: subsystem.mutex_ alone (as P6-9 used it) only
-        // serializes this against *this class's own* other SDL calls —
-        // Gyroscope's identical getIsSupportedProperty() locks a
-        // *different* mutex (Gyroscope::GetSubsystem().mutex_), so the two
-        // classes' real SDL sensor-subsystem calls could still run fully
-        // concurrently with each other, against the exact same SDL global
-        // SDL_INIT_SENSOR subsystem the P6-1 addendum bug already proved
-        // unsafe. ProbeIsSupported() touches no per-class subsystem state
-        // (sensor_/sensorId_/instanceCount_/...) at all — it only needs to
-        // be serialized against every other real SDL sensor call, from
-        // *any* sensor class — so this now locks only the shared global SDL
-        // sensor mutex, not subsystem.mutex_ (dropped entirely; see
-        // GetGlobalSdlSensorMutex()'s doc comment for the full lock-order
-        // rule this participates in).
-        std::lock_guard<std::mutex> lock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Accelerometer>::ProbeIsSupported(lock);
+        // Process-wide native subsystem serialization belongs to IPlatform. The per-class manager
+        // protects only registrations and callback lifetime, so Accelerometer and Gyroscope cannot
+        // accidentally use different locks around the same native subsystem.
+        return Detail::PlatformSensorSubsystem<Accelerometer>::ProbeIsSupported(
+            GetPlatformSensorKind());
     }
 
     SensorState Accelerometer::getStateProperty() const
@@ -129,7 +80,7 @@ namespace Microsoft::Devices::Sensors
         // (Dispose() already decrements under this same lock) — previously
         // unlocked here, a real data race under the C++ memory model, not
         // just a benign lost-update risk. The lock is released before
-        // getIsSupportedProperty() below, which performs real (slow) SDL
+        // getIsSupportedProperty() below, which performs a real (slow) platform
         // probing and must never run while holding subsystem.mutex_.
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
@@ -168,15 +119,6 @@ namespace Microsoft::Devices::Sensors
     void Accelerometer::Start()
     {
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
-
-        // Task P6-3: the whole body below is now guarded by a single
-        // subsystem.mutex_ acquisition — previously the started_ check and
-        // the initial subsystemHeld_ read/write ran before any lock was
-        // taken at all, racing against Stop()/Dispose()/
-        // ProcessSensorUpdateEvent() on another thread. EnsureSubsystemInitialized()
-        // (a plain SDL_InitSubSystem() call, not a device-enumerating probe)
-        // is safe to call while holding this lock — it doesn't call back
-        // into this class's own code.
         auto& subsystem = GetSubsystem();
         std::lock_guard<std::mutex> lock(subsystem.mutex_);
 
@@ -186,87 +128,42 @@ namespace Microsoft::Devices::Sensors
                 "Failed to start accelerometer data acquisition. Data acquisition already started.");
         }
 
-        // Task P6-2: tracks whether *this* Start() call is the one that
-        // just transitioned subsystemHeld_ false -> true, as opposed to it
-        // already having been true from an earlier successful Start()
-        // (e.g. after a Stop()/Start() cycle). Only a hold newly acquired
-        // by this call should be released on failure below — an
-        // already-true subsystemHeld_ from before still owes its eventual
-        // release to Dispose(), same as always.
         bool acquiredSubsystemThisCall = false;
-
-        {
-            // Task P7-1: EnsureSubsystemInitialized()/OpenDefaultSensorLocked()
-            // below make real SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
-            // SDL_GetSensorType/SDL_CloseSensor calls — serialize them against
-            // every other SDL sensor call across both Accelerometer and
-            // Gyroscope via the shared global mutex, nested inside
-            // subsystem.mutex_ (already held for this whole method) — always
-            // acquired in that order, never the reverse; see
-            // GetGlobalSdlSensorMutex()'s doc comment for the full rule.
-            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-
-            if (!subsystemHeld_)
-            {
-                if (!Detail::SdlSensorSubsystem<Accelerometer>::EnsureSubsystemInitialized(sdlLock))
-                {
-                    state_ = SensorState::NotSupported;
-                    throw AccelerometerFailedException(
-                        "Failed to start accelerometer data acquisition. SDL sensor subsystem initialization failed.");
-                }
-
-                subsystemHeld_ = true;
-                acquiredSubsystemThisCall = true;
-            }
-
-            if (subsystem.OpenDefaultSensorLocked(sdlLock) == nullptr)
-            {
-                state_ = SensorState::NotSupported;
-
-                // Task P6-2: previously left subsystemHeld_ true here forever
-                // (until this instance's eventual Dispose()) even though
-                // Start() itself failed — a real subsystem-hold leak for any
-                // caller that constructs, fails Start(), and never disposes
-                // promptly (e.g. a retry loop). Release only the hold this
-                // call itself just acquired.
-                if (acquiredSubsystemThisCall)
-                {
-                    SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                    subsystemHeld_ = false;
-                }
-
-                throw AccelerometerFailedException(
-                    "Failed to start accelerometer data acquisition. No default sensor found.");
-            }
-        }
-
-        // Task SDLCORE-003 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
-        // register the event watch *before* committing started_/state_ to
-        // Ready -- previously this ran last, and its (unconditionally
-        // ignored) result could never stop this instance from claiming
-        // Ready even if `SDL_AddEventWatch()` genuinely failed, leaving an
-        // instance permanently "Ready" with no possible way for a real
-        // sensor event to ever reach it. Does not touch the subsystem's
-        // shared, cached `sensor_`/`sensorId_` handle on this failure path
-        // -- that handle is subsystem-wide (potentially already relied on
-        // by another started instance of this same sensor type) and
-        // opening it is itself harmless to leave in place; only what *this*
-        // call itself freshly acquired (the subsystem hold) is rolled back,
-        // mirroring the identical, already-established discipline the
-        // "no default sensor found" failure path above already follows.
-        if (!subsystem.RegisterEventWatchIfNeededLocked())
+        CNA::Platform::IPlatform& platform = CNA::Platform::GetCurrentPlatform();
+        if (subsystemHeld_ && acquiredPlatform_ != &platform)
         {
             state_ = SensorState::NotSupported;
+            throw AccelerometerFailedException(
+                "Failed to start accelerometer data acquisition: selected platform changed "
+                "while this sensor still owns its previous subsystem reference.");
+        }
+        if (!subsystemHeld_)
+        {
+            try
+            {
+                platform.AcquireSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
+            }
+            catch (const CNA::Platform::PlatformException& ex)
+            {
+                state_ = SensorState::NotSupported;
+                throw AccelerometerFailedException(ex.what());
+            }
+            subsystemHeld_ = true;
+            acquiredPlatform_ = &platform;
+            acquiredSubsystemThisCall = true;
+        }
 
+        if (!subsystem.EnsureSessionLocked(GetPlatformSensorKind()))
+        {
+            state_ = SensorState::NotSupported;
             if (acquiredSubsystemThisCall)
             {
-                std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
+                platform.ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
                 subsystemHeld_ = false;
+                acquiredPlatform_ = nullptr;
             }
-
             const std::string message =
-                "Failed to start accelerometer data acquisition. Failed to register the sensor event watch: "
+                "Failed to start accelerometer data acquisition: "
                 + subsystem.lastEventWatchError_;
             throw AccelerometerFailedException(message.c_str());
         }
@@ -287,17 +184,21 @@ namespace Microsoft::Devices::Sensors
         System::ObjectDisposedException::ThrowIf(getIsDisposedProperty(), "Accelerometer");
 
         auto& subsystem = GetSubsystem();
-        std::lock_guard<std::mutex> lock(subsystem.mutex_);
-
-        if (started_)
+        std::unique_ptr<CNA::Platform::IPlatformSensorSession> inactive;
         {
-            subsystem.UnregisterStartedInstanceLocked(this);
+            std::lock_guard<std::mutex> lock(subsystem.mutex_);
+
+            if (started_)
+            {
+                subsystem.UnregisterStartedInstanceLocked(this);
+            }
+
+            started_ = false;
+            state_ = SensorState::Disabled;
+            inactive = subsystem.TakeInactiveSessionLocked();
         }
-
-        started_ = false;
-        state_ = SensorState::Disabled;
-
-        subsystem.UnregisterEventWatchIfNeededLocked();
+        // Destruction is outside subsystem.mutex_: the platform session destructor is a callback
+        // barrier, and an in-flight callback may itself be waiting to take that mutex.
     }
 
     void Accelerometer::Dispose(bool disposing)
@@ -398,57 +299,33 @@ namespace Microsoft::Devices::Sensors
             assert(subsystem.instanceCount_ >= 0
                 && "Accelerometer::instanceCount_ underflowed -- Dispose(bool) ran more than once for one instance");
 
-            // Task P7-1: SDL_CloseSensor()/SDL_QuitSubSystem() below are
-            // real SDL sensor-subsystem calls — serialize them against
-            // every other SDL sensor call across both Accelerometer and
-            // Gyroscope via the shared global mutex, nested inside the
-            // subsystem.mutex_ already held above (same lock order as
-            // Start(); see GetGlobalSdlSensorMutex()'s doc comment).
-            std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-
             if (subsystem.instanceCount_ == 0)
             {
                 subsystem.startedInstances_.clear();
-                subsystem.UnregisterEventWatchIfNeededLocked();
-
-                if (subsystem.sensor_ != nullptr)
-                {
-                    SDL_CloseSensor(subsystem.sensor_);
-                    subsystem.sensor_ = nullptr;
-                    subsystem.sensorId_ = 0;
-                }
             }
+        }
 
-            // Balances this instance's own EnsureSubsystemInitialized()
-            // call from Start() (if any) 1:1, independent of
-            // instanceCount_ — SDL's internal ref-count (not this class)
-            // decides whether this is the last holder across both
-            // Accelerometer and Gyroscope (Task P4-8).
-            if (subsystemHeld_)
-            {
-                SDL_QuitSubSystem(SDL_INIT_SENSOR);
-                subsystemHeld_ = false;
-            }
+        if (subsystemHeld_ && acquiredPlatform_ != nullptr)
+        {
+            acquiredPlatform_->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Sensor);
+            subsystemHeld_ = false;
+            acquiredPlatform_ = nullptr;
         }
 
         // Task P7-2: only the winning caller (this point is only reached
         // after ClaimDisposalOnce() returned true and cleanup above has
         // fully finished) flips disposed_ to true and wakes any concurrent
         // loser blocked in WaitForDisposalToComplete(). Runs after the
-        // subsystem.mutex_/global SDL mutex scope above has already
-        // released both locks.
+        // subsystem and platform lock scopes above have already ended.
         SensorBase<AccelerometerReading>::Dispose(disposing);
     }
 
 #ifdef __ANDROID__
     /**
-     * Converts raw SDL3 accelerometer data (portrait device frame) to the XNA Windows
-     * Phone landscape coordinate convention expected by the game, for both allowed
-     * landscape rotations (ROTATION_90 or ROTATION_270).
+     * Converts raw Android accelerometer data (portrait device frame) to the XNA Windows Phone
+     * landscape convention, for both allowed landscape rotations.
      *
-     * --- SDL3 / Android raw sensor coordinate system ---
-     * SDL3 on Android always delivers accelerometer values in the device's NATURAL
-     * (portrait) orientation, regardless of the current display rotation:
+     * The platform contract reports axes in the device's natural orientation:
      *   +X  right edge of device (portrait)
      *   +Y  top  edge of device (portrait)
      *   +Z  out of screen (toward the user)
@@ -458,18 +335,16 @@ namespace Microsoft::Devices::Sensors
      * Corrected 2026-07-06 (Task ACCEL-004): this is not an
      * `android:screenOrientation` manifest attribute (the demo's manifest sets
      * none, confirmed by inspection) — see
-     * `Detail::AndroidSensorLandscapeOrientation`'s own doc comment for the
-     * actual mechanism (SDL's runtime `SDL_HINT_ORIENTATIONS`-driven
-     * `SCREEN_ORIENTATION_SENSOR_LANDSCAPE` request). Whatever the exact
-     * mechanism, only two rotations are modeled here:
+     * `Detail::AndroidSensorLandscapeOrientation`'s own doc comment. Only two rotations are
+     * modeled here:
      *
-     *   ROTATION_90  (SDL_ORIENTATION_LANDSCAPE):
+     *   ROTATION_90:
      *     Device rotated 90° CCW from portrait — portrait-top points landscape-LEFT.
      *       Portrait +X → landscape DOWN,  Portrait +Y → landscape LEFT
      *     Tilt right in landscape → portrait-Y goes down → rawY more negative.
      *     To match WP7 (right tilt → xnaY > 0): xnaX = rawX, xnaY = -rawY, xnaZ = rawZ.
      *
-     *   ROTATION_270 (SDL_ORIENTATION_LANDSCAPE_FLIPPED):
+     *   ROTATION_270:
      *     Device rotated 270° CCW from portrait — portrait-top points landscape-RIGHT.
      *       Portrait +X → landscape UP,   Portrait +Y → landscape RIGHT
      *     Tilt right in landscape → portrait-Y goes down → rawY more positive.
@@ -487,46 +362,29 @@ namespace Microsoft::Devices::Sensors
      * deviation** from real WP7 behavior, not part of the XNA 4.0 contract — the
      * real WP7 `Accelerometer` never remaps axes based on display orientation at
      * all (archived MSDN Magazine article, "Touch and Go - Getting Oriented with
-     * the Windows Phone Compass"; SDL3's own docs agree raw axes are never
-     * display-orientation-relative). Kept enabled by default for existing CNA
+     * the Windows Phone Compass"). Kept enabled by default for existing CNA
      * games/demos; see `Detail::SetAndroidLandscapeRemapEnabled()` for the opt-out.
      *
-     * @param rawX  SDL accelerometer X normalised to g.
-     * @param rawY  SDL accelerometer Y normalised to g.
-     * @param rawZ  SDL accelerometer Z normalised to g.
+     * @param rawX Platform accelerometer X normalised to g.
+     * @param rawY Platform accelerometer Y normalised to g.
+     * @param rawZ Platform accelerometer Z normalised to g.
      * @return      Acceleration vector in XNA landscape coordinate convention.
      */
     static Microsoft::Xna::Framework::Vector3 ConvertAndroidAccelerometerToXnaLandscape(
         float rawX, float rawY, float rawZ)
     {
-        const SDL_DisplayOrientation orient =
-            SDL_GetCurrentDisplayOrientation(SDL_GetPrimaryDisplay());
-
-        // Task P5-7: the actual sign-remap math is a pure function shared
-        // with Gyroscope.cpp (identical for both), moved to
-        // Detail::ConvertAndroidPortraitToXnaLandscape() so it can be unit
-        // tested on any platform. This function's only remaining job is
-        // mapping SDL's live display orientation to that function's
-        // platform-independent enum, plus the debug log below.
+        CNA::Platform::IPlatformSensors* sensors =
+            CNA::Platform::GetCurrentPlatform().GetSensors();
+        const CNA::Platform::SensorDisplayRotation rotation = sensors != nullptr
+            ? sensors->GetDisplayRotation()
+            : CNA::Platform::SensorDisplayRotation::Unknown;
         const Detail::AndroidSensorLandscapeOrientation mappedOrientation =
-            (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
+            (rotation == CNA::Platform::SensorDisplayRotation::Degrees270)
                 ? Detail::AndroidSensorLandscapeOrientation::Rotation270
                 : Detail::AndroidSensorLandscapeOrientation::Rotation90;
 
-        const Microsoft::Xna::Framework::Vector3 converted =
-            Detail::ConvertAndroidPortraitToXnaLandscape(rawX, rawY, rawZ, mappedOrientation);
-
-#ifndef NDEBUG
-    const char* orientName =
-        (orient == SDL_ORIENTATION_LANDSCAPE_FLIPPED)
-            ? "LANDSCAPE_FLIPPED(ROTATION_270)"
-            : "LANDSCAPE(ROTATION_90)";
-    SDL_Log (
-"[CNA][Accelerometer] displayRotation=%s raw=(%.3f,%.3f,%.3f) converted=(%.3f,%.3f,%.3f)",
-    orientName, rawX, rawY, rawZ, converted.X, converted.Y, converted.Z);
-#endif
-
-    return converted;
+        return Detail::ConvertAndroidPortraitToXnaLandscape(
+            rawX, rawY, rawZ, mappedOrientation);
     }
 #endif // __ANDROID__
 
@@ -541,27 +399,17 @@ namespace Microsoft::Devices::Sensors
             return;
         }
 
-        // Task P6-3: started_'s read folded into the same lock scope that
-        // already reads subsystem.sensor_/sensorId_ — previously read
-        // separately with no lock at all, racing against
-        // Start()/Stop()/Dispose() on another thread.
-        std::int64_t currentSensorId;
         {
             auto& subsystem = GetSubsystem();
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
-            if (!started_ || subsystem.sensor_ == nullptr)
+            if (!started_)
             {
                 return;
             }
-            currentSensorId = subsystem.sensorId_;
         }
+        (void)sensorId;
 
-        if (sensorId != currentSensorId)
-        {
-            return;
-        }
-
-        // Task ACCEL-005/SDL-SENSOR-002: honor TimeBetweenUpdates by
+        // Honor TimeBetweenUpdates by
         // dropping events that arrive too soon after the last accepted one.
         // Scoped to this instance alone (ShouldAcceptUpdateAt() reads/writes
         // only this object's own fields), so two Accelerometer instances
@@ -582,40 +430,12 @@ namespace Microsoft::Devices::Sensors
     {
         AccelerometerReading accelerometerReading;
 
-        // Task ACCEL-003 (re-verified 2026-07-06): SDL3 documents its own
-        // `SDL_STANDARD_GRAVITY` macro (third_party/SDL/include/SDL3/SDL_sensor.h)
-        // as "The accelerometer returns the current acceleration in SI meters
-        // per second squared" -- a cross-platform contract, not a
-        // per-backend guess. Confirmed this is actually implemented
-        // consistently, not just documented, by reading two real platform
-        // backends directly: Android's (SDL_androidsensor.c) passes NDK
-        // ASensorEvent data through completely unconverted (correct, since
-        // ASENSOR_TYPE_ACCELEROMETER already reports m/s^2 natively);
-        // Windows' (SDL_windowssensor.c) explicitly multiplies its native
-        // Sensor API's g-unit values by SDL_STANDARD_GRAVITY before handing
-        // them to SDL_SendSensorUpdate() -- i.e. SDL itself does the
-        // necessary per-platform conversion so every backend ends up
-        // reporting the same SI m/s^2 unit this constant assumes.
+        // IPlatformSensors reports acceleration in SI metres per second squared. WP7 exposes the
+        // reading in fractions of standard gravity, so conversion belongs at this API boundary.
         constexpr float StandardGravity = 9.80665f;
 
-        // Task SDL-SENSOR-001 (2026-07-06): axis convention for the raw x/y/z
-        // this method receives is documented directly above `SDL_SensorType`
-        // (third_party/SDL/include/SDL3/SDL_sensor.h, "Accelerometer sensor
-        // notes"): for a device in natural (portrait) orientation,
-        // -X..+X = left..right, -Y..+Y = bottom..top, -Z..+Z = farther..closer,
-        // and "the accelerometer axis data is not changed when the device is
-        // rotated" -- i.e. these are raw, device-frame axes, never
-        // display-orientation-aware, exactly what ConvertAndroidAccelerometerToXnaLandscape()
-        // below assumes it is remapping *from*. Confirmed this is what SDL
-        // actually delivers, not just documents, by reading both real
-        // backends this project targets: SDL_androidsensor.c passes the NDK
-        // ASensorEvent's raw values through with no axis reordering at all
-        // (only ACCEL-003's unit passthrough); SDL_windowssensor.c maps
-        // Windows' own SENSOR_DATA_TYPE_ACCELERATION_{X,Y,Z}_G values to
-        // values[0]/[1]/[2] in the same X/Y/Z order, only scaling by
-        // SDL_STANDARD_GRAVITY -- neither backend reorders or negates axes,
-        // so this method's x/y/z parameters are exactly SDL's documented
-        // natural-orientation axes on every platform this project builds for.
+        // Raw values use natural-orientation device axes. Only the Android compatibility policy
+        // below applies a display-relative remap.
         // Task BASE2-002 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
         // previously set via an early setIsDataValidProperty(valid) call,
         // then immediately re-read back via getIsDataValidProperty() below --
@@ -629,7 +449,7 @@ namespace Microsoft::Devices::Sensors
         if (valid)
         {
 #ifdef __ANDROID__
-            // On Android, remap raw SDL portrait-frame axes to the XNA landscape
+            // On Android, remap raw portrait-frame axes to the XNA landscape
             // convention so that the game layer remains platform-agnostic -- unless
             // Task ACCEL-008's opt-out has been used to request real WP7's raw,
             // unremapped, device-fixed axes instead (see
@@ -653,12 +473,8 @@ namespace Microsoft::Devices::Sensors
 
             accelerometerReading.setAccelerationProperty(acceleration);
 
-            // Wall-clock time of this reading (Task P4-7). Previously derived
-            // from SDL_GetTicksNS() (monotonic ns since SDL init) fed into a
-            // DateTime(ticks) constructor that expects ticks since the .NET
-            // epoch (0001-01-01) — always produced a bogus near-year-1 value,
-            // never the actual reading time. Re-confirmed as this project's
-            // one consistent cross-sensor-class policy, Task READINGS-003 —
+            // Wall-clock time of this reading (Task P4-7), rather than the platform session's
+            // arbitrary monotonic epoch. This is the project-wide cross-sensor policy —
             // see docs/devices-api-coverage.md's "Timestamp policy" section.
             accelerometerReading.setTimestampProperty(System::DateTimeOffset::getUtcNowProperty());
         }
@@ -755,7 +571,7 @@ namespace Microsoft::Devices::Sensors
         // CurrentValueChanged/ReadingChanged handler) throws — previously
         // a plain post-call statement, skipped entirely on an exception
         // and permanently corrupting the dispatch token. Unlike the
-        // real SDL event-watch path (SensorEventWatch()), this is a
+        // real platform callback path, this is a
         // regular C++ call site, not a C-library callback boundary, so the
         // exception is allowed to propagate to this method's own caller
         // after cleanup runs.
@@ -819,16 +635,16 @@ namespace Microsoft::Devices::Sensors
     void Accelerometer::DispatchToInstancesForTesting(
         const std::vector<Accelerometer*>& instances, float x, float y, float z)
     {
-        // Task SDLCORE-004: DispatchToInstances() now takes a snapshot of
+        // DispatchToInstances() takes a snapshot of
         // DispatchRegistration nodes, not raw pointers -- reconstruct that
         // snapshot from the *currently* active registration for each raw
-        // test pointer, exactly as SensorEventWatch() itself does from the
+        // test pointer, exactly as the platform callback does from the
         // live startedInstances_ list, before any dispatch (and thus any
         // test callback that might dispose/destroy one of these instances)
         // has had a chance to run.
         auto& subsystem = GetSubsystem();
 
-        std::vector<std::shared_ptr<Detail::SdlSensorSubsystem<Accelerometer>::DispatchRegistration>> registrations;
+        std::vector<std::shared_ptr<Detail::PlatformSensorSubsystem<Accelerometer>::DispatchRegistration>> registrations;
         {
             std::lock_guard<std::mutex> lock(subsystem.mutex_);
             for (Accelerometer* instance : instances)
@@ -873,8 +689,7 @@ namespace Microsoft::Devices::Sensors
 
     bool Accelerometer::IsSensorConnectedForTesting(std::int64_t sensorId)
     {
-        std::lock_guard<std::mutex> sdlLock(Detail::GetGlobalSdlSensorMutex());
-        return Detail::SdlSensorSubsystem<Accelerometer>::IsSensorConnected(sensorId, sdlLock);
+        return Detail::PlatformSensorSubsystem<Accelerometer>::IsSensorConnected(sensorId);
     }
 
     GetTypeNameCPP(Accelerometer, "Microsoft.Devices.Sensors.Accelerometer")

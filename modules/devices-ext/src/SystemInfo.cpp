@@ -3,18 +3,18 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_cpuinfo.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace CNA::Devices
 {
     int SystemInfo::getLogicalCpuCoreCountProperty()
     {
-        return SDL_GetNumLogicalCPUCores();
+        return Platform::GetCurrentPlatform().GetSystemInfo()->GetLogicalCoreCount();
     }
 
     int SystemInfo::getSystemRamMegabytesProperty()
     {
-        return SDL_GetSystemRAM();
+        return Platform::GetCurrentPlatform().GetSystemInfo()->GetSystemMemoryMegabytes();
     }
 } // namespace CNA::Devices
 

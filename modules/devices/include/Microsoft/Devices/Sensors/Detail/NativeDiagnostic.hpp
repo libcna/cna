@@ -33,13 +33,13 @@ namespace Microsoft::Devices::Sensors::Detail
         /** @brief Which backend produced this record, e.g. "SDL" or "Android". */
         std::string Backend;
 
-        /** @brief The native API call or internal operation that failed, e.g. "SDL_PlayHapticRumble" or "AndroidSensorBridge::Run callback". */
+        /** @brief The native API call or internal operation that failed, e.g. "PlayHapticRumble" or "AndroidSensorBridge::Run callback". */
         std::string Operation;
 
         /** @brief The native return code, if the underlying API has one; 0 if not applicable (e.g. a swallowed C++ exception has no native code of its own). */
         int NativeCode = 0;
 
-        /** @brief Human-readable detail -- SDL_GetError() text, an exception's what(), or a short fixed description. */
+        /** @brief Human-readable detail — native error text, an exception's what(), or a short fixed description. */
         std::string NativeMessage;
 
         /** @brief Best-effort identifier of the sensor/haptic device this record is about; empty if none is available at this call site. */
@@ -68,9 +68,7 @@ namespace Microsoft::Devices::Sensors::Detail
 
         /**
          * @brief Records one diagnostic event: logs it (debug builds only,
-         * via SDL_Log() -- available and already linked on every CNA target
-         * this sink can be called from, including Android, where SDL_Log()
-         * itself routes to logcat), increments the process-wide counter,
+         * via CNA's process-wide logger), increments the process-wide counter,
          * stores a copy as the last record, and invokes the test/diagnostics
          * callback if one is set. Never throws, regardless of what logging,
          * copying, or the callback itself do internally.

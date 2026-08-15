@@ -6,8 +6,6 @@
 
 #include "openvg.h"
 
-#include <SDL3/SDL.h>
-
 // P1-8: portable GL/GLU header selection -- mirrors the pinned ShivaVG source's own shDefs.h
 // platform branch exactly (Apple's headers live under a different framework path, and MSVC's
 // <GL/gl.h> requires <windows.h> to already be included), rather than assuming the Linux/X11
@@ -53,6 +51,20 @@ namespace CNA::Internal::Renderers::OpenVg
         // smallest robust fix: only one OpenVgRenderer may be live at a time; sequential
         // construct/destroy/construct cycles remain fully supported.
         std::atomic<bool> g_shivaVgContextOwned{false};
+
+        CNA::Platform::GlContextDescription RequestedContext()
+        {
+            CNA::Platform::GlContextDescription description;
+            description.majorVersion = 2;
+            description.minorVersion = 1;
+            description.profile = CNA::Platform::GlProfile::Compatibility;
+            description.depthBits = 0;
+            description.stencilBits = 0;
+            description.multisampleBuffers = 0;
+            description.multisampleSamples = 0;
+            description.doubleBuffer = true;
+            return description;
+        }
     }
 
     // ShivaVG's own updateBlendingStateGL (src/shPipeline.c) implements VG_BLEND_SRC (opaque,
@@ -98,15 +110,12 @@ namespace CNA::Internal::Renderers::OpenVg
             "blend-factor/equation model to express an arbitrary custom BlendState.");
     }
 
-    OpenVgRenderer::OpenVgRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                   CnaPresentationMode mode, int swapInterval)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    OpenVgRenderer::OpenVgRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("OpenVgRenderer initialized with null window.");
-
         {
             bool expected = false;
             if (!g_shivaVgContextOwned.compare_exchange_strong(expected, true))
@@ -121,52 +130,41 @@ namespace CNA::Internal::Renderers::OpenVg
         ownsGlobalContext_ = true;
 
         // Exception-safe from here on: every acquired resource (the global-context ownership
-        // flag above, and the SDL GL context below) is released on any throw before this
-        // constructor commits, since this object's own destructor never runs for a
+        // flag above, the platform GL context and the ShivaVG context) is released on any throw
+        // before this constructor commits, since this object's own destructor never runs for a
         // not-yet-fully-constructed instance.
         try
         {
-            // ShivaVG is fixed-function/immediate-mode desktop GL (glVertexPointer/glDrawArrays-era
-            // client vertex arrays, no VAOs/shaders) -- it needs a genuine compatibility-profile
-            // context. The profile mask ALONE is not enough to reliably get one (found empirically:
-            // vgClear worked but vgDrawPath/vgDrawImage silently rasterized nothing on this
-            // environment's Mesa software GL, consistent with a driver-chosen core profile silently
-            // ignoring client-array draw calls) -- pinning an explicit legacy version alongside the
-            // mask, the same combination OpenGL2Renderer's own constructor uses for the identical
-            // reason, is what actually forces a compatibility context.
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-
-            glContext_ = SDL_GL_CreateContext(window_);
-            if (!glContext_)
-                throw std::runtime_error(std::string("OPENVG: SDL_GL_CreateContext failed: ") + SDL_GetError());
-            if (!SDL_GL_MakeCurrent(window_, glContext_))
-                throw std::runtime_error(std::string("OPENVG: SDL_GL_MakeCurrent failed: ") + SDL_GetError());
+            // ShivaVG is fixed-function/immediate-mode desktop GL (client vertex arrays, no
+            // VAOs/shaders), so request the same explicit 2.1 compatibility context as OPENGL2.
+            platformContext_ = std::make_unique<PlatformGlContextOwner>(
+                RequirePlatformGlContext(args.glContext, "OPENVG"),
+                RequirePlatformGlWindow(args.surface, "OPENVG"), RequestedContext());
 
             int physW = 0, physH = 0;
-            SDL_GetWindowSizeInPixels(window_, &physW, &physH);
+            surface_.GetDrawableSize(physW, physH);
             if (physW <= 0) physW = 1;
             if (physH <= 0) physH = 1;
 
             if (!vgCreateContextSH(physW, physH))
                 throw std::runtime_error("OPENVG: vgCreateContextSH failed.");
+            shivaContextCreated_ = true;
 
             lastPhysW_ = physW;
             lastPhysH_ = physH;
             refreshPresentationDerivedStateEXT();
-            SetSwapInterval(swapInterval);
+            SetSwapInterval(args.swapInterval);
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
         }
         catch (...)
         {
-            if (glContext_)
+            if (shivaContextCreated_)
             {
-                SDL_GL_MakeCurrent(window_, nullptr);
-                SDL_GL_DestroyContext(glContext_);
-                glContext_ = nullptr;
+                vgDestroyContextSH();
+                shivaContextCreated_ = false;
             }
+            platformContext_.reset();
             if (ownsGlobalContext_)
             {
                 g_shivaVgContextOwned.store(false);
@@ -178,20 +176,20 @@ namespace CNA::Internal::Renderers::OpenVg
 
     OpenVgRenderer::~OpenVgRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         // P2-2: re-establish currentness before touching ShivaVG's context -- some other GL
         // consumer in this process may have changed the current context since this renderer's
         // last call (the single-live-OpenVG-renderer rule only guarantees no OTHER OpenVgRenderer
         // shares ShivaVG's global context, not that nothing else in the process ever calls
-        // SDL_GL_MakeCurrent).
-        if (glContext_)
-            SDL_GL_MakeCurrent(window_, glContext_);
-        vgDestroyContextSH();
-        if (glContext_)
+        // IPlatformGlContext::MakeCurrent).
+        if (platformContext_)
+            platformContext_->MakeCurrent();
+        if (shivaContextCreated_)
         {
-            SDL_GL_MakeCurrent(window_, nullptr);
-            SDL_GL_DestroyContext(glContext_);
+            vgDestroyContextSH();
+            shivaContextCreated_ = false;
         }
+        platformContext_.reset();
         if (ownsGlobalContext_)
         {
             g_shivaVgContextOwned.store(false);
@@ -201,15 +199,14 @@ namespace CNA::Internal::Renderers::OpenVg
 
     // Mirrors OpenGL2Renderer::ComputeLogicalViewport's algorithm exactly (see that renderer's own
     // "reference implementation" doc comment on IGraphicsRenderer::GetDefaultViewportRect), with
-    // one deliberate change: physical-pixel-based throughout (SDL_GetWindowSizeInPixels), not
-    // window-point-based (SDL_GetWindowSize) -- glViewport/gluOrtho2D/glReadPixels all require real
-    // physical pixels, and conflating the two would be wrong under a high-DPI window scale factor
+    // one deliberate change: physical-pixel-based throughout -- glViewport/gluOrtho2D/glReadPixels
+    // all require real physical pixels, and conflating them with logical client units is wrong
     // (P0-1's own "account correctly for high-DPI" requirement). NativeBackBuffer/no-virtual-
     // resolution/zero-size-window all degenerate to the full physical window with no scaling.
     OpenVgRenderer::LogicalViewport OpenVgRenderer::ComputeLogicalViewportEXT() const
     {
         int physW = 0, physH = 0;
-        SDL_GetWindowSizeInPixels(window_, &physW, &physH);
+        surface_.GetDrawableSize(physW, physH);
 
         LogicalViewport viewport{};
         viewport.width = static_cast<float>(std::max(0, physW));
@@ -254,7 +251,8 @@ namespace CNA::Internal::Renderers::OpenVg
     int OpenVgRenderer::GetPhysicalHeightEXT() const
     {
         int physH = 0;
-        SDL_GetWindowSizeInPixels(window_, nullptr, &physH);
+        int ignoredWidth = 0;
+        surface_.GetDrawableSize(ignoredWidth, physH);
         return physH > 0 ? physH : 1;
     }
 
@@ -335,7 +333,7 @@ namespace CNA::Internal::Renderers::OpenVg
     void OpenVgRenderer::EnsureSurfaceSizeEXT()
     {
         int physW = 0, physH = 0;
-        SDL_GetWindowSizeInPixels(window_, &physW, &physH);
+        surface_.GetDrawableSize(physW, physH);
         if (physW <= 0) physW = 1;
         if (physH <= 0) physH = 1;
         if (physW == lastPhysW_ && physH == lastPhysH_)
@@ -372,7 +370,7 @@ namespace CNA::Internal::Renderers::OpenVg
     void OpenVgRenderer::Present()
     {
         vgFlush();
-        SDL_GL_SwapWindow(window_);
+        platformContext_->SwapBuffers();
     }
 
     void OpenVgRenderer::GetViewportSize(int& width, int& height)
@@ -380,6 +378,12 @@ namespace CNA::Internal::Renderers::OpenVg
         const LogicalViewport viewport = ComputeLogicalViewportEXT();
         width = static_cast<int>(std::lround(viewport.logicalWidth));
         height = static_cast<int>(std::lround(viewport.logicalHeight));
+    }
+
+    void OpenVgRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+        EnsureSurfaceSizeEXT();
     }
 
     // The reference "real Letterbox/Overscan/Stretch" GetDefaultViewportRect() override in this
@@ -421,43 +425,27 @@ namespace CNA::Internal::Renderers::OpenVg
 
     void OpenVgRenderer::SetSwapInterval(int interval)
     {
-        if (SDL_GL_SetSwapInterval(interval) != 0 && interval != 0)
+        if (platformContext_->SetSwapInterval(interval))
         {
-            // Some drivers reject adaptive vsync (-1) or a specific positive interval; fall back
-            // to the standard single-buffer vsync every desktop GL driver supports rather than
-            // silently keeping whatever interval happened to be active before.
-            if (SDL_GL_SetSwapInterval(1) != 0)
-                SDL_GL_SetSwapInterval(0);
+            swapInterval_ = interval;
+            return;
         }
-        // Never claim a mode SDL rejected -- record what actually ended up active.
-        int actualInterval = interval;
-        if (SDL_GL_GetSwapInterval(&actualInterval))
-            swapInterval_ = actualInterval;
+        // Some drivers reject adaptive vsync or a larger positive interval. Fall back to ordinary
+        // vsync, then immediate presentation, and only record a setting the platform accepted.
+        if (interval != 0 && platformContext_->SetSwapInterval(1))
+            swapInterval_ = 1;
+        else if (platformContext_->SetSwapInterval(0))
+            swapInterval_ = 0;
     }
 
     bool OpenVgRenderer::TransformWindowToLogical(float windowX, float windowY, float& logX, float& logY) const
     {
-        // `windowX`/`windowY` are SDL window-point coordinates (what SDL's own mouse/touch events
-        // report -- SDL_GetWindowSize's units, NOT necessarily physical pixels on a high-DPI
-        // display), while ComputeLogicalViewportEXT()'s rectangle is physical-pixel-based (P0-1) --
-        // scaled by the window's own DPI factor before the presentation-rect math so the two
-        // spaces agree.
-        int winW = 0, winH = 0;
-        SDL_GetWindowSize(window_, &winW, &winH);
-        if (winW <= 0 || winH <= 0)
-            return false;
-
         const LogicalViewport viewport = ComputeLogicalViewportEXT();
         if (viewport.width <= 0.0f || viewport.height <= 0.0f)
             return false;
 
-        int physW = 0, physH = 0;
-        SDL_GetWindowSizeInPixels(window_, &physW, &physH);
-        const float scaleX = physW > 0 ? static_cast<float>(physW) / static_cast<float>(winW) : 1.0f;
-        const float scaleY = physH > 0 ? static_cast<float>(physH) / static_cast<float>(winH) : 1.0f;
-
-        const float physX = windowX * scaleX;
-        const float physY = windowY * scaleY;
+        const float physX = surface_.WindowToDrawable(windowX);
+        const float physY = surface_.WindowToDrawable(windowY);
         // Outside the current presentation rectangle -- a Letterbox bar, or an Overscan/Stretch
         // window edge -- has no corresponding logical position.
         if (physX < viewport.x || physX > viewport.x + viewport.width ||
@@ -478,17 +466,8 @@ namespace CNA::Internal::Renderers::OpenVg
         const float physX = viewport.x + logX * viewport.width / viewport.logicalWidth;
         const float physY = viewport.y + logY * viewport.height / viewport.logicalHeight;
 
-        int winW = 0, winH = 0;
-        SDL_GetWindowSize(window_, &winW, &winH);
-        int physW = 0, physH = 0;
-        SDL_GetWindowSizeInPixels(window_, &physW, &physH);
-        if (winW <= 0 || winH <= 0 || physW <= 0 || physH <= 0)
-            return false;
-        const float invScaleX = static_cast<float>(winW) / static_cast<float>(physW);
-        const float invScaleY = static_cast<float>(winH) / static_cast<float>(physH);
-
-        windowX = physX * invScaleX;
-        windowY = physY * invScaleY;
+        windowX = surface_.DrawableToWindow(physX);
+        windowY = surface_.DrawableToWindow(physY);
         return true;
     }
 
@@ -741,8 +720,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<OpenVg::OpenVgRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
-            args.swapInterval);
+        return std::make_unique<OpenVg::OpenVgRenderer>(args);
     }
 }

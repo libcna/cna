@@ -12,9 +12,9 @@ namespace CNA::Input
      * @brief CNAEXT — active keyboard modifier keys and lock states, as a bit flag set.
      *
      * XNA 4.0's `KeyboardState` exposes only individual key up/down; it has no aggregate modifier or
-     * lock-state query. This CNA extension mirrors SDL3's `SDL_Keymod` (collapsing the left/right
-     * variants of each modifier into one flag), so text/UI code can branch on Shift/Ctrl/Alt/Gui and
-     * read the Caps/Num/Scroll lock toggles.
+     * lock-state query. This CNA extension projects the platform contract's implementation-neutral
+     * `KeyModifier` mask (which collapses left/right variants), so text/UI code can branch on
+     * Shift/Ctrl/Alt/Gui and read the Caps/Num/Scroll lock toggles without naming a native backend.
      */
     CNAEXT enum class KeyModifiersEXT : std::uint32_t
     {

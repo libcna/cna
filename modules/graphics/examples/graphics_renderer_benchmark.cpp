@@ -2,10 +2,9 @@
 //
 // CNAEXT. A renderer-agnostic sprite benchmark, deliberately written against nothing but the public
 // XNA API (no CNA::Internal::Renderers::* include, no renderer-specific hook) so the identical
-// source can be compiled against CANVAS, EASYGL or HTML_DOM and produce a genuine like-for-like
-// comparison -- built once per renderer via three separate `emcmake` configures
-// (cmake-build-canvas/cmake-build-easygl/cmake-build-htmldom), each producing its own
-// cna_bench_graphics_renderer.html.
+// source produces a genuine like-for-like comparison. In browsers it retains the original
+// CANVAS/EasyGL/HTML_DOM reporting contract. On native hosts it is also the PLAT-7/PLAT-120 fixed
+// scene: build the target once per selected renderer and compare its raw per-frame JSON samples.
 //
 // plan_html_dom.md HTMLDOM-111 (reopens HTMLDOM-89/92/99's own conclusions): an earlier version of
 // this file (and htmldom_stress_test.cpp's own HTMLDOM-89 benchmark) stopped its timer immediately
@@ -63,7 +62,9 @@
 #include "CNA/GraphicsRendererType.hpp"
 
 #include <cmath>
+#include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
@@ -78,7 +79,28 @@ using namespace Microsoft::Xna::Framework::Graphics;
 namespace
 {
     constexpr int kSpriteCount = 500;
-    constexpr int kPhaseFrames = 60;
+
+#if defined(__EMSCRIPTEN__)
+    constexpr int kWarmupFrames = 1;
+    constexpr int kDefaultPhaseFrames = 60;
+#else
+    constexpr int kWarmupFrames = 120;
+    constexpr int kDefaultPhaseFrames = 1200;
+#endif
+
+    int PhaseFrames()
+    {
+#if defined(__EMSCRIPTEN__)
+        return kDefaultPhaseFrames;
+#else
+        const char* configured = std::getenv("CNA_BENCH_PHASE_FRAMES");
+        if (configured == nullptr)
+            return kDefaultPhaseFrames;
+
+        const long value = std::strtol(configured, nullptr, 10);
+        return value >= 100 && value <= 100000 ? static_cast<int>(value) : kDefaultPhaseFrames;
+#endif
+    }
 
 #if defined(__EMSCRIPTEN__)
     EM_JS(double, JsNow, (), { return performance.now(); });
@@ -125,10 +147,43 @@ namespace
         window.__cnaSmokeResult = 0;
     });
 #else
-    double JsNow() { return 0.0; }
+    double JsNow()
+    {
+        using Clock = std::chrono::steady_clock;
+        return std::chrono::duration<double, std::milli>(Clock::now().time_since_epoch()).count();
+    }
     void JsPushSample(const char*, double) {}
     void JsPublishResult(const char*, double, double, double, double) {}
 #endif
+
+    void PrintJsonArray(const std::vector<double>& samples)
+    {
+        std::putchar('[');
+        for (std::size_t i = 0; i < samples.size(); ++i)
+        {
+            if (i != 0)
+                std::putchar(',');
+            std::printf("%.9f", samples[i]);
+        }
+        std::putchar(']');
+    }
+
+    void PrintNativeSamples(const std::string& renderer, const char* phase, const char* metric,
+                            const std::vector<double>& samples)
+    {
+#if !defined(__EMSCRIPTEN__)
+        std::printf("{\"schema\":1,\"renderer\":\"%s\",\"phase\":\"%s\","
+                    "\"metric\":\"%s\",\"sprites\":%d,\"samples_ms\":",
+                    renderer.c_str(), phase, metric, kSpriteCount);
+        PrintJsonArray(samples);
+        std::puts("}");
+#else
+        (void)renderer;
+        (void)phase;
+        (void)metric;
+        (void)samples;
+#endif
+    }
 }
 
 class GraphicsRendererBenchmark : public Game
@@ -136,16 +191,21 @@ class GraphicsRendererBenchmark : public Game
     std::unique_ptr<GraphicsDeviceManager> gdm_;
     std::unique_ptr<SpriteBatch> spriteBatch_;
     std::unique_ptr<Texture2D> texture_;
+    const int phaseFrames_ = PhaseFrames();
     int frame_ = 0;
     double lastFrameStart_ = -1.0;
 
     double stableSubmissionTotalMs_ = 0.0;
     double stableEndToEndTotalMs_ = 0.0;
     int stableFramesTimed_ = 0;
+    std::vector<double> stableSubmissionSamples_;
+    std::vector<double> stableEndToEndSamples_;
 
     double churnSubmissionTotalMs_ = 0.0;
     double churnEndToEndTotalMs_ = 0.0;
     int churnFramesTimed_ = 0;
+    std::vector<double> churnSubmissionSamples_;
+    std::vector<double> churnEndToEndSamples_;
 
     // plan_html_dom.md HTMLDOM-111: draws kSpriteCount sprites, all moving every frame (this
     // renderer's own documented sweet spot on the position side regardless of workload). `churnTint`
@@ -188,14 +248,13 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         dev.Clear(Color(10, 10, 20, 255));
 
-        // Frame 1 pays the one-time pool-creation cost -- excluded from every measurement, the
-        // same "frame 1 is excluded" shape htmldom_stress_test.cpp's own HTMLDOM-89 benchmark uses.
-        // Frames 2..1+kPhaseFrames: stable-tint phase. Frames 2+kPhaseFrames..1+2*kPhaseFrames:
-        // heavy-churn phase, immediately following with no extra warm-up frame -- every one of ITS
-        // frames is already a fresh cache entry by design (churnTint=true), so there is no steady
-        // state to warm into first, unlike the stable-tint phase's one-time pool-creation cost.
-        const bool inStablePhase = frame_ > 1 && frame_ <= 1 + kPhaseFrames;
-        const bool inChurnPhase = frame_ > 1 + kPhaseFrames && frame_ <= 1 + 2 * kPhaseFrames;
+        // Native runs use a longer warm-up to settle code/data caches and CPU frequency. Browser
+        // runs retain their historical one-frame warm-up. Churn immediately follows stable tint;
+        // it intentionally has no cache steady-state because fresh tint values are the workload.
+        const int stableEnd = kWarmupFrames + phaseFrames_;
+        const int churnEnd = kWarmupFrames + 2 * phaseFrames_;
+        const bool inStablePhase = frame_ > kWarmupFrames && frame_ <= stableEnd;
+        const bool inChurnPhase = frame_ > stableEnd && frame_ <= churnEnd;
 
         const double subT0 = (inStablePhase || inChurnPhase) ? JsNow() : 0.0;
         DrawSprites(/*churnTint=*/inChurnPhase);
@@ -203,6 +262,7 @@ protected:
         {
             const double subMs = JsNow() - subT0;
             (inStablePhase ? stableSubmissionTotalMs_ : churnSubmissionTotalMs_) += subMs;
+            (inStablePhase ? stableSubmissionSamples_ : churnSubmissionSamples_).push_back(subMs);
         }
 
         // End-to-end: the wall-clock gap since the PREVIOUS Draw() call started -- see this file's
@@ -215,25 +275,27 @@ protected:
         if (lastFrameStart_ >= 0.0)
         {
             const double gapMs = frameStart - lastFrameStart_;
-            if (inStablePhase && frame_ > 2)
+            if (inStablePhase && frame_ > kWarmupFrames + 1)
             {
                 stableEndToEndTotalMs_ += gapMs;
                 ++stableFramesTimed_;
+                stableEndToEndSamples_.push_back(gapMs);
                 JsPushSample("stable", gapMs);
             }
-            else if (inChurnPhase && frame_ > 2 + kPhaseFrames)
+            else if (inChurnPhase && frame_ > stableEnd + 1)
             {
                 churnEndToEndTotalMs_ += gapMs;
                 ++churnFramesTimed_;
+                churnEndToEndSamples_.push_back(gapMs);
                 JsPushSample("churn", gapMs);
             }
         }
         lastFrameStart_ = frameStart;
 
-        if (frame_ == 1 + 2 * kPhaseFrames)
+        if (frame_ == churnEnd)
         {
-            const double stableSubAvg = stableSubmissionTotalMs_ / kPhaseFrames;
-            const double churnSubAvg = churnSubmissionTotalMs_ / kPhaseFrames;
+            const double stableSubAvg = stableSubmissionTotalMs_ / phaseFrames_;
+            const double churnSubAvg = churnSubmissionTotalMs_ / phaseFrames_;
             const double stableE2eAvg =
                 stableFramesTimed_ > 0 ? stableEndToEndTotalMs_ / stableFramesTimed_ : -1.0;
             const double churnE2eAvg =
@@ -248,13 +310,16 @@ protected:
             std::printf("    heavy churn : submission %.4f ms/frame | end-to-end %.4f ms/frame "
                         "(%.1f real fps)\n",
                         churnSubAvg, churnE2eAvg, churnE2eAvg > 0 ? 1000.0 / churnE2eAvg : 0.0);
-            std::printf("    (submission = SpriteBatch Begin/Draw/End CPU time only, NOT a frame "
-                        "rate; end-to-end = real wall-clock gap between successive "
-                        "requestAnimationFrame-paced Draw() calls, includes all deferred browser "
-                        "layout/paint/composite work)\n");
+            std::printf("    (submission = SpriteBatch Begin/Draw/End CPU time only; end-to-end "
+                        "= wall-clock gap between successive Draw calls, including the host "
+                        "loop's event/update/present work)\n");
             std::fflush(stdout);
 
             const std::string rendererNameStr(rendererName);
+            PrintNativeSamples(rendererNameStr, "stable", "submission", stableSubmissionSamples_);
+            PrintNativeSamples(rendererNameStr, "stable", "end_to_end", stableEndToEndSamples_);
+            PrintNativeSamples(rendererNameStr, "churn", "submission", churnSubmissionSamples_);
+            PrintNativeSamples(rendererNameStr, "churn", "end_to_end", churnEndToEndSamples_);
             JsPublishResult(rendererNameStr.c_str(), stableSubAvg, stableE2eAvg, churnSubAvg, churnE2eAvg);
             Exit();
         }
@@ -263,9 +328,15 @@ protected:
 public:
     GraphicsRendererBenchmark()
     {
+        setIsFixedTimeStepProperty(false);
         gdm_ = std::make_unique<GraphicsDeviceManager>(this);
         gdm_->setPreferredBackBufferWidthProperty(480);
         gdm_->setPreferredBackBufferHeightProperty(270);
+        gdm_->setSynchronizeWithVerticalRetraceProperty(false);
+        stableSubmissionSamples_.reserve(static_cast<std::size_t>(phaseFrames_));
+        stableEndToEndSamples_.reserve(static_cast<std::size_t>(phaseFrames_ - 1));
+        churnSubmissionSamples_.reserve(static_cast<std::size_t>(phaseFrames_));
+        churnEndToEndSamples_.reserve(static_cast<std::size_t>(phaseFrames_ - 1));
     }
 };
 

@@ -2,14 +2,13 @@
 //
 // plan_canvas.md CANVAS-80: structural GTest coverage for everything on the CANVAS renderer that
 // doesn't need a real CanvasRenderingContext2D -- ThrowNo3D coverage and the blend-mode->
-// globalCompositeOperation pure-function mapping. Runs under `node CnaTests.js` (Design decision
-// 9): this dev loop has no real browser DOM, and SDL_Init(SDL_INIT_VIDEO) itself throws under
-// Emscripten/node (confirmed empirically in Phase C1) -- so every test here deliberately avoids
-// touching window_ (GetViewportSize/TransformWindowToLogical/... need a real SDL window and are
-// left to CANVAS-82's manual browser checklist instead).
+// globalCompositeOperation pure-function mapping. Runs either under `node CnaTests.js` (Design
+// decision 9) or in the native host-contract target. Neither loop has a real browser DOM, so every
+// test here deliberately avoids the EM_JS presentation path; browser integration remains covered
+// by CANVAS-82's manual checklist.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_CANVAS)
+#if defined(CNA_RENDERER_CANVAS) || defined(CNA_CANVAS_HOST_TESTS)
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -23,11 +22,17 @@ using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 
 namespace
 {
-    // Non-null but never-dereferenced: CanvasRenderer's constructor only null-checks its
-    // window pointer and registers it in a pointer-keyed map (IGraphicsRenderer::RegisterForWindow)
-    // -- it never calls a real SDL API on it, and none of the ThrowNo3D-only methods exercised
-    // below touch window_ either.
-    SDL_Window* FakeWindow() { return reinterpret_cast<SDL_Window*>(0x1); }
+    GraphicsRendererCreateArgs TestArgs()
+    {
+        GraphicsRendererCreateArgs args;
+        args.surface.windowId = 1;
+        args.surface.nativeHandle.system = CNA::Platform::NativeWindowSystem::Web;
+        args.surface.drawableSize = {64, 64};
+        args.virtualWidth = 64;
+        args.virtualHeight = 64;
+        args.presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        return args;
+    }
 
     // Minimal stand-ins so DrawColoredPrimitives/DrawIndexedColoredPrimitives (which take
     // references, not pointers) have something valid to bind to -- ThrowNo3D fires immediately,
@@ -114,7 +119,7 @@ TEST(CanvasTintNormalization, OtherBlendModesKeepRawChannels)
 
 TEST(CanvasRendererThrowNo3D, ClearVariantsThrow)
 {
-    CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    CanvasRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.ClearColorAndDepth(0, 0, 0, 1, 1.0f), std::runtime_error);
     EXPECT_THROW(renderer.ClearDepth(1.0f), std::runtime_error);
     EXPECT_THROW(renderer.ClearStencil(0), std::runtime_error);
@@ -125,7 +130,7 @@ TEST(CanvasRendererThrowNo3D, ClearVariantsThrow)
 
 TEST(CanvasRendererThrowNo3D, DepthAndBlendStateSettersThrow)
 {
-    CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    CanvasRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.SetDepthTestEnabled(true), std::runtime_error);
     EXPECT_THROW(renderer.SetBlendEnabled(true), std::runtime_error);
     EXPECT_THROW(renderer.SetDepthWriteEnabled(true), std::runtime_error);
@@ -134,7 +139,7 @@ TEST(CanvasRendererThrowNo3D, DepthAndBlendStateSettersThrow)
 
 TEST(CanvasRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
 {
-    CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    CanvasRenderer renderer(TestArgs());
     EXPECT_THROW(renderer.CreateVertexBuffer(3), std::runtime_error);
     EXPECT_THROW(renderer.CreateIndexBuffer16(3), std::runtime_error);
     // CANVAS-62: CreateIndexBuffer32 has no Canvas-local override -- IGraphicsRenderer's own shared
@@ -144,7 +149,7 @@ TEST(CanvasRendererThrowNo3D, VertexAndIndexBufferCreationThrows)
 
 TEST(CanvasRendererThrowNo3D, DrawCallsThrow)
 {
-    CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    CanvasRenderer renderer(TestArgs());
     DummyVertexBuffer vb;
     DummyIndexBuffer ib;
     const Matrix identity = Matrix::getIdentityProperty();
@@ -162,7 +167,7 @@ TEST(CanvasRendererThrowNo3D, DrawCallsThrow)
 
 TEST(CanvasRendererThrowNo3D, SharedDefaultsReturnNullptr)
 {
-    CanvasRenderer renderer(FakeWindow(), 64, 64, CnaPresentationMode::FixedHeightDynamicWidth);
+    CanvasRenderer renderer(TestArgs());
     // CANVAS-64/66/67: no Canvas-local override for any of these -- IGraphicsRenderer's own shared
     // default (return nullptr) is already the intended behavior (CreateOcclusionQuery's nullptr is
     // Design decision 11, a deliberate choice that happens to coincide with the shared default).

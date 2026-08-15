@@ -37,7 +37,7 @@ namespace
 
 // Task P5-7: Accelerometer.cpp's/Gyroscope.cpp's #ifdef __ANDROID__ axis-remap
 // code was previously untestable off-Android — it called
-// SDL_GetCurrentDisplayOrientation() directly, and the whole function was
+// the native display-orientation query directly, and the whole function was
 // compiled out entirely on non-Android builds (confirmed compiling under
 // the real Android NDK for the first time in Task P4-11, but its actual
 // sign/axis correctness was still only reasoned about from documentation,
@@ -62,7 +62,7 @@ namespace
 
 TEST(AndroidSensorOrientationTests, AccelerometerRotation90NegatesY)
 {
-    // ROTATION_90 (SDL_ORIENTATION_LANDSCAPE): xnaX = rawX, xnaY = -rawY, xnaZ = rawZ.
+    // ROTATION_90 (landscape): xnaX = rawX, xnaY = -rawY, xnaZ = rawZ.
     const float rawX = 0.25f;
     const float rawY = -0.75f;
     const float rawZ = 1.0f;
@@ -77,7 +77,7 @@ TEST(AndroidSensorOrientationTests, AccelerometerRotation90NegatesY)
 
 TEST(AndroidSensorOrientationTests, AccelerometerRotation270NegatesX)
 {
-    // ROTATION_270 (SDL_ORIENTATION_LANDSCAPE_FLIPPED): xnaX = -rawX, xnaY = rawY, xnaZ = rawZ.
+    // ROTATION_270 (flipped landscape): xnaX = -rawX, xnaY = rawY, xnaZ = rawZ.
     const float rawX = 0.25f;
     const float rawY = -0.75f;
     const float rawZ = 1.0f;

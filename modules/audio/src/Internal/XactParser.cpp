@@ -986,7 +986,7 @@ namespace CNA::Internal::Audio
                 // skip by (unlike the RPC block above) -- FAudio reads and discards it, then
                 // reads a 1-byte code count followed by that many 4-byte codes (FACT_internal.c,
                 // FACTSoundBank_Prepare's SOUND_FLAG_HAS_DSP branch). DSP presets aren't applied
-                // here (SDL_mixer has no equivalent), but the codes must still be consumed
+                // here (the mixing engine has no equivalent), but the codes must still be consumed
                 // correctly to keep the cursor in sync with the rest of the sound entries.
                 if (flags & SOUND_FLAG_HAS_DSP)
                 {

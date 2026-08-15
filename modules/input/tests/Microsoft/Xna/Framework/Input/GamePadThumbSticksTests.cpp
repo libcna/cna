@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedGamepadStateDriver.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadThumbSticks.hpp"
 
@@ -11,15 +11,16 @@ using namespace Microsoft::Xna::Framework::Input;
 
 namespace
 {
-    void ResetGamePadState()
+    class GamePadThumbSticksTest : public ::testing::Test
     {
-        CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, false);
-    }
+    protected:
+        CNA::Internal::Input::Testing::CannedGamepadStateDriver input;
+    };
 }
 
 // --- Public API: construction, equality, hashing (no dead-zone mode involved) ---
 
-TEST(GamePadThumbSticksTest, DefaultConstructorIsAtRest)
+TEST_F(GamePadThumbSticksTest, DefaultConstructorIsAtRest)
 {
     const GamePadThumbSticks sticks;
 
@@ -27,7 +28,7 @@ TEST(GamePadThumbSticksTest, DefaultConstructorIsAtRest)
     EXPECT_EQ(sticks.getRightProperty(), Vector2::Zero);
 }
 
-TEST(GamePadThumbSticksTest, TwoArgConstructorAppliesSquareClamp)
+TEST_F(GamePadThumbSticksTest, TwoArgConstructorAppliesSquareClamp)
 {
     const GamePadThumbSticks sticks(Vector2(2.0f, -3.0f), Vector2(0.5f, 1.5f));
 
@@ -37,7 +38,7 @@ TEST(GamePadThumbSticksTest, TwoArgConstructorAppliesSquareClamp)
     EXPECT_FLOAT_EQ(sticks.getRightProperty().Y, 1.0f);
 }
 
-TEST(GamePadThumbSticksTest, EqualityOperatorsForEqualAndDifferingInstances)
+TEST_F(GamePadThumbSticksTest, EqualityOperatorsForEqualAndDifferingInstances)
 {
     const GamePadThumbSticks a(Vector2(0.1f, 0.2f), Vector2(0.3f, 0.4f));
     const GamePadThumbSticks sameAsA(Vector2(0.1f, 0.2f), Vector2(0.3f, 0.4f));
@@ -52,7 +53,7 @@ TEST(GamePadThumbSticksTest, EqualityOperatorsForEqualAndDifferingInstances)
     EXPECT_FALSE(a == different);
 }
 
-TEST(GamePadThumbSticksTest, GetHashCodeMatchesLeftPlus37TimesRightFormula)
+TEST_F(GamePadThumbSticksTest, GetHashCodeMatchesLeftPlus37TimesRightFormula)
 {
     const GamePadThumbSticks sticks(Vector2(0.1f, 0.2f), Vector2(0.3f, 0.4f));
 
@@ -64,14 +65,14 @@ TEST(GamePadThumbSticksTest, GetHashCodeMatchesLeftPlus37TimesRightFormula)
 
 // --- Dead-zone modes: only reachable via GamePad::GetState's private 3-arg ctor ---
 
-TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesPerAxisDeadZoneThenSquareClamps)
+TEST_F(GamePadThumbSticksTest, IndependentAxesModeExcludesPerAxisDeadZoneThenSquareClamps)
 {
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.5f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickY, 0.0f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickX, 0.5f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickY, 0.0f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
     const Vector2 left = state.getThumbSticksProperty().getLeftProperty();
@@ -80,22 +81,22 @@ TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesPerAxisDeadZoneThenSquar
     EXPECT_NEAR(left.X, expectedX, 1e-5f);
     EXPECT_FLOAT_EQ(left.Y, 0.0f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesRightStickDeadZoneUsingRightDeadZoneConstant)
+TEST_F(GamePadThumbSticksTest, IndependentAxesModeExcludesRightStickDeadZoneUsingRightDeadZoneConstant)
 {
     // The Left-stick test above only exercises GamePad::LeftDeadZone. LeftDeadZone
     // (7849/32768) and RightDeadZone (8689/32768) are distinct constants per FNA's
     // GamePad.cs, and GamePadThumbSticks::ApplyDeadZone wires right_.X/right_.Y to
     // RightDeadZone specifically (not LeftDeadZone) for GamePadDeadZone::IndependentAxes.
     // This pins that per-stick wiring, not just the shared formula.
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickX, 0.5f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickY, 0.0f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::RightThumbstickX, 0.5f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::RightThumbstickY, 0.0f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
     const Vector2 right = state.getThumbSticksProperty().getRightProperty();
@@ -105,48 +106,48 @@ TEST(GamePadThumbSticksTest, IndependentAxesModeExcludesRightStickDeadZoneUsingR
     EXPECT_NEAR(right.X, expectedX, 1e-5f);
     EXPECT_FLOAT_EQ(right.Y, 0.0f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, IndependentAxesModeZeroesValuesWithinDeadZone)
+TEST_F(GamePadThumbSticksTest, IndependentAxesModeZeroesValuesWithinDeadZone)
 {
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickX, GamePad::LeftDeadZone * 0.5f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickX, GamePad::LeftDeadZone * 0.5f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
 
     EXPECT_FLOAT_EQ(state.getThumbSticksProperty().getLeftProperty().X, 0.0f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, CircularModeZeroesValuesWithinDeadZoneRadius)
+TEST_F(GamePadThumbSticksTest, CircularModeZeroesValuesWithinDeadZoneRadius)
 {
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.1f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickY, 0.1f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickX, 0.1f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickY, 0.1f);
 
     // Length(0.1, 0.1) ~= 0.1414, below LeftDeadZone (~0.2395).
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
 
     EXPECT_EQ(state.getThumbSticksProperty().getLeftProperty(), Vector2::Zero);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, CircularModeRescalesValueOutsideDeadZoneRadius)
+TEST_F(GamePadThumbSticksTest, CircularModeRescalesValueOutsideDeadZoneRadius)
 {
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickY, 0.5f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickX, 0.0f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickY, 0.5f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
     const Vector2 left = state.getThumbSticksProperty().getLeftProperty();
@@ -156,20 +157,20 @@ TEST(GamePadThumbSticksTest, CircularModeRescalesValueOutsideDeadZoneRadius)
     EXPECT_NEAR(left.X, 0.0f, 1e-5f);
     EXPECT_NEAR(left.Y, expectedLength, 1e-5f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, CircularModeRescalesRightStickUsingRightDeadZoneConstant)
+TEST_F(GamePadThumbSticksTest, CircularModeRescalesRightStickUsingRightDeadZoneConstant)
 {
     // Mirrors CircularModeRescalesValueOutsideDeadZoneRadius but for the Right stick, pinning
     // that ApplyDeadZone's Circular branch calls ExcludeCircularDeadZone(right_, RightDeadZone)
     // -- not LeftDeadZone -- for the right stick specifically.
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickX, 0.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::RightThumbstickY, 0.5f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::RightThumbstickX, 0.0f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::RightThumbstickY, 0.5f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::Circular);
     const Vector2 right = state.getThumbSticksProperty().getRightProperty();
@@ -180,17 +181,17 @@ TEST(GamePadThumbSticksTest, CircularModeRescalesRightStickUsingRightDeadZoneCon
     EXPECT_NEAR(right.X, 0.0f, 1e-5f);
     EXPECT_NEAR(right.Y, expectedLength, 1e-5f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadThumbSticksTest, CircularModeClampsMagnitudeToUnitCircle)
+TEST_F(GamePadThumbSticksTest, CircularModeClampsMagnitudeToUnitCircle)
 {
-    ResetGamePadState();
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 1.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(
-        PlayerIndex::One, CNA::Internal::Input::GamePadAxis::LeftThumbstickY, 1.0f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickX, 1.0f);
+    input.SetGamePadAxisValue(
+        PlayerIndex::One, CNA::Platform::GamepadAxis::LeftThumbstickY, 1.0f);
 
     // (1,1) has length sqrt(2); after dead-zone exclusion it still exceeds 1 and must be
     // circularly clamped back onto the unit circle, preserving direction.
@@ -200,5 +201,5 @@ TEST(GamePadThumbSticksTest, CircularModeClampsMagnitudeToUnitCircle)
     EXPECT_NEAR(left.Length(), 1.0f, 1e-4f);
     EXPECT_NEAR(left.X, left.Y, 1e-4f);
 
-    ResetGamePadState();
+    input.Reset();
 }

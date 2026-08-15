@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/DirectX8/DirectX8Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -215,7 +216,12 @@ namespace CNA::Internal::Renderers::DirectX8
 
     struct DirectX8Renderer::Impl
     {
-        SDL_Window* window = nullptr;
+        explicit Impl(const RendererSurfaceInfo& surfaceInfo)
+            : surface(surfaceInfo, "DirectX8Renderer")
+        {
+        }
+
+        PlatformRendererSurfaceState surface;
         HWND hwnd = nullptr;
 
         IDirect3D8* d3d8 = nullptr;
@@ -278,18 +284,18 @@ namespace CNA::Internal::Renderers::DirectX8
     };
 
     DirectX8Renderer::DirectX8Renderer(const GraphicsRendererCreateArgs& args)
-        : impl_(std::make_unique<Impl>())
+        : impl_(std::make_unique<Impl>(args.surface))
     {
-        if (!args.window) throw std::runtime_error("DirectX8Renderer initialized with null window.");
-        impl_->window = args.window;
         impl_->presentationMode = args.presentationMode;
 
-        impl_->hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(impl_->window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!impl_->hwnd)
-            throw std::runtime_error("DirectX8Renderer: could not obtain a real HWND from the SDL window.");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(impl_->surface.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX8Renderer requires a Win32 native window.");
+        impl_->hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
-        SDL_GetWindowSizeInPixels(impl_->window, &impl_->width, &impl_->height);
+        const auto drawableSize = impl_->surface.GetDrawableSize();
+        impl_->width = drawableSize.width;
+        impl_->height = drawableSize.height;
         if (impl_->width <= 0) impl_->width = args.virtualWidth > 0 ? args.virtualWidth : 640;
         if (impl_->height <= 0) impl_->height = args.virtualHeight > 0 ? args.virtualHeight : 480;
         impl_->virtualWidth = args.virtualWidth > 0 ? args.virtualWidth : impl_->width;
@@ -458,10 +464,6 @@ namespace CNA::Internal::Renderers::DirectX8
         impl_->presentationMode = static_cast<CnaPresentationMode>(mode);
     }
 
-    SDL_Window* DirectX8Renderer::GetWindowInternal() const
-    {
-        return impl_->window;
-    }
 
     // ---- Textures and render targets: real Direct3D8 resources (design decision 7) ----
     // Never named outside this .cpp (only returned polymorphically as ITextureRenderer/
@@ -483,7 +485,6 @@ namespace CNA::Internal::Renderers::DirectX8
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -570,7 +571,7 @@ namespace CNA::Internal::Renderers::DirectX8
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t*, int) override {}
         void UpdatePixelsLevel(int level, const uint8_t*, int, int) override
         {
@@ -686,15 +687,15 @@ namespace CNA::Internal::Renderers::DirectX8
     };
     constexpr DWORD kDx8Fvf = D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1;
 
-    // Recomputed fresh on every Present() call from the real physical SDL_Window size, so a
-    // resize is correct on the very next call -- same convention DIRECTX1..DIRECTX7's own ComputeLetterbox
-    // uses (each renderer in this family keeps its own private copy rather than sharing one).
-    bool ComputeLetterbox(SDL_Window* window, int logicalWidth, int logicalHeight,
+    // Recomputed from the latest platform surface snapshot on every Present() call.
+    bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
+                          int logicalWidth, int logicalHeight,
                           float& scale, float& offsetX, float& offsetY)
     {
-        if (!window || logicalWidth <= 0 || logicalHeight <= 0) return false;
-        int physW = 0, physH = 0;
-        SDL_GetWindowSize(window, &physW, &physH);
+        if (logicalWidth <= 0 || logicalHeight <= 0) return false;
+        const auto drawableSize = surface.GetDrawableSize();
+        const int physW = drawableSize.width;
+        const int physH = drawableSize.height;
         if (physW <= 0 || physH <= 0) return false;
 
         scale = std::min(static_cast<float>(physW) / static_cast<float>(logicalWidth),
@@ -713,7 +714,7 @@ namespace CNA::Internal::Renderers::DirectX8
         IDirect3DDevice8* device = impl_->device8;
 
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
         {
             scale = 1.0f; offsetX = 0.0f; offsetY = 0.0f;
         }
@@ -781,10 +782,10 @@ namespace CNA::Internal::Renderers::DirectX8
                                                        float& logX, float& logY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
             return false;
-        logX = (windowX - offsetX) / scale;
-        logY = (windowY - offsetY) / scale;
+        logX = (impl_->surface.WindowToDrawable(windowX) - offsetX) / scale;
+        logY = (impl_->surface.WindowToDrawable(windowY) - offsetY) / scale;
         return true;
     }
 
@@ -792,11 +793,16 @@ namespace CNA::Internal::Renderers::DirectX8
                                                        float& windowX, float& windowY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->virtualWidth, impl_->virtualHeight, scale, offsetX, offsetY))
             return false;
-        windowX = logX * scale + offsetX;
-        windowY = logY * scale + offsetY;
+        windowX = impl_->surface.DrawableToWindow(logX * scale + offsetX);
+        windowY = impl_->surface.DrawableToWindow(logY * scale + offsetY);
         return true;
+    }
+
+    void DirectX8Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        impl_->surface.Update(surface);
     }
 
     class DirectX8SpriteBatchRenderer final : public ISpriteBatchRenderer

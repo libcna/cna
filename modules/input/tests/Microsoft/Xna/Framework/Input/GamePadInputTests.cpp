@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedGamepadStateDriver.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 
 using namespace Microsoft::Xna::Framework;
@@ -9,18 +9,16 @@ using namespace Microsoft::Xna::Framework::Input;
 
 namespace
 {
-    void ResetGamePadState()
+    class GamePadInputTest : public ::testing::Test
     {
-        CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, false);
-        CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::Two, false);
-        CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::Three, false);
-        CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::Four, false);
-    }
+    protected:
+        CNA::Internal::Input::Testing::CannedGamepadStateDriver input;
+    };
 }
 
-TEST(GamePadInputTest, GetStateReturnsDisconnectedWhenNoGamePadConnected)
+TEST_F(GamePadInputTest, GetStateReturnsDisconnectedWhenNoGamePadConnected)
 {
-    ResetGamePadState();
+    input.Reset();
 
     const auto state = GamePad::GetState(PlayerIndex::One);
 
@@ -30,34 +28,34 @@ TEST(GamePadInputTest, GetStateReturnsDisconnectedWhenNoGamePadConnected)
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.0f);
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 0.0f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
+TEST_F(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
 {
-    ResetGamePadState();
+    input.Reset();
 
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::A,
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadButtonState(PlayerIndex::One, CNA::Platform::GamepadButton::A,
                                                               ButtonState::Pressed);
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One,
-                                                              CNA::Internal::Input::GamePadButton::Back,
+    input.SetGamePadButtonState(PlayerIndex::One,
+                                                              CNA::Platform::GamepadButton::Back,
                                                               ButtonState::Pressed);
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One,
-                                                              CNA::Internal::Input::GamePadButton::DPadLeft,
+    input.SetGamePadButtonState(PlayerIndex::One,
+                                                              CNA::Platform::GamepadButton::DPadLeft,
                                                               ButtonState::Pressed);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.25f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftThumbstickY, -0.75f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::RightThumbstickX, -1.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::RightThumbstickY, 1.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftTrigger, 0.2f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::RightTrigger, 1.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftThumbstickX, 0.25f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftThumbstickY, -0.75f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::RightThumbstickX, -1.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::RightThumbstickY, 1.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftTrigger, 0.2f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::RightTrigger, 1.0f);
 
     const auto state = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
 
@@ -73,21 +71,21 @@ TEST(GamePadInputTest, GetStateReflectsMappedButtonsAndAxes)
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getLeftProperty(), 0.2f);
     EXPECT_FLOAT_EQ(state.getTriggersProperty().getRightProperty(), 1.0f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
+TEST_F(GamePadInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
 {
-    ResetGamePadState();
+    input.Reset();
 
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::A,
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadButtonState(PlayerIndex::One, CNA::Platform::GamepadButton::A,
                                                               ButtonState::Pressed);
     const auto snapshot = GamePad::GetState(PlayerIndex::One);
 
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::A,
+    input.SetGamePadButtonState(PlayerIndex::One, CNA::Platform::GamepadButton::A,
                                                               ButtonState::Released);
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::B,
+    input.SetGamePadButtonState(PlayerIndex::One, CNA::Platform::GamepadButton::B,
                                                               ButtonState::Pressed);
 
     EXPECT_EQ(snapshot.getButtonsProperty().getAProperty(), ButtonState::Pressed);
@@ -97,22 +95,22 @@ TEST(GamePadInputTest, SnapshotDoesNotChangeAfterInternalStateMutation)
     EXPECT_EQ(currentState.getButtonsProperty().getAProperty(), ButtonState::Released);
     EXPECT_EQ(currentState.getButtonsProperty().getBProperty(), ButtonState::Pressed);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState)
+TEST_F(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedState)
 {
-    ResetGamePadState();
+    input.Reset();
 
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 3.5f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::RightThumbstickY, -2.0f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftTrigger, -0.5f);
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::RightTrigger, 4.0f);
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftThumbstickX, 3.5f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::RightThumbstickY, -2.0f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftTrigger, -0.5f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::RightTrigger, 4.0f);
 
     const auto clampedState = GamePad::GetState(PlayerIndex::One);
     EXPECT_FLOAT_EQ(clampedState.getThumbSticksProperty().getLeftProperty().X, 1.0f);
@@ -123,17 +121,17 @@ TEST(GamePadInputTest, AxisValuesAreClampedAndInvalidPlayerReturnsDisconnectedSt
     const auto invalidState = GamePad::GetState(static_cast<PlayerIndex>(99));
     EXPECT_FALSE(invalidState.getIsConnectedProperty());
 
-    ResetGamePadState();
+    input.Reset();
 }
 
-TEST(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
+TEST_F(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
 {
-    ResetGamePadState();
+    input.Reset();
 
     const auto disconnected = GamePad::GetState(PlayerIndex::One);
     EXPECT_EQ(disconnected.getPacketNumberProperty(), 0);
 
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadConnection(PlayerIndex::One, true);
     const auto afterConnect = GamePad::GetState(PlayerIndex::One);
     const int packetAfterConnect = afterConnect.getPacketNumberProperty();
     EXPECT_GT(packetAfterConnect, 0);
@@ -141,22 +139,22 @@ TEST(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
     const auto unchanged = GamePad::GetState(PlayerIndex::One);
     EXPECT_EQ(unchanged.getPacketNumberProperty(), packetAfterConnect);
 
-    CNA::Internal::Input::InputManager::SetGamePadButtonState(PlayerIndex::One, CNA::Internal::Input::GamePadButton::A,
+    input.SetGamePadButtonState(PlayerIndex::One, CNA::Platform::GamepadButton::A,
                                                               ButtonState::Pressed);
     const auto afterButton = GamePad::GetState(PlayerIndex::One);
     const int packetAfterButton = afterButton.getPacketNumberProperty();
     EXPECT_GT(packetAfterButton, packetAfterConnect);
 
-    CNA::Internal::Input::InputManager::SetGamePadAxisValue(PlayerIndex::One,
-                                                            CNA::Internal::Input::GamePadAxis::LeftThumbstickX, 0.5f);
+    input.SetGamePadAxisValue(PlayerIndex::One,
+                                                            CNA::Platform::GamepadAxis::LeftThumbstickX, 0.5f);
     const auto afterAxis = GamePad::GetState(PlayerIndex::One);
     EXPECT_GT(afterAxis.getPacketNumberProperty(), packetAfterButton);
 
-    CNA::Internal::Input::InputManager::SetGamePadConnection(PlayerIndex::One, false);
+    input.SetGamePadConnection(PlayerIndex::One, false);
     const auto afterDisconnect = GamePad::GetState(PlayerIndex::One);
     EXPECT_EQ(afterDisconnect.getPacketNumberProperty(), 0);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
 // DEC-04 / task 916. CNA synthesizes GamePadState::PacketNumber (FNA leaves it hardcoded to 0); it
@@ -164,21 +162,20 @@ TEST(GamePadInputTest, PacketNumberBumpsOnConnectButtonAndAxisChangesOnly)
 // wobble that stays entirely within the dead zone still bumps PacketNumber, even though the
 // default-dead-zoned thumbstick reads at rest both times. This pins that by-design behavior: the raw
 // input changed, so PacketNumber reflects it; the dead zone is a GetState-time projection, not stored.
-TEST(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest)
+TEST_F(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZonedStateStaysAtRest)
 {
-    using CNA::Internal::Input::InputManager;
-    using CNA::Internal::Input::GamePadAxis;
+        using GamePadAxis = CNA::Platform::GamepadAxis;
 
-    ResetGamePadState();
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
 
     // Left-stick dead zone is ~0.2395 (GamePad::LeftDeadZone = 7849/32768); both values are below it.
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.05f);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.05f);
     const auto first = GamePad::GetState(PlayerIndex::One); // default = IndependentAxes dead zone
     EXPECT_FLOAT_EQ(first.getThumbSticksProperty().getLeftProperty().X, 0.0f);
     const int packetFirst = first.getPacketNumberProperty();
 
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.15f);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.15f);
     const auto second = GamePad::GetState(PlayerIndex::One);
     EXPECT_FLOAT_EQ(second.getThumbSticksProperty().getLeftProperty().X, 0.0f); // still at rest (dead-zoned)
 
@@ -189,7 +186,7 @@ TEST(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZoned
     const auto raw = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None);
     EXPECT_FLOAT_EQ(raw.getThumbSticksProperty().getLeftProperty().X, 0.15f);
 
-    ResetGamePadState();
+    input.Reset();
 }
 
 // Task P1-003. FNA's GamePad.GetState(PlayerIndex) forwards to GetState(playerIndex,
@@ -198,14 +195,13 @@ TEST(GamePadInputTest, PacketNumberBumpsOnWithinDeadZoneAxisWobbleWhileDeadZoned
 // (e.g. accidentally defaulting to GamePadDeadZone::None). Use a value above the dead zone so the
 // IndependentAxes rescale produces a distinct, non-zero, non-raw result, and pin that the 1-arg
 // overload matches the explicit IndependentAxes call exactly while differing from the raw/None reading.
-TEST(GamePadInputTest, GetStateDefaultOverloadForwardsToIndependentAxesDeadZone)
+TEST_F(GamePadInputTest, GetStateDefaultOverloadForwardsToIndependentAxesDeadZone)
 {
-    using CNA::Internal::Input::InputManager;
-    using CNA::Internal::Input::GamePadAxis;
+        using GamePadAxis = CNA::Platform::GamepadAxis;
 
-    ResetGamePadState();
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.5f);
+    input.Reset();
+    input.SetGamePadConnection(PlayerIndex::One, true);
+    input.SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 0.5f);
 
     const auto defaultState = GamePad::GetState(PlayerIndex::One);
     const auto explicitIndependentAxesState = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::IndependentAxes);
@@ -219,5 +215,5 @@ TEST(GamePadInputTest, GetStateDefaultOverloadForwardsToIndependentAxesDeadZone)
     EXPECT_NE(defaultState.getThumbSticksProperty().getLeftProperty().X,
               noneState.getThumbSticksProperty().getLeftProperty().X);
 
-    ResetGamePadState();
+    input.Reset();
 }

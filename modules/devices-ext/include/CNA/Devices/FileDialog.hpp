@@ -3,11 +3,10 @@
 
 #ifdef CNA_DEVICES
 
-#include <memory>
 #include <string>
 #include <vector>
 
-#include "CNA/Devices/Detail/IFileDialogBackend.hpp"
+#include "CNA/Devices/Detail/FileDialogResultCallback.hpp"
 #include "CNA/Devices/FileDialogFilter.hpp"
 
 namespace CNA::Devices
@@ -15,15 +14,17 @@ namespace CNA::Devices
     /**
      * @brief Shows native open-file/save-file/open-folder dialogs.
      *
-     * CNA extension — no XNA/WP7 equivalent exists. Calls through
-     * `Detail::IFileDialogBackend` (default: `Detail::SdlFileDialogBackend`, backed by
-     * SDL3's `SDL_ShowOpenFileDialog()`/`SDL_ShowSaveFileDialog()`/
-     * `SDL_ShowOpenFolderDialog()`, `third_party/SDL/include/SDL3/SDL_dialog.h`) rather
-     * than calling SDL3 directly, specifically so tests can inject a fake backend —
-     * see `SetBackendForTesting()`'s own doc comment for why this matters more here
-     * than for most other `CNA::Devices` classes. Every dialog call is
-     * **asynchronous**: it returns immediately, and the result arrives later via
-     * `onResult`, possibly on a different thread than the one the call was made from.
+     * CNA extension — no XNA/WP7 equivalent exists. Calls straight through to the platform's
+     * dialog service. Every dialog call is **asynchronous**: it returns immediately, and the
+     * result arrives later via `onResult`, possibly on a different thread than the one the call
+     * was made from.
+     *
+     * A test must never reach a real dialog — it launches an interactive native window (a real
+     * `zenity` process on Linux) that waits for a human forever, which happened once during this
+     * class's own development and left orphaned processes on a real desktop session. Tests
+     * therefore install a platform whose dialog service records instead of showing
+     * (`CNA::Platform::Testing::CannedDialogPlatform`); there is deliberately no test-only
+     * injection hook on this class.
      *
      * @note Real native backends exist for Windows, Linux (via XDG portal/zenity),
      * macOS, and **Android** (confirmed by reading
@@ -102,21 +103,6 @@ namespace CNA::Devices
             const std::string& defaultLocation = "",
             bool allowMultiple = false);
 
-        /**
-         * @brief Test-only hook: replaces the real, platform-default backend with a
-         * caller-supplied one (typically a test fake).
-         *
-         * The real backend (`Detail::SdlFileDialogBackend`) launches a genuine,
-         * interactive native OS dialog — unlike most other `CNA::Devices` classes'
-         * backends, this one has a side effect an automated test cannot safely
-         * trigger (a real dialog left open forever, waiting for a human, e.g. a real
-         * `zenity` process on Linux). This hook exists specifically so tests never
-         * call the real backend at all.
-         *
-         * @param backend Replacement backend; pass nullptr to restore the
-         * platform-default (`Detail::SdlFileDialogBackend`) behavior.
-         */
-        static void SetBackendForTesting(std::unique_ptr<Detail::IFileDialogBackend> backend);
 
     private:
         /** @brief Not instantiable — every member is static. */

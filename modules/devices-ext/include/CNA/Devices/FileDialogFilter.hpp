@@ -10,7 +10,7 @@ namespace CNA::Devices
     /**
      * @brief One file-type filter entry for `FileDialog`'s open/save dialogs.
      *
-     * Mirrors SDL3's `SDL_DialogFileFilter` (`third_party/SDL/include/SDL3/SDL_dialog.h`).
+     * Mirrors the platform contract's native-dialog filter record.
      * CNA extension — no XNA/WP7 equivalent exists.
      */
     struct FileDialogFilter

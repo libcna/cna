@@ -3,8 +3,8 @@
 // created/updated through SDL_Renderer.
 //
 // SaveAsPng/SaveAsJpeg (shared, renderer-agnostic Texture2D.cpp) operate ENTIRELY on the
-// CPU-side pixel shadow cache (cpuPixels_) via SDL3_image (SDL_CreateSurfaceFrom +
-// IMG_SavePNG_IO / STBIW-based JPEG encode) -- neither ever touches renderer_ or the real GPU
+// CPU-side pixel shadow cache (cpuPixels_) via the shared vendored-stb image backend -- neither
+// ever touches renderer_ or the real GPU
 // texture at all. cpuPixels_ is populated identically regardless of which renderer created or
 // updated the texture (confirmed: Texture2D::MaybeFreeCpuPixels() only frees it when
 // GraphicsDevice::contextRecoveryEnabled_ is false, and that defaults to true -- a

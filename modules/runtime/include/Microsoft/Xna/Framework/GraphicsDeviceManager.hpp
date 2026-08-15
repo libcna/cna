@@ -24,7 +24,6 @@
 #include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
-struct SDL_Window;
 
 namespace Microsoft::Xna::Framework
 {
@@ -355,7 +354,6 @@ namespace Microsoft::Xna::Framework
         void markPreferencesChanged();
         void registerServices();
         void unregisterServices();
-        [[nodiscard]] SDL_Window* tryGetSDLWindow() const;
         void applyToExistingRenderer(GraphicsDeviceInformation& gdi);
     };
 }

@@ -53,8 +53,8 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GameWindow handle returns a real window");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;

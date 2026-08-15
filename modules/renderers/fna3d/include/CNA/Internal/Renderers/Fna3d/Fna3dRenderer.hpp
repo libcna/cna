@@ -72,9 +72,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Level-0 height in texels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: FNA3D owns no SDL_Texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole of level 0 with tightly packed RGBA8 rows.
          * @param rgba   Source pixels, top row first.
@@ -179,9 +176,6 @@ namespace CNA::Internal::Renderers::Fna3d
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: FNA3D owns no SDL_Texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /** @brief Binds this target as the sole draw destination. */
         void BindAsRenderTarget() override;
         /** @brief Restores the back buffer, resolving this target first. */
@@ -921,11 +915,6 @@ namespace CNA::Internal::Renderers::Fna3d
          */
         [[nodiscard]] bool TransformLogicalToWindow(float logX, float logY, float& windowX,
                                                     float& windowY) const override;
-
-        /** @brief The SDL window FNA3D presents into. */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        /** @brief Always null: FNA3D owns no SDL_Renderer. */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         /**
          * @brief Reads the back buffer's rendered pixels for a region.

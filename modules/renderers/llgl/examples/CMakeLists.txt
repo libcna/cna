@@ -21,7 +21,7 @@ include_directories(${CNA_GRAPHICS_EXAMPLES_DIR})
 # the SDL window itself. Each binary probes for a usable display first and exits with the project's
 # skip code when there is none, so a headless machine reports SKIPPED rather than FAILED.
 #
-# Only the X11 SDL video driver is supported (see LlglSdlSurface) -- the environment pins it rather
+# Only an X11 native window is supported (see LlglPlatformSurface) -- the environment pins it rather
 # than letting SDL pick Wayland on a session that has both.
 if(CNA_BUILD_TESTS AND CNA_GRAPHICS_RENDERER STREQUAL "LLGL")
     enable_testing()

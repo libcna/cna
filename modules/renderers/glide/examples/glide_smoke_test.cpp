@@ -66,7 +66,7 @@ namespace
                 device.GetRenderer());
             Check(CNA::getCurrentGraphicsRendererType() == CNA::GraphicsRendererType::Glide,
                   "the GLIDE renderer is selected at compile time");
-            Check(renderer.GetWindowInternal() != nullptr,
+            Check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr,
                   "the Glide context uses CNA's real SDL/Win32 window");
             Check(device.SupportsCapability(CNA::GraphicsCapability::ThreeD),
                   "GLIDE reports its fixed-function colored 3D capability");

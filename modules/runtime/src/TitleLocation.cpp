@@ -4,7 +4,7 @@
 
 #include <filesystem>
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace Microsoft::Xna::Framework
 {
@@ -39,14 +39,11 @@ namespace Microsoft::Xna::Framework
 
     std::string TitleLocation::DetectBasePath()
     {
-        const char* basePath = SDL_GetBasePath();
-        if (basePath != nullptr)
+        const std::string basePath =
+            CNA::Platform::GetCurrentPlatform().GetFileSystem()->GetBasePath();
+        if (!basePath.empty())
         {
-            std::string result(basePath);
-            if (!result.empty())
-            {
-                return result;
-            }
+            return basePath;
         }
 
         return std::filesystem::current_path().string();

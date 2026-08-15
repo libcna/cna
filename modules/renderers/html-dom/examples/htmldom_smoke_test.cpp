@@ -419,10 +419,10 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr,
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr,
                   "GraphicsDevice has a real SDL_Window under the HTML_DOM renderer");
-            check(renderer.GetRendererInternal() == nullptr,
-                  "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr,
+                  "SDL_GetRenderer(window) is null -- no SDL_Renderer exists on this renderer");
             int w = 0, h = 0;
             renderer.GetViewportSize(w, h);
             check(w > 0 && h > 0, "GetViewportSize() reports a positive logical size");
@@ -777,7 +777,7 @@ protected:
             // (HtmlDomState's CNA_HtmlDom_UpdateSurface). Not dev.Present(): see the note above for
             // why that would hide what this test is checking behind GraphicsDevice's own separate
             // reset.
-            SDL_SetWindowSize(renderer.GetWindowInternal(), 128, 128);
+            SDL_SetWindowSize(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), 128, 128);
             renderer.Present();
 
             // HTMLDOM-98: real XNA/FNA Viewport does NOT auto-track a resized backbuffer on its own

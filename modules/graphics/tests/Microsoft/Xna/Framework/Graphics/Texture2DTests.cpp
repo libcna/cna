@@ -47,7 +47,6 @@ namespace
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t*, int stride) override
         {
@@ -970,7 +969,7 @@ TEST_F(ContextRecoveryTest, PartialUpdateNeverThrowsWithRecoveryEnabledByDefault
 //
 // Round-trips through Texture2D::SaveAsPng/SaveAsJpeg (PNG/JPEG) and a
 // hand-built minimal file (BMP) to empirically confirm which encoded
-// formats Texture2D::FromStream can decode via the linked SDL3_image build.
+// formats Texture2D::FromStream can decode via the vendored stb image backend.
 // -----------------------------------------------------------------------
 
 namespace
@@ -1148,6 +1147,35 @@ TEST_F(Texture2DFromStreamResizeTest, ZoomFillsExactRequestedSize)
     EXPECT_EQ(loaded.getHeightProperty(), 4);
 }
 
+TEST_F(Texture2DFromStreamResizeTest, ZoomCropsTheHorizontalCenterBeforeScaling)
+{
+    Texture2D striped(gd, 8, 4);
+    std::vector<Color> pixels;
+    pixels.reserve(32);
+    for (int y = 0; y < 4; ++y)
+    {
+        for (int x = 0; x < 8; ++x)
+        {
+            pixels.emplace_back(x < 2 ? Color(255, 0, 0, 255)
+                                      : x < 6 ? Color(0, 255, 0, 255)
+                                              : Color(0, 0, 255, 255));
+        }
+    }
+    striped.SetData(pixels.data(), static_cast<int>(pixels.size()));
+
+    MemoryStream encoded;
+    striped.SaveAsPng(&encoded, 8, 4);
+    const auto bytes = encoded.GetBuffer();
+    MemoryStream source(bytes.data(), static_cast<System::IO::intcs>(bytes.size()));
+    Texture2D loaded = Texture2D::FromStream(gd, source, 4, 4, true);
+
+    std::vector<Color> result(16, Color(0, 0, 0, 0));
+    loaded.GetData(result.data(), 0, static_cast<int>(result.size()));
+    EXPECT_TRUE(std::all_of(result.begin(), result.end(), [](const Color& pixel) {
+        return pixel == Color(0, 255, 0, 255);
+    }));
+}
+
 // -----------------------------------------------------------------------
 // SaveAsPng — round-trip verification (Task 263)
 //
@@ -1285,7 +1313,7 @@ TEST_F(SaveAsPngTest, FilenameOverloadWritesReadableFile)
 //
 // Mirrors the SaveAsPngTest coverage above, adapted for JPEG: lossy colour
 // tolerance instead of exact match, and no alpha preservation (JPEG has no
-// alpha channel — FNA/SDL_image round-trips it back as fully opaque).
+// alpha channel — the reference image decoder round-trips it back as fully opaque).
 // Also verifies FNA_GRAPHICS_JPEG_SAVE_QUALITY is honoured (Task 261 audit
 // found CNA previously hardcoded quality=100, ignoring FNA's env var).
 // -----------------------------------------------------------------------

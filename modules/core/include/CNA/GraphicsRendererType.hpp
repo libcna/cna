@@ -7,7 +7,7 @@ namespace CNA
     /** @brief Identifies which CNA graphics renderer was selected for this build (compile-time choice, see CNA_GRAPHICS_RENDERER). */
     enum class GraphicsRendererType
     {
-        /** @brief SDL_Renderer (2D-only). */
+        /** @brief SDL's native 2D renderer (2D-only). */
         SdlRenderer,
 
         /** @brief OpenGL ES 2.0 (desktop/mobile, GLSL ES 1.00), internally implemented by EasyGL. */

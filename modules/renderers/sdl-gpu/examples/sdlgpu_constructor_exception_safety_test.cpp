@@ -144,7 +144,7 @@ namespace
                   prefix + " preserves stage diagnostic");
             Check(failedTracker.Balanced(),
                   prefix + " releases every acquired device/window/shader resource");
-            Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
+            Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr,
                   prefix + " never leaves a usable renderer registered");
             Check(SDL_GetWindowID(window) != 0,
                   prefix + " preserves the caller-owned SDL window");
@@ -159,12 +159,12 @@ namespace
                     SdlGpuRenderer renderer(
                         window, 64, 64, CnaPresentationMode::FixedHeightDynamicWidth, 0,
                         successHooks);
-                    usable = IGraphicsRenderer::GetForWindow(window) == &renderer &&
+                    usable = IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer &&
                              renderer.Device() != nullptr;
                     renderer.Clear(0.05f, 0.10f, 0.15f, 1.0f);
                     renderer.Present();
                 }
-                usable = usable && IGraphicsRenderer::GetForWindow(window) == nullptr;
+                usable = usable && IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr;
             }
             catch (const std::exception& exception)
             {
@@ -230,7 +230,7 @@ namespace
                     {
                         renderer.InitializeSpritePipelineAndSamplerForTestEXT();
                     }
-                    recovered = IGraphicsRenderer::GetForWindow(window) == &renderer;
+                    recovered = IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == &renderer;
                 }
             }
             catch (const std::exception& exception)
@@ -242,7 +242,7 @@ namespace
             Check(recovered, std::string(label) + " failure is one-shot and retryable");
             Check(tracker.Balanced(),
                   std::string(label) + " resources are destroyed exactly once");
-            Check(IGraphicsRenderer::GetForWindow(window) == nullptr,
+            Check(IGraphicsRenderer::GetForWindow(SDL_GetWindowID(window)) == nullptr,
                   std::string(label) + " teardown unregisters exactly once");
         }
 
@@ -330,14 +330,14 @@ namespace
 
                 independent =
                     first->Device() != second->Device() &&
-                    IGraphicsRenderer::GetForWindow(firstWindow) == first.get() &&
-                    IGraphicsRenderer::GetForWindow(secondWindow) == second.get();
+                    IGraphicsRenderer::GetForWindow(SDL_GetWindowID(firstWindow)) == first.get() &&
+                    IGraphicsRenderer::GetForWindow(SDL_GetWindowID(secondWindow)) == second.get();
 
                 first.reset();
                 independent =
                     independent &&
-                    IGraphicsRenderer::GetForWindow(firstWindow) == nullptr &&
-                    IGraphicsRenderer::GetForWindow(secondWindow) == second.get();
+                    IGraphicsRenderer::GetForWindow(SDL_GetWindowID(firstWindow)) == nullptr &&
+                    IGraphicsRenderer::GetForWindow(SDL_GetWindowID(secondWindow)) == second.get();
                 second->Clear(0.2f, 0.1f, 0.05f, 1.0f);
                 second->Present();
                 second.reset();

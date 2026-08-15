@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
@@ -54,9 +55,10 @@ namespace CNA::Internal::Renderers::Fna3d
 
     namespace Detail
     {
-        std::uint64_t PrepareWindowFlags()
+        bool PrepareWindowNeedsOpenGl()
         {
-            return static_cast<std::uint64_t>(FNA3D_PrepareWindowAttributes());
+            const std::uint32_t flags = FNA3D_PrepareWindowAttributes();
+            return (flags & SDL_WINDOW_OPENGL) != 0;
         }
     }
 
@@ -65,7 +67,7 @@ namespace CNA::Internal::Renderers::Fna3d
     // ---------------------------------------------------------------------------------------
 
     Fna3dRenderer::Fna3dRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , presentationMode_(args.presentationMode)
     {
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
@@ -93,7 +95,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // GraphicsDevice already called FNA3D_PrepareWindowAttributes() before creating the
-        // window (Detail::PrepareWindowFlags), which is also what selected the driver. Calling it
+        // window (Detail::PrepareWindowNeedsOpenGl), which is also what selected the driver. Calling it
         // again here would re-run driver selection after the window's visual is fixed.
         int windowWidth = 0;
         int windowHeight = 0;
@@ -222,7 +224,7 @@ namespace CNA::Internal::Renderers::Fna3d
         QueryDriverLimits();
         ProbeCompressedReadbackSupport();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
     }
 
     void Fna3dRenderer::QueryDriverLimits()
@@ -401,7 +403,7 @@ namespace CNA::Internal::Renderers::Fna3d
     {
         if (window_ != nullptr)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         }
         if (device_ == nullptr)
         {

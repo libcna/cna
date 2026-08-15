@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <exception>
+#include <memory>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -26,6 +27,7 @@
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RasterizerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTargetBinding.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
@@ -117,6 +119,9 @@ constexpr bool kExpectCustomEffects         = false;
 // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
 // at all -- and no programmable shader stage for a genuinely custom Effect (same reasoning as
 // Canvas/Skia's own arms just above/below).
+constexpr bool kExpectMultipleRenderTargets = false;
+constexpr bool kExpectOcclusionQuery        = false;
+constexpr bool kExpectCustomEffects         = false;
 #elif defined(CNA_RENDERER_PORTABLEGL)
 // PortableGL owns exactly one framebuffer per context and creates no render targets at all
 // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and its
@@ -213,6 +218,62 @@ TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;
     EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), kExpectMultipleRenderTargets);
+}
+
+// The consistency check the two tests above could not make between them.
+//
+// SupportsMultipleRenderTargets asserted the capability, and
+// GraphicsDeviceValidationTest::SetRenderTargets_FourTargets_DoesNotThrow asserted the behaviour,
+// in a different file and against a hand-maintained list of renderers. Nothing tied them
+// together, so HeadlessRenderer spent a while reporting MultipleRenderTargets as available --
+// its SupportsCapability answers true by default -- while SetRenderTargets threw for any count
+// above one. Both tests were "passing"; they simply disagreed.
+//
+// Two targets rather than four on purpose: two is the minimum a renderer must accept for the
+// capability to mean anything, so this stays correct for a future renderer whose ceiling is
+// lower than four.
+TEST(GraphicsDeviceCapabilityTest, TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes)
+{
+    GraphicsDevice gd;
+
+    using Microsoft::Xna::Framework::Graphics::RenderTarget2D;
+    using Microsoft::Xna::Framework::Graphics::RenderTargetBinding;
+
+    std::vector<std::unique_ptr<RenderTarget2D>> targets;
+    std::vector<RenderTargetBinding> bindings;
+    for (int i = 0; i < 2; ++i)
+    {
+        targets.push_back(std::make_unique<RenderTarget2D>(gd, 4, 4));
+        bindings.emplace_back(targets.back().get());
+    }
+
+    bool accepted = true;
+    try
+    {
+        gd.SetRenderTargets(bindings);
+    }
+    catch (const std::exception&)
+    {
+        // Which exception type is each renderer's own documented choice; that a refusal happened
+        // at all is what has to agree with the capability.
+        accepted = false;
+    }
+
+    EXPECT_EQ(accepted, gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets))
+        << "the renderer reports MultipleRenderTargets as "
+        << (gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets) ? "available"
+                                                                            : "unavailable")
+        << " but binding two targets " << (accepted ? "succeeded" : "was refused");
+
+    // Unbind before leaving, so a later test in this process does not inherit targets bound here.
+    const std::vector<RenderTargetBinding> none;
+    try
+    {
+        gd.SetRenderTargets(none);
+    }
+    catch (const std::exception&)
+    {
+    }
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)

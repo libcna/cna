@@ -36,14 +36,11 @@ subsystem chooses to call back on (WP7 itself does not marshal sensor events
 to the UI thread) — CNA's own per-backend behavior is analogous, not
 identical, since the underlying OS mechanisms differ:
 
-- **`Accelerometer`/`Gyroscope`** (`Detail::SdlSensorSubsystem<TSensor>`):
-  `CurrentValueChanged`/`ReadingChanged` are raised synchronously from inside
-  `SensorEventWatch()`, an `SDL_EventFilter` installed via
-  `SDL_AddEventWatch()`. SDL invokes event-watch filters synchronously from
-  whichever thread adds the underlying event to SDL's event queue — in
-  practice, whichever thread pumps SDL's event loop (`SDL_PollEvent()`/
-  `SDL_PumpEvents()`), most commonly but not exclusively an application's
-  main thread. CNA does not itself spawn a dedicated thread for this path.
+- **`Accelerometer`/`Gyroscope`** (`Detail::PlatformSensorSubsystem<TSensor>`):
+  `CurrentValueChanged`/`ReadingChanged` are raised synchronously from the
+  selected `IPlatformSensorSession` callback. That callback may run on any
+  platform-owned thread; CNA does not marshal it to the thread that called
+  `Start()`.
 - **`Compass`/`Motion`** (`Detail::AndroidCompassBackend`/
   `Detail::AndroidMotionBackend`, backed by `Detail::AndroidSensorBridge`):
   `CurrentValueChanged`/`Calibrate` are raised synchronously from
@@ -143,7 +140,7 @@ CNA-specific guarantee:
 
 - **`Accelerometer`/`Gyroscope`**: a handler may safely destroy or `Dispose()`
   the sending instance from within its own `CurrentValueChanged`/
-  `ReadingChanged` callback. `Detail::SdlSensorSubsystem<TSensor>::
+  `ReadingChanged` callback. `Detail::PlatformSensorSubsystem<TSensor>::
   DispatchToInstances()` snapshots/revalidates registrations before each
   call, closing the ABA/use-after-free window (Task `P8-1`–`P8-5` family).
   Proven by `DestroyingOwnerFromCurrentValueChangedStillFiresReadingChangedSafely`,
@@ -189,13 +186,14 @@ rather than silently discarding it with a bare `catch (...) {}`.
 **Current implementation state relative to that policy — a real,
 concrete gap, found while writing this document, not assumed:**
 
-- **`Accelerometer`/`Gyroscope`** (`Detail::SdlSensorSubsystem<TSensor>::
+- **`Accelerometer`/`Gyroscope`** (`Detail::PlatformSensorSubsystem<TSensor>::
   DispatchToInstances()`): **fully matches the decided policy.** Task
-  `SDLCORE-009` (2026-07-17) split the swallow into a typed
+  the prior callback-hardening task split the swallow into a typed
   `std::exception&` clause (extracts `.what()`) plus a fallback, both routed
   through `LogAndRecordDispatchException()` — debug-only `SDL_Log()`
   diagnostics plus `dispatchExceptionCountForTesting_`/
-  `lastDispatchExceptionMessageForTesting_` test hooks. Proven by
+  `lastDispatchExceptionMessageForTesting_` test hooks. PLAT-108 moved the catch and diagnostic
+  policy unchanged to the platform-neutral manager. Proven by
   `ThrowingCallbackDuringSyntheticUpdateStillCleansUpAndDoesNotHangDispose`,
   `ThrowingNonStdExceptionDuringDispatchToInstancesForTestingIsObservable`,
   `ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFromReceivingItsEvent`
@@ -213,11 +211,11 @@ concrete gap, found while writing this document, not assumed:**
   their own) is wrapped in a bare `catch (...) { }` with **no logging and no
   test-visible counter at all** — the exception is caught (so no crash — the
   `std::terminate()` hazard this policy exists to prevent is already
-  avoided), but silently, unlike the SDL path. The existing comment at that
-  call site ("Mirrors `Detail::SdlSensorSubsystem<TSensor>::
+  avoided), but silently, unlike the platform sensor path. The existing comment at that
+  call site ("Mirrors `Detail::PlatformSensorSubsystem<TSensor>::
   DispatchToInstances()`'s identical policy") was accurate when written but
-  is now **stale**: it no longer is identical, since `SDLCORE-009` upgraded
-  the SDL side afterward. **Deliberately not fixed by this task**: adding the
+  is now **stale**: it no longer is identical, since the callback-hardening task upgraded
+  the platform sensor side afterward. **Deliberately not fixed by this task**: adding the
   matching `__android_log_print()`-based logging plus a testable counter to
   `AndroidSensorBridge.cpp` is exactly `DEVPERF-005`'s scope ("structured
   native error/diagnostic channel... cover SDL and Android failure paths"),

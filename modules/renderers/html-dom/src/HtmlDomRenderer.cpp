@@ -8,8 +8,6 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -19,11 +17,11 @@
 #include <emscripten.h>
 
 // plan_html_dom.md HTMLDOM-10 / design decision 2: creates the <div> every sprite element lives in,
-// positioned over the <canvas> SDL3's Emscripten video driver owns.
+// positioned over the platform-owned <canvas>.
 //
 // The canvas itself is made transparent but deliberately NOT hidden, removed or display:none'd --
-// SDL keeps sizing it and delivering input through it, so it must remain in both layout and pointer
-// hit testing. The DOM surface ignores pointer events, allowing them to reach the transparent
+// the platform keeps sizing it and delivering input through it, so it must remain in both layout and
+// pointer hit testing. The DOM surface ignores pointer events, allowing them to reach the transparent
 // canvas underneath. `contain:strict` keeps the sprite subtree's layout and painting isolated from
 // the rest of the page, and clips sprites that leave the viewport.
 //
@@ -84,7 +82,7 @@ EM_JS(void, CNA_HtmlDom_EnsureRoot, (), {
     }
     const viewportEl = document.createElement('div');
     viewportEl.id = 'cna-dom-viewport';
-    // The static black matches SDL3's own SDL_LOGICAL_PRESENTATION_LETTERBOX behaviour (its bars
+    // The static black matches the native letterbox presentation behaviour (its bars
     // are always black, not the app's current clear colour) -- this element is exactly what shows
     // through in a Letterbox bar or outside an undersized NativeBackBuffer surface.
     viewportEl.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;contain:strict;' +
@@ -495,7 +493,7 @@ EM_JS(void, CNA_HtmlDom_PresentFrame, (), {
 //
 // plan_html_dom.md HTMLDOM-108: offsetX/offsetY/scaleX/scaleY come from
 // HtmlDomRenderer::ComputeLogicalViewport, computed on the C++ side once per Present() --
-// the same per-CnaPresentationMode geometry SdlGpuRenderer's own reference implementation
+// the same per-CnaPresentationMode geometry the GPU reference implementation
 // uses, replacing a single height-derived uniform scale that was only ever correct for
 // FixedHeightDynamicWidth.
 EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH,
@@ -539,10 +537,8 @@ EM_JS(void, CNA_HtmlDom_UpdateSurface, (int logicalW, int logicalH,
 // the same still-open batch (SpriteSortMode::Immediate games that change ScissorRectangle between
 // individual Draw() calls inside one Begin/End won't see finer-grained clipping than that).
 //
-// Applied regardless of RasterizerState.ScissorTestEnable, the same way SdlRenderer::
-// SetScissorRect behaves: SDL_Renderer never overrides ApplyRasterizerState at all, so its own
-// SDL_SetRenderClipRect call is never gated on ScissorTestEnable either -- confirmed by reading
-// SdlRenderer.cpp before matching its behaviour here, not assumed.
+// Applied regardless of RasterizerState.ScissorTestEnable, matching the established native 2D
+// renderer behaviour; its clip call is likewise not gated on ScissorTestEnable.
 EM_JS(void, CNA_HtmlDom_SetScissorRect, (int x, int y, int w, int h), {
     if (!Module['cnaDomRoot']) return;
     Module['cnaDomScissorRect'] = { x: x, y: y, w: w, h: h };
@@ -598,15 +594,17 @@ namespace CNA::Internal::Renderers::HtmlDom
         }
     }
 
-    HtmlDomRenderer::HtmlDomRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                   CnaPresentationMode mode)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    HtmlDomRenderer::HtmlDomRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("HtmlDomRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        if (surface_.windowId == 0)
+            throw std::runtime_error("HtmlDomRenderer initialized without a platform window.");
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
         // A renderer can be constructed after a previous one was destroyed (GraphicsDevice::Reset),
         // so the shared draw-path state is rewound rather than assumed pristine.
         SetBoundRenderTargetIdEXT(0);
@@ -619,7 +617,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     HtmlDomRenderer::~HtmlDomRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.windowId);
 #if defined(__EMSCRIPTEN__)
         CNA_HtmlDom_DestroyRoot();
 #endif
@@ -639,8 +637,10 @@ namespace CNA::Internal::Renderers::HtmlDom
         const LogicalViewport viewport = ComputeLogicalViewport();
         const int logicalW = static_cast<int>(std::lround(viewport.logicalWidth));
         const int logicalH = static_cast<int>(std::lround(viewport.logicalHeight));
-        int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        const int physW = static_cast<int>(std::lround(
+            surface_.drawableSize.width / surface_.displayScale));
+        const int physH = static_cast<int>(std::lround(
+            surface_.drawableSize.height / surface_.displayScale));
         const float scaleX = viewport.logicalWidth > 0.0f ? viewport.width / viewport.logicalWidth : 1.0f;
         const float scaleY = viewport.logicalHeight > 0.0f ? viewport.height / viewport.logicalHeight : 1.0f;
         // plan_html_dom.md HTMLDOM-108: tracks the full viewport (offset + scale), not just logical/
@@ -671,14 +671,15 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     HtmlDomRenderer::LogicalViewport HtmlDomRenderer::ComputeLogicalViewport() const
     {
-        // plan_html_dom.md HTMLDOM-108: ported from SdlGpuRenderer::ComputeLogicalViewport
-        // (the "complete renderer" this task's own plan row names) rather than re-derived, so every
+        // plan_html_dom.md HTMLDOM-108: ported from the established GPU presentation geometry, so every
         // CnaPresentationMode's geometry matches an already-tested reference exactly. See
         // LogicalViewport's own doc comment (HtmlDomRenderer.hpp) for what x/y/width/height
         // and logicalWidth/logicalHeight mean per mode.
         LogicalViewport viewport{};
-        int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        const int physW = static_cast<int>(std::lround(
+            surface_.drawableSize.width / surface_.displayScale));
+        const int physH = static_cast<int>(std::lround(
+            surface_.drawableSize.height / surface_.displayScale));
         viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, physW));
         viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, physH));
         if (physW <= 0 || physH <= 0) return viewport;
@@ -762,7 +763,7 @@ namespace CNA::Internal::Renderers::HtmlDom
 
     void HtmlDomRenderer::SetPresentationMode(int mode)
     {
-        // plan_html_dom.md HTMLDOM-108: matches SdlGpuRenderer::SetPresentationMode's own
+        // plan_html_dom.md HTMLDOM-108: matches the GPU renderer's presentation-mode
         // validation -- an invalid ordinal used to be stored unchecked, silently corrupting every
         // later ComputeLogicalViewport() call instead of failing at the actual bad input.
         if (mode < static_cast<int>(CnaPresentationMode::Letterbox) ||
@@ -770,6 +771,15 @@ namespace CNA::Internal::Renderers::HtmlDom
             throw std::out_of_range(
                 "HTML_DOM renderer: invalid CnaPresentationMode ordinal " + std::to_string(mode));
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
+    }
+
+    void HtmlDomRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surface_.windowId)
+            throw std::runtime_error("HtmlDomRenderer surface window id changed.");
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
     }
 
     bool HtmlDomRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -785,7 +795,7 @@ namespace CNA::Internal::Renderers::HtmlDom
         logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
         logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
         // Letterbox: a point in the bars (outside the scaled content rectangle) has no logical
-        // counterpart at all -- matches SdlGpuRenderer::TransformWindowToLogical's own
+        // counterpart at all -- matches the shared renderer coordinate-conversion
         // contract. Overscan's viewport always extends at least to the physical edges on every
         // axis, so every on-screen point is inside it; Stretch/FixedHeightDynamicWidth/
         // NativeBackBuffer's viewport IS the physical rect, so this is never false for them either.
@@ -1059,7 +1069,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<HtmlDom::HtmlDomRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        return std::make_unique<HtmlDom::HtmlDomRenderer>(args);
     }
 }
