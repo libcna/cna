@@ -567,22 +567,24 @@ After `CBIND-037` closes: `CBIND-043` (make the coverage matrix a configured/CI 
 passes `--check` deterministically, so this is small and high-leverage), then `CBIND-038`–`042`,
 then `CBIND-044`.
 
-### Working method that produced the closed slices
+### Judgment calls that produced the closed slices
 
-Repeat it; it is what makes each slice reviewable and each claim checkable.
+The mechanics — which files, which commands — are in *The loop for one slice* in the handoff
+below. These are the decisions that mechanics cannot make for you:
 
-1. Read the canonical header **and** its `.cpp` — several slices turned on behavior only the
-   implementation shows (a square clamp, an epsilon comparison, a silent drop, a no-op disposal).
-2. Design the C surface; prefer the representation the ABI already has over a second spelling of
-   the same data.
-3. Implement behind `CallWithExceptionBarrier`, validating identities against their `_ALL` masks.
-4. Extend the strict-C smoke test, including every refusal path.
-5. Probe struct layouts with a throwaway `gcc -std=c17` compile, then freeze them in the C and C++
-   ABI assertion files.
-6. Add coverage rules, regenerate, **and check the implemented delta equals the slice's row count**
-   — that check has caught a rule silently claiming another slice's rows.
-7. Update `plan_binding.md`, `AUDIT.md`, `NEXT.md` and the `docs/c-api/` pages.
-8. Verify all four trees, then commit — one task, one commit, explicit file names.
+1. **Read the canonical `.cpp`, not only the header.** Several slices turned on behavior only the
+   implementation reveals: a square clamp, an epsilon comparison, a silently dropped key, a
+   deliberately no-op disposal, a hash that ignores half the fields.
+2. **Prefer the representation the ABI already has** over a second spelling of the same data. The
+   gamepad button set and directional pad reuse one mask; the thumbstick and trigger values are the
+   two halves of a block the snapshot already carried, and an ABI assertion proves it.
+3. **Collapse only what the canonical implementation itself collapses.** Eleven named button
+   getters become one route because each is the same masked test — not because eleven routes felt
+   verbose.
+4. **When C must differ, deviate deliberately and write it down**, in the header, the coverage rule
+   and here. When the canonical behavior is merely odd, preserve it and test it.
+5. **Check the implemented delta equals the slice's row count** after regenerating coverage. That
+   check has already caught a rule silently claiming another slice's rows.
 
 ### Recorded deviations and re-partitions
 
@@ -843,6 +845,97 @@ what remains. This section carries only what a fresh context cannot infer from t
   is the precedent to follow, and the `INTERNAL_On*` raises are what make them observable without
   a real keyboard.
 - Do not reopen a closed slice without a concrete demonstrated defect.
+
+### Code map — what one slice touches
+
+The C API lives entirely in `modules/c-api/`. A slice almost always edits exactly these, in this
+order:
+
+| File | Role |
+|---|---|
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 44 today (`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
+| `src/CnaCApi<Family>.cpp` | the adapter — 37 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
+| `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 67**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
+| `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (51 tests today). |
+| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 46 files; prefer extending the family's existing one over adding a target. |
+| `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
+| `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
+| `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
+| `docs/c-api/<FAMILY>.md` + `FEATURE_MATRIX.md` + `README.md` | the consumer-facing contract. |
+
+The design contracts that already exist do not need restating in a new page — point at
+`docs/c-api/HANDLES.md`, `OWNERSHIP.md`, `STRINGS_AND_BUFFERS.md`, `ERRORS.md` and
+`CALLBACKS_AND_THREADING.md`.
+
+### Conventions already settled (do not reinvent)
+
+Every closed slice follows these. A new slice that invents a different shape makes the ABI
+inconsistent, which is worse than the shape being slightly suboptimal.
+
+- **Identities** are `typedef uint32_t CNA_Xxx;` plus `#define CNA_XXX_* UINT32_C(n)` at the
+  canonical ordinals — never renumbered into a dense range (`CNA_LOG_LEVEL_EXPERIMENT` is 100).
+  Flag sets get a `CNA_XXX_ALL` mask and every route validates against it.
+- **Values** are fixed PODs. Anything that may grow carries `struct_size` + `struct_version` and
+  an `_init` route; a pure math pair (`CNA_GamePadThumbSticks`) does not.
+- **Strings** are the count/copy pair `cna_x_get_y_size` + `cna_x_copy_y`: **no terminator**,
+  `out_bytes` always required and always written, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial
+  write** when the capacity is short. Input strings are a borrowed `CNA_StringView`, copied before
+  use.
+- **Handles** are opaque, generation-checked and thread-affine. Owned vs borrowed is a deliberate
+  choice per type: a borrowed view keeps its parent alive and blocks the parent's release.
+- **`_ext` suffix** marks a route with no XNA 4.0 counterpart — either the canonical member is
+  `CNAEXT`, or the route exists only because C needs it. A whole header of CNA-namespace surface
+  (`core_ext.h`) does not repeat the suffix on every route.
+- **Every fallible route** returns `CNA_Result` and runs inside `CallWithExceptionBarrier`.
+- **Availability is separate from the answer.** A canonical query that returns `bool` and fills an
+  output reference becomes a route with an `out_available` flag — "no sensor" is an ordinary answer,
+  never a failure.
+- **An identity is not a capability claim.** Never branch a test or a route on which renderer is
+  compiled in; probe the behavior.
+- **Preserve canonical quirks, record deliberate deviations.** Both have precedent in the closed
+  slices; what is not acceptable is silently smoothing one over.
+
+### The loop for one slice
+
+```bash
+cd /rv/data/development/github.com/openeggbert/cnabinding
+export CCACHE_DIR=/media/robertvokac/claude/tmp/ccache
+B=/media/robertvokac/claude/tmp/cna/cmake-build-binding-headless
+
+# 1. what does this slice own?  (planned rows, by header)
+python3 - <<'EOF'
+import re
+hdr=None
+for line in open('docs/c-api/COVERAGE.md',encoding='utf-8'):
+    m=re.match(r'#### `(modules/[^`]+)`', line)
+    if m: hdr=m.group(1); continue
+    if line.startswith('| `CPP-') and '⬜' in line and '<Header>.hpp' in (hdr or ''):
+        print(line.split('|')[4].strip())
+EOF
+
+# 2. implement, then build just the library
+nice -n 10 cmake --build $B --target cna_c_api -j3
+
+# 3. probe a new struct layout before freezing it
+gcc -std=c17 -I modules/c-api/include /path/to/probe.c -o /tmp/probe && /tmp/probe
+
+# 4. coverage: regenerate, then CHECK THE DELTA equals the slice's row count
+python3 tools/c-api/generate_coverage_inventory.py --write
+python3 tools/c-api/generate_coverage_inventory.py --check
+
+# 5. all four trees
+for T in headless sdlrenderer software asan; do
+  D=/media/robertvokac/claude/tmp/cna/cmake-build-binding-$T
+  nice -n 10 make -C $D/modules/c-api -j3 || break
+  (cd $D && SDL_VIDEODRIVER=dummy ASAN_OPTIONS=detect_leaks=1 \
+      ctest --test-dir modules/c-api --output-on-failure -j3 | tail -3)
+done
+```
+
+A slice is not finished until step 4's delta matches, all four trees are green, and
+`plan_binding.md` / `AUDIT.md` / `NEXT.md` / the `docs/c-api/` pages say what changed.
 
 ### Verification (do all four before committing a slice)
 
