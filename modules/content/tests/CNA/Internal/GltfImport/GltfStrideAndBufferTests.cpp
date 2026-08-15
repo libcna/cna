@@ -293,7 +293,7 @@ TEST(GltfStrideAndBuffer, AStrideOutsideTheTableIsNotGuessedAt)
 
 TEST(GltfStrideAndBuffer, EveryImportedGltfStrideCarriesItsCanonicalVertexDeclaration)
 {
-    // Each fixture below is the corpus witness for exactly one of the seven layouts a glTF mesh
+    // Each fixture below is the corpus witness for exactly one of the eight layouts a glTF mesh
     // can select. Loading, rather than constructing a VertexBuffer directly, is essential: the
     // regression was in BuildVertexBufferFromRawBytes, where the capacity-only constructor erased
     // the declaration before SetData/SetDataRaw reached the selected renderer.

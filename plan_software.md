@@ -12,13 +12,14 @@
 > `EnvironmentMapEffect` (real cube-map reflection)/`SkinnedEffect` (real bone-transform skinning)
 > support, and a real pixel-correct `SpriteBatch` path reusing the same rasterizer core -- all
 > without any per-light diffuse lighting (design decision 6, still out of v1 scope for every
-> effect). Six CTests, 29 checks total: `Software_Smoke` (6/6), `Software_Rasterizer` (5/5,
+> effect). The original six focused CTests now contain 34 checks: `Software_Smoke` (6/6), `Software_Rasterizer` (10/10,
 > **order-independent depth occlusion**), `Software_Effects` (5/5), `Software_Culling` (5/5),
 > `Software_Clipping` (4/4), `Software_DualEnvmapSkinned` (4/4) -- all with **no window, no GPU, no
 > display server**. Plus a manually-run cross-backend diagnostic (`SOFTWARE-84`) confirming this
 > backend's output matches `EASYGL`'s within a max per-channel diff of 1 on a canonical scene.
-> `TriangleList` only in v1; no per-light lighting/fog, no MRT/cube-render-target/3D textures (see
-> Boundaries).
+> Effect-aware draws support `TriangleList`, `LineList`, `LineStrip` and `PointListEXT`;
+> `TriangleStrip` remains an explicit unsupported boundary. No per-light lighting/fog, no
+> MRT/cube-render-target/3D textures (see Boundaries).
 >
 > **Status legend:** ✅ implemented *and verified against its stated acceptance criteria*;
 > 🟨 code or documentation exists but has not met those criteria; ⬜ not implemented.
@@ -151,7 +152,7 @@ without both.
 |---|---|---|---|
 | SOFTWARE-20 | `SoftwareVertexBufferBackend`: stores raw bytes + stride (real storage, not discarded, mirroring `HeadlessVertexBufferBackend`'s own `ShadowData()` pattern) | ✅ | Verified 2026-07-13 (`Software_Smoke` Check D): real `VertexBuffer`s at strides 16 (`VertexPositionColor`)/20 (`VertexPositionTexture`)/24 (`VertexPositionColorTexture`) all round-trip real vertex data through `SetData()` without throwing. `Data()`/`Stride()` accessors exist for Phase S4's rasterizer to read from directly. |
 | SOFTWARE-21 | `SoftwareIndexBufferBackend`: 16- and 32-bit, real storage | ✅ | Verified 2026-07-13 (`Software_Smoke` Check E): both a 16-bit and a 32-bit `IndexBuffer` round-trip real index data without throwing. A genuine bit-width mismatch (`SetData16` on a buffer declared 32-bit or vice versa) throws `std::runtime_error`, mirroring `HeadlessIndexBufferBackend`'s own precedent. |
-| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | ✅ | **Closed** (dispatch logic landed with Phase S4's rasterizer, `BuildGenericClipVertex`/`BuildPositionColorClipVertex`, verified by `Software_Rasterizer`/`Software_Effects`). The 32-byte deferral was itself later lifted by `SOFTWARE-82` (Phase S9, 2026-07-13), which added real stride-32 (`VertexPositionNormalTexture`, `EnvironmentMapEffect`) and stride-52 (`VertexPositionNormalTextureSkinned`, `SkinnedEffect`) dispatch once a real (if lighting-free) use for the normal existed. `GLTF-387` later completed the canonical table with 48-byte rigid PBR, 56-byte coloured skinning and 68-byte skinned PBR, all reached by the glTF native-boundary sweep. |
+| SOFTWARE-22 | Stride-based vertex format inference (design decision 2): 16→`VertexPositionColor`, 20→`VertexPositionTexture`, 24→`VertexPositionColorTexture`. 32-byte (`VertexPositionNormalTexture`) explicitly deferred (needs lighting, out of scope for v1) | ✅ | **Closed** (dispatch logic landed with Phase S4's rasterizer, `BuildGenericClipVertex`/`BuildPositionColorClipVertex`, verified by `Software_Rasterizer`/`Software_Effects`). The 32-byte deferral was itself later lifted by `SOFTWARE-82` (Phase S9, 2026-07-13), which added real stride-32 (`VertexPositionNormalTexture`, `EnvironmentMapEffect`) and stride-52 (`VertexPositionNormalTextureSkinned`, `SkinnedEffect`) dispatch once a real (if lighting-free) use for the normal existed. `GLTF-387` completed the canonical table with 48/60-byte rigid PBR, 56-byte coloured skinning and 68/76-byte skinned PBR, all reached by the glTF native-boundary sweep. The 60/76 forms carry UV1; SOFTWARE consumes bit 0 of the shared PBR selector and slot zero's transform for its base-colour-only fallback. |
 
 ---
 
@@ -255,12 +256,11 @@ in an approved batch. Ordered roughly by value-for-effort, cheapest/highest-valu
 - If Phase S4's rasterizer core turns out to need real polygon near-plane clipping sooner than
   expected (visible artifacts in even simple test scenes), treat that as a legitimate scope
   addition to flag and discuss, not something to silently skip or silently half-implement.
-- **`TriangleList` only in v1** (already called out in the top status banner, restated here since
-  this is the section meant to be the durable reference): `TriangleStrip`/`LineList`/`LineStrip`/
-  `PointListEXT` all throw a clear "only TriangleList is supported in v1" error instead of silently
-  misrendering. Not tracked as its own `SOFTWARE-NN` row because it was never implemented in the
-  first place (Phase S4's rasterizer core was scoped to triangles from the start) — see
-  `docs/software-backend.md`'s Known Limitations for the exact error text.
+- **`TriangleStrip` remains unsupported.** `GLTF-387` extended the effect-aware indexed and
+  non-indexed path to `LineList`, `LineStrip` and `PointListEXT`; near-plane-clipped lines and
+  points share the established depth/blend/shading fragment path. Strips and the legacy coloured
+  convenience paths retain the clear TriangleList-only refusal rather than silently misrendering.
+  See `docs/software-renderer.md`'s Known Limitations for the current boundary.
 - **Bilinear texture sampling (`SOFTWARE-80`) is always on, regardless of `SamplerState.Filter`**,
   and there is no real texture address-mode support — `Wrap`/`Mirror` are not implemented, UVs are
   simply clamped to `[0,1]` at the texture bounds regardless of what `SamplerState.AddressU/V`

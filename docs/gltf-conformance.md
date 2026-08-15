@@ -331,7 +331,7 @@ images are diagnostic external-renderer evidence, not replacements for the spec-
 oracles. `tools/gltf_reference/` contains the local harness and browser driver;
 `scripts/gltf-reference-renderer-compare.py` verifies the renderer commit, serves only local files,
 runs the CNA viewer's clean `--reference-capture`, enforces the comparison thresholds and writes the
-per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in §5.4.
+per-asset provenance plus aggregate report. `GLTF-411`'s executed result is in §5.6.
 The driver additionally requires `xvfb-run`, Python Pillow and a Chromium-compatible browser;
 `tools/gltf_reference/capture.mjs` defaults to `/usr/bin/google-chrome` and accepts an explicit
 `CNA_GLTF_CHROME` path. Browser automation is loaded from the pinned renderer's own `npm ci`
@@ -1028,14 +1028,14 @@ loader/upload boundary, not corpus L7 pixels. It also exposed and fixed two host
 RFC `/`-absolute URI is now classified as absolute even under Windows path semantics, and ladder
 traceability accepts the platform-excluded tool suite only while its source still declares it.
 
-`GLTF-387` adds the CPU SOFTWARE rasteriser as a fifth independent boundary. Its first complete
-run was 519/520 and exposed a gap hidden by every prior configuration: SOFTWARE rejected a stock
+`GLTF-387` adds the CPU SOFTWARE rasteriser as a fifth independent boundary. Its first L0–L6 run
+was 519/520 and exposed a gap hidden by every prior configuration: SOFTWARE rejected a stock
 PBR/Skinned draw whose optional base map was absent before it could validate the vertex record,
 then lacked the glTF-era 48/56/68-byte layouts behind that guard. An absent optional base map now
 uses the same white identity fallback as the shader renderers, while missing mandatory
-DualTexture/environment maps still refuse. SOFTWARE consumes all eight canonical CNA strides and
-the seven-fixture native draw sweep reaches rigid PBR, coloured skinning and skinned PBR. The
-rerun is **520/520 with no skips** and the ten-rung L0–L6/tool ladder is 10/10. Focused ordinary
+DualTexture/environment maps still refuse. SOFTWARE consumes all ten canonical CNA strides and
+the eight-fixture native draw sweep reaches rigid PBR, dual-UV PBR, coloured skinning and skinned
+PBR. The rerun is **520/520 with no skips** and the ten-rung L0–L6/tool ladder is 10/10. Focused ordinary
 target/backbuffer cull, depth/depth-bias and stride-52 skinning pixels are green; the broader
 winding control separately found a pre-existing blank readback on a 4x-MSAA target, recorded under
 `GLTF-395` rather than misclassified as an importer or stride failure. `GLTF-395` then fixed that
@@ -1043,8 +1043,9 @@ boundary: a level-zero SOFTWARE readback now snapshots the live four-sample plan
 the render pass or exposing generated mip levels. The shared winding oracle is 127/127 on both
 EasyGL and Vulkan and green on SOFTWARE; HEADLESS also passes its explicit non-rasterising
 boundary. It covers both windings under all three cull modes, ordinary/MSAA targets, every draw
-entry point, stock textured effects, mirrored transforms and SpriteBatch. Corpus-wide L7 remains
-open.
+entry point, stock textured effects, mirrored transforms and SpriteBatch. The later whole-corpus
+L7 campaign is complete at 137 deterministic captures plus eight deterministic safe rejections;
+its two additional renderer-boundary findings and exact evidence are in §5.5.
 
 `GLTF-396` records the adjacent clip/depth boundary in `docs/gltf-conventions.md`. CNA projection
 matrices emit Direct3D/XNA `0 <= z <= w`: Vulkan consumes that range natively, EasyGL accepts it as
@@ -1123,7 +1124,47 @@ the golden directory to equal the captured disposition set exactly, and locks th
 single-device and zero-tolerance policy. The focused 14-material Vulkan runner remains useful as a
 fast subsystem gate; its narrower report is not used to inflate the whole-corpus claim.
 
-### 5.5 Pinned reference-renderer subset (`GLTF-411`)
+### 5.5 Whole-corpus SOFTWARE L7 oracle (`GLTF-387` / `GLTF-390` / `GLTF-391`)
+
+The generalized corpus protocol also has an independently measured CPU-rasteriser policy. It runs
+the production viewer twice for every canonical asset with `CNA_GRAPHICS_RENDERER=SOFTWARE`,
+records the renderer identity emitted by the application and compares only against SOFTWARE-owned
+`tests/gltf-l7/software/` goldens. The viewer still creates an SDL window for its application
+shell, so the recorded capture environment uses X11/Xvfb and dummy audio; all mesh transformation,
+clipping, depth, shading and framebuffer pixels are nevertheless produced by CNA's CPU rasteriser,
+not by the display server or a graphics API. The result is 137 byte-identical 512×512 PNG pairs at
+exact RGB/alpha tolerance 0 and eight deterministic non-zero safe rejections. Policy and exception
+reasons live in `tests/gltf-l7/software-policy.json`; complete input, viewer, executable and PNG
+hashes live in `docs/gltf-l7-software-corpus-report.json`.
+
+As with Vulkan, the initial images were reviewed before becoming goldens. The first run stopped on
+`mode-points`: the importer had correctly preserved the core topology, but SOFTWARE's effect-aware
+native draw path still accepted only triangles. The renderer now rasterises `PointListEXT`,
+`LineList` and `LineStrip`, for indexed and non-indexed submissions, through the same clipped,
+depth-tested, blended fragment path as triangles; `TriangleStrip` remains an explicit unsupported
+boundary. The next run stopped on `uv1-material`: its canonical 60-byte dual-UV record reached the
+renderer intact, but the CPU fallback only knew stride 48/68. SOFTWARE now accepts stride 60/76,
+selects the base-colour UV with mask bit 0 and applies that map's affine transform. The corrected
+capture covers the complete 45,643-pixel numbered quad. This is deliberately bounded evidence:
+SOFTWARE's reduced PBR fallback samples base colour only, so its corpus does not claim full
+normal/MR/emissive/occlusion shading fidelity already established by EasyGL and Vulkan.
+
+Reproduce the exact campaign after building the SOFTWARE viewer:
+
+```bash
+xvfb-run -a python3 scripts/gltf-l7-corpus.py \
+  --viewer /path/to/software-build/cna_gltf_viewer \
+  --viewer-source /path/to/cna-gltf-viewer \
+  --policy tests/gltf-l7/software-policy.json \
+  --report-out docs/gltf-l7-software-corpus-report.json
+```
+
+`GltfFixtureCorpus.SoftwareCorpusL7ReportIsCompleteExactAndReproducible` makes the recorded evidence
+portable to a no-display unit test: it re-hashes all 145 canonical sources and all 137 goldens,
+requires the golden directory to equal the captured disposition set, verifies each safe rejection,
+and locks the two-process, single-renderer and zero-tolerance policy.
+
+### 5.6 Pinned reference-renderer subset (`GLTF-411`)
 
 The supplementary reference comparison is now executed over 13 generated assets: JSON and GLB,
 ordinary and non-indexed triangles, interleaved and sparse accessors, converted strip topology,
@@ -1162,7 +1203,7 @@ an external renderer or browser to CNA's CI/runtime dependency graph. This 13-as
 the independent implementation check; the 145-asset EasyGL gate in §5.3 is the broad regression
 oracle. Neither is substituted for the other.
 
-### 5.6 Final viewer retake matrix (`GLTF-429`)
+### 5.7 Final viewer retake matrix (`GLTF-429`)
 
 The release retake is the exact 14-row Gate C matrix from `plan_gltf.md` §30.3, executed by
 `scripts/gltf-viewer-retake.py`. Row 12 has separate sparse-attribute and sparse-index cases, so a
