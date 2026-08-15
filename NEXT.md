@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS-DEVICE VALUES COMPLETE THROUGH CBIND-035F1 (2026-08-15)
+## C BINDING / C ABI — GRAPHICS-DEVICE STATE COMPLETE THROUGH CBIND-035F2 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
-> `CBIND-035F1` are complete:
+> `CBIND-035F1`–`035F2` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -161,8 +161,12 @@
 > GraphicsDeviceStatus, Unsupported3DGraphicsCallBehavior and SpriteEffects-operator rows through a
 > fixed 24-byte viewport POD with complete construction/property/transform/string operations plus
 > fixed-width identities asserted against their native ordinals at the adapter boundary. The
-> inventory is now 3,215 implemented, 19 partial, 3,111 planned and 70 N/A. CBIND-035F2 device
-> lifetime, state, events and service surface is next.
+> inventory is now 3,215 implemented, 19 partial, 3,111 planned and 70 N/A. CBIND-035F2 then maps
+> all 51 device lifetime, state, event, event-args, service and device-exception rows through the
+> borrowed device handle, owned subscriptions with fixed payload structures and a shared
+> exception-firewall conversion of the three canonical device exceptions. The inventory is now
+> 3,259 implemented, 23 partial, 3,060 planned and 73 N/A. CBIND-035F3 texture and vertex-texture
+> collections is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

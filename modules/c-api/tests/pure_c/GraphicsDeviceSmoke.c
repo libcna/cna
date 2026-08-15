@@ -257,10 +257,423 @@ static int validate_string(void)
     return 1;
 }
 
+typedef struct DeviceEventCounters {
+    int disposing;
+    int device_lost;
+    int device_reset;
+    int device_resetting;
+    int resource_created;
+    int resource_created_with_object;
+    int resource_destroyed;
+    int resource_destroyed_named;
+    CNA_Handle observed_device;
+} DeviceEventCounters;
+
+typedef struct DeviceState {
+    DeviceEventCounters counters;
+    CNA_GraphicsDeviceEventRegistrationHandle disposing_registration;
+    CNA_GraphicsDeviceEventRegistrationHandle lost_registration;
+    CNA_GraphicsDeviceEventRegistrationHandle reset_registration;
+    CNA_GraphicsDeviceEventRegistrationHandle resetting_registration;
+    CNA_GraphicsDeviceEventRegistrationHandle created_registration;
+    CNA_GraphicsDeviceEventRegistrationHandle destroyed_registration;
+    CNA_Handle stale_device;
+    int validated;
+} DeviceState;
+
+static void on_device_event(CNA_Handle graphics_device, void* context)
+{
+    DeviceEventCounters* const counters = (DeviceEventCounters*)context;
+    counters->observed_device = graphics_device;
+    ++counters->disposing;
+}
+
+static void on_device_lost(CNA_Handle graphics_device, void* context)
+{
+    (void)graphics_device;
+    ++((DeviceEventCounters*)context)->device_lost;
+}
+
+static void on_device_reset(CNA_Handle graphics_device, void* context)
+{
+    (void)graphics_device;
+    ++((DeviceEventCounters*)context)->device_reset;
+}
+
+static void on_device_resetting(CNA_Handle graphics_device, void* context)
+{
+    (void)graphics_device;
+    ++((DeviceEventCounters*)context)->device_resetting;
+}
+
+static void on_resource_created(
+    CNA_Handle graphics_device,
+    const CNA_ResourceCreatedEventInfo* info,
+    void* context)
+{
+    DeviceEventCounters* const counters = (DeviceEventCounters*)context;
+    counters->observed_device = graphics_device;
+    if (info == 0 || info->struct_size != sizeof(CNA_ResourceCreatedEventInfo) ||
+        info->struct_version != UINT32_C(1)) {
+        return;
+    }
+    ++counters->resource_created;
+    if (info->has_resource == CNA_TRUE) {
+        ++counters->resource_created_with_object;
+    }
+}
+
+static void on_resource_destroyed(
+    CNA_Handle graphics_device,
+    const CNA_ResourceDestroyedEventInfo* info,
+    void* context)
+{
+    DeviceEventCounters* const counters = (DeviceEventCounters*)context;
+    counters->observed_device = graphics_device;
+    if (info == 0 || info->struct_size != sizeof(CNA_ResourceDestroyedEventInfo) ||
+        info->struct_version != UINT32_C(1)) {
+        return;
+    }
+    ++counters->resource_destroyed;
+    if (info->has_tag == CNA_FALSE && info->name.byte_length == 0U && info->name.data == 0) {
+        ++counters->resource_destroyed_named;
+    }
+}
+
+static int validate_device_state(CNA_Handle graphics_device)
+{
+    CNA_Bool disposed = CNA_TRUE;
+    CNA_GraphicsDeviceStatus status = UINT32_MAX;
+    CNA_GraphicsProfile profile = UINT32_MAX;
+    uint32_t adapter_index = UINT32_MAX;
+    uint64_t adapter_count = 0U;
+    if (cna_graphics_device_get_is_disposed(graphics_device, &disposed) != CNA_RESULT_SUCCESS ||
+        disposed != CNA_FALSE ||
+        cna_graphics_device_get_status(graphics_device, &status) != CNA_RESULT_SUCCESS ||
+        status != CNA_GRAPHICS_DEVICE_STATUS_NORMAL ||
+        cna_graphics_device_get_graphics_profile(
+            graphics_device, &profile) != CNA_RESULT_SUCCESS ||
+        (profile != CNA_GRAPHICS_PROFILE_REACH && profile != CNA_GRAPHICS_PROFILE_HI_DEF) ||
+        cna_graphics_device_get_adapter_index(
+            graphics_device, &adapter_index) != CNA_RESULT_SUCCESS ||
+        cna_graphics_adapter_get_count(graphics_device, &adapter_count) != CNA_RESULT_SUCCESS ||
+        (uint64_t)adapter_index >= adapter_count) {
+        return 0;
+    }
+
+    /* Every query rejects a null output without touching the device. */
+    if (cna_graphics_device_get_is_disposed(graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_status(graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_graphics_profile(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_adapter_index(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    CNA_Viewport viewport = {0, 0, 0, 0, 0.0F, 0.0F};
+    CNA_Viewport applied = {0, 0, 0, 0, 0.0F, 0.0F};
+    if (cna_graphics_device_get_viewport(graphics_device, &viewport) != CNA_RESULT_SUCCESS ||
+        viewport.width <= 0 || viewport.height <= 0) {
+        return 0;
+    }
+    const CNA_Viewport requested = {4, 6, 40, 30, 0.25F, 0.75F};
+    if (cna_graphics_device_set_viewport(graphics_device, requested) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_viewport(graphics_device, &applied) != CNA_RESULT_SUCCESS ||
+        !viewport_equals(applied, requested) ||
+        cna_graphics_device_get_viewport(graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* A non-finite depth range is rejected before the device is touched. */
+    CNA_Viewport invalid = requested;
+    invalid.max_depth = INFINITY;
+    if (cna_graphics_device_set_viewport(graphics_device, invalid) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_viewport(graphics_device, &applied) != CNA_RESULT_SUCCESS ||
+        !viewport_equals(applied, requested)) {
+        return 0;
+    }
+    invalid.max_depth = 1.0F;
+    invalid.min_depth = NAN;
+    if (cna_graphics_device_set_viewport(graphics_device, invalid) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_graphics_device_set_viewport(graphics_device, viewport) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    CNA_Rectangle scissor = {0, 0, 0, 0};
+    const CNA_Rectangle requested_scissor = {2, 3, 20, 15};
+    if (cna_graphics_device_get_scissor_rectangle(
+            graphics_device, &scissor) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_scissor_rectangle(
+            graphics_device, requested_scissor) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_scissor_rectangle(
+            graphics_device, &scissor) != CNA_RESULT_SUCCESS ||
+        !rectangle_equals(scissor, requested_scissor) ||
+        cna_graphics_device_get_scissor_rectangle(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    CNA_Color blend_factor = {0U, 0U, 0U, 0U};
+    const CNA_Color requested_factor = {12U, 34U, 56U, 78U};
+    if (cna_graphics_device_get_blend_factor(
+            graphics_device, &blend_factor) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_set_blend_factor(
+            graphics_device, requested_factor) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_blend_factor(
+            graphics_device, &blend_factor) != CNA_RESULT_SUCCESS ||
+        blend_factor.r != requested_factor.r || blend_factor.g != requested_factor.g ||
+        blend_factor.b != requested_factor.b || blend_factor.a != requested_factor.a ||
+        cna_graphics_device_get_blend_factor(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    int32_t mask = 0;
+    int32_t reference = -1;
+    if (cna_graphics_device_get_multi_sample_mask(
+            graphics_device, &mask) != CNA_RESULT_SUCCESS ||
+        mask != -1 ||
+        cna_graphics_device_set_multi_sample_mask(graphics_device, 15) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_multi_sample_mask(
+            graphics_device, &mask) != CNA_RESULT_SUCCESS ||
+        mask != 15 ||
+        cna_graphics_device_get_multi_sample_mask(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_get_reference_stencil(
+            graphics_device, &reference) != CNA_RESULT_SUCCESS ||
+        reference != 0 ||
+        cna_graphics_device_set_reference_stencil(graphics_device, 7) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_get_reference_stencil(
+            graphics_device, &reference) != CNA_RESULT_SUCCESS ||
+        reference != 7 ||
+        cna_graphics_device_get_reference_stencil(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    static const char ExpectedType[] = "Microsoft.Xna.Framework.Graphics.GraphicsDevice";
+    const uint64_t expected_type_length = (uint64_t)(sizeof(ExpectedType) - 1U);
+    uint64_t type_bytes = 0U;
+    char type_name[sizeof(ExpectedType)];
+    memset(type_name, 'z', sizeof(type_name));
+    if (cna_graphics_device_get_type_name_size(
+            graphics_device, &type_bytes) != CNA_RESULT_SUCCESS ||
+        type_bytes != expected_type_length ||
+        cna_graphics_device_get_type_name_size(
+            graphics_device, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_copy_type_name(
+            graphics_device, type_name, expected_type_length, &type_bytes) !=
+            CNA_RESULT_SUCCESS ||
+        type_bytes != expected_type_length ||
+        memcmp(type_name, ExpectedType, (size_t)expected_type_length) != 0 ||
+        type_name[expected_type_length] != 'z') {
+        return 0;
+    }
+
+    char guard = 'q';
+    type_bytes = 0U;
+    if (cna_graphics_device_copy_type_name(graphics_device, &guard, 1U, &type_bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL ||
+        type_bytes != expected_type_length || guard != 'q' ||
+        cna_graphics_device_copy_type_name(
+            graphics_device, type_name, sizeof(type_name), 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* The active game owns the device, so C cannot dispose it. */
+    if (cna_graphics_device_dispose(graphics_device) != CNA_RESULT_NOT_SUPPORTED ||
+        cna_graphics_device_get_is_disposed(graphics_device, &disposed) != CNA_RESULT_SUCCESS ||
+        disposed != CNA_FALSE) {
+        return 0;
+    }
+    return 1;
+}
+
+static int validate_device_events(CNA_Handle graphics_device, DeviceState* state)
+{
+    CNA_GraphicsDeviceEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+    if (cna_graphics_device_subscribe_event(
+            graphics_device, UINT32_C(4), on_device_event, &state->counters, &registration) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        registration != CNA_INVALID_HANDLE ||
+        cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DISPOSING, 0, &state->counters,
+            &registration) != CNA_RESULT_INVALID_ARGUMENT ||
+        registration != CNA_INVALID_HANDLE ||
+        cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DISPOSING, on_device_event,
+            &state->counters, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_subscribe_resource_created(
+            graphics_device, 0, &state->counters, &registration) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_graphics_device_subscribe_resource_destroyed(
+            graphics_device, 0, &state->counters, &registration) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    if (cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DISPOSING, on_device_event,
+            &state->counters, &state->disposing_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST, on_device_lost,
+            &state->counters, &state->lost_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET, on_device_reset,
+            &state->counters, &state->reset_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_subscribe_event(
+            graphics_device, CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING, on_device_resetting,
+            &state->counters, &state->resetting_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_subscribe_resource_created(
+            graphics_device, on_resource_created, &state->counters,
+            &state->created_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_subscribe_resource_destroyed(
+            graphics_device, on_resource_destroyed, &state->counters,
+            &state->destroyed_registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* Creating and destroying a real graphics resource drives both payload events. */
+    const CNA_Texture2DCreateInfo create_info = {
+        sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 2U, 2U, CNA_FALSE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_COLOR
+    };
+    CNA_Handle texture = CNA_INVALID_HANDLE;
+    if (cna_texture2d_create(graphics_device, &create_info, &texture) != CNA_RESULT_SUCCESS ||
+        state->counters.resource_created != 1 ||
+        state->counters.resource_created_with_object != 1 ||
+        state->counters.observed_device != graphics_device ||
+        state->counters.resource_destroyed != 0 ||
+        cna_texture2d_destroy(texture) != CNA_RESULT_SUCCESS ||
+        state->counters.resource_destroyed != 1 ||
+        state->counters.resource_destroyed_named != 1 ||
+        state->counters.disposing != 0 || state->counters.device_lost != 0 ||
+        state->counters.device_reset != 0 || state->counters.device_resetting != 0) {
+        return 0;
+    }
+
+    /* An unsubscribed registration stops receiving events. */
+    if (cna_graphics_device_unsubscribe(state->created_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state->created_registration) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_graphics_device_unsubscribe(CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE ||
+        cna_graphics_device_unsubscribe(graphics_device) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    state->created_registration = CNA_INVALID_HANDLE;
+
+    CNA_Handle second_texture = CNA_INVALID_HANDLE;
+    if (cna_texture2d_create(graphics_device, &create_info, &second_texture) !=
+            CNA_RESULT_SUCCESS ||
+        state->counters.resource_created != 1 ||
+        cna_texture2d_destroy(second_texture) != CNA_RESULT_SUCCESS ||
+        state->counters.resource_destroyed != 2) {
+        return 0;
+    }
+    return 1;
+}
+
+static CNA_Result on_load(
+    CNA_Handle game,
+    const CNA_GameTime* game_time,
+    void* context,
+    CNA_CallbackError* out_error)
+{
+    (void)out_error;
+    DeviceState* const state = (DeviceState*)context;
+    CNA_Handle graphics_device = CNA_INVALID_HANDLE;
+    if (game_time != 0 ||
+        cna_game_get_graphics_device(game, &graphics_device) != CNA_RESULT_SUCCESS ||
+        !validate_device_state(graphics_device) ||
+        !validate_device_events(graphics_device, state)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    state->stale_device = graphics_device;
+    state->validated = 1;
+    return CNA_RESULT_SUCCESS;
+}
+
+static int validate_device(void)
+{
+    DeviceState state = {
+        {0, 0, 0, 0, 0, 0, 0, 0, CNA_INVALID_HANDLE},
+        CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+        CNA_INVALID_HANDLE, CNA_INVALID_HANDLE, CNA_INVALID_HANDLE,
+        CNA_INVALID_HANDLE,
+        0
+    };
+    CNA_GameCallbacks callbacks = {
+        sizeof(CNA_GameCallbacks), UINT32_C(1), on_load, 0, 0, 0, 0, &state
+    };
+    static const char title[] = "C API graphics device";
+    const CNA_GameCreateInfo create_info = {
+        sizeof(CNA_GameCreateInfo),
+        UINT32_C(1),
+        CNA_TRUE,
+        {0U, 0U, 0U, 0U, 0U, 0U, 0U},
+        INT64_C(166667),
+        {title, sizeof(title) - 1U},
+        &callbacks
+    };
+    CNA_Handle game = CNA_INVALID_HANDLE;
+    if (cna_game_create(&create_info, &game) != CNA_RESULT_SUCCESS ||
+        cna_game_run_one_frame(game) != CNA_RESULT_SUCCESS || state.validated != 1) {
+        return 0;
+    }
+
+    /* The borrowed device handle expires when its callback returns. */
+    CNA_Bool disposed = CNA_FALSE;
+    if (cna_graphics_device_get_is_disposed(state.stale_device, &disposed) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        cna_graphics_device_get_status(state.stale_device, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Destroying the game disposes the device, which reaches the live Disposing subscription. */
+    if (cna_game_destroy(game) != CNA_RESULT_SUCCESS || state.counters.disposing != 1 ||
+        state.counters.observed_device != state.stale_device ||
+        state.counters.device_lost != 0 || state.counters.device_reset != 0 ||
+        state.counters.device_resetting != 0) {
+        return 0;
+    }
+
+    /* Surviving registration handles release cleanly once the device is gone. */
+    if (cna_graphics_device_unsubscribe(state.disposing_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state.lost_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state.reset_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state.resetting_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state.destroyed_registration) != CNA_RESULT_SUCCESS ||
+        cna_graphics_device_unsubscribe(state.destroyed_registration) !=
+            CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return 1;
+}
+
 int main(void)
 {
-    return validate_identities() && validate_construction() && validate_properties() &&
-            validate_transforms() && validate_string()
-        ? 0
-        : 1;
+    if (!validate_identities()) {
+        return 1;
+    }
+    if (!validate_construction()) {
+        return 2;
+    }
+    if (!validate_properties()) {
+        return 3;
+    }
+    if (!validate_transforms()) {
+        return 4;
+    }
+    if (!validate_string()) {
+        return 5;
+    }
+    if (!validate_device()) {
+        return 6;
+    }
+    return 0;
 }

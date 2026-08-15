@@ -557,6 +557,10 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         }
 
         game->Shutdown();
+        // Shutdown has already disposed the canonical graphics device, so any C subscriber has
+        // observed its Disposing event. Drop the subscriptions before the device object itself
+        // goes away with the game.
+        CNA::C::Detail::InvalidateGraphicsDeviceSubscriptions();
         const CNA_Result callbackResult = game->GetCallbackFailure();
         RuntimeState& state = GetRuntimeState();
         const CNA_Result releaseResult = state.handles.Release(gameHandle);

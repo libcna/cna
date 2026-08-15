@@ -519,3 +519,17 @@ static_assert(sizeof(CNA_SpriteEffects) == sizeof(uint32_t));
 static_assert((CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY) == UINT32_C(3));
 static_assert(((CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY) &
                CNA_SPRITE_EFFECT_FLIP_VERTICALLY) == CNA_SPRITE_EFFECT_FLIP_VERTICALLY);
+static_assert(sizeof(CNA_GraphicsDeviceEventRegistrationHandle) == 8U);
+static_assert(sizeof(CNA_GraphicsDeviceEvent) == sizeof(uint32_t));
+static_assert(CNA_GRAPHICS_DEVICE_EVENT_DISPOSING == UINT32_C(0));
+static_assert(CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST == UINT32_C(1));
+static_assert(CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET == UINT32_C(2));
+static_assert(CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING == UINT32_C(3));
+static_assert(sizeof(CNA_ResourceCreatedEventInfo) == 16U);
+static_assert(alignof(CNA_ResourceCreatedEventInfo) == 4U);
+static_assert(offsetof(CNA_ResourceCreatedEventInfo, has_resource) == 8U);
+static_assert(offsetof(CNA_ResourceCreatedEventInfo, reserved) == 9U);
+static_assert(sizeof(CNA_ResourceDestroyedEventInfo) == 32U);
+static_assert(alignof(CNA_ResourceDestroyedEventInfo) == 8U);
+static_assert(offsetof(CNA_ResourceDestroyedEventInfo, has_tag) == 8U);
+static_assert(offsetof(CNA_ResourceDestroyedEventInfo, name) == 16U);

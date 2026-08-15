@@ -641,3 +641,20 @@ _Static_assert(sizeof(CNA_SpriteEffects) == sizeof(uint32_t) &&
                      CNA_SPRITE_EFFECT_FLIP_VERTICALLY) &
                     CNA_SPRITE_EFFECT_FLIP_VERTICALLY) == CNA_SPRITE_EFFECT_FLIP_VERTICALLY,
                "CNA sprite-effect bit operations must remain stable");
+_Static_assert(sizeof(CNA_GraphicsDeviceEventRegistrationHandle) == 8U &&
+                   sizeof(CNA_GraphicsDeviceEvent) == sizeof(uint32_t) &&
+                   CNA_GRAPHICS_DEVICE_EVENT_DISPOSING == UINT32_C(0) &&
+                   CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST == UINT32_C(1) &&
+                   CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET == UINT32_C(2) &&
+                   CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING == UINT32_C(3),
+               "CNA graphics-device event identities must remain stable");
+_Static_assert(sizeof(CNA_ResourceCreatedEventInfo) == 16U &&
+                   _Alignof(CNA_ResourceCreatedEventInfo) == 4U &&
+                   offsetof(CNA_ResourceCreatedEventInfo, has_resource) == 8U &&
+                   offsetof(CNA_ResourceCreatedEventInfo, reserved) == 9U,
+               "CNA_ResourceCreatedEventInfo layout must remain stable");
+_Static_assert(sizeof(CNA_ResourceDestroyedEventInfo) == 32U &&
+                   _Alignof(CNA_ResourceDestroyedEventInfo) == 8U &&
+                   offsetof(CNA_ResourceDestroyedEventInfo, has_tag) == 8U &&
+                   offsetof(CNA_ResourceDestroyedEventInfo, name) == 16U,
+               "CNA_ResourceDestroyedEventInfo layout must remain stable");

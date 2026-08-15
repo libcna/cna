@@ -403,7 +403,10 @@ def load_rules(path: Path) -> list[Rule]:
             raise RuntimeError(f"Duplicate mapping rule id: {rule_id}")
         seen_ids.add(rule_id)
         status = raw["status"]
-        if status not in {"implemented", "partial"}:
+        # ``not-applicable`` is also reachable without a rule, for a declaration the C++ source
+        # explicitly deletes.  An explicit rule additionally records a reviewed declaration that
+        # exposes no callable public behavior at all, such as a friendship declaration.
+        if status not in {"implemented", "partial", "not-applicable"}:
             raise RuntimeError(f"Explicit rule {rule_id} has invalid status {status!r}.")
         rules.append(
             Rule(

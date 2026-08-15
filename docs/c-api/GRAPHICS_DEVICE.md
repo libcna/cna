@@ -75,11 +75,99 @@ Exporting `cna_clear_options_or`-style functions would add an ABI call for somet
 already expresses exactly. The strict-C test exercises every combination so the claim is checked,
 not assumed.
 
+## Device lifetime, state and events
+
+CBIND-035F2 adds the device's own contract on top of the borrowed handle that `graphics.h`
+already provides.
+
+### Lifetime is the game's, not the caller's
+
+There is no `cna_graphics_device_create` or `cna_graphics_device_destroy`. The canonical
+`GraphicsDevice` is created by the running `Game` from its adapter, profile and presentation state,
+and destroyed when `cna_game_destroy` runs. `cna_game_get_graphics_device` borrows it for the
+duration of one lifecycle callback; the handle is generation-invalidated the moment that callback
+returns.
+
+`cna_graphics_device_dispose` exists so the rule is callable rather than merely documented: given a
+valid device handle it returns `CNA_RESULT_NOT_SUPPORTED` and explains that the active game owns
+the device. Disposal is observed, not performed, through
+`cna_graphics_device_get_is_disposed`.
+
+### State
+
+| C operation | Canonical property |
+|---|---|
+| `cna_graphics_device_get_is_disposed` | `IsDisposed` |
+| `cna_graphics_device_get_status` | `GraphicsDeviceStatus` |
+| `cna_graphics_device_get_adapter_index` | `Adapter` |
+| `cna_graphics_device_get_graphics_profile` | `GraphicsProfile` |
+| `cna_graphics_device_get`/`set_scissor_rectangle` | `ScissorRectangle` |
+| `cna_graphics_device_get`/`set_viewport` | `Viewport` |
+| `cna_graphics_device_get`/`set_blend_factor` | `BlendFactor` |
+| `cna_graphics_device_get`/`set_multi_sample_mask` | `MultiSampleMask` |
+| `cna_graphics_device_get`/`set_reference_stencil` | `ReferenceStencil` |
+| `cna_graphics_device_get_type_name_size` / `_copy_type_name` | `GetTypeName()` |
+
+`Adapter` is a native `GraphicsAdapter&`, which must not cross the ABI, so the C route returns the
+adapter's index into the current enumeration — the same index the `cna_graphics_adapter_*` queries
+in `display.h` take. Indices are point-in-time: an adapter change renumbers them, and a device whose
+adapter is no longer enumerated reports `CNA_RESULT_INVALID_STATE` rather than a stale index.
+
+`cna_graphics_device_set_viewport` rejects a non-finite depth range with
+`CNA_RESULT_INVALID_ARGUMENT` before touching the device, so a rejected call leaves the current
+viewport intact. The canonical defaults are preserved exactly: `MultiSampleMask` starts at -1 and
+`ReferenceStencil` at 0.
+
+### Events
+
+Four device events carry no payload and share one entry point:
+
+```c
+CNA_GraphicsDeviceEventRegistrationHandle registration = CNA_INVALID_HANDLE;
+cna_graphics_device_subscribe_event(
+    device, CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET, on_reset, context, &registration);
+/* … */
+cna_graphics_device_unsubscribe(registration);
+```
+
+`ResourceCreated` and `ResourceDestroyed` carry payloads and have their own entry points, each
+delivering a versioned structure that is valid only for the duration of the callback.
+
+Two payload decisions are deliberate limitations, not omissions:
+
+- `ResourceCreatedEventArgs::Resource` is **not** exposed, not even as a type name. The canonical
+  event is raised from the `GraphicsResource` base constructor, so the reported object has no
+  concrete type yet and querying any virtual member of it would be a pure-virtual call. The C
+  event reports only that a resource was supplied.
+- `ResourceDestroyedEventArgs::Tag` is caller-owned native state of unknown liveness, so it too is
+  reported as presence only. The resource `Name` is a canonical string and is passed as a
+  callback-scoped UTF-8 view.
+
+A subscription is an owned handle. It does **not** block `cna_game_destroy`: destroying the game
+disposes the device — which is exactly when a `Disposing` subscriber wants to be called — and the
+runtime then invalidates every live subscription before the device object goes away. Surviving
+registration handles stay releasable afterwards; releasing one twice returns
+`CNA_RESULT_INVALID_HANDLE`.
+
+### Device exceptions never cross the ABI
+
+`DeviceLostException` and `DeviceNotResetException` become `CNA_RESULT_INVALID_STATE` with
+`CNA_ERROR_CATEGORY_STATE`; `NoSuitableGraphicsDeviceException` becomes `CNA_RESULT_NOT_SUPPORTED`
+with `CNA_ERROR_CATEGORY_NOT_SUPPORTED`. The exception message — default or custom — reaches the
+caller through the ordinary per-thread UTF-8 diagnostic. The conversion lives in the shared
+exception firewall, so it applies to every C entry point, not just the device family. Only the
+DirectX 9 backend currently raises these conditions, so the conversion is proven by a focused
+adapter test rather than by a HEADLESS or SDL_RENDERER device.
+
+`IGraphicsDeviceService` is an abstract C++ interface. C can neither implement nor instantiate it;
+`cna_game_get_graphics_device` is the C route to the device it exposes. Its four service-level
+events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module and
+remain owned by CBIND-037.
+
 ## Not yet in this header
 
-Device borrowing and renderer/capability discovery remain in `graphics.h`
-(`cna_game_get_graphics_device`, `cna_graphics_device_*`); presentation parameters, display mode and
+Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. Device lifetime and events, texture collections, clear/present/reset, buffer
-binding, draw submission, SpriteBatch text routes, occlusion queries and the `graphics-ext`
-post-process family are owned by CBIND-035F2 through CBIND-035F7 and are not callable yet.
+`graphics_state.h`. Texture collections, clear/present/reset, buffer binding, draw submission,
+SpriteBatch text routes, occlusion queries and the `graphics-ext` post-process family are owned by
+CBIND-035F3 through CBIND-035F7 and are not callable yet.

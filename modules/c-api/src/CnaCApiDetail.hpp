@@ -5,6 +5,13 @@
 
 #include "CNA/C/core.h"
 
+// Header-only canonical exception types. They add no link dependency, so every C entry point can
+// report a lost, not-reset or unavailable graphics device as a specific result instead of letting
+// it fall through to the generic internal-failure arm.
+#include "Microsoft/Xna/Framework/Graphics/DeviceLostException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/DeviceNotResetException.hpp"
+#include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
+
 #include "System/ArgumentException.hpp"
 #include "System/NotImplementedException.hpp"
 #include "System/NotSupportedException.hpp"
@@ -70,6 +77,7 @@ enum class ObjectKind : uint32_t {
     SkinnedModelEXT = 41,
     SkinningData = 42,
     AnimationPlayer = 43,
+    GraphicsDeviceEventRegistration = 44,
     Test = UINT32_MAX
 };
 
@@ -121,6 +129,13 @@ template<typename TCallable>
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const System::InvalidOperationException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::Graphics::DeviceLostException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::Graphics::DeviceNotResetException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (
+        const Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException& exception) {
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const std::exception& exception) {
         return Fail(CNA_RESULT_INTERNAL, CNA_ERROR_CATEGORY_INTERNAL, exception.what());
     } catch (...) {

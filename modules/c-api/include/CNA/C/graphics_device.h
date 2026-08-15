@@ -3,6 +3,7 @@
 #ifndef CNA_C_GRAPHICS_DEVICE_H
 #define CNA_C_GRAPHICS_DEVICE_H
 
+#include "CNA/C/display.h"
 #include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
@@ -216,6 +217,364 @@ CNA_C_API CNA_Result cna_viewport_copy_string(
     char* destination,
     uint64_t capacity,
     uint64_t* out_bytes);
+
+/**
+ * @brief Owned handle for one graphics-device event subscription.
+ *
+ * A registration is a C-owned resource of the active game. It must be released with
+ * @ref cna_graphics_device_unsubscribe before @ref cna_game_destroy succeeds, which keeps the
+ * canonical device alive for the whole life of the subscription.
+ */
+typedef CNA_Handle CNA_GraphicsDeviceEventRegistrationHandle;
+
+/** @brief Fixed-width identity of a graphics-device event that carries no payload. */
+typedef uint32_t CNA_GraphicsDeviceEvent;
+
+/** @brief Raised when the device is disposed. */
+#define CNA_GRAPHICS_DEVICE_EVENT_DISPOSING UINT32_C(0)
+/** @brief Raised when the device is lost. */
+#define CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST UINT32_C(1)
+/** @brief Raised after the device has been reset. */
+#define CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET UINT32_C(2)
+/** @brief Raised before the device is reset. */
+#define CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING UINT32_C(3)
+
+/**
+ * @brief Describes the resource reported by a graphics-device resource-created event.
+ *
+ * The canonical event is raised from the graphics-resource base constructor, so the reported
+ * object is still under construction: its concrete type does not exist yet and no member of it can
+ * be queried. The C event therefore reports only that a resource was supplied, and no native
+ * object pointer crosses the ABI.
+ */
+typedef struct CNA_ResourceCreatedEventInfo {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when the event reported a non-null resource. */
+    CNA_Bool has_resource;
+
+    /** @brief Reserved bytes; always zero. */
+    uint8_t reserved[7];
+} CNA_ResourceCreatedEventInfo;
+
+/**
+ * @brief Describes the resource reported by a graphics-device resource-destroyed event.
+ *
+ * @ref name borrows bytes that are valid only for the duration of the callback. The canonical
+ * `System::Object*` tag is caller-owned native state, so it is reported as presence only.
+ */
+typedef struct CNA_ResourceDestroyedEventInfo {
+    /** @brief Size of this structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this structure. */
+    uint32_t struct_version;
+
+    /** @brief `CNA_TRUE` when the destroyed resource carried a non-null native tag. */
+    CNA_Bool has_tag;
+
+    /** @brief Reserved bytes; always zero. */
+    uint8_t reserved[7];
+
+    /** @brief Callback-scoped UTF-8 resource name, which may be empty. */
+    CNA_StringView name;
+} CNA_ResourceDestroyedEventInfo;
+
+/**
+ * @brief Receives a graphics-device event that carries no payload.
+ *
+ * @param graphics_device Device handle supplied when the callback was registered.
+ * @param context Caller-owned context supplied at registration.
+ */
+typedef void (*CNA_GraphicsDeviceEventCallback)(
+    CNA_Handle graphics_device,
+    void* context);
+
+/**
+ * @brief Receives a graphics-device resource-created event.
+ *
+ * @param graphics_device Device handle supplied when the callback was registered.
+ * @param info Callback-scoped event description; the structure and its bytes expire on return.
+ * @param context Caller-owned context supplied at registration.
+ */
+typedef void (*CNA_GraphicsDeviceResourceCreatedCallback)(
+    CNA_Handle graphics_device,
+    const CNA_ResourceCreatedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Receives a graphics-device resource-destroyed event.
+ *
+ * @param graphics_device Device handle supplied when the callback was registered.
+ * @param info Callback-scoped event description; the structure and its bytes expire on return.
+ * @param context Caller-owned context supplied at registration.
+ */
+typedef void (*CNA_GraphicsDeviceResourceDestroyedCallback)(
+    CNA_Handle graphics_device,
+    const CNA_ResourceDestroyedEventInfo* info,
+    void* context);
+
+/**
+ * @brief Gets whether the graphics device has been disposed.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_is_disposed Receives `CNA_TRUE` when the device has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_is_disposed(
+    CNA_Handle graphics_device,
+    CNA_Bool* out_is_disposed);
+
+/**
+ * @brief Gets the current device lifecycle status.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_status Receives one of the `CNA_GRAPHICS_DEVICE_STATUS_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_status(
+    CNA_Handle graphics_device,
+    CNA_GraphicsDeviceStatus* out_status);
+
+/**
+ * @brief Gets the index of the adapter this device was created with.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_adapter_index Receives an index usable with the `cna_graphics_adapter_*` queries.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the device's adapter is no longer
+ * one of the currently enumerated adapters, or a documented argument/handle/thread/native failure.
+ *
+ * Adapter indices are point-in-time values; a later adapter change may renumber them.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_adapter_index(
+    CNA_Handle graphics_device,
+    uint32_t* out_adapter_index);
+
+/**
+ * @brief Gets the graphics profile this device was created with.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_profile Receives `CNA_GRAPHICS_PROFILE_REACH` or `CNA_GRAPHICS_PROFILE_HI_DEF`.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_graphics_profile(
+    CNA_Handle graphics_device,
+    CNA_GraphicsProfile* out_profile);
+
+/**
+ * @brief Gets the current scissor rectangle.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_scissor_rectangle Receives the scissor rectangle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_scissor_rectangle(
+    CNA_Handle graphics_device,
+    CNA_Rectangle* out_scissor_rectangle);
+
+/**
+ * @brief Sets the scissor rectangle used for clipping.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param scissor_rectangle Rectangle to apply.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_scissor_rectangle(
+    CNA_Handle graphics_device,
+    CNA_Rectangle scissor_rectangle);
+
+/**
+ * @brief Gets the current viewport.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_viewport Receives the viewport.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_viewport(
+    CNA_Handle graphics_device,
+    CNA_Viewport* out_viewport);
+
+/**
+ * @brief Sets the viewport.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param viewport Viewport to apply. Both depth values must be finite.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-finite depth value, or a
+ * documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_viewport(
+    CNA_Handle graphics_device,
+    CNA_Viewport viewport);
+
+/**
+ * @brief Gets the current blend factor color.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_blend_factor Receives the blend factor.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_blend_factor(
+    CNA_Handle graphics_device,
+    CNA_Color* out_blend_factor);
+
+/**
+ * @brief Sets the blend factor color.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param blend_factor Blend factor to apply.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_blend_factor(
+    CNA_Handle graphics_device,
+    CNA_Color blend_factor);
+
+/**
+ * @brief Gets the current multisample mask.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_multi_sample_mask Receives the mask; the canonical default is -1.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_multi_sample_mask(
+    CNA_Handle graphics_device,
+    int32_t* out_multi_sample_mask);
+
+/**
+ * @brief Sets the multisample mask.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param multi_sample_mask Bitmask for multisample anti-aliasing.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_multi_sample_mask(
+    CNA_Handle graphics_device,
+    int32_t multi_sample_mask);
+
+/**
+ * @brief Gets the current reference stencil value.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_reference_stencil Receives the reference value; the canonical default is 0.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_reference_stencil(
+    CNA_Handle graphics_device,
+    int32_t* out_reference_stencil);
+
+/**
+ * @brief Sets the reference stencil value.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param reference_stencil Reference value for stencil operations.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_set_reference_stencil(
+    CNA_Handle graphics_device,
+    int32_t reference_stencil);
+
+/**
+ * @brief Gets the UTF-8 byte count of the device's fully qualified .NET type name.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_bytes Receives the byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_get_type_name_size(
+    CNA_Handle graphics_device,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the device's fully qualified .NET type name as UTF-8 bytes without a terminator.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread/native failure. No partial name is written.
+ */
+CNA_C_API CNA_Result cna_graphics_device_copy_type_name(
+    CNA_Handle graphics_device,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports that C cannot dispose the graphics device owned by the active game.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @return `CNA_RESULT_NOT_SUPPORTED` for a valid device handle, or a documented
+ * argument/handle/thread failure.
+ *
+ * The canonical `GraphicsDevice` belongs to the running game, so disposing it through a borrowed
+ * handle would leave that game drawing into a destroyed device. @ref cna_game_destroy performs the
+ * canonical disposal and @ref cna_graphics_device_get_is_disposed observes the resulting state.
+ */
+CNA_C_API CNA_Result cna_graphics_device_dispose(CNA_Handle graphics_device);
+
+/**
+ * @brief Subscribes to one graphics-device event that carries no payload.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param device_event One of the `CNA_GRAPHICS_DEVICE_EVENT_*` identities.
+ * @param callback Non-null callback invoked synchronously on the game thread.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The callback and context remain caller-owned until unsubscription. The registration keeps the
+ * game alive in the same way an owned graphics resource does.
+ */
+CNA_C_API CNA_Result cna_graphics_device_subscribe_event(
+    CNA_Handle graphics_device,
+    CNA_GraphicsDeviceEvent device_event,
+    CNA_GraphicsDeviceEventCallback callback,
+    void* context,
+    CNA_GraphicsDeviceEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to the graphics-device resource-created event.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param callback Non-null callback invoked synchronously on the game thread.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_subscribe_resource_created(
+    CNA_Handle graphics_device,
+    CNA_GraphicsDeviceResourceCreatedCallback callback,
+    void* context,
+    CNA_GraphicsDeviceEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to the graphics-device resource-destroyed event.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param callback Non-null callback invoked synchronously on the game thread.
+ * @param context Caller-owned callback context, which may be null.
+ * @param out_registration Receives an owned registration handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_graphics_device_subscribe_resource_destroyed(
+    CNA_Handle graphics_device,
+    CNA_GraphicsDeviceResourceDestroyedCallback callback,
+    void* context,
+    CNA_GraphicsDeviceEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Unsubscribes and releases one graphics-device event registration.
+ *
+ * @param registration Owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure. A second release returns
+ * `CNA_RESULT_INVALID_HANDLE`.
+ */
+CNA_C_API CNA_Result cna_graphics_device_unsubscribe(
+    CNA_GraphicsDeviceEventRegistrationHandle registration);
 
 #ifdef __cplusplus
 }

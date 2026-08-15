@@ -2,19 +2,30 @@
 
 #include "CNA/C/graphics_device.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiRuntimeDetail.hpp"
 
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
+#include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ClearOptions.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsAdapter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDeviceStatus.hpp"
+#include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
+#include "System/EventArgs.hpp"
+#include "System/Object.hpp"
 
+#include <cmath>
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -43,12 +54,25 @@ static_assert(
     NativeOrdinal(CNA::Unsupported3DGraphicsCallBehavior::WarnAndStub) ==
         CNA_UNSUPPORTED_3D_GRAPHICS_CALL_BEHAVIOR_WARN_AND_STUB);
 
+using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetBorrowedGraphicsDevice;
+using CNA::C::Detail::GetRuntimeHandles;
+using CNA::C::Detail::ObjectKind;
+using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector3;
+using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
+using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
+using Microsoft::Xna::Framework::Graphics::ResourceCreatedEventArgs;
+using Microsoft::Xna::Framework::Graphics::ResourceDestroyedEventArgs;
 using Microsoft::Xna::Framework::Graphics::Viewport;
+
+constexpr uint32_t StructureVersion = UINT32_C(1);
 
 [[nodiscard]] Matrix ToNative(const CNA_Matrix value)
 {
@@ -147,7 +171,190 @@ template<typename TCallable>
     });
 }
 
+template<typename TValue, typename TCallable>
+[[nodiscard]] CNA_Result DeviceQuery(
+    const CNA_Handle graphicsDeviceHandle,
+    TValue* const output,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (output == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The graphics-device query output is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const TValue value = static_cast<TValue>(
+            std::forward<TCallable>(callable)(*graphicsDevice->value));
+        *output = value;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result DeviceCommand(
+    const CNA_Handle graphicsDeviceHandle,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::forward<TCallable>(callable)(*graphicsDevice->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+// Callback-scoped view over native text. The event payload never owns bytes: the canonical string
+// outlives the synchronous callback, and the C consumer copies whatever it needs before returning.
+[[nodiscard]] CNA_StringView ToStringView(const std::string* const value) noexcept
+{
+    if (value == nullptr || value->empty()) {
+        return CNA_StringView{nullptr, UINT64_C(0)};
+    }
+    return CNA_StringView{value->data(), static_cast<uint64_t>(value->size())};
+}
+
+class DeviceRegistration {
+public:
+    DeviceRegistration() = default;
+    DeviceRegistration(const DeviceRegistration&) = delete;
+    DeviceRegistration& operator=(const DeviceRegistration&) = delete;
+    virtual ~DeviceRegistration() = default;
+    virtual void Unsubscribe() noexcept = 0;
+
+    // Drops the subscription without touching the native handler, for use once the canonical
+    // device is gone.
+    void Invalidate() noexcept
+    {
+        subscribed_ = false;
+    }
+
+protected:
+    bool subscribed_ = true;
+};
+
+template<typename TEventArgs>
+class TypedDeviceRegistration final : public DeviceRegistration {
+public:
+    using Source = System::EventHandler<TEventArgs>;
+    using Token = typename Source::Token;
+
+    TypedDeviceRegistration(Source* const source, const Token token) noexcept
+        : source_(source), token_(token)
+    {
+    }
+
+    ~TypedDeviceRegistration() override
+    {
+        TypedDeviceRegistration::Unsubscribe();
+    }
+
+    void Unsubscribe() noexcept override
+    {
+        if (!subscribed_) {
+            return;
+        }
+        subscribed_ = false;
+        source_->Remove(token_);
+    }
+
+private:
+    Source* source_;
+    Token token_;
+};
+
+struct LiveRegistrations final {
+    std::mutex mutex;
+    std::vector<std::weak_ptr<DeviceRegistration>> entries;
+};
+
+[[nodiscard]] LiveRegistrations& GetLiveRegistrations()
+{
+    static LiveRegistrations registrations;
+    return registrations;
+}
+
+void TrackRegistration(const std::shared_ptr<DeviceRegistration>& registration)
+{
+    LiveRegistrations& live = GetLiveRegistrations();
+    std::lock_guard lock(live.mutex);
+    std::erase_if(live.entries, [](const std::weak_ptr<DeviceRegistration>& entry) {
+        return entry.expired();
+    });
+    live.entries.push_back(registration);
+}
+
+using DeviceEventRegistration = TypedDeviceRegistration<System::EventArgs>;
+using ResourceCreatedRegistration = TypedDeviceRegistration<ResourceCreatedEventArgs>;
+using ResourceDestroyedRegistration = TypedDeviceRegistration<ResourceDestroyedEventArgs>;
+
+template<typename TCallback>
+[[nodiscard]] CNA_Result ValidateSubscription(
+    const TCallback callback,
+    CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration) noexcept
+{
+    if (outRegistration == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The device event-registration output handle is null.");
+    }
+    *outRegistration = CNA_INVALID_HANDLE;
+    if (callback == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The device event callback is null.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result StoreRegistration(
+    std::shared_ptr<DeviceRegistration> registration,
+    CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::GraphicsDeviceEventRegistration,
+        registration,
+        outRegistration);
+    if (result == CNA_RESULT_SUCCESS) {
+        TrackRegistration(registration);
+        return CNA_RESULT_SUCCESS;
+    }
+    registration->Unsubscribe();
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The graphics-device event-registration handle could not be created.");
+}
+
 } // namespace
+
+namespace CNA::C::Detail {
+
+void InvalidateGraphicsDeviceSubscriptions() noexcept
+{
+    LiveRegistrations& live = GetLiveRegistrations();
+    std::lock_guard lock(live.mutex);
+    for (const std::weak_ptr<DeviceRegistration>& entry : live.entries) {
+        if (const std::shared_ptr<DeviceRegistration> registration = entry.lock()) {
+            registration->Invalidate();
+        }
+    }
+    live.entries.clear();
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_viewport_init(CNA_Viewport* const outValue)
 {
@@ -267,5 +474,364 @@ CNA_Result cna_viewport_copy_string(
 {
     return CopyFormattedString(destination, capacity, outBytes, [=] {
         return ToNative(value).ToString();
+    });
+}
+
+CNA_Result cna_graphics_device_get_is_disposed(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Bool* const outIsDisposed)
+{
+    return DeviceQuery(graphicsDeviceHandle, outIsDisposed, [](GraphicsDevice& device) {
+        return device.getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_graphics_device_get_status(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_GraphicsDeviceStatus* const outStatus)
+{
+    return DeviceQuery(graphicsDeviceHandle, outStatus, [](GraphicsDevice& device) {
+        return NativeOrdinal(device.getGraphicsDeviceStatusProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_get_adapter_index(
+    const CNA_Handle graphicsDeviceHandle,
+    uint32_t* const outAdapterIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAdapterIndex == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The adapter-index output is null.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const GraphicsAdapter* const adapter = &graphicsDevice->value->getAdapterProperty();
+        const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+        for (std::size_t index = 0U; index < adapters.size(); ++index) {
+            if (adapters[index].get() == adapter) {
+                *outAdapterIndex = static_cast<uint32_t>(index);
+                return CNA_RESULT_SUCCESS;
+            }
+        }
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The device's graphics adapter is no longer one of the enumerated adapters.");
+    });
+}
+
+CNA_Result cna_graphics_device_get_graphics_profile(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_GraphicsProfile* const outProfile)
+{
+    return DeviceQuery(graphicsDeviceHandle, outProfile, [](GraphicsDevice& device) {
+        return NativeOrdinal(device.getGraphicsProfileProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_get_scissor_rectangle(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Rectangle* const outScissorRectangle)
+{
+    return DeviceQuery(graphicsDeviceHandle, outScissorRectangle, [](GraphicsDevice& device) {
+        return ToC(device.getScissorRectangleProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_set_scissor_rectangle(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Rectangle scissorRectangle)
+{
+    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        device.setScissorRectangleProperty(ToNative(scissorRectangle));
+    });
+}
+
+CNA_Result cna_graphics_device_get_viewport(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Viewport* const outViewport)
+{
+    return DeviceQuery(graphicsDeviceHandle, outViewport, [](GraphicsDevice& device) {
+        return ToC(device.getViewportProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_set_viewport(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Viewport viewport)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(viewport.min_depth) || !std::isfinite(viewport.max_depth)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The viewport depth range is not finite.");
+        }
+        return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+            device.setViewportProperty(ToNative(viewport));
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_get_blend_factor(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_Color* const outBlendFactor)
+{
+    return DeviceQuery(graphicsDeviceHandle, outBlendFactor, [](GraphicsDevice& device) {
+        const Color value = device.getBlendFactorProperty();
+        return CNA_Color{
+            value.getRProperty(),
+            value.getGProperty(),
+            value.getBProperty(),
+            value.getAProperty()};
+    });
+}
+
+CNA_Result cna_graphics_device_set_blend_factor(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_Color blendFactor)
+{
+    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        device.setBlendFactorProperty(
+            Color(blendFactor.r, blendFactor.g, blendFactor.b, blendFactor.a));
+    });
+}
+
+CNA_Result cna_graphics_device_get_multi_sample_mask(
+    const CNA_Handle graphicsDeviceHandle,
+    int32_t* const outMultiSampleMask)
+{
+    return DeviceQuery(graphicsDeviceHandle, outMultiSampleMask, [](GraphicsDevice& device) {
+        return static_cast<int32_t>(device.getMultiSampleMaskProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_set_multi_sample_mask(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t multiSampleMask)
+{
+    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        device.setMultiSampleMaskProperty(multiSampleMask);
+    });
+}
+
+CNA_Result cna_graphics_device_get_reference_stencil(
+    const CNA_Handle graphicsDeviceHandle,
+    int32_t* const outReferenceStencil)
+{
+    return DeviceQuery(graphicsDeviceHandle, outReferenceStencil, [](GraphicsDevice& device) {
+        return static_cast<int32_t>(device.getReferenceStencilProperty());
+    });
+}
+
+CNA_Result cna_graphics_device_set_reference_stencil(
+    const CNA_Handle graphicsDeviceHandle,
+    const int32_t referenceStencil)
+{
+    return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
+        device.setReferenceStencilProperty(referenceStencil);
+    });
+}
+
+CNA_Result cna_graphics_device_get_type_name_size(
+    const CNA_Handle graphicsDeviceHandle,
+    uint64_t* const outBytes)
+{
+    return DeviceQuery(graphicsDeviceHandle, outBytes, [](GraphicsDevice& device) {
+        return static_cast<uint64_t>(device.GetTypeName().size());
+    });
+}
+
+CNA_Result cna_graphics_device_copy_type_name(
+    const CNA_Handle graphicsDeviceHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyFormattedString(destination, capacity, outBytes, [&] {
+            return graphicsDevice->value->GetTypeName();
+        });
+    });
+}
+
+CNA_Result cna_graphics_device_dispose(const CNA_Handle graphicsDeviceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return Fail(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "The active game owns this graphics device; destroy the game to dispose it.");
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_event(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_GraphicsDeviceEvent deviceEvent,
+    const CNA_GraphicsDeviceEventCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The device event-registration output handle is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The device event callback is null.");
+        }
+        if (deviceEvent > CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESETTING) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The graphics-device event identity is not recognized.");
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        GraphicsDevice& device = *graphicsDevice->value;
+        System::EventHandler<System::EventArgs>& source =
+            deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DISPOSING ? device.Disposing
+            : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_LOST ? device.DeviceLost
+            : deviceEvent == CNA_GRAPHICS_DEVICE_EVENT_DEVICE_RESET ? device.DeviceReset
+                                                                    : device.DeviceResetting;
+        const auto token = source.Add(
+            [graphicsDeviceHandle, callback, context](System::Object*, const System::EventArgs&) {
+                callback(graphicsDeviceHandle, context);
+            });
+        return StoreRegistration(
+            std::make_shared<DeviceEventRegistration>(&source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_resource_created(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_GraphicsDeviceResourceCreatedCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        auto& source = graphicsDevice->value->ResourceCreated;
+        const auto token = source.Add(
+            [graphicsDeviceHandle, callback, context](
+                System::Object*, const ResourceCreatedEventArgs& args) {
+                // The canonical event fires from the GraphicsResource base constructor, so the
+                // reported object has no concrete type yet: querying any virtual member of it
+                // here would be a pure-virtual call. Only its presence is reported.
+                CNA_ResourceCreatedEventInfo info = {};
+                info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceCreatedEventInfo));
+                info.struct_version = StructureVersion;
+                info.has_resource =
+                    args.getResourceProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+                callback(graphicsDeviceHandle, &info, context);
+            });
+        return StoreRegistration(
+            std::make_shared<ResourceCreatedRegistration>(&source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_graphics_device_subscribe_resource_destroyed(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_GraphicsDeviceResourceDestroyedCallback callback,
+    void* const context,
+    CNA_GraphicsDeviceEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateSubscription(callback, outRegistration);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        auto& source = graphicsDevice->value->ResourceDestroyed;
+        const auto token = source.Add(
+            [graphicsDeviceHandle, callback, context](
+                System::Object*, const ResourceDestroyedEventArgs& args) {
+                // The tag is caller-owned native state of unknown liveness, so its presence is
+                // reported without dereferencing it.
+                CNA_ResourceDestroyedEventInfo info = {};
+                info.struct_size = static_cast<uint32_t>(sizeof(CNA_ResourceDestroyedEventInfo));
+                info.struct_version = StructureVersion;
+                info.has_tag = args.getTagProperty() != nullptr ? CNA_TRUE : CNA_FALSE;
+                info.name = ToStringView(&args.getNameProperty());
+                callback(graphicsDeviceHandle, &info, context);
+            });
+        return StoreRegistration(
+            std::make_shared<ResourceDestroyedRegistration>(&source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_graphics_device_unsubscribe(
+    const CNA_GraphicsDeviceEventRegistrationHandle registrationHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<DeviceRegistration> registration;
+        const CNA_Result result = GetRuntimeHandles().Get(
+            registrationHandle,
+            ObjectKind::GraphicsDeviceEventRegistration,
+            &registration);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The graphics-device event-registration handle is invalid.");
+        }
+        registration->Unsubscribe();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(registrationHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The graphics-device event-registration handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }

@@ -764,6 +764,7 @@ if(CNA_BUILD_TESTS)
     target_include_directories(cna_c_api_handle_registry_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/modules/graphics/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         Threads::Threads
@@ -780,6 +781,7 @@ if(CNA_BUILD_TESTS)
     target_include_directories(cna_c_api_boundary_detail_test PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/modules/graphics/include
     )
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE sharp_runtime_core_base)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)

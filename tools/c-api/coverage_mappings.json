@@ -1201,6 +1201,80 @@
       "tests": "native-ordinal static assertions in `CnaCApiGraphicsDevice.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F1"
+    },
+    {
+      "id": "graphics-device-events",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Disposing|DeviceLost|DeviceReset|DeviceResetting|ResourceCreated|ResourceDestroyed)$",
+      "kinds": ["event"],
+      "mapping": "`cna_graphics_device_subscribe_event` with the four `CNA_GRAPHICS_DEVICE_EVENT_*` identities plus `cna_graphics_device_subscribe_resource_created`/`_destroyed` and `cna_graphics_device_unsubscribe`; owned registration handles replace native handler objects and copied `CNA_ResourceCreatedEventInfo`/`CNA_ResourceDestroyedEventInfo` values replace the native EventArgs. Game destruction invalidates live subscriptions after the canonical device has raised Disposing, so the handle stays releasable and never touches a destroyed handler",
+      "tests": "all six subscriptions, real resource-created/destroyed delivery through Texture2D creation and destruction, observed Disposing during game destruction, post-destruction release, unsubscription stopping delivery and null/unknown-identity/wrong-kind failures in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-lifetime",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::~?GraphicsDevice$",
+      "kinds": ["constructor", "destructor"],
+      "mapping": "no C constructor or destructor: the canonical device belongs to the running `Game`, which creates it from its adapter/profile/presentation state and destroys it during `cna_game_destroy`. `cna_game_get_graphics_device` borrows it for the active callback and `cna_graphics_device_dispose` reports the same ownership rule as an explicit callable `NOT_SUPPORTED` result",
+      "tests": "borrowed-device acquisition, callback-scoped expiry, explicit dispose refusal and device destruction through `cna_game_destroy` in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-friend-declarations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:Game|GameWindow|GraphicsDeviceManager)$",
+      "kinds": ["method"],
+      "mapping": "No C mapping: these are friendship declarations that grant canonical CNA types access to private device state, not callable public members",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-state-and-disposal",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::GraphicsDevice::(?:getIsDisposedProperty|getGraphicsDeviceStatusProperty|getAdapterProperty|getGraphicsProfileProperty|getScissorRectangleProperty|setScissorRectangleProperty|getViewportProperty|setViewportProperty|getBlendFactorProperty|setBlendFactorProperty|getMultiSampleMaskProperty|setMultiSampleMaskProperty|getReferenceStencilProperty|setReferenceStencilProperty|GetTypeName|Dispose)$",
+      "kinds": ["method"],
+      "mapping": "`cna_graphics_device_get_is_disposed`, `_get_status`, `_get_adapter_index`, `_get_graphics_profile`, `_get`/`_set_scissor_rectangle`, `_get`/`_set_viewport`, `_get`/`_set_blend_factor`, `_get`/`_set_multi_sample_mask`, `_get`/`_set_reference_stencil`, `_get_type_name_size`/`_copy_type_name` and the explicit `_dispose` ownership result. The native `GraphicsAdapter&` becomes an index into the existing `cna_graphics_adapter_*` queries and no native reference crosses the ABI",
+      "tests": "every getter/setter round trip, canonical multisample-mask and reference-stencil defaults, non-finite viewport-depth rejection without mutation, exact type-name bytes with capacity atomicity, dispose refusal and null-output/stale-handle failures in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-resource-event-args",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Resource(?:Created|Destroyed)EventArgs\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "fixed-layout `CNA_ResourceCreatedEventInfo` and `CNA_ResourceDestroyedEventInfo` values delivered by the device subscription callbacks; a C consumer never constructs the native args object. `getResourceProperty()` is reported as presence only because the canonical event is raised from the graphics-resource base constructor, where the object has no concrete type yet; `getNameProperty()` becomes a callback-scoped UTF-8 view and the caller-owned `System::Object*` tag is likewise reported as presence only",
+      "tests": "real created/destroyed delivery with exact structure size/version, empty-name and no-tag values and payload validation in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-service-access",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService(?:::~?IGraphicsDeviceService|::getGraphicsDeviceProperty)?$",
+      "kinds": ["class", "destructor", "method"],
+      "mapping": "`cna_game_get_graphics_device` is the C route to the service's device. The interface itself is deliberately not instantiable or implementable from C: a C++ abstract base class cannot cross the ABI, and its only canonical implementation is the game-owned `GraphicsDeviceManager`",
+      "tests": "borrowed-device acquisition and callback-scoped expiry in strict-C `GraphicsDeviceSmoke.c` under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-service-events",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::IGraphicsDeviceService::getDevice(?:Created|Disposing|Reset|Resetting)Event$",
+      "kinds": ["method"],
+      "mapping": "the device's own lifecycle events are subscribable through `cna_graphics_device_subscribe_event`; these service-level events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module, whose C mapping is owned by CBIND-037",
+      "tests": "device-level Disposing/lost/reset/resetting subscriptions in strict-C `GraphicsDeviceSmoke.c`; service-level delivery evidence is pending CBIND-037",
+      "status": "partial",
+      "task": "CBIND-035F2"
+    },
+    {
+      "id": "graphics-device-exceptions",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:DeviceLostException|DeviceNotResetException|NoSuitableGraphicsDeviceException)\\.hpp$",
+      "kinds": ["class", "constructor"],
+      "mapping": "the C exception firewall converts these canonical failures before they can cross the ABI: a lost or not-reset device becomes `CNA_RESULT_INVALID_STATE` with `CNA_ERROR_CATEGORY_STATE`, an unavailable device becomes `CNA_RESULT_NOT_SUPPORTED` with `CNA_ERROR_CATEGORY_NOT_SUPPORTED`, and both default and custom messages reach the caller through the per-thread UTF-8 diagnostic. No exception object, type name or C++ throw is exposed",
+      "tests": "default-message and custom-message conversion of all three types, including exact result, category and diagnostic text, in the `cna_c_api_boundary_detail_test` adapter test",
+      "status": "implemented",
+      "task": "CBIND-035F2"
     }
   ]
 }

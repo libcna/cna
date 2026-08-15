@@ -30,6 +30,11 @@ struct BorrowedGraphicsDevice final {
     CNA_Handle game,
     CNA_Handle* outGraphicsDevice);
 
+// Marks every live graphics-device event subscription dead. The game-destroy path calls this once
+// the canonical device has already raised its own Disposing event, so a C subscriber still
+// observes that event while no later unsubscription can touch the destroyed native handler.
+void InvalidateGraphicsDeviceSubscriptions() noexcept;
+
 void AddOwnedGraphicsResource() noexcept;
 
 void RemoveOwnedGraphicsResource() noexcept;

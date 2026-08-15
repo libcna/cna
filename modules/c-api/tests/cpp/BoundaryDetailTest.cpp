@@ -116,5 +116,37 @@ int main()
         return 8;
     }
 
+    // Canonical graphics-device failures must not fall through to the generic internal arm.
+    using Microsoft::Xna::Framework::Graphics::DeviceLostException;
+    using Microsoft::Xna::Framework::Graphics::DeviceNotResetException;
+    using Microsoft::Xna::Framework::Graphics::NoSuitableGraphicsDeviceException;
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw DeviceLostException();
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "The graphics device was lost.")) {
+        return 9;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw DeviceNotResetException("device not reset");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "device not reset")) {
+        return 10;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw NoSuitableGraphicsDeviceException();
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "No suitable graphics device found.")) {
+        return 11;
+    }
+
     return 0;
 }
