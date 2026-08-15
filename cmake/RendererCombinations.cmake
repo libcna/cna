@@ -95,13 +95,12 @@ function(cna_validate_renderer_combination)
                     "functions twice with different bodies -- an ODR violation, not just a clash.")
             endif()
 
-            # Two identities served by the shared EasyGL implementation.
-            if(_first IN_LIST CNA_RENDERER_SHARED_EASYGL AND _second IN_LIST CNA_RENDERER_SHARED_EASYGL)
-                _cna_reject_combination("${_first}" "${_second}"
-                    "both are served by the shared EasyGL implementation, whose GL profile is still "
-                    "a compile-time choice. Making that profile a runtime choice is "
-                    "plan_runtimerenderer.md phase P11.")
-            endif()
+            # plan_runtimerenderer.md phase P11 REMOVED the rule that used to sit here: two
+            # identities served by the shared EasyGL implementation could not coexist, because its
+            # GL profile was a compile definition and the same translation units would have had to
+            # be compiled twice. The profile is now a runtime value, so OPENGLES2, OPENGLES3,
+            # OPENGL33, WEBGL1 and WEBGL2 can share one binary -- subject only to the platform
+            # partition below, which still separates the WEBGL pair from the rest.
 
             # Cross-platform pairs.
             _cna_renderer_platform("${_first}" _first_platform)

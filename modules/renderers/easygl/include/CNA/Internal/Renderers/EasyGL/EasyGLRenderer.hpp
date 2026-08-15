@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
@@ -606,6 +608,8 @@ namespace CNA::Internal::Renderers::EasyGL
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
+        /// plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
+        GlProfile profile_ = kCompileTimeGlProfile;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
@@ -765,12 +769,37 @@ namespace CNA::Internal::Renderers::EasyGL
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
 
     public:
+        /**
+         * @brief Constructs the renderer for one of EasyGL's five GL profiles.
+         *
+         * plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
+         * compile definition, which is what lets two GL identities coexist in one binary. It
+         * defaults to the profile this build was configured for, so a single-renderer build is
+         * unaffected.
+         *
+         * @param window The SDL window to create the GL context on.
+         * @param virtualWidth Logical presentation width; 0 means unset.
+         * @param virtualHeight Logical presentation height; 0 means unset.
+         * @param mode Presentation/scaling policy.
+         * @param contextRecoveryEnabled Whether to keep CPU-side copies for context-loss recovery.
+         * @param multiSampleCount Requested MSAA sample count.
+         * @param swapInterval Swap interval (0 immediate, 1 VSync, 2 half-rate).
+         * @param profile Which GL profile to create the context and shaders for.
+         */
         explicit EasyGLRenderer(SDL_Window* window,
                                        int virtualWidth = 0, int virtualHeight = 0,
                                        CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
                                        bool contextRecoveryEnabled = true,
                                        int multiSampleCount = 1,
-                                       int swapInterval = 1);
+                                       int swapInterval = 1,
+                                       GlProfile profile = kCompileTimeGlProfile);
+
+        /**
+         * @brief The GL profile this renderer instance was created for.
+         *
+         * @return The profile.
+         */
+        [[nodiscard]] GlProfile Profile() const { return profile_; }
         ~EasyGLRenderer() override;
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL

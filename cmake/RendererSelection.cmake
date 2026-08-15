@@ -501,7 +501,9 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
     # easy-gl is a SIBLING repository checkout, not a git submodule of this
     # repo (Task DEV-BUILD-001) -- see sharp-runtime's identical check above
     # for the full rationale.
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
+    # plan_runtimerenderer.md P11: several GL identities can now be selected at once, and they all
+    # share this one easy-gl subdirectory -- add it only for the first of them.
+    if(NOT TARGET easy-gl AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl/CMakeLists.txt")
         message(FATAL_ERROR
             "CNA: Missing sibling repository 'easy-gl' at "
             "${CMAKE_CURRENT_SOURCE_DIR}/../easy-gl -- this is a separate git "
@@ -510,7 +512,10 @@ if(CNA_GRAPHICS_RENDERER STREQUAL "OPENGLES2" OR CNA_GRAPHICS_RENDERER STREQUAL 
             "not fetch it). easy-gl itself expects its own sibling '../meta-gl' "
             "checkout (branch 'develop' of meta-gl).")
     endif()
-    add_subdirectory(../easy-gl easy-gl)
+    if(NOT _cna_easygl_subdir_added)
+        add_subdirectory(../easy-gl easy-gl)
+        set(_cna_easygl_subdir_added TRUE)
+    endif()
 endif()
 
 # plan_freedirect.md design decision 10 / Task DX3-2: free-direct is a SIBLING repository checkout, not a

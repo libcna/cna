@@ -98,6 +98,7 @@ endif()
 # re-establishing them would either skip its block entirely or make it redefine the default's
 # target. Re-point both per family instead; in single-renderer mode this loop runs once with the
 # values it already had.
+set(_cna_entered_families)
 set(_cna_saved_graphics_renderer "${CNA_GRAPHICS_RENDERER}")
 set(_cna_saved_renderer_target "${RENDERER_TARGET}")
 
@@ -112,6 +113,15 @@ foreach(_cna_family_index RANGE ${_cna_family_last})
     set(CNA_GRAPHICS_RENDERER "${_cna_renderer_identity}")
     set(RENDERER_TARGET "${_cna_renderer_target}")
     set(CNA_RENDERER_TARGET_DEFINE "${_cna_renderer_target_define}")
+
+    # plan_runtimerenderer.md phase P11: several IDENTITIES may share one implementation family --
+    # EasyGL serves up to five. The family directory defines one target and must be entered once;
+    # entering it again is a CMake error. The extra identities need no directory of their own,
+    # only their own registry entry, which cmake/RendererRegistry.cmake already emits.
+    if(_cna_renderer_family IN_LIST _cna_entered_families)
+        continue()
+    endif()
+    list(APPEND _cna_entered_families "${_cna_renderer_family}")
 
     if(NOT _cna_renderer_family STREQUAL "metal" AND NOT _cna_renderer_family STREQUAL "glide")
         add_subdirectory(${_cna_renderer_family})

@@ -14,16 +14,20 @@
 #
 # In a single-renderer build -- the default and recommended mode -- the table has exactly one entry.
 
-# Maps a CNA_GRAPHICS_RENDERER identity to the C++ namespace of the family implementing it.
-# EasyGL is the one family serving several identities (plan_glbackends.md).
+# Maps a CNA_GRAPHICS_RENDERER identity to the family that implements it, as
+# "<namespace>" or "<namespace>|<descriptor accessor>". The accessor defaults to GetDescriptor.
+#
+# EasyGL is the one family serving several identities (plan_glbackends.md), and since
+# plan_runtimerenderer.md phase P11 made its GL profile a runtime value, all five can be compiled in
+# at once -- each reached through its own accessor on the single EasyGL target.
 function(cna_renderer_identity_to_namespace identity out_var)
     set(_map
         SDL_RENDERER SdlRenderer
-        OPENGLES2    EasyGL
-        OPENGLES3    EasyGL
-        OPENGL33     EasyGL
-        WEBGL1       EasyGL
-        WEBGL2       EasyGL
+        OPENGLES2    EasyGL|GetDescriptorOpenGLES2
+        OPENGLES3    EasyGL|GetDescriptorOpenGLES3
+        OPENGL33     EasyGL|GetDescriptorOpenGL33
+        WEBGL1       EasyGL|GetDescriptorWebGL1
+        WEBGL2       EasyGL|GetDescriptorWebGL2
         BGFX         Bgfx
         VULKAN       Vulkan
         WEBGPU       WebGPU
@@ -73,8 +77,23 @@ function(cna_renderer_identity_to_namespace identity out_var)
             "as in GraphicsRendererType.hpp and scripts/check_renderer_identities.py.")
     endif()
     math(EXPR _value_index "${_index} + 1")
-    list(GET _map ${_value_index} _namespace)
-    set(${out_var} "${_namespace}" PARENT_SCOPE)
+    list(GET _map ${_value_index} _entry)
+    set(${out_var} "${_entry}" PARENT_SCOPE)
+endfunction()
+
+# Splits a map entry into its namespace and descriptor accessor.
+function(_cna_split_renderer_entry entry ns_var accessor_var)
+    string(FIND "${entry}" "|" _bar)
+    if(_bar EQUAL -1)
+        set(${ns_var} "${entry}" PARENT_SCOPE)
+        set(${accessor_var} "GetDescriptor" PARENT_SCOPE)
+    else()
+        string(SUBSTRING "${entry}" 0 ${_bar} _ns)
+        math(EXPR _after "${_bar} + 1")
+        string(SUBSTRING "${entry}" ${_after} -1 _accessor)
+        set(${ns_var} "${_ns}" PARENT_SCOPE)
+        set(${accessor_var} "${_accessor}" PARENT_SCOPE)
+    endif()
 endfunction()
 
 # Generates the registry translation unit for ${identities} and returns its path in out_var.
@@ -87,27 +106,32 @@ function(cna_generate_renderer_registry out_var)
         message(FATAL_ERROR "CNA: cna_generate_renderer_registry() called with no renderer identity.")
     endif()
 
+    set(_accessors)
     set(_namespaces)
-    foreach(_identity IN LISTS _identities)
-        cna_renderer_identity_to_namespace("${_identity}" _namespace)
-        if(_namespace IN_LIST _namespaces)
-            message(FATAL_ERROR
-                "CNA: renderer identities ${_identities} include two served by the same "
-                "implementation family (${_namespace}). They cannot coexist in one binary until "
-                "that family's profile becomes a runtime choice (plan_runtimerenderer.md phase P11).")
-        endif()
-        list(APPEND _namespaces "${_namespace}")
-    endforeach()
-
     set(_declarations "")
     set(_entries "")
-    foreach(_namespace IN LISTS _namespaces)
+    foreach(_identity IN LISTS _identities)
+        cna_renderer_identity_to_namespace("${_identity}" _entry)
+        _cna_split_renderer_entry("${_entry}" _namespace _accessor)
+
+        # Two identities may share a NAMESPACE (EasyGL serves five), but never an accessor -- that
+        # would mean two registry entries describing the same renderer.
+        if("${_namespace}::${_accessor}" IN_LIST _accessors)
+            message(FATAL_ERROR
+                "CNA: renderer identities ${_identities} map to the same descriptor "
+                "(${_namespace}::${_accessor}). Each identity needs its own accessor.")
+        endif()
+        list(APPEND _accessors "${_namespace}::${_accessor}")
+        if(NOT _namespace IN_LIST _namespaces)
+            list(APPEND _namespaces "${_namespace}")
+        endif()
+
         string(APPEND _declarations
             "namespace CNA::Internal::Renderers::${_namespace}\n"
             "{\n"
-            "    const GraphicsRendererDescriptor& GetDescriptor();\n"
+            "    const GraphicsRendererDescriptor& ${_accessor}();\n"
             "}\n\n")
-        string(APPEND _entries "            ${_namespace}::GetDescriptor(),\n")
+        string(APPEND _entries "            ${_namespace}::${_accessor}(),\n")
     endforeach()
 
     set(_generated "${CMAKE_BINARY_DIR}/generated/CnaRendererRegistry.generated.cpp")

@@ -826,13 +826,13 @@ Each set is its own task because each will surface its own third-party integrati
 
 | ID | St | Task |
 |---|---|---|
-| RTR-P11-1 | ⬜ | Audit every `CNA_GL_PROFILE_*` use inside `modules/renderers/easygl/` and classify: context-creation attributes, shader-source selection, feature gating. |
-| RTR-P11-2 | ⬜ | Convert context-creation attribute choice to a runtime profile parameter on `EasyGLRenderer`. |
-| RTR-P11-3 | ⬜ | Convert shader-header/source selection to runtime — the largest sub-item; GLSL ES 1.00 vs 3.00 vs 3.30 sources must all be compiled into the binary. |
-| RTR-P11-4 | ⬜ | Convert remaining feature gates to runtime profile queries. |
-| RTR-P11-5 | ⬜ | Five descriptors from one `easygl` target, one per GL identity, each pinning its profile. |
-| RTR-P11-6 | ⬜ | Remove the "two GL profiles conflict" entry from the P6 conflict matrix. |
-| RTR-P11-7 | ⬜ | Multi set `OPENGLES2 + OPENGLES3 + OPENGL33` proven on Linux. |
+| RTR-P11-1 | ✅ | Audit every `CNA_GL_PROFILE_*` use inside `modules/renderers/easygl/` and classify: context-creation attributes, shader-source selection, feature gating. |
+| RTR-P11-2 | ✅ | Convert context-creation attribute choice to a runtime profile parameter on `EasyGLRenderer`. |
+| RTR-P11-3 | ✅ | Convert shader-header/source selection to runtime — the largest sub-item; GLSL ES 1.00 vs 3.00 vs 3.30 sources must all be compiled into the binary. |
+| RTR-P11-4 | ✅ | Convert remaining feature gates to runtime profile queries. |
+| RTR-P11-5 | ✅ | Five descriptors from one `easygl` target, one per GL identity, each pinning its profile. |
+| RTR-P11-6 | ✅ | Remove the "two GL profiles conflict" entry from the P6 conflict matrix. |
+| RTR-P11-7 | ✅ | Multi set `OPENGLES2 + OPENGLES3 + OPENGL33` proven on Linux. |
 | RTR-P11-8 | ⬜ | Multi set `WEBGL1 + WEBGL2` proven under Emscripten. |
 | RTR-P11-9 | ⬜ | Measure the binary-size cost of carrying all shader variants; document it. |
 | RTR-P11-10 | ⬜ | Verify `plan_glbackends.md`'s documented invariants still hold and update it with the runtime-profile addition. |

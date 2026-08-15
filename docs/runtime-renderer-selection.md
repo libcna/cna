@@ -196,7 +196,6 @@ configure time, not merely to exist.
 |---|---|
 | `PORTABLEGL` + any real-OpenGL renderer | PORTABLEGL is a single-header C library that **defines** the global `gl*` symbols (`glClear`, `glDrawArrays`, …). Linking it beside a renderer that calls the real OpenGL of the same names is a duplicate-symbol error. |
 | `GDI` + `SOFTWARE` | GDI compiles the SOFTWARE module's own translation units a second time with `CNA_SOFTWARE_2D_ONLY`. Both in one binary would define the same functions twice with different bodies — an ODR violation. |
-| Two of `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` | All five are served by the shared **EasyGL** implementation, whose GL profile is still a compile-time choice. Lifting this is phase P11. |
 | Renderers from different **platform** partitions | Windows-only (the DirectX family, `GLIDE`, `GDI`, `DIRECT2D`), Emscripten-only (`WEBGL1`, `WEBGL2`, `CANVAS`, `HTML_DOM`, `SVG_DOM`) and macOS-only (`METAL`) cannot be targeted by one toolchain. |
 | `GLIDE` + anything | GLIDE pins the build to the native 32-bit x86 Glide ABI. |
 
@@ -207,6 +206,7 @@ configure time, not merely to exist.
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
+| `OPENGLES3;OPENGLES2;OPENGL33;SOFTWARE;HEADLESS` | ✅ **6385 passed, 0 failed.** Three EasyGL GL profiles in one binary — `OPENGL33` really does get a desktop core context (`OpenGL 4.6 (Core Profile)`) while the ES profiles get an ES context |
 | `OPENGLES3;OPENGL1;OPENGL2;OPENGL4;SDL_GPU;SDL_RENDERER;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Nine renderers, four independent OpenGL families among them, all selectable at runtime |
 | `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` | ✅ **6385 passed, 0 failed.** Two different GPU APIs in one binary, both selectable at runtime, including the `SDL_WINDOW_OPENGL` ↔ `SDL_WINDOW_VULKAN` crossing |
 
