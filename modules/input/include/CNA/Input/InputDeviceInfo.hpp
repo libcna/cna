@@ -17,7 +17,7 @@ namespace CNA::Input
      */
     CNAEXT struct InputDeviceInfoEXT
     {
-        /** @brief The SDL device instance id (SDL_MouseID / SDL_KeyboardID / SDL_TouchID). */
+        /** @brief The stable platform device instance id. */
         std::uint64_t id = 0;
 
         /** @brief The device's human-readable name, or empty if SDL reports none. */

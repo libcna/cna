@@ -6,10 +6,9 @@ target_include_directories(cna_renderer_glide_headers INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 if(CNA_GRAPHICS_RENDERER STREQUAL "GLIDE")
-    # Glide itself is dynamically loaded at runtime (glide3x.dll); SDL is used only to obtain the
-    # application's existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
+    # Glide itself is dynamically loaded at runtime (glide3x.dll) and receives the application's
+    # existing Win32 HWND. Do not link or vendor a particular Glide emulator here.
     cna_add_renderer()
-    target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
 endif()
 
 # Module-owned examples (module-examples campaign): the family's example/test

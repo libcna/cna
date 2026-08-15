@@ -4,8 +4,8 @@
 // context, a real 60-frame Clear()+Present() loop -- the same bar SDLGPU-12/sdlgpu_smoke_test.cpp
 // established when that renderer was first bootstrapped.
 //
-// Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
+// Check A -- GameWindow handle returns a real, non-null SDL_Window.
+// Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports a positive width/height matching the real window.
 // Check D -- a real VertexBuffer round-trip: SetData() followed by GetVertexCount() reports the
 //   exact count uploaded.
@@ -62,8 +62,8 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr, "GetWindowInternal() returns a real window");
-            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null (no SDL_Renderer)");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GameWindow handle returns a real window");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null (no SDL_Renderer)");
 
             int width = 0, height = 0;
             renderer.GetViewportSize(width, height);

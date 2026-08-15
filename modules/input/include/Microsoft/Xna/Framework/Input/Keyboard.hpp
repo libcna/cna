@@ -30,8 +30,8 @@ namespace Microsoft::Xna::Framework::Input
         Keyboard() = delete;
 
         /**
-         * @brief Returns the current keyboard state.
-         * @return The current keyboard state.
+         * @brief Returns the keyboard state captured at the start of the current frame.
+         * @return The most recently published platform keyboard snapshot.
          */
         static KeyboardState GetState();
 
@@ -50,8 +50,8 @@ namespace Microsoft::Xna::Framework::Input
         CNAEXT static Keys GetKeyFromScancodeEXT(Keys scancode);
 
         /**
-         * @brief CNAEXT/EXT: returns the currently active keyboard modifier and lock keys.
-         * @return A bit set of active modifiers (Shift/Ctrl/Alt/Gui) and lock states (Caps/Num/Scroll/Mode).
+         * @brief CNAEXT/EXT: returns modifier and lock keys from the current frame snapshot.
+         * @return A bit set of modifiers (Shift/Ctrl/Alt/Gui) and lock states (Caps/Num/Scroll/Mode).
          */
         CNAEXT static CNA::Input::KeyModifiersEXT GetModStateEXT();
 

@@ -3,8 +3,8 @@
 // plan_html_dom.md HTMLDOM-70: GTest coverage for everything on the HTML_DOM renderer that does not
 // need a real DOM -- the blend-state mapping, the addressing-mode validation, the sprite geometry
 // encoder, and the 3D "not yet implemented" surface. Deliberately structured so it runs under this
-// repo's `node CnaTests.js` runner, which has no document, no CSS and no canvas: nothing here
-// creates a texture or touches window_.
+// repo's `node CnaTests.js` runner or the native host-contract target: nothing here requires a
+// document, CSS or a browser canvas.
 //
 // The geometry assertions matter most. BuildDrawCommandEXT is where pivot placement, flip mirroring
 // and source-rectangle clamping are decided, and getting any of them wrong is invisible in a
@@ -38,10 +38,17 @@ using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 
 namespace
 {
-    // Non-null but never dereferenced: the constructor only null-checks its window pointer and
-    // registers it in a pointer-keyed map, and none of the throwing methods exercised below reads
-    // window_ before throwing.
-    SDL_Window* FakeWindow() { return reinterpret_cast<SDL_Window*>(0x1); }
+    GraphicsRendererCreateArgs TestArgs()
+    {
+        GraphicsRendererCreateArgs args;
+        args.surface.windowId = 1;
+        args.surface.nativeHandle.system = CNA::Platform::NativeWindowSystem::Web;
+        args.surface.drawableSize = {800, 480};
+        args.virtualWidth = 800;
+        args.virtualHeight = 480;
+        args.presentationMode = CnaPresentationMode::FixedHeightDynamicWidth;
+        return args;
+    }
 
     struct DummyVertexBuffer final : IVertexBufferRenderer
     {
@@ -355,12 +362,12 @@ TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)
 {
     const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
                                        Color(0x11, 0x22, 0x33, 0x44), 0.0f, Vector2(0, 0),
-                                       SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+                                       SpriteEffects::None, true, 1, 1, DomCompositeOp::NonPremultiplied);
     EXPECT_EQ(c.packedColor & 0xFFu, 0x11u);
     EXPECT_EQ((c.packedColor >> 8) & 0xFFu, 0x22u);
     EXPECT_EQ((c.packedColor >> 16) & 0xFFu, 0x33u);
     EXPECT_EQ((c.packedColor >> 24) & 0xFFu, 0x44u);
-    EXPECT_EQ(c.variantMode, 1);
+    EXPECT_EQ(c.variantMode, 0);
     EXPECT_EQ(c.flags & FlagAdditive, 0);
 
     const HtmlDomDrawCommand additive =
@@ -373,6 +380,56 @@ TEST(HtmlDomDrawCommand, ColorIsPackedRgbaAndBlendOpSelectsTheVariant)
         Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16), Color(255, 255, 255, 255), 0.0f,
               Vector2(0, 0), SpriteEffects::None, true, 1, 1, DomCompositeOp::Opaque);
     EXPECT_EQ(opaque.variantMode, 2);
+}
+
+TEST(HtmlDomDrawCommand, AlphaBlendConvertsPremultipliedTintToStraightRgb)
+{
+    const Color premultiplied = Color::FromNonPremultiplied(255, 128, 64, 128);
+    const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+                                       premultiplied, 0.0f, Vector2(0, 0), SpriteEffects::None,
+                                       true, 1, 1, DomCompositeOp::AlphaBlend);
+    EXPECT_EQ(c.packedColor & 0xFFu, 255u);
+    EXPECT_EQ((c.packedColor >> 8) & 0xFFu, 128u);
+    EXPECT_EQ((c.packedColor >> 16) & 0xFFu, 64u);
+    EXPECT_EQ((c.packedColor >> 24) & 0xFFu, 128u);
+    EXPECT_EQ(c.variantMode, 1);
+}
+
+TEST(HtmlDomDrawCommand, AlphaOnlyFadeKeepsOneRgbVariantKey)
+{
+    std::uint32_t expectedRgb = 0;
+    for (const int alpha : {255, 192, 128, 64, 1})
+    {
+        const HtmlDomDrawCommand c = Build(
+            Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+            Color::FromNonPremultiplied(255, 255, 255, alpha), 0.0f, Vector2(0, 0),
+            SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+        const std::uint32_t rgb = c.packedColor & 0x00FFFFFFu;
+        if (expectedRgb == 0) expectedRgb = rgb;
+        EXPECT_EQ(rgb, expectedRgb);
+        EXPECT_EQ(rgb, 0x00FFFFFFu);
+        EXPECT_EQ((c.packedColor >> 24) & 0xFFu, static_cast<std::uint32_t>(alpha));
+    }
+
+    const HtmlDomDrawCommand transparent = Build(
+        Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+        Color::FromNonPremultiplied(12, 34, 56, 0), 0.0f, Vector2(0, 0),
+        SpriteEffects::None, true, 1, 1, DomCompositeOp::AlphaBlend);
+    EXPECT_EQ(transparent.packedColor, 0x00FFFFFFu);
+}
+
+TEST(HtmlDomDrawCommand, NonAlphaBlendModesKeepRawTintChannels)
+{
+    const Color raw(17, 34, 51, 68);
+    for (const DomCompositeOp op : {DomCompositeOp::Opaque,
+                                    DomCompositeOp::NonPremultiplied,
+                                    DomCompositeOp::Additive})
+    {
+        const HtmlDomDrawCommand c = Build(Rectangle(0, 0, 32, 16), Rectangle(0, 0, 32, 16),
+                                           raw, 0.0f, Vector2(0, 0), SpriteEffects::None,
+                                           true, 1, 1, op);
+        EXPECT_EQ(c.packedColor, 0x44332211u);
+    }
 }
 
 TEST(HtmlDomDrawCommand, PointFilteringClearsTheSmoothingFlag)
@@ -490,8 +547,7 @@ TEST(HtmlDomSpriteBatch, SetImmediateModeIsAcceptedAndDoesNotThrow)
 class HtmlDom3DSurfaceTest : public ::testing::Test
 {
 protected:
-    HtmlDomRenderer renderer{FakeWindow(), 800, 480,
-                                   CnaPresentationMode::FixedHeightDynamicWidth};
+    HtmlDomRenderer renderer{TestArgs()};
 };
 
 TEST_F(HtmlDom3DSurfaceTest, DepthAndStencilClearsThrow)
@@ -577,8 +633,6 @@ TEST_F(HtmlDom3DSurfaceTest, CapabilityQueriesReportTheTwoDimensionalBoundaryUpF
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::Instancing));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::MultiStreamVertexInput));
     EXPECT_FALSE(renderer.SupportsCapability(CNA::GraphicsCapability::WireFrame));
-    EXPECT_EQ(renderer.GetRendererInternal(), nullptr);
-    EXPECT_EQ(renderer.GetWindowInternal(), FakeWindow());
 }
 
 // plan_html_dom.md HTMLDOM-117: GraphicsCapability::AdditiveBlending is the one capability this

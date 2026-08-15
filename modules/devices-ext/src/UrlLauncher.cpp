@@ -3,13 +3,13 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_misc.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 namespace CNA::Devices
 {
     bool UrlLauncher::Open(const std::string& url)
     {
-        return SDL_OpenURL(url.c_str());
+        return Platform::GetCurrentPlatform().GetSystemInfo()->OpenUrl(url);
     }
 } // namespace CNA::Devices
 

@@ -12,6 +12,7 @@
 #include "CNA/Internal/Renderers/OpenVg/OpenVgSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/OpenVg/OpenVgTextureRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -30,6 +31,9 @@ using namespace CNA::Internal::Renderers::OpenVg;
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Graphics;
 using CNA::Internal::Graphics::ImageData;
+using CNA::Examples::SdlTestGlContext;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurface;
 
 namespace
 {
@@ -98,7 +102,10 @@ namespace
         // construct each case in its own scope instead of via a helper returning by value.
         {
             SDL_Window* window = MakeWindow(200, 100);
-            OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::Letterbox);
+            {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 100, 100, CnaPresentationMode::Letterbox));
             auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
             auto sb = renderer.CreateSpriteBatch();
             renderer.Clear(kClear.getRProperty() / 255.0f, kClear.getGProperty() / 255.0f,
@@ -115,11 +122,15 @@ namespace
             Check(CloseTo(ReadPixel(renderer, 190, 50), kClear), "Letterbox: right bar shows the clear colour, not the sprite");
             Check(CloseTo(ReadPixel(renderer, 55, 50), kSprite), "Letterbox: just inside the left presentation edge is sprite");
             Check(CloseTo(ReadPixel(renderer, 145, 50), kSprite), "Letterbox: just inside the right presentation edge is sprite");
+            }
             SDL_DestroyWindow(window);
         }
         {
             SDL_Window* window = MakeWindow(200, 100);
-            OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::Overscan);
+            {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 100, 100, CnaPresentationMode::Overscan));
             auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
             auto sb = renderer.CreateSpriteBatch();
             renderer.Clear(kClear.getRProperty() / 255.0f, kClear.getGProperty() / 255.0f,
@@ -133,11 +144,15 @@ namespace
                       CloseTo(ReadPixel(renderer, 199, 99), kSprite) &&
                       CloseTo(ReadPixel(renderer, 100, 50), kSprite),
                   "Overscan: the ENTIRE window is covered -- no bars anywhere");
+            }
             SDL_DestroyWindow(window);
         }
         {
             SDL_Window* window = MakeWindow(200, 100);
-            OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::Stretch);
+            {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 100, 100, CnaPresentationMode::Stretch));
             auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
             auto sb = renderer.CreateSpriteBatch();
             renderer.Clear(kClear.getRProperty() / 255.0f, kClear.getGProperty() / 255.0f,
@@ -153,27 +168,38 @@ namespace
                   "Stretch: non-uniform scaleX places logical half-width sprite up to physical x~100");
             Check(CloseTo(ReadPixel(renderer, 160, 50), kClear),
                   "Stretch: nothing drawn beyond the non-uniformly scaled sprite edge");
+            }
             SDL_DestroyWindow(window);
         }
         {
             SDL_Window* window = MakeWindow(200, 100);
+            {
             // FixedHeightDynamicWidth: virtualHeight=100 fixed, width derives from the window's own
             // aspect (200/100 = 2.0) -> dynamic logical width 200, matching the window exactly.
-            OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::FixedHeightDynamicWidth);
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 100, 100,
+                CnaPresentationMode::FixedHeightDynamicWidth));
             int lw = 0, lh = 0; renderer.GetViewportSize(lw, lh);
             Check(lw == 200 && lh == 100,
                   "FixedHeightDynamicWidth: logical width derives from the window's own aspect");
             int px = 0, py = 0, pw = 0, ph = 0; renderer.GetDefaultViewportRect(px, py, pw, ph);
             Check(px == 0 && py == 0 && pw == 200 && ph == 100,
                   "FixedHeightDynamicWidth: fills the window with no bars by construction");
+            }
             SDL_DestroyWindow(window);
         }
         {
             SDL_Window* window = MakeWindow(200, 100);
-            OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::NativeBackBuffer);
+            {
+            SdlTestGlContext glContext(window);
+            OpenVgRenderer renderer(SdlTestRendererArgs(
+                window, &glContext, nullptr, 100, 100,
+                CnaPresentationMode::NativeBackBuffer));
             int lw = 0, lh = 0; renderer.GetViewportSize(lw, lh);
             Check(lw == 200 && lh == 100,
                   "NativeBackBuffer: logical size equals the physical window regardless of virtual resolution");
+            }
             SDL_DestroyWindow(window);
         }
     }
@@ -182,7 +208,10 @@ namespace
     void TestCoordinateTransforms()
     {
         SDL_Window* window = MakeWindow(200, 100);
-        OpenVgRenderer renderer(window, 100, 100, CnaPresentationMode::Letterbox);
+        {
+        SdlTestGlContext glContext(window);
+        OpenVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 100, 100, CnaPresentationMode::Letterbox));
 
         float logX = -1.0f, logY = -1.0f;
         Check(renderer.TransformWindowToLogical(100.0f, 50.0f, logX, logY) &&
@@ -204,6 +233,7 @@ namespace
                   winX > 119.0f && winX < 121.0f && winY > 29.0f && winY < 31.0f,
               "window -> logical -> window round-trips to the original point");
 
+        }
         SDL_DestroyWindow(window);
     }
 
@@ -211,7 +241,10 @@ namespace
     void TestViewport()
     {
         SDL_Window* window = MakeWindow(200, 100);
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        {
+        SdlTestGlContext glContext(window);
+        OpenVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
         const Color kClear(5, 5, 5, 255);
         const Color kSprite(240, 120, 10, 255);
         auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
@@ -237,6 +270,7 @@ namespace
         Check(CloseTo(ReadPixel(renderer, 80, 40), kSprite) && CloseTo(ReadPixel(renderer, 10, 10), kClear),
               "custom viewport survives Clear()");
 
+        }
         SDL_DestroyWindow(window);
     }
 
@@ -244,7 +278,10 @@ namespace
     void TestResizeWithoutClear()
     {
         SDL_Window* window = MakeWindow(120, 80);
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        {
+        SdlTestGlContext glContext(window);
+        OpenVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
         const Color kClear(1, 2, 3, 255);
         const Color kSprite(0, 220, 90, 255);
         auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
@@ -256,6 +293,7 @@ namespace
         SDL_SetWindowSize(window, 240, 160);
         SDL_SyncWindow(window);
         SDL_PumpEvents();
+        renderer.OnSurfaceChanged(SdlTestSurface(window));
 
         // Proves EnsureSurfaceSizeEXT()'s own bookkeeping is correct immediately -- no draw, no
         // swap, nothing beyond the resize itself.
@@ -268,17 +306,16 @@ namespace
         }
 
         // Xvfb/Mesa software-GLX environment characteristic (verified, not assumed): SDL and
-        // OpenVgRenderer's own bookkeeping (SDL_GetWindowSizeInPixels, GetDefaultViewportRect)
-        // already report the new physical size correctly at this point -- confirmed by probing
-        // them directly here during investigation -- but the ACTUAL GLX drawable's backing store
+        // The refreshed platform surface snapshot and GetDefaultViewportRect already report the
+        // new physical size correctly at this point, but the ACTUAL GLX drawable's backing store
         // on this X server is not reallocated to the new size until one buffer swap has completed
         // after the resize; a draw issued before that swap still rasterizes into the OLD-sized
         // buffer even though every CNA-side viewport/ortho/scissor computation is already correct.
         // This is an X11/GLX-level characteristic of this display server, outside OpenVgRenderer's
         // control (no additional `vg*`/`gl*` call from CNA's own code changes it) -- one harmless
-        // SwapWindow settles it, matching how a real application's per-frame Present() would
+        // platform swap settles it, matching how a real application's per-frame Present() would
         // naturally absorb this on its very next frame.
-        SDL_GL_SwapWindow(window);
+        glContext.SwapBuffers(SDL_GetWindowID(window));
         SDL_PumpEvents();
 
         // No Clear() call here at all -- draw immediately after the resize. If the physical
@@ -294,6 +331,7 @@ namespace
         Check(CloseTo(ReadPixel(renderer, 235, 155), kSprite),
               "resize without Clear: the far corner of the NEW (larger) canvas is covered too");
 
+        }
         SDL_DestroyWindow(window);
     }
 
@@ -301,7 +339,10 @@ namespace
     void TestScissor()
     {
         SDL_Window* window = MakeWindow(100, 100);
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        {
+        SdlTestGlContext glContext(window);
+        OpenVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
         const Color kClear(3, 3, 3, 255);
         const Color kSprite(255, 255, 0, 255);
         auto tex = renderer.CreateTexture(SolidImage(4, 4, kSprite));
@@ -342,6 +383,7 @@ namespace
         DrawFullCanvasSprite(renderer, *sb, *tex, Rectangle(0, 0, 100, 100));
         Check(CloseTo(ReadPixel(renderer, 5, 5), kSprite), "disabling scissor again restores unclipped drawing");
 
+        }
         SDL_DestroyWindow(window);
     }
 
@@ -349,13 +391,18 @@ namespace
     void TestSingleLiveContext()
     {
         SDL_Window* window1 = MakeWindow(64, 64);
-        auto renderer1 = std::make_unique<OpenVgRenderer>(window1, 0, 0, CnaPresentationMode::NativeBackBuffer);
+        SdlTestGlContext glContext1(window1);
+        auto renderer1 = std::make_unique<OpenVgRenderer>(SdlTestRendererArgs(
+            window1, &glContext1, nullptr, 0, 0, CnaPresentationMode::NativeBackBuffer));
 
         SDL_Window* window2 = MakeWindow(64, 64);
+        SdlTestGlContext glContext2(window2);
         bool threwWhileFirstAlive = false;
         try
         {
-            OpenVgRenderer renderer2(window2, 0, 0, CnaPresentationMode::NativeBackBuffer);
+            OpenVgRenderer renderer2(SdlTestRendererArgs(
+                window2, &glContext2, nullptr, 0, 0,
+                CnaPresentationMode::NativeBackBuffer));
             (void)renderer2;
         }
         catch (const std::runtime_error&)
@@ -371,7 +418,9 @@ namespace
         bool secondSucceeded = true;
         try
         {
-            OpenVgRenderer renderer3(window2, 0, 0, CnaPresentationMode::NativeBackBuffer);
+            OpenVgRenderer renderer3(SdlTestRendererArgs(
+                window2, &glContext2, nullptr, 0, 0,
+                CnaPresentationMode::NativeBackBuffer));
             (void)renderer3;
         }
         catch (const std::exception& ex)
@@ -402,7 +451,10 @@ namespace
             SDL_Window* window = MakeWindow(32, 32);
             try
             {
-                OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer);
+                SdlTestGlContext glContext(window);
+                OpenVgRenderer renderer(SdlTestRendererArgs(
+                    window, &glContext, nullptr, 0, 0,
+                    CnaPresentationMode::NativeBackBuffer));
                 renderer.Clear(0.0f, 0.0f, 0.0f, 1.0f);
                 renderer.Present();
             }
@@ -420,7 +472,11 @@ namespace
     void TestSwapInterval()
     {
         SDL_Window* window = MakeWindow(64, 64);
-        OpenVgRenderer renderer(window, 0, 0, CnaPresentationMode::NativeBackBuffer, /*swapInterval=*/0);
+        {
+        SdlTestGlContext glContext(window);
+        OpenVgRenderer renderer(SdlTestRendererArgs(
+            window, &glContext, nullptr, 0, 0,
+            CnaPresentationMode::NativeBackBuffer, /*swapInterval=*/0));
         int interval = -99;
         const bool queried = SDL_GL_GetSwapInterval(&interval);
         Check(queried, "SDL_GL_GetSwapInterval succeeds after OpenVgRenderer construction with swapInterval=0");
@@ -432,6 +488,7 @@ namespace
         Check(SDL_GL_GetSwapInterval(&intervalAfter) && intervalAfter != -99,
               "SetSwapInterval(1) is reflected by SDL_GL_GetSwapInterval");
 
+        }
         SDL_DestroyWindow(window);
     }
 }

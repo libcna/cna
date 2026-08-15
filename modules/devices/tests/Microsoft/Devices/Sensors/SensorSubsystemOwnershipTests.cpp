@@ -4,10 +4,9 @@
 #include <thread>
 #include <vector>
 
-#include "Microsoft/Devices/Detail/SdlSubsystemMutex.hpp"
 #include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerFailedException.hpp"
-#include "Microsoft/Devices/Sensors/Detail/SdlSensorSubsystem.hpp"
+#include "Microsoft/Devices/Sensors/Detail/PlatformSensorSubsystem.hpp"
 #include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
@@ -19,8 +18,8 @@ using Microsoft::Devices::Sensors::SensorFailedException;
 using Microsoft::Devices::Sensors::SensorState;
 
 // Task P4-8: Accelerometer and Gyroscope both wrap the same
-// SDL_INIT_SENSOR subsystem. Before this task, each class guarded its own
-// SDL_InitSubSystem()/SDL_QuitSubSystem() calls with SDL_WasInit(), which
+// native sensor subsystem. Before this task, each class guarded its own
+// acquire/release calls with a global initialized query, which
 // bypassed SDL's own internal ref-counting — one class's last instance
 // disposing could tear the subsystem down while the other class's
 // instances still expected it alive. This can't observe SDL's internal
@@ -99,8 +98,7 @@ TEST(SensorSubsystemOwnershipTests, DisposingGyroscopeDoesNotAffectAccelerometer
 // Task P7-1: getIsSupportedProperty() previously locked each class's *own*
 // SdlSensorSubsystem<T>::mutex_ around its real SDL sensor-subsystem calls —
 // two different mutexes for Accelerometer and Gyroscope, so nothing actually
-// serialized their real SDL_InitSubSystem/SDL_GetSensors/SDL_OpenSensor/
-// SDL_GetSensorType/SDL_CloseSensor/SDL_QuitSubSystem calls against each
+// serialized their real subsystem/enumerate/open/type/close/release calls against each
 // other. Unlike plan_devices_phase6.md's P6-1 addendum test (which only
 // stressed one class at a time and still reliably reproduced heap
 // corruption), this test constructs/destroys/probes *both* classes
@@ -178,23 +176,4 @@ TEST(SensorSubsystemOwnershipTests, ConcurrentCrossClassConstructDestroyProbeDoe
         EXPECT_NO_THROW(gyroscopes.push_back(std::make_unique<Gyroscope>()));
     }
     EXPECT_THROW({ const Gyroscope overflow; (void)overflow; }, SensorFailedException);
-}
-
-// Task SDLCORE-001/TEST2-001 (2026-07-17, external audit
-// `audit_devices_2026-07-17.md`): Sensors::Detail::GetGlobalSdlSensorMutex()
-// (used by Accelerometer/Gyroscope) and Devices::Detail::
-// GetGlobalSdlSubsystemMutex() (used directly by SdlHapticVibrateBackend,
-// i.e. VibrateController) were previously two entirely independent mutexes —
-// a haptic call had no shared serialization at all against a concurrent
-// sensor call, even though both touch SDL's own global, cross-subsystem
-// state. Comparing addresses directly proves they are now the exact same
-// mutex object, not merely two mutexes that happen to behave similarly —
-// this is the permanent regression test for that unification: it would fail
-// immediately (comparing two distinct static locals) against the pre-fix
-// design, and only passes because GetGlobalSdlSensorMutex() now forwards to
-// GetGlobalSdlSubsystemMutex() rather than owning its own static mutex.
-TEST(SensorSubsystemOwnershipTests, SensorAndHapticSdlCallsShareOneProcessWideMutex)
-{
-    EXPECT_EQ(&Microsoft::Devices::Sensors::Detail::GetGlobalSdlSensorMutex(),
-              &Microsoft::Devices::Detail::GetGlobalSdlSubsystemMutex());
 }

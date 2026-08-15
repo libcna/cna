@@ -38,7 +38,14 @@ EM_JS(void, CNA_Canvas2D_BindRenderTarget, (int id), {
     const entry = Module['cnaTextures'] && Module['cnaTextures'][id];
     if (!entry) { console.error('[CNA] Canvas2D: BindRenderTarget on unknown id', id); return; }
     Module['cnaCurrentCtx'] = entry.ctx;
+    entry.unpremultipliedCanvas = null;
+    entry.unpremultipliedCtx = null;
     if (Module['cnaMirrorTiles']) delete Module['cnaMirrorTiles'][id];
+});
+
+EM_JS(void, CNA_Canvas2D_MarkRenderTarget, (int id), {
+    const entry = Module['cnaTextures'] && Module['cnaTextures'][id];
+    if (entry) entry.isRenderTarget = true;
 });
 #endif
 
@@ -47,6 +54,9 @@ namespace CNA::Internal::Renderers::Canvas
     CanvasRenderTargetRenderer::CanvasRenderTargetRenderer(int w, int h)
         : texture_(w, h)
     {
+#if defined(__EMSCRIPTEN__)
+        CNA_Canvas2D_MarkRenderTarget(texture_.GetCanvasId());
+#endif
     }
 
     CanvasRenderTargetRenderer::~CanvasRenderTargetRenderer() = default;

@@ -2548,7 +2548,7 @@ protected:
         // GraphicsDeviceManager's virtual dimensions. The default scene now lives in a logical
         // Direct2D target, so these non-1:1 modes retain exact logical GetBackBufferData as well.
         auto& renderer = device.GetRenderer();
-        SDL_Window* const window = renderer.GetWindowInternal();
+        SDL_Window* const window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
         bool emptyFrameResizeAccepted = true;
         try
         {

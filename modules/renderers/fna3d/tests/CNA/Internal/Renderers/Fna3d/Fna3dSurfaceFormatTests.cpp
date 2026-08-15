@@ -18,6 +18,8 @@
 // the under-read that corrupts the last block row.
 #include <gtest/gtest.h>
 
+#include <limits>
+
 #if defined(CNA_RENDERER_FNA3D)
 #include "CNA/Internal/Renderers/Fna3d/Fna3dSurfaceFormats.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
@@ -109,6 +111,49 @@ TEST(Fna3dSurfaceFormatTests, NonPositiveExtentsCountZeroRatherThanNegative)
     EXPECT_EQ(FormatRegionByteCount(Ordinal(SurfaceFormat::Dxt5), 8, 0), 0);
     EXPECT_EQ(FormatRegionByteCount(Ordinal(SurfaceFormat::Dxt5), -4, -4), 0);
     EXPECT_EQ(FormatRowByteCount(Ordinal(SurfaceFormat::Dxt5), 0), 0);
+}
+
+TEST(Fna3dSurfaceFormatTests, ByteArithmeticRejectsSignedIntOverflow)
+{
+    // FNA3D's transfer-length parameter is signed int32. A wrapped positive count would make a
+    // native upload/readback smaller than the region it is asked to cover, so helpers return zero
+    // rather than wrapping.
+    EXPECT_EQ(FormatRowByteCount(Ordinal(SurfaceFormat::Color), std::numeric_limits<int>::max()),
+              0);
+    EXPECT_EQ(FormatRegionByteCount(Ordinal(SurfaceFormat::Color), 1 << 30, 4), 0);
+    EXPECT_EQ(FormatRegionByteCount(Ordinal(SurfaceFormat::Dxt5),
+                                    std::numeric_limits<int>::max(), 4),
+              0);
+}
+
+TEST(Fna3dSurfaceFormatTests, TransferRegionsMustFitTheirMipExtent)
+{
+    EXPECT_TRUE(IsValidTextureRegion2D(8, 4, 0, 0, 8, 4));
+    EXPECT_TRUE(IsValidTextureRegion2D(8, 4, 7, 3, 1, 1));
+    EXPECT_FALSE(IsValidTextureRegion2D(8, 4, -1, 0, 1, 1));
+    EXPECT_FALSE(IsValidTextureRegion2D(8, 4, 7, 3, 2, 1));
+    EXPECT_FALSE(IsValidTextureRegion2D(8, 4, 0, 4, 1, 1));
+    EXPECT_FALSE(IsValidTextureRegion2D(8, 4, 0, 0, 0, 1));
+
+    EXPECT_TRUE(IsValidTextureRegion3D(8, 4, 2, 7, 3, 1, 1, 1, 1));
+    EXPECT_FALSE(IsValidTextureRegion3D(8, 4, 2, 0, 0, -1, 1, 1, 1));
+    EXPECT_FALSE(IsValidTextureRegion3D(8, 4, 2, 0, 0, 1, 1, 1, 2));
+}
+
+TEST(Fna3dSurfaceFormatTests, CompressedTransferRegionsRespectBlockBoundaries)
+{
+    const int color = Ordinal(SurfaceFormat::Color);
+    const int dxt5 = Ordinal(SurfaceFormat::Dxt5);
+
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(color, 10, 10, 1, 1, 3, 3));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 4, 4));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 4, 4, 6, 6));
+    EXPECT_TRUE(IsValidTextureRegion2DForFormat(dxt5, 6, 6, 0, 0, 6, 6));
+
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 1, 0, 4, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 2, 4, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 6, 4));
+    EXPECT_FALSE(IsValidTextureRegion2DForFormat(dxt5, 10, 10, 0, 0, 4, 6));
 }
 
 #endif // CNA_RENDERER_FNA3D

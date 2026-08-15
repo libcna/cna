@@ -31,15 +31,20 @@ on:
       - 'cmake/SharpRuntimeConsumption.cmake'
       - 'modules/CMakeLists.txt'
       - 'modules/runtime/CMakeLists.txt'
-      - 'modules/core/include/CNA/Platform.hpp'
-      - 'modules/core/include/CNA/Entrypoint.hpp'
+      - 'modules/core/include/CNA/TargetPlatform.hpp'
+      - 'modules/platform/include/CNA/Platform/Entrypoint.hpp'
+      - 'modules/platform/include/CNA/Platform/IPlatformWindow.hpp'
+      - 'modules/platform/include/CNA/Platform/PlatformEvent.hpp'
+      - 'modules/platform/CMakeLists.txt'
+      - 'modules/platform/src/Sdl3/Sdl3AppleOrientation.mm'
+      - 'modules/platform/src/Sdl3/Sdl3Window.cpp'
+      - 'modules/platform/src/Sdl3/Sdl3Platform.cpp'
+      - 'modules/platform/src/Sdl3/Sdl3EventMapper.cpp'
       - 'modules/core/CMakeLists.txt'
       - 'modules/core/src/DesktopOS.cpp'
-      - 'modules/core/tests/CNA/PlatformTests.cpp'
+      - 'modules/core/tests/CNA/TargetPlatformTests.cpp'
       - 'modules/runtime/src/Game.cpp'
       - 'modules/runtime/src/GameWindow.cpp'
-      - 'modules/runtime/src/AppleOrientation.mm'
-      - 'modules/runtime/include/CNA/Internal/AppleOrientation.hpp'
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameWindowTests.cpp'
       - 'modules/runtime/tests/Microsoft/Xna/Framework/GameTests.cpp'
       - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
@@ -128,7 +133,7 @@ jobs:
           SDL_AUDIODRIVER: dummy
         run: >
           ./cmake-build-macos/CnaTests
-          --gtest_filter='PlatformTest.*:GameWindowTest.*:GameTest.MobileLifecycleEventsSuspendResumeAndTerminateTheLoop:Storage*:*DesktopOS*'
+          --gtest_filter='TargetPlatformTest.*:GameWindowTest.*:GameTest.MobileLifecycleEventsSuspendResumeAndTerminateTheLoop:Storage*:*DesktopOS*'
 
       # Exercise the opt-in shipping layout in a separate build tree so the CnaTests binary above
       # remains a directly invokable executable. The persistent SDL install and ccache are shared,

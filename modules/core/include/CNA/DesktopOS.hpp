@@ -26,7 +26,7 @@ namespace CNA
      * @brief Returns the current desktop operating system.
      *
      * This function may only be called when the current platform is
-     * Platform::Desktop. If the current platform is not Desktop,
+     * TargetPlatform::Desktop. If the current platform is not Desktop,
      * an exception is thrown.
      *
      * @return The current DesktopOS value.

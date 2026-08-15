@@ -32,8 +32,12 @@ namespace Microsoft::Xna::Framework::Input
         static void setWindowHandleProperty(std::uintptr_t value);
 
         /**
-         * @brief Gets mouse state information including position and button presses.
-         * @return The current mouse state.
+         * @brief Gets mouse state captured at the current frame boundary.
+         *
+         * Relative displacement is the one consume-on-read field: a second call with no new
+         * motion reports zero x/y, matching FNA.
+         *
+         * @return The most recently published platform mouse state.
          */
         static MouseState GetState();
 
@@ -98,14 +102,23 @@ namespace Microsoft::Xna::Framework::Input
         CNAEXT static void INTERNAL_onClicked(int button);
 
         /**
-         * @brief Test-only: resets Mouse's process-wide static state (window handle, ClickedEXT).
+         * @brief Internal: publishes a platform window without requiring graphics to interpret it.
+         * @param handle The legacy integer token exposed through WindowHandle.
+         * @param windowId The stable platform event id used by renderer and mouse services.
+         */
+        CNAEXT static void INTERNAL_setWindow(std::uintptr_t handle, std::uint32_t windowId);
+
+        /**
+         * @brief Test-only: resets Mouse's process-wide static state (window ids, ClickedEXT).
          *
-         * Does not touch the SDL cursor or InputManager mouse state (reset those separately).
+         * Does not touch the cursor or platform mouse snapshot (reset those separately).
          */
         CNAEXT static void ResetForTests();
 
     private:
         /** @brief Backing store for the WindowHandle property. */
         static std::uintptr_t windowHandle_;
+        /** @brief Platform event id corresponding to WindowHandle, or zero. */
+        static std::uint32_t windowId_;
     };
 }

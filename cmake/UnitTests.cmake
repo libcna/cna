@@ -42,6 +42,78 @@ if(CNA_BUILD_TESTS)
     # as the Glide ABI programs just above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
 
+    # plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
+    # program with its own main(), for the same reason as the two entries above. Swept into
+    # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
+    # links, runs the smoke app and exits without running a single test.
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/apple/.*\\.cpp$")
+
+    # plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
+    # CNA::Platform::Sdl3, which is compiled only when CNA_PLATFORM=SDL3. Under any other
+    # platform selection they would reference symbols that do not exist and fail to link -- found
+    # by actually configuring CNA_PLATFORM=HEADLESS rather than by inspection. The
+    # implementation-neutral tests (the contract, and the conformance suite parameterised over
+    # every available implementation) always build.
+    if(NOT CNA_PLATFORM STREQUAL "SDL3")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl3.*\\.cpp$")
+    endif()
+    # SDL2 implementation tests include SDL2's real event structure and are meaningful only when
+    # the SDL2 backend was selected. Contract tests above remain parameterised over all builds.
+    if(NOT CNA_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Sdl2.*\\.cpp$")
+    endif()
+    # The SDL2 native-queue mapper test must not share CnaTests with SDL3-native fixture tests:
+    # SDL deliberately makes both imported targets declare mutually exclusive SDL_VERSION
+    # interface requirements. It receives its own small executable below.
+    if(CNA_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/platform/tests/.*/Sdl2PlatformTests\\.cpp$")
+    endif()
+
+    # plan_platform.md PLAT-94: like the general platform implementation above, the native
+    # SDL3 audio test directly exercises a private implementation compiled only for its selected
+    # audio platform. Contract/selection tests remain implementation-neutral.
+    if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl3AudioDeviceTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl3AudioRecordingDeviceTests\\.cpp$")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/AudioMixerPlatformTests\\.cpp$")
+        # These suites exercise the SDL3_mixer implementation itself, not the portable XNA
+        # facade.  The implementation is purposefully absent from SDL2/NULL link graphs.
+        foreach(_cna_sdl3_mixer_test IN ITEMS
+                AudioMixerTests
+                CueTests
+                DynamicSoundEffectInstanceTests
+                OfflineAudioRendererTests
+                SoundBankTests
+                SoundEffectInstanceTests
+                SoundEffectTests)
+            list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+                ".*/modules/audio/tests/.*/${_cna_sdl3_mixer_test}\\.cpp$")
+        endforeach()
+    endif()
+    if(NOT CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
+    else()
+        # SDL2 and SDL3 deliberately publish incompatible interface requirements.  The general
+        # CnaTests binary retains SDL3-native renderer fixtures, so keep the native SDL2 audio
+        # fixture in its own executable just like the SDL2 platform-event fixture above.
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX
+            ".*/modules/audio/tests/.*/Sdl2AudioDeviceTests\\.cpp$")
+    endif()
+
+    # plan_platform.md PLAT-130: TerminalPlatform is built on termios and pseudo-terminals, so
+    # both it and its tests are POSIX-only -- excluded on Windows for the same reason the
+    # implementation directory is (modules/platform/CMakeLists.txt), not gated line-by-line.
+    # Everywhere else they always build, whatever CNA_PLATFORM says, because the implementation
+    # always does.
+    if(WIN32)
+        list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/modules/platform/tests/.*/Terminal.*\\.cpp$")
+    endif()
+
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
@@ -196,6 +268,32 @@ if(CNA_BUILD_TESTS)
             SDL3::SDL3
     )
 
+    if(CNA_PLATFORM STREQUAL "SDL2")
+        add_executable(cna_platform_sdl2_tests
+            modules/platform/tests/CNA/Platform/Sdl2PlatformTests.cpp)
+        target_link_libraries(cna_platform_sdl2_tests PRIVATE
+            cna_platform
+            SDL2::SDL2
+            gtest_main)
+        add_test(NAME CnaSdl2PlatformTests COMMAND cna_platform_sdl2_tests)
+        set_tests_properties(CnaSdl2PlatformTests PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    endif()
+
+    if(CNA_AUDIO_PLATFORM STREQUAL "SDL2")
+        add_executable(cna_audio_sdl2_tests
+            modules/audio/tests/CNA/Audio/Platform/Sdl2AudioDeviceTests.cpp)
+        target_include_directories(cna_audio_sdl2_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src)
+        target_link_libraries(cna_audio_sdl2_tests PRIVATE
+            cna_audio
+            SDL2::SDL2
+            gtest_main)
+        add_test(NAME CnaSdl2AudioDeviceTests COMMAND cna_audio_sdl2_tests)
+        set_tests_properties(CnaSdl2AudioDeviceTests PROPERTIES
+            ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+    endif()
+
     # The metal and glide policy suites deliberately compile on every renderer (see their own
     # header comments); their policy headers ride the unconditional header-interface targets
     # those renderer modules always define.
@@ -207,6 +305,18 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(CnaTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+            # plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
+            # scaffolding (PlatformTestDecorator.hpp) that tests in other modules include to drive
+            # CNA against a controlled platform. It replaces the eight per-subsystem injectable
+            # backend seams modules/input used to carry for the same purpose, so it has to be
+            # reachable from outside its own module. Deliberately NOT in any module's public
+            # include tree -- a production build has no business including scaffolding.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/tests
+            # PLAT-66: shared SDL-free coordinate-transform renderer used by the input bridge and
+            # public Mouse tests. Test-only for the same reason as the platform fixtures above.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/input/tests
+            # PLAT-94: implementation test only; Sdl3AudioDevice remains out of public headers.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )
 
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
@@ -279,6 +389,24 @@ if(CNA_BUILD_TESTS)
         add_dependencies(CnaTests cna_devices_shutdown_ordering_harness)
         target_compile_definitions(CnaTests PRIVATE
             CNA_DEVICES_SHUTDOWN_ORDERING_HARNESS_PATH="$<TARGET_FILE:cna_devices_shutdown_ordering_harness>"
+        )
+    endif()
+
+    if(TARGET cna_platform_terminal_restoration_harness)
+        # plan_platform.md PLAT-131: same reasoning as cna_net_two_process_harness above, and more
+        # sharply -- four of the five exit paths TerminalSession must restore on destroy the
+        # process, so they cannot be asserted inside this binary at all.
+        add_dependencies(CnaTests cna_platform_terminal_restoration_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_PLATFORM_TERMINAL_RESTORATION_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_restoration_harness>"
+        )
+    endif()
+
+    if(TARGET cna_platform_terminal_resize_harness)
+        # plan_platform.md PLAT-136: see cna_platform_terminal_restoration_harness above.
+        add_dependencies(CnaTests cna_platform_terminal_resize_harness)
+        target_compile_definitions(CnaTests PRIVATE
+            CNA_PLATFORM_TERMINAL_RESIZE_HARNESS_PATH="$<TARGET_FILE:cna_platform_terminal_resize_harness>"
         )
     endif()
 
@@ -402,7 +530,7 @@ if(CNA_BUILD_TESTS)
     # CI select the subset via `ctest -L input` (see docs/input-build-and-test.md). When you add an input
     # test suite whose name matches none of these tokens, extend this one string.
     set(CNA_INPUT_TEST_FILTER
-        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*")
+        "*Keyboard*:*Mouse*:*GamePad*:*Touch*:*Gesture*:*TextInput*:*SdlInputBridge*:*PlatformInputBridge*:*InputResetAllForTests*:*FakeGamepad*:*SdlGamepadSubsystemInit*:*ButtonState*:*KeyState*:*Buttons*:*PublicApiInput*:*CnaInput*:*Joystick*:*Haptic*")
     # INPUT-BUILD-009: `--gtest_shuffle --gtest_repeat=5` is the standardized order-independence gate.
     # The input state is a process-wide singleton (InputManager / GestureDetector / MouseCursor stock
     # cursors persist for the whole binary), so a static-state leak would reintroduce order dependence;
@@ -413,6 +541,71 @@ if(CNA_BUILD_TESTS)
     # driver has null cursors).
     cna_register_renderer_test(NAME CnaInputTests COMMAND CnaTests --gtest_filter=${CNA_INPUT_TEST_FILTER} --gtest_shuffle --gtest_repeat=5
         LABELS "input" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
+    # plan_platform.md PLAT-91: audio has its own platform contract and selection axis rather
+    # than inheriting from CNA::Platform. Keep its native-SDK-free/lifecycle/buffer-granularity
+    # contract visible as a dedicated CTest; the shared conformance suite runs every implementation
+    # compiled into the selected build (SDL3 + NULL by default, NULL in the SDL-free build).
+    cna_register_renderer_test(NAME CnaAudioPlatformTests
+        COMMAND CnaTests --gtest_filter=Audio*DeviceContractTests.*:*AudioDeviceConformanceTests.*:NullAudioDeviceTests.*:AudioPlatformSelectionCompileTests.*:Sdl2AudioDeviceTests.*:Sdl3AudioDeviceTests.*:Sdl3AudioRecordingDeviceTests.*:AudioMixerPlatformContractTests.* --gtest_shuffle --gtest_repeat=3
+        LABELS "audio;platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
+
+    # plan_platform.md PLAT-93: test the cache default, every implemented value, every reserved
+    # future identifier, and an unknown value without spawning six full nested project configs.
+    # The selection file is intentionally script-mode-safe for exactly this validation path.
+    foreach(_cna_audio_selection_case IN ITEMS DEFAULT SDL3 SDL2 NULL OPENAL WASAPI ALSA BOGUS)
+        if(_cna_audio_selection_case STREQUAL "DEFAULT" OR
+           _cna_audio_selection_case STREQUAL "SDL3")
+            set(_cna_audio_selection_expected "Using SDL3 audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "SDL2")
+            set(_cna_audio_selection_expected "Using SDL2 audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "NULL")
+            set(_cna_audio_selection_expected "Using NULL audio platform implementation")
+        elseif(_cna_audio_selection_case STREQUAL "BOGUS")
+            set(_cna_audio_selection_expected "not a known audio platform")
+        else()
+            # CMake line-wraps the full diagnostic between "NOT" and "implemented" depending
+            # on terminal width; this stable prefix still proves the reserved-value branch ran.
+            set(_cna_audio_selection_expected "is a reserved identifier")
+        endif()
+        add_test(NAME CnaAudioPlatformSelection_${_cna_audio_selection_case}
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_AUDIO_SELECTION_FILE=${CMAKE_SOURCE_DIR}/cmake/AudioPlatformSelection.cmake
+                -DCNA_AUDIO_SELECTION_CASE=${_cna_audio_selection_case}
+                -DCNA_AUDIO_SELECTION_EXPECTED=${_cna_audio_selection_expected}
+                -P ${CMAKE_SOURCE_DIR}/cmake/Tests/AudioPlatformSelectionCase.cmake)
+        set_tests_properties(CnaAudioPlatformSelection_${_cna_audio_selection_case}
+            PROPERTIES LABELS "audio;platform")
+    endforeach()
+
+    add_test(NAME CnaSdl2OnlyRendererGate
+        COMMAND ${CMAKE_COMMAND}
+            -DCNA_SDL2_ONLY_GUARD_FILE=${CMAKE_SOURCE_DIR}/cmake/Sdl2OnlyConfiguration.cmake
+            -P ${CMAKE_SOURCE_DIR}/cmake/Tests/Sdl2OnlyRendererGate.cmake)
+    set_tests_properties(CnaSdl2OnlyRendererGate PROPERTIES LABELS "platform;configuration")
+
+    # plan_platform.md PLAT-30/31/32: the Sdl3Window tests need a live video subsystem, and they
+    # get one from SDL's dummy driver rather than a display server. That only works in a process
+    # where nothing has already committed SDL to a driver -- inside the shared CnaTests binary
+    # another suite usually has, so these skip there and would otherwise contribute no coverage
+    # at all. Running them as their own ctest, in their own process, is what makes them real.
+    # The window half of the conformance suite (PLAT-116) and GraphicsDevice's platform-window
+    # ownership regression (PLAT-62) belong here rather than with the rest
+    # of it: its SDL3 parameterisation skips outright without a video subsystem, so running it in
+    # the display-independent suite would have exercised only the implementations that need no
+    # display. It ran nowhere at all until PLAT-130 -- the other suite's *PlatformConformance*
+    # token does not match the string "PlatformWindowConformance".
+    cna_register_renderer_test(NAME CnaPlatformWindowTests COMMAND CnaTests --gtest_filter=Sdl3WindowTest.*:Sdl3DisplayTest.*:Sdl3GraphicsServiceTest.*:Sdl3PresenterTest.*:Sdl3InputTest.TextInputLifecycleAndAreaReachALivePlatformWindow:DisplayInfoTests.*:GraphicsDevicePlatformWindowTests.*:GameWindowPlatformTest.*:*PlatformWindowConformance*
+        LABELS "platform" ENVIRONMENT "SDL_VIDEODRIVER=dummy;SDL_AUDIODRIVER=dummy")
+
+    # The rest of the platform contract is display-independent by construction, so it runs
+    # unconditionally. Shuffled and repeated for the same reason the input suite is: SDL's
+    # subsystem refcount is process-global, and an acquire/release imbalance would show up as
+    # order dependence rather than as a direct failure.
+    cna_register_renderer_test(NAME CnaPlatformTests
+        COMMAND CnaTests --gtest_filter=NativeWindow*:Platform*:IPlatform*:ServiceContract*:InputSnapshot*:SystemService*:WindowDescription*:GlContext*:VulkanSurface*:ContractIsSdlFree*:Sdl3PlatformTest.*:Sdl3EventMapperTests.*:Sdl3InputTest.*:Sdl3ServiceTest.*:*PlatformConformance*:HeadlessPlatform*:TerminalPlatformTest.*:TerminalCapabilityProbeTests.*:TerminalKeyboardTest.*:TerminalMouseTest.*:TerminalSessionTest.*:TerminalRestoration.*:TerminalFrameGridTest.*:TerminalAnsiWriterTest.*:TerminalPresenter.*:TerminalResize*:TerminalFrameBudgetTest.*:TerminalBudgetPresenter.*:CurrentPlatformTest.*
+                --gtest_shuffle --gtest_repeat=3
+        LABELS "platform" ENVIRONMENT "SDL_AUDIODRIVER=dummy")
 
     if(MINGW)
         # Statically link MinGW runtime into the test binary too, so it can

@@ -41,7 +41,7 @@ TEST_F(NativeDiagnosticSinkTest, RecordIncrementsTheCounter)
 {
     NativeDiagnosticRecord record;
     record.Backend = "SDL";
-    record.Operation = "SDL_PlayHapticRumble";
+    record.Operation = "PlayHapticRumble";
     EXPECT_NO_THROW(NativeDiagnosticSink::Record(record));
     EXPECT_EQ(NativeDiagnosticSink::GetRecordCountForTesting(), 1u);
 
@@ -99,13 +99,13 @@ TEST_F(NativeDiagnosticSinkTest, CallbackReceivesTheExactRecord)
 
     NativeDiagnosticRecord record;
     record.Backend = "SDL";
-    record.Operation = "SDL_GetHaptics";
+    record.Operation = "EnumerateHaptics";
     record.NativeCode = 7;
     NativeDiagnosticSink::Record(record);
 
     ASSERT_TRUE(invoked);
     EXPECT_EQ(observed.Backend, "SDL");
-    EXPECT_EQ(observed.Operation, "SDL_GetHaptics");
+    EXPECT_EQ(observed.Operation, "EnumerateHaptics");
     EXPECT_EQ(observed.NativeCode, 7);
 }
 

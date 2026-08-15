@@ -68,7 +68,7 @@ protected:
         auto& dev = getGraphicsDeviceProperty();
         auto& renderer = static_cast<DirectX6Renderer&>(dev.GetRenderer());
 
-        SDL_Window* window = renderer.GetWindowInternal();
+        SDL_Window* window = reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty());
         int physW = 0, physH = 0;
         SDL_GetWindowSize(window, &physW, &physH);
         std::printf("Real physical window size: %dx%d (logical: %dx%d)\n", physW, physH, kLogicalSize, kLogicalSize);

@@ -1,9 +1,15 @@
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1OcclusionQueryRenderer.hpp"
-#include <SDL3/SDL.h>
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #if defined(_WIN32)
 #include <windows.h>
 #endif
-#include <SDL3/SDL_opengl.h>
+#if defined(__APPLE__)
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
 #include <stdexcept>
 
 namespace CNA::Internal::Renderers::OpenGL1
@@ -20,7 +26,7 @@ namespace
 
 bool TryLoadOpenGL1OcclusionQueryFunctions()
 {
-    auto load = [](const char* name) { return SDL_GL_GetProcAddress(name); };
+    auto load = [](const char* name) { return LoadPlatformGlProcAddress(name); };
     glGenQueries_ = reinterpret_cast<PFNGLGENQUERIESPROC>(load("glGenQueries"));
     glDeleteQueries_ = reinterpret_cast<PFNGLDELETEQUERIESPROC>(load("glDeleteQueries"));
     glBeginQuery_ = reinterpret_cast<PFNGLBEGINQUERYPROC>(load("glBeginQuery"));

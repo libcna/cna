@@ -30,7 +30,7 @@ using Microsoft::Xna::Framework::Vector3;
 using System::TimeSpan;
 
 // NOTE: Unlike Compass, the Gyroscope sensor can genuinely be supported on
-// platforms/devices that expose SDL_SENSOR_GYRO. These tests branch on the
+// platforms/devices that expose a gyroscope. These tests branch on the
 // live getIsSupportedProperty() result so they pass both on typical headless
 // CI/dev machines (no gyroscope hardware) and on real hardware.
 
@@ -41,7 +41,7 @@ TEST(GyroscopeTests, GetIsSupportedPropertyDoesNotCrash)
 }
 
 // Task P5-1: mirrors AccelerometerTests.RepeatedSupportProbingDoesNotChangeSubsequentBehavior
-// — see that test for the full rationale (a leaked SDL_INIT_SENSOR
+// — see that test for the full rationale (a leaked sensor-subsystem
 // ref-count from getIsSupportedProperty() can't be asserted on directly,
 // so this instead proves repeated probing doesn't change subsequent
 // behavior).
@@ -458,7 +458,7 @@ TEST(GyroscopeTests, GetCurrentValuePropertyDoesNotThrowWhenSupported)
 
 // Task P3-6: CurrentValueChanged is the primary sensor-update event on
 // Gyroscope. Actually observing it fire needs a real gyroscope delivering
-// an SDL_EVENT_SENSOR_UPDATE, which this headless environment cannot
+// a platform sensor-update event, which this headless environment cannot
 // produce. This test confirms subscribing doesn't crash and Start()/Stop()
 // still behave correctly with a subscriber attached.
 TEST(GyroscopeTests, CurrentValueChangedSubscriptionDoesNotThrow)
@@ -646,7 +646,7 @@ TEST(GyroscopeTests, GetCurrentValuePropertyStillThrowsAfterSyntheticUpdateWhenN
 
 // Task P4-7: Timestamp is now the real wall-clock time of the call
 // (System::DateTimeOffset::getUtcNowProperty()), not a bogus near-year-1
-// value derived from SDL_GetTicksNS(). Asserts "close to now" with a
+// value derived from a native monotonic tick count. Asserts "close to now" with a
 // generous tolerance rather than an exact value, since wall-clock time is
 // inherently non-deterministic between the call and the assertion.
 TEST(GyroscopeTests, CurrentValueChangedReceivesWallClockTimestamp)
@@ -973,7 +973,7 @@ TEST(GyroscopeTests, ThrowingHandlerInBatchDispatchDoesNotPreventNextInstanceFro
 // Task SDLCORE-005 (2026-07-17, external audit `audit_devices_2026-07-17.md`):
 // see AccelerometerTests's identical test for the full rationale — this
 // container never has a real SDL sensor open, so this only proves
-// IsSensorConnectedForTesting()'s plumbing/logic (reaches SDL_GetSensors()
+// IsSensorConnectedForTesting()'s plumbing/logic (reaches platform enumeration
 // and correctly reports "not found"), not a genuine hardware
 // remove/re-add/default-device-change scenario.
 TEST(GyroscopeTests, IsSensorConnectedForTestingReportsNotConnectedWhenNoRealSensorIsOpen)

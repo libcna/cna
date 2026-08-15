@@ -6,11 +6,11 @@ target_include_directories(cna_renderer_metal_headers INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 if(CNA_GRAPHICS_RENDERER STREQUAL "METAL")
-    # Metal owns the renderer directly; SDL provides only the native macOS window and
-    # CAMetalLayer. The Objective-C++ units join the renderer archive alongside the C++ ones.
+    # Metal owns the renderer directly and attaches its CAMetalLayer to the platform-provided
+    # Cocoa window. The Objective-C++ units join the renderer archive alongside the C++ ones.
     file(GLOB CNA_METAL_OBJCXX_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.mm")
     cna_add_renderer(${CNA_METAL_OBJCXX_SOURCES})
-    target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 "-framework Metal" "-framework QuartzCore" "-framework Foundation")
+    target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework Metal" "-framework QuartzCore" "-framework Foundation")
 endif()
 
 # Module-owned examples (module-examples campaign): the family's example/test

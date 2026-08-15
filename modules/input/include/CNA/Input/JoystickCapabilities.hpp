@@ -32,10 +32,10 @@ namespace CNA::Input
         /** @brief The device's physical category. */
         JoystickTypeEXT type = JoystickTypeEXT::Unknown;
 
-        /** @brief The device's human-readable name, or empty if SDL reports none. */
+        /** @brief The device's human-readable name, or empty if the platform reports none. */
         std::string name;
 
-        /** @brief The device's SDL GUID, formatted as a lowercase hex string (empty if disconnected). */
+        /** @brief The device's lowercase hexadecimal hardware GUID (empty if disconnected). */
         std::string guid;
 
         /** @brief The device's battery/charge state (`PowerStateEXT::Unknown` if disconnected). */

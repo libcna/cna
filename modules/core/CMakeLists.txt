@@ -9,15 +9,7 @@ target_include_directories(cna_core_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 file(GLOB CNA_CORE_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 cna_add_module(cna_core Core ${CNA_CORE_SOURCES})
 cna_link_sharp_runtime(cna_core PUBLIC Core.Base)
-# Logger.cpp uses SDL internally, but SDL is also part of the public compile surface:
-# CNA/Entrypoint.hpp includes SDL_main.h on SDL/mobile targets. Consumers linking CNA::Core or the
-# CNA umbrella must therefore inherit SDL's include directory without adding a hidden extra
-# dependency themselves.
-target_link_libraries(cna_core PUBLIC SDL3::SDL3)
+# No SDL: plan_platform.md PLAT-53 moved Logger onto its own sink and PLAT-54 moved
+# Entrypoint.hpp into the platform module, so nothing under modules/core includes an SDL header
+# any more. This is the first module to come off SDL entirely.
 
-# Some SDL builds package the platform-owned main() implementation as a separate target. Publish
-# it with the header that renames the game's main() so a downstream iOS/Android executable cannot
-# compile successfully and then fail its final link on a missing SDL entry point.
-if(TARGET SDL3::SDL3main)
-    target_link_libraries(cna_core PUBLIC SDL3::SDL3main)
-endif()

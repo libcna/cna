@@ -4,8 +4,7 @@
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
 #include "CNA/Internal/Renderers/Common/NoOp3DResources.hpp"
 
-#include <SDL3/SDL.h>
-
+#include <cmath>
 #include <stdexcept>
 
 #if defined(__EMSCRIPTEN__)
@@ -17,7 +16,7 @@
 // Module['cnaMainCtx']. Module['cnaCurrentCtx'] is "whichever context Clear()/Draw() currently
 // target" -- the main canvas by default, or a bound CanvasRenderTargetRenderer's own off-screen
 // context (see CanvasRenderTargetRenderer.cpp's Bind/UnbindAsRenderTarget, Phase C3), mirroring
-// SDL_Renderer's SetRenderTarget2D model of "operate on whatever's currently bound". EM_JS-declared
+// the retained target model of "operate on whatever is currently bound". EM_JS-declared
 // functions are ordinary top-level JS functions in the generated glue code, so every Canvas2D EM_JS
 // function in this renderer (across every .cpp -- textures/render targets included) can call this
 // one directly by name.
@@ -96,20 +95,22 @@ EM_JS(void, CNA_Canvas2D_UnbindRenderTarget, (), {
 
 namespace CNA::Internal::Renderers::Canvas
 {
-    CanvasRenderer::CanvasRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode mode)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    CanvasRenderer::CanvasRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("CanvasRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        if (surface_.windowId == 0)
+            throw std::runtime_error("CanvasRenderer initialized without a platform window.");
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
     }
 
     CanvasRenderer::~CanvasRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.windowId);
     }
 
     void CanvasRenderer::Clear(float r, float g, float b, float a)
@@ -127,15 +128,21 @@ namespace CNA::Internal::Renderers::Canvas
         // automatically on the next paint tick; there is nothing for CNA to flush or swap.
     }
 
+    void CanvasRenderer::getWindowSize(int& width, int& height) const
+    {
+        width = static_cast<int>(std::lround(surface_.drawableSize.width / surface_.displayScale));
+        height = static_cast<int>(std::lround(surface_.drawableSize.height / surface_.displayScale));
+    }
+
     void CanvasRenderer::getLogicalSize(int& width, int& height) const
     {
         if (virtualHeight_ <= 0)
         {
-            SDL_GetWindowSize(window_, &width, &height);
+            getWindowSize(width, height);
             return;
         }
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         height = virtualHeight_;
         if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
             width = static_cast<int>(static_cast<double>(physW) * virtualHeight_ / physH + 0.5);
@@ -159,12 +166,21 @@ namespace CNA::Internal::Renderers::Canvas
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
     }
 
+    void CanvasRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surface_.windowId)
+            throw std::runtime_error("CanvasRenderer surface window id changed.");
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+    }
+
     bool CanvasRenderer::TransformWindowToLogical(float windowX, float windowY,
                                                           float& logX, float& logY) const
     {
         if (virtualHeight_ <= 0) return false;
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         if (physH <= 0) return false;
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
         logX = windowX * scale;
@@ -180,7 +196,7 @@ namespace CNA::Internal::Renderers::Canvas
         // FixedHeightDynamicWidth presentation mode (no letterbox bars to account for).
         if (virtualHeight_ <= 0) return false;
         int physW, physH;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        getWindowSize(physW, physH);
         if (physH <= 0) return false;
         const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
         windowX = logX * invScale;
@@ -195,13 +211,13 @@ namespace CNA::Internal::Renderers::Canvas
 
     std::unique_ptr<ISpriteBatchRenderer> CanvasRenderer::CreateSpriteBatch()
     {
-        return std::make_unique<CanvasSpriteBatchRenderer>();
+        return std::make_unique<CanvasSpriteBatchRenderer>(state_);
     }
 
     std::unique_ptr<IRenderTargetRenderer> CanvasRenderer::CreateRenderTarget2D(
         int w, int h, int /*depthFormat*/, bool /*preserveContents*/, bool /*mipMap*/, int /*multiSampleCount*/)
     {
-        // depthFormat/mipMap/multiSampleCount are all ignored, same as SDL_RENDERER's own
+        // depthFormat/mipMap/multiSampleCount are all ignored, same as the native 2D renderer's
         // CreateRenderTarget2D: Canvas2D has no depth buffer (CANVAS-23), no native mip chain
         // (CANVAS-21), and no MSAA control on its 2D blit pipeline.
         return std::make_unique<CanvasRenderTargetRenderer>(w, h);
@@ -249,8 +265,8 @@ namespace CNA::Internal::Renderers::Canvas
                                               int colorDstBlend, int alphaDstBlend,
                                               int colorBlendFunc, int alphaBlendFunc)
     {
-        // Raw Blend/BlendFunction enum values, same table SdlRenderer::ToSdlBlendFactor/
-        // ToSdlBlendOperation use: One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5; Add=0.
+        // Raw Blend/BlendFunction enum values, matching the native renderer table:
+        // One=0, Zero=1, SourceAlpha=4, InverseSourceAlpha=5; Add=0.
         const bool isAdd = colorBlendFunc == 0 && alphaBlendFunc == 0;
         const bool symmetric = colorSrcBlend == alphaSrcBlend && colorDstBlend == alphaDstBlend;
 
@@ -264,7 +280,7 @@ namespace CNA::Internal::Renderers::Canvas
             // own alpha (real hardware's blend unit just adds it in as-is). Canvas2D's
             // 'source-over' always treats drawImage/fillStyle input as STRAIGHT alpha and
             // premultiplies it internally before compositing -- so genuinely premultiplied source
-            // data (SDL_RENDERER's own Task 697 pixel test constructs exactly this) would get
+            // data (the native renderer's Task 697 pixel test constructs exactly this) would get
             // multiplied by its own alpha a SECOND time, darkening semi-transparent regions.
             // CanvasSpriteBatchRenderer.cpp's DrawSprite un-premultiplies (divides RGB by alpha)
             // before handing pixels to 'source-over' specifically when this op is active, so the
@@ -299,6 +315,7 @@ namespace CNA::Internal::Renderers::Canvas
         // (documented capability gap, not a silent drop).
         const CanvasCompositeOp op = BlendStateToCompositeOp(
             colorSrcBlend, alphaSrcBlend, colorDstBlend, alphaDstBlend, colorBlendFunc, alphaBlendFunc);
+        state_->compositeOp = op;
 #if defined(__EMSCRIPTEN__)
         CNA_Canvas2D_SetCompositeOp(static_cast<int>(op));
 #else
@@ -359,7 +376,7 @@ namespace CNA::Internal::Renderers::Canvas
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> CanvasRenderer::CreateRenderTargetCube(
-        int size, int, bool, int)
+        int size, int, bool, bool, int)
     {
         if (!ShouldStubUnsupported3DResource())
             return nullptr;
@@ -380,7 +397,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Canvas::CanvasRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        return std::make_unique<Canvas::CanvasRenderer>(args);
     }
 }

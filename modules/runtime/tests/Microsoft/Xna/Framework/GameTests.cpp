@@ -1,20 +1,24 @@
 // SPDX-License-Identifier: MS-PL
-// REMED-TEST-002: Game requires a live SDL window + graphics device, which is exactly what
-// GraphicsDeviceCapabilityTests.cpp's bare `GraphicsDevice gd;` already constructs successfully in
-// this same CnaTests binary -- Game::Game() unconditionally embeds one of those same GraphicsDevice
-// objects (GraphicsDevice_). Following GameWindowTests.cpp's own skip-when-unavailable precedent,
-// a cheap up-front SDL video probe still guards every TEST() here so a genuinely display-less
-// environment skips rather than fails deep inside Game's own renderer construction.
+// PLAT-56: Game requires the selected platform/renderer combination to construct its ordinary
+// hidden window. Probe that capability through IPlatform so this suite is unchanged across
+// platform selections and never names a backend API.
 
 #include <gtest/gtest.h>
-
-#include <SDL3/SDL.h>
 
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameTime.hpp"
 #include "Microsoft/Xna/Framework/GraphicsDeviceManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IGraphicsDeviceService.hpp"
 #include "System/EventArgs.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
+#include "RuntimePlatformTestSupport.hpp"
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 using namespace Microsoft::Xna::Framework;
 
@@ -30,28 +34,43 @@ namespace CNA::Internal
 
 namespace
 {
-    // Matches GameWindowTests.cpp's own probe-then-skip idiom.
-    bool VideoSubsystemAvailable()
+    // A real platform with only its event source scripted, so a test can state a lifecycle
+    // transition in CNA's own vocabulary instead of injecting a backend event.
+    class ScriptedEventPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
     {
-        if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    public:
+        explicit ScriptedEventPlatform(std::unique_ptr<CNA::Platform::IPlatform> inner)
+            : PlatformTestDecorator(std::move(inner))
         {
-            return false;
         }
-        SDL_Window* probe = SDL_CreateWindow("cna-gametests-probe", 64, 64, SDL_WINDOW_HIDDEN);
-        if (probe == nullptr)
+
+        void Queue(const std::vector<CNA::Platform::PlatformEvent>& events)
         {
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-            return false;
+            queued_.insert(queued_.end(), events.begin(), events.end());
         }
-        SDL_DestroyWindow(probe);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        return true;
-    }
+
+        void PollEvents(std::vector<CNA::Platform::PlatformEvent>& destination) override
+        {
+            destination.clear();
+            destination.insert(destination.end(), queued_.begin(), queued_.end());
+            queued_.clear();
+        }
+
+    private:
+        std::vector<CNA::Platform::PlatformEvent> queued_;
+    };
 
     // Records lifecycle call order/counts and exits after the first Draw().
     class LifecycleTestGame : public Game
     {
     public:
+        LifecycleTestGame() = default;
+
+        explicit LifecycleTestGame(std::unique_ptr<CNA::Platform::IPlatform> platform)
+            : Game(std::move(platform))
+        {
+        }
+
         int initializeCalls = 0;
         int loadContentCalls = 0;
         int updateCalls = 0;
@@ -111,9 +130,9 @@ namespace
 
 TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     LifecycleTestGame game;
@@ -129,34 +148,42 @@ TEST(GameTest, RunExecutesLifecycleInDocumentedOrder)
 
 TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a window in this environment.";
     }
 
-    LifecycleTestGame game;
+    // plan_apple.md APPLE-7. The lifecycle transitions are scripted as CNA platform events rather
+    // than injected into a backend queue: what is under test is the loop's reaction, and stating
+    // it this way keeps the case true for every platform implementation instead of only the one
+    // whose native constants it happened to name.
+    auto scripted = std::make_unique<ScriptedEventPlatform>(
+        CNA::Platform::PlatformFactory::Create());
+    ScriptedEventPlatform& events = *scripted;
+    LifecycleTestGame game(std::move(scripted));
     ASSERT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
 
-    SDL_Event event{};
-    event.type = SDL_EVENT_DID_ENTER_BACKGROUND;
-    ASSERT_TRUE(SDL_PushEvent(&event));
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+        CNA::Platform::AppLifecycleKind::WillEnterBackground}});
     CNA::Internal::GameTestPeer::PollEvents(game);
     EXPECT_TRUE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_FALSE(game.getIsActiveProperty());
 
-    event = {};
-    event.type = SDL_EVENT_WILL_ENTER_FOREGROUND;
-    ASSERT_TRUE(SDL_PushEvent(&event));
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+        CNA::Platform::AppLifecycleKind::DidEnterForeground}});
     CNA::Internal::GameTestPeer::PollEvents(game);
     EXPECT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_TRUE(game.getIsActiveProperty());
 
-    event = {};
-    event.type = SDL_EVENT_DID_ENTER_BACKGROUND;
-    ASSERT_TRUE(SDL_PushEvent(&event));
-    event = {};
-    event.type = SDL_EVENT_TERMINATING;
-    ASSERT_TRUE(SDL_PushEvent(&event));
+    // Termination is already decided by the operating system, so it must both end the loop and
+    // leave it able to reach OnExiting -- a process that stays parked in the suspended wait would
+    // be killed before shutting down.
+    events.Queue({CNA::Platform::AppLifecycleEvent{
+                      CNA::Platform::AppLifecycleKind::WillEnterBackground},
+                  CNA::Platform::AppLifecycleEvent{
+                      CNA::Platform::AppLifecycleKind::Terminating}});
     CNA::Internal::GameTestPeer::PollEvents(game);
-    EXPECT_TRUE(CNA::Internal::GameTestPeer::IsSuspended(game));
+    EXPECT_FALSE(CNA::Internal::GameTestPeer::IsSuspended(game));
     EXPECT_FALSE(game.RunApplication);
 }
 
@@ -169,9 +196,9 @@ TEST(GameTest, MobileLifecycleEventsSuspendResumeAndTerminateTheLoop)
 // Game-attached manager).
 TEST(GameTest, DisposingDeviceInvokesUnloadContent)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     LifecycleTestGame game;
@@ -189,9 +216,9 @@ TEST(GameTest, DisposingDeviceInvokesUnloadContent)
 // every call (FNA-faithful; Game.cs:296-304 does the same).
 TEST(GameTest, RepeatedDisposeDoesNotReinvokeUnloadContent)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     LifecycleTestGame game;
@@ -209,9 +236,9 @@ TEST(GameTest, RepeatedDisposeDoesNotReinvokeUnloadContent)
 // DeviceDisposing subscription or disposal should affect the next.
 TEST(GameTest, UnloadContentWorksAcrossRepeatedGameInstancesInOneProcess)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     for (int i = 0; i < 2; ++i)
@@ -235,9 +262,9 @@ TEST(GameTest, UnloadContentWorksAcrossRepeatedGameInstancesInOneProcess)
 // unreachable through the normal production path.
 TEST(GameTest, DeferredLoadContentFiresOnDeviceCreatedWhenServiceHasNoDeviceAtInitializeTime)
 {
-    if (!VideoSubsystemAvailable())
+    if (!CNA::Runtime::Testing::DefaultPlatformCanCreateWindow())
     {
-        GTEST_SKIP() << "No usable SDL video subsystem in this environment.";
+        GTEST_SKIP() << "The selected platform cannot create a test window in this environment.";
     }
 
     LifecycleTestGame game;

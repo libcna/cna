@@ -1,139 +1,51 @@
 // SPDX-License-Identifier: MS-PL
+//
+// PLAT-90: FileDialog is driven through the platform's dialog service, not an injected backend.
+//
+// A test must never reach a real file dialog. It launches an interactive native window -- a real
+// `zenity` process on Linux -- that waits for a human forever; that happened once during this
+// class's own development and left orphaned processes on a real desktop session. The protection
+// used to be a `SetBackendForTesting` hook on the public class. It is now a platform whose dialog
+// service records instead of showing, which is one seam serving every surface rather than a
+// test-only hook on shipped API.
+
 #ifdef CNA_DEVICES
 
 #include <gtest/gtest.h>
 
-#include <atomic>
 #include <memory>
-#include <thread>
+#include <string>
+#include <vector>
 
-#include "CNA/Devices/Detail/IFileDialogBackend.hpp"
 #include "CNA/Devices/FileDialog.hpp"
+#include "CNA/Platform/CannedDialogs.hpp"
 
 using CNA::Devices::FileDialog;
 using CNA::Devices::FileDialogFilter;
-using CNA::Devices::Detail::FileDialogResultCallback;
-using CNA::Devices::Detail::IFileDialogBackend;
+using CNA::Platform::Testing::CannedDialogPlatform;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
 
 namespace
 {
-    // Task DEVICES-CNA-008: the real backend (Detail::SdlFileDialogBackend) launches
-    // a genuine, interactive native OS dialog -- calling it from an automated test was
-    // tried during this class's own development and left orphaned `zenity` processes
-    // running on the development machine's real desktop session, waiting forever for
-    // a human that would never arrive. Every test below uses this fake instead, never
-    // the real backend, mirroring VibrateControllerTests.cpp's established
-    // FakeVibrateBackend/ScopedFakeVibrateBackend pattern.
-    class FakeFileDialogBackend final : public IFileDialogBackend
+    class FileDialogTest : public ::testing::Test
     {
-    public:
-        int ShowOpenFileCallCount = 0;
-        std::vector<FileDialogFilter> LastOpenFileFilters;
-        std::string LastOpenFileDefaultLocation;
-        bool LastOpenFileAllowMultiple = false;
+    protected:
+        CannedDialogPlatform platform;
+        std::unique_ptr<ScopedCurrentPlatform> installed;
 
-        int ShowSaveFileCallCount = 0;
-        std::vector<FileDialogFilter> LastSaveFileFilters;
-        std::string LastSaveFileDefaultLocation;
-
-        int ShowOpenFolderCallCount = 0;
-        std::string LastOpenFolderDefaultLocation;
-        bool LastOpenFolderAllowMultiple = false;
-
-        // The result this fake immediately invokes the callback with, instead of ever
-        // showing a real dialog -- simulates a real dialog's asynchronous-but-
-        // eventually-fires-once contract without any real OS interaction.
-        std::vector<std::string> SimulatedResult;
-
-        void ShowOpenFile(
-            FileDialogResultCallback onResult,
-            const std::vector<FileDialogFilter>& filters,
-            const std::string& defaultLocation,
-            bool allowMultiple) override
-        {
-            ++ShowOpenFileCallCount;
-            LastOpenFileFilters = filters;
-            LastOpenFileDefaultLocation = defaultLocation;
-            LastOpenFileAllowMultiple = allowMultiple;
-            if (onResult)
-            {
-                onResult(SimulatedResult);
-            }
-        }
-
-        void ShowSaveFile(
-            FileDialogResultCallback onResult,
-            const std::vector<FileDialogFilter>& filters,
-            const std::string& defaultLocation) override
-        {
-            ++ShowSaveFileCallCount;
-            LastSaveFileFilters = filters;
-            LastSaveFileDefaultLocation = defaultLocation;
-            if (onResult)
-            {
-                onResult(SimulatedResult);
-            }
-        }
-
-        void ShowOpenFolder(
-            FileDialogResultCallback onResult,
-            const std::string& defaultLocation,
-            bool allowMultiple) override
-        {
-            ++ShowOpenFolderCallCount;
-            LastOpenFolderDefaultLocation = defaultLocation;
-            LastOpenFolderAllowMultiple = allowMultiple;
-            if (onResult)
-            {
-                onResult(SimulatedResult);
-            }
-        }
+        void SetUp() override { installed = std::make_unique<ScopedCurrentPlatform>(platform); }
+        void TearDown() override { installed.reset(); }
     };
+}
 
-    // RAII: installs the fake in the constructor, restores the real
-    // Detail::SdlFileDialogBackend in the destructor -- FileDialog's backend is
-    // process-wide static state, so every test must restore it, or a fake would leak
-    // into unrelated tests run afterward in the same process.
-    class ScopedFakeFileDialogBackend
-    {
-    public:
-        ScopedFakeFileDialogBackend()
-        {
-            auto fake = std::make_unique<FakeFileDialogBackend>();
-            fake_ = fake.get();
-            FileDialog::SetBackendForTesting(std::move(fake));
-        }
-
-        ~ScopedFakeFileDialogBackend()
-        {
-            FileDialog::SetBackendForTesting(nullptr);
-        }
-
-        ScopedFakeFileDialogBackend(const ScopedFakeFileDialogBackend&) = delete;
-        ScopedFakeFileDialogBackend& operator=(const ScopedFakeFileDialogBackend&) = delete;
-
-        FakeFileDialogBackend* operator->() const
-        {
-            return fake_;
-        }
-
-    private:
-        FakeFileDialogBackend* fake_;
-    };
-} // namespace
-
-TEST(FileDialogTests, GetIsSupportedPropertyDoesNotCrash)
+TEST_F(FileDialogTest, GetIsSupportedPropertyDoesNotCrash)
 {
-    // Real, platform-dependent value (true on this desktop Linux container) --
-    // exercises the actual CNA::getCurrentPlatform()-based logic, not the fake
-    // backend (getIsSupportedProperty() does not go through the backend at all).
     EXPECT_NO_THROW({ (void)FileDialog::getIsSupportedProperty(); });
 }
 
-TEST(FileDialogTests, ShowOpenFileForwardsParametersToBackendAndInvokesCallback)
+TEST_F(FileDialogTest, ShowOpenFileForwardsParametersAndInvokesCallback)
 {
-    ScopedFakeFileDialogBackend fake;
-    fake->SimulatedResult = {"/tmp/chosen-file.txt"};
+    platform.Canned().chosenPaths = {"/tmp/chosen-file.txt"};
 
     const std::vector<FileDialogFilter> filters = {{"Text files", "txt"}};
     bool invoked = false;
@@ -147,18 +59,22 @@ TEST(FileDialogTests, ShowOpenFileForwardsParametersToBackendAndInvokesCallback)
         },
         filters, "/tmp", true);
 
-    EXPECT_EQ(fake->ShowOpenFileCallCount, 1);
-    EXPECT_EQ(fake->LastOpenFileFilters.size(), 1u);
-    EXPECT_EQ(fake->LastOpenFileDefaultLocation, "/tmp");
-    EXPECT_TRUE(fake->LastOpenFileAllowMultiple);
+    ASSERT_EQ(platform.Canned().fileDialogs.size(), 1u);
+    const auto& call = platform.Canned().fileDialogs.front();
+    EXPECT_EQ(call.kind, "open");
+    ASSERT_EQ(call.filters.size(), 1u);
+    EXPECT_EQ(call.filters.front().name, "Text files");
+    EXPECT_EQ(call.filters.front().patterns, "txt");
+    EXPECT_EQ(call.defaultLocation, "/tmp");
+    EXPECT_TRUE(call.allowMultiple);
+
     ASSERT_TRUE(invoked);
-    EXPECT_EQ(received, fake->SimulatedResult);
+    EXPECT_EQ(received, platform.Canned().chosenPaths);
 }
 
-TEST(FileDialogTests, ShowSaveFileForwardsParametersToBackendAndInvokesCallback)
+TEST_F(FileDialogTest, ShowSaveFileForwardsParametersAndInvokesCallback)
 {
-    ScopedFakeFileDialogBackend fake;
-    fake->SimulatedResult = {"/tmp/save-target.txt"};
+    platform.Canned().chosenPaths = {"/tmp/save-target.txt"};
 
     bool invoked = false;
     std::vector<std::string> received;
@@ -171,16 +87,16 @@ TEST(FileDialogTests, ShowSaveFileForwardsParametersToBackendAndInvokesCallback)
         },
         {}, "/tmp");
 
-    EXPECT_EQ(fake->ShowSaveFileCallCount, 1);
-    EXPECT_EQ(fake->LastSaveFileDefaultLocation, "/tmp");
+    ASSERT_EQ(platform.Canned().fileDialogs.size(), 1u);
+    EXPECT_EQ(platform.Canned().fileDialogs.front().kind, "save");
+    EXPECT_EQ(platform.Canned().fileDialogs.front().defaultLocation, "/tmp");
     ASSERT_TRUE(invoked);
-    EXPECT_EQ(received, fake->SimulatedResult);
+    EXPECT_EQ(received, platform.Canned().chosenPaths);
 }
 
-TEST(FileDialogTests, ShowOpenFolderForwardsParametersToBackendAndInvokesCallback)
+TEST_F(FileDialogTest, ShowOpenFolderForwardsParametersAndInvokesCallback)
 {
-    ScopedFakeFileDialogBackend fake;
-    fake->SimulatedResult = {"/tmp/chosen-folder"};
+    platform.Canned().chosenPaths = {"/tmp/chosen-folder"};
 
     bool invoked = false;
     std::vector<std::string> received;
@@ -193,95 +109,74 @@ TEST(FileDialogTests, ShowOpenFolderForwardsParametersToBackendAndInvokesCallbac
         },
         "/tmp", false);
 
-    EXPECT_EQ(fake->ShowOpenFolderCallCount, 1);
-    EXPECT_EQ(fake->LastOpenFolderDefaultLocation, "/tmp");
-    EXPECT_FALSE(fake->LastOpenFolderAllowMultiple);
+    ASSERT_EQ(platform.Canned().fileDialogs.size(), 1u);
+    EXPECT_EQ(platform.Canned().fileDialogs.front().kind, "folder");
+    EXPECT_EQ(platform.Canned().fileDialogs.front().defaultLocation, "/tmp");
+    EXPECT_FALSE(platform.Canned().fileDialogs.front().allowMultiple);
     ASSERT_TRUE(invoked);
-    EXPECT_EQ(received, fake->SimulatedResult);
+    EXPECT_EQ(received, platform.Canned().chosenPaths);
 }
 
-TEST(FileDialogTests, EmptyResultMeansCanceledOrError)
+TEST_F(FileDialogTest, EmptyResultMeansCanceledOrError)
 {
-    ScopedFakeFileDialogBackend fake;
-    // SimulatedResult defaults to empty -- represents both "user canceled" and
-    // "an error occurred", which this simplified wrapper does not distinguish (see
-    // FileDialog's own doc comment).
-
+    // chosenPaths defaults to empty -- which represents both "user cancelled" and "an error
+    // occurred", a distinction this wrapper deliberately does not make.
     std::vector<std::string> received = {"sentinel-should-be-overwritten"};
     FileDialog::ShowOpenFile([&](const std::vector<std::string>& files) { received = files; });
 
     EXPECT_TRUE(received.empty());
 }
 
-TEST(FileDialogTests, SetBackendForTestingNullRestoresDefaultBackendBehavior)
+namespace
 {
+    /// A platform that reports no file dialogs at all, which is what HEADLESS does.
+    class DialoglessPlatform final : public CNA::Platform::Testing::PlatformTestDecorator
     {
-        ScopedFakeFileDialogBackend fake;
-        FileDialog::ShowOpenFile([](const std::vector<std::string>&) {});
-        EXPECT_EQ(fake->ShowOpenFileCallCount, 1);
-    }
-    // After the scope above, the real Detail::SdlFileDialogBackend is restored.
-    // getIsSupportedProperty() does not depend on the backend, so this only proves
-    // SetBackendForTesting(nullptr) does not crash -- the real backend's dialog-
-    // launching behavior itself is deliberately never exercised in this test file.
-    EXPECT_NO_THROW({ (void)FileDialog::getIsSupportedProperty(); });
+    public:
+        [[nodiscard]] CNA::Platform::PlatformCapabilities GetCapabilities() const override
+        {
+            CNA::Platform::PlatformCapabilities capabilities =
+                PlatformTestDecorator::GetCapabilities();
+            capabilities.nativeFileDialog = false;
+            return capabilities;
+        }
+    };
 }
 
-// Task REMED-DEVICES-001: FileDialog's GetBackend() (see FileDialog.cpp, internal
-// linkage) used to return a raw pointer after already releasing BackendMutex(),
-// so a concurrent SetBackendForTesting() could reassign -- and destroy -- the
-// backend object while another thread was still calling through the just-returned
-// pointer (a genuine use-after-free window). GetBackend() now returns a
-// shared_ptr copy taken under the lock, which keeps the pointee alive for the
-// full duration of any in-flight call regardless of a concurrent swap.
-//
-// This does not deterministically reproduce the pre-fix bug on every run -- the
-// original race window was a handful of machine instructions -- but racing both
-// operations for many iterations reliably trips ThreadSanitizer/AddressSanitizer
-// against the pre-fix code (see the devices-tsan/devices-asan CMake presets).
-// Against the fix, it must complete cleanly under a plain build and under both
-// sanitizers.
-TEST(FileDialogTests, ConcurrentSetBackendForTestingDoesNotRaceWithLiveCalls)
+TEST(FileDialogWithoutAServiceTest, TheCallbackStillFiresSoACallerIsNotLeftWaiting)
 {
-    constexpr int kIterations = 2000;
-    std::atomic<int> callCount{0};
+    // The branch that did not exist before the migration. A caller has already registered its
+    // continuation by the time it could learn there is no dialog, so dropping the callback would
+    // be a hang rather than a refusal -- and a hang in a UI flow reads as a frozen game.
+    DialoglessPlatform platform;
+    const ScopedCurrentPlatform installed(platform);
 
-    // Install a fake before racing -- the caller thread below must never reach
-    // the real Detail::SdlFileDialogBackend, which would launch a real
-    // interactive dialog (see this file's own top-of-file comment on why).
-    FileDialog::SetBackendForTesting(std::make_unique<FakeFileDialogBackend>());
-
-    std::thread caller(
-        [&]
+    bool invoked = false;
+    std::vector<std::string> received = {"sentinel"};
+    FileDialog::ShowOpenFile(
+        [&](const std::vector<std::string>& files)
         {
-            for (int i = 0; i < kIterations; ++i)
-            {
-                FileDialog::ShowOpenFile([&](const std::vector<std::string>&) { ++callCount; });
-            }
+            invoked = true;
+            received = files;
         });
 
-    std::thread swapper(
-        [&]
-        {
-            for (int i = 0; i < kIterations; ++i)
-            {
-                // Never pass nullptr here -- that would install the real
-                // backend mid-race, which the caller thread above must never
-                // touch.
-                FileDialog::SetBackendForTesting(std::make_unique<FakeFileDialogBackend>());
-            }
-        });
+    EXPECT_TRUE(invoked);
+    EXPECT_TRUE(received.empty());
 
-    caller.join();
-    swapper.join();
-
-    FileDialog::SetBackendForTesting(nullptr);
-
-    // Every call must have run its callback exactly once, regardless of which
-    // backend instance happened to be installed at the time -- a UAF would show
-    // up here as a crash (under a sanitizer or even a plain build, given enough
-    // iterations) well before this assertion is reached.
-    EXPECT_EQ(callCount.load(), kIterations);
+    EXPECT_NO_THROW(FileDialog::ShowSaveFile([&](const std::vector<std::string>&) {}));
+    EXPECT_NO_THROW(FileDialog::ShowOpenFolder([&](const std::vector<std::string>&) {}));
 }
+
+// The concurrency test that used to live here raced a caller thread against
+// SetBackendForTesting, pinning REMED-DEVICES-001: a swap could destroy the backend while a call
+// was still running through it. It is deleted rather than ported, because with no swappable
+// backend the race has no parts left to have -- there is nothing to swap and nothing to destroy.
+//
+// Porting it was tried and is the wrong shape: two threads calling through the recording service
+// race on the recording itself, so the test would have been measuring test scaffolding, and
+// making that scaffolding thread-safe would have been work done purely to keep a test of it
+// alive. The one remaining instance of the pattern is `GetCurrentPlatform()`, which returns a
+// reference the caller uses after the lock is released -- and that is governed by a stated
+// ownership rule (the platform must outlive every use of it) rather than by a swap.
 
 #endif // CNA_DEVICES

@@ -9,8 +9,6 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -1082,17 +1080,20 @@ namespace CNA::Internal::Renderers::Direct2D
                            transform_, textureFilter_, addressU_, addressV_);
     }
 
-    Direct2DRenderer::Direct2DRenderer(
-        SDL_Window* window, int virtualWidth, int virtualHeight,
-        CnaPresentationMode presentationMode, int swapInterval, bool contextRecoveryEnabled,
-        std::function<void(RendererDeviceEvent)> deviceEventCallback,
-        int backBufferFormat, int depthStencilFormat, int multiSampleCount)
-        : window_(window), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight),
-          presentationMode_(presentationMode), swapInterval_(swapInterval),
-          contextRecoveryEnabled_(contextRecoveryEnabled),
-          deviceEventCallback_(std::move(deviceEventCallback))
+    Direct2DRenderer::Direct2DRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface, "Direct2DRenderer")
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , swapInterval_(args.swapInterval)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
+        , deviceEventCallback_(args.deviceEventCallback)
     {
-        if (!window_) throw std::runtime_error("Direct2DRenderer initialized with null SDL_Window.");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(surface_.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("Direct2DRenderer requires a Win32 native window.");
+        hwnd_ = static_cast<HWND>(nativeWindow.hwnd);
+
         if (virtualWidth_ < 0 || virtualHeight_ < 0 ||
             ((virtualWidth_ == 0) != (virtualHeight_ == 0)))
             throw System::ArgumentOutOfRangeException(
@@ -1102,23 +1103,23 @@ namespace CNA::Internal::Renderers::Direct2D
             throw System::ArgumentOutOfRangeException(
                 "swapInterval", std::to_string(swapInterval_),
                 "Direct2D supports swap intervals 0 (Immediate), 1 (VSync), and 2 (half-rate)." );
-        if (backBufferFormat != 0)
+        if (args.backBufferFormat != 0)
             throw System::NotSupportedException(
                 "Direct2D supports only SurfaceFormat::Color for the backbuffer.");
-        if (depthStencilFormat != 0)
+        if (args.depthStencilFormat != 0)
             throw System::NotSupportedException(
                 "Direct2D supports only DepthFormat::None for the backbuffer.");
-        if (multiSampleCount < 0 || multiSampleCount > 1)
+        if (args.multiSampleCount < 0 || args.multiSampleCount > 1)
             throw System::NotSupportedException(
                 "Direct2D does not support a multisampled backbuffer; request MultiSampleCount 0 or 1.");
         diagnosticsEnabled_ = EnvironmentFlagEnabled("CNA_DIRECT2D_DIAGNOSTICS");
         CreateDeviceResources();
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     Direct2DRenderer::~Direct2DRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         ReleaseDeviceResourcesNoThrow(true);
     }
 
@@ -1401,7 +1402,7 @@ namespace CNA::Internal::Renderers::Direct2D
         if (FAILED(hr) && !forceWarp)
         {
             // WARP retains a functional Direct2D path on VMs/RDP sessions without a hardware D3D
-            // adapter; this is an intentional Direct2D fallback, not an SDL renderer fallback.
+            // adapter; this is an intentional Direct2D software fallback.
             driverType = D3D_DRIVER_TYPE_WARP;
             hr = D3D11CreateDevice(nullptr, driverType, nullptr, flags,
                                    featureLevels, static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION,
@@ -1447,11 +1448,9 @@ namespace CNA::Internal::Renderers::Direct2D
         ReserveTransientCapacity();
 
         const HWND hwnd = GetWindowHandle();
-        RECT clientRect{};
-        if (!GetClientRect(hwnd, &clientRect))
-            throw std::runtime_error("Direct2DRenderer: GetClientRect failed.");
-        const UINT width = static_cast<UINT>(std::max<LONG>(1, clientRect.right - clientRect.left));
-        const UINT height = static_cast<UINT>(std::max<LONG>(1, clientRect.bottom - clientRect.top));
+        const auto drawableSize = surface_.GetDrawableSize();
+        const UINT width = static_cast<UINT>(std::max(1, drawableSize.width));
+        const UINT height = static_cast<UINT>(std::max(1, drawableSize.height));
 
         DXGI_SWAP_CHAIN_DESC1 description{};
         description.Width = width;
@@ -1473,16 +1472,7 @@ namespace CNA::Internal::Renderers::Direct2D
 
     HWND Direct2DRenderer::GetWindowHandle() const
     {
-        const SDL_PropertiesID properties = SDL_GetWindowProperties(window_);
-        if (properties == 0)
-            throw std::runtime_error(
-                std::string("Direct2DRenderer: SDL_GetWindowProperties failed: ") + SDL_GetError());
-        const HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            properties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!hwnd)
-            throw std::runtime_error(
-                std::string("Direct2DRenderer: SDL did not expose a Win32 HWND: ") + SDL_GetError());
-        return hwnd;
+        return hwnd_;
     }
 
     void Direct2DRenderer::CreateBackBufferTarget()
@@ -1528,27 +1518,12 @@ namespace CNA::Internal::Renderers::Direct2D
 
     float Direct2DRenderer::ObserveWindowDisplayScale()
     {
-        // SDL's own two sizes are the portable expression of the display scale: window units come
-        // from Windows' DIP domain, the pixel size is the physical client surface. Their ratio
-        // changes exactly when the window moves to a differently scaled monitor or the user changes
-        // that monitor's scaling -- which is the event WM_DPICHANGED reports.
-        int windowWidth = 0;
-        int windowHeight = 0;
-        int pixelWidth = 0;
-        int pixelHeight = 0;
-        if (!SDL_GetWindowSize(window_, &windowWidth, &windowHeight) ||
-            !SDL_GetWindowSizeInPixels(window_, &pixelWidth, &pixelHeight) || windowWidth <= 0)
-        {
-            return observedDisplayScale_;
-        }
-        const float scale = static_cast<float>(pixelWidth) / static_cast<float>(windowWidth);
+        const float scale = surface_.GetDisplayScale();
         if (observedDisplayScale_ != 0.0f && scale != observedDisplayScale_ && diagnosticsEnabled_)
         {
             std::fprintf(stderr,
-                         "[Direct2D diagnostics] display scale changed %.4f -> %.4f "
-                         "(window %dx%d, pixels %dx%d).\n",
-                         static_cast<double>(observedDisplayScale_), static_cast<double>(scale),
-                         windowWidth, windowHeight, pixelWidth, pixelHeight);
+                         "[Direct2D diagnostics] display scale changed %.4f -> %.4f.\n",
+                         static_cast<double>(observedDisplayScale_), static_cast<double>(scale));
         }
         observedDisplayScale_ = scale;
         return scale;
@@ -1563,11 +1538,9 @@ namespace CNA::Internal::Renderers::Direct2D
         // (D2D-54) -- there is no DIP-derived value to recompute. The scale is observed rather than
         // used, so a run that claims presentation evidence records the DPI it actually ran at.
         (void)ObserveWindowDisplayScale();
-        const HWND hwnd = GetWindowHandle();
-        RECT clientRect{};
-        if (!GetClientRect(hwnd, &clientRect)) throw std::runtime_error("Direct2DRenderer: GetClientRect failed.");
-        const UINT width = static_cast<UINT>(std::max<LONG>(1, clientRect.right - clientRect.left));
-        const UINT height = static_cast<UINT>(std::max<LONG>(1, clientRect.bottom - clientRect.top));
+        const auto drawableSize = surface_.GetDrawableSize();
+        const UINT width = static_cast<UINT>(std::max(1, drawableSize.width));
+        const UINT height = static_cast<UINT>(std::max(1, drawableSize.height));
         const D2D1_SIZE_U current = backBufferTarget_->GetPixelSize();
         if (current.width != width || current.height != height)
         {
@@ -2067,14 +2040,19 @@ namespace CNA::Internal::Renderers::Direct2D
         swapInterval_ = interval;
     }
 
+    void Direct2DRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+    }
+
     bool Direct2DRenderer::TransformWindowToLogical(float windowX, float windowY,
                                                             float& logicalX, float& logicalY) const
     {
         if (activeRenderTarget_) return false;
         const PresentationTransform transform = GetPresentationTransform();
         if (transform.scaleX == 0.0f || transform.scaleY == 0.0f) return false;
-        logicalX = (windowX - transform.offsetX) / transform.scaleX;
-        logicalY = (windowY - transform.offsetY) / transform.scaleY;
+        logicalX = (surface_.WindowToDrawable(windowX) - transform.offsetX) / transform.scaleX;
+        logicalY = (surface_.WindowToDrawable(windowY) - transform.offsetY) / transform.scaleY;
         return true;
     }
 
@@ -2083,8 +2061,8 @@ namespace CNA::Internal::Renderers::Direct2D
     {
         if (activeRenderTarget_) return false;
         const PresentationTransform transform = GetPresentationTransform();
-        windowX = logicalX * transform.scaleX + transform.offsetX;
-        windowY = logicalY * transform.scaleY + transform.offsetY;
+        windowX = surface_.DrawableToWindow(logicalX * transform.scaleX + transform.offsetX);
+        windowY = surface_.DrawableToWindow(logicalY * transform.scaleY + transform.offsetY);
         return true;
     }
 
@@ -3257,10 +3235,7 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_DIRECT2D
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Direct2D::Direct2DRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode, args.swapInterval,
-            args.contextRecoveryEnabled, args.deviceEventCallback, args.backBufferFormat,
-            args.depthStencilFormat, args.multiSampleCount);
+        return std::make_unique<Direct2D::Direct2DRenderer>(args);
     }
 #endif
 }

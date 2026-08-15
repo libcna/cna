@@ -236,7 +236,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
@@ -293,7 +293,7 @@ namespace CNA::Internal::Renderers::Software
 
         [[nodiscard]] int GetWidth() const override { return framebuffer_.width; }
         [[nodiscard]] int GetHeight() const override { return framebuffer_.height; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /**
          * @brief Copies a sub-rectangle of the rendered colour attachment into @p data as RGBA8.
@@ -606,8 +606,6 @@ namespace CNA::Internal::Renderers::Software
         void SetPresentationMode(int mode) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
-        SDL_Window* GetWindowInternal() const override { return nullptr; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;

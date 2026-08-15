@@ -43,7 +43,7 @@ namespace CNA::Internal::Renderers::HtmlDom
                                               int colorDstBlend, int alphaDstBlend,
                                               int colorBlendFunc, int alphaBlendFunc)
     {
-        // Raw Blend/BlendFunction ordinals, the same table SdlRenderer::ToSdlBlendFactor and
+        // Raw Blend/BlendFunction ordinals, the same table the native 2D renderer uses for
         // CanvasRenderer::BlendStateToCompositeOp read: One=0, Zero=1, SourceAlpha=4,
         // InverseSourceAlpha=5; Add=0.
         const bool isAdd = colorBlendFunc == 0 && alphaBlendFunc == 0;

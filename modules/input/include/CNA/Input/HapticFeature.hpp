@@ -10,48 +10,48 @@ namespace CNA::Input
 {
     /**
      * @brief CNAEXT — the force-feedback effect families and global capabilities a haptic device
-     *        supports, as a bit flag set. Mirrors SDL3's `SDL_HapticFeatures` bitmask.
+     *        supports, as a CNA-owned bit flag set.
      *
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple dual-motor rumble;
-     * this CNA extension exposes SDL3's richer `SDL_haptic` capability query.
+     * this CNA extension exposes the platform contract's richer haptic capability query.
      */
     CNAEXT enum class HapticFeatureEXT : std::uint32_t
     {
         /** @brief No effect families or global capabilities supported. */
         None = 0,
-        /** @brief Constant-force effects (`SDL_HAPTIC_CONSTANT`). */
+        /** @brief Constant-force effects. */
         Constant = 1u << 0,
-        /** @brief Sine-wave periodic effects (`SDL_HAPTIC_SINE`). */
+        /** @brief Sine-wave periodic effects. */
         Sine = 1u << 1,
-        /** @brief Square-wave periodic effects (`SDL_HAPTIC_SQUARE`). */
+        /** @brief Square-wave periodic effects. */
         Square = 1u << 2,
-        /** @brief Triangle-wave periodic effects (`SDL_HAPTIC_TRIANGLE`). */
+        /** @brief Triangle-wave periodic effects. */
         Triangle = 1u << 3,
-        /** @brief Upward-sawtooth periodic effects (`SDL_HAPTIC_SAWTOOTHUP`). */
+        /** @brief Upward-sawtooth periodic effects. */
         SawtoothUp = 1u << 4,
-        /** @brief Downward-sawtooth periodic effects (`SDL_HAPTIC_SAWTOOTHDOWN`). */
+        /** @brief Downward-sawtooth periodic effects. */
         SawtoothDown = 1u << 5,
-        /** @brief Ramp (linear start-to-end) effects (`SDL_HAPTIC_RAMP`). */
+        /** @brief Ramp (linear start-to-end) effects. */
         Ramp = 1u << 6,
-        /** @brief Spring condition effects (`SDL_HAPTIC_SPRING`). */
+        /** @brief Spring condition effects. */
         Spring = 1u << 7,
-        /** @brief Damper condition effects (`SDL_HAPTIC_DAMPER`). */
+        /** @brief Damper condition effects. */
         Damper = 1u << 8,
-        /** @brief Inertia condition effects (`SDL_HAPTIC_INERTIA`). */
+        /** @brief Inertia condition effects. */
         Inertia = 1u << 9,
-        /** @brief Friction condition effects (`SDL_HAPTIC_FRICTION`). */
+        /** @brief Friction condition effects. */
         Friction = 1u << 10,
-        /** @brief Left/right (large/small motor) effects (`SDL_HAPTIC_LEFTRIGHT`). */
+        /** @brief Left/right (large/small motor) effects. */
         LeftRight = 1u << 11,
-        /** @brief Custom raw-sample-buffer effects (`SDL_HAPTIC_CUSTOM`). */
+        /** @brief Custom raw-sample-buffer effects. */
         Custom = 1u << 15,
-        /** @brief Overall effect gain can be set (`SDL_HAPTIC_GAIN`). */
+        /** @brief Overall effect gain can be set. */
         Gain = 1u << 16,
-        /** @brief Autocenter strength can be set (`SDL_HAPTIC_AUTOCENTER`). */
+        /** @brief Autocenter strength can be set. */
         Autocenter = 1u << 17,
-        /** @brief Effect play/stop status can be queried (`SDL_HAPTIC_STATUS`). */
+        /** @brief Effect play/stop status can be queried. */
         Status = 1u << 18,
-        /** @brief Effects can be paused/resumed (`SDL_HAPTIC_PAUSE`). */
+        /** @brief Effects can be paused/resumed. */
         Pause = 1u << 19
     };
 

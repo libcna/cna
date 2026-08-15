@@ -7,9 +7,8 @@
 // properties of the public surface:
 //   1. Self-containment: each public Input header compiles standalone and every public type is usable
 //      from a consumer that includes only public headers (no internal header pulled in by hand).
-//   2. SDL containment: NO public Input header drags <SDL3/SDL.h> into a consumer's TU. MouseCursor.hpp
-//      wraps an SDL cursor but only through a forward-declared, opaque SDL_Cursor* handle
-//      (INPUT-MOUSE-018 removed its SDL include), so Mouse.hpp no longer transitively pulls SDL either.
+//   2. SDL containment: NO public Input header drags <SDL3/SDL.h> or an SDL type into a consumer's
+//      TU. MouseCursor stores only a platform-neutral cursor description.
 
 #include <cstdint>
 #include <functional>
@@ -46,10 +45,8 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanelCapabilities.hpp"
 
-// Guardrail: NO public Input header above may pull SDL into a consumer's TU. MouseCursor.hpp wraps an
-// SDL cursor only through a forward-declared, opaque SDL_Cursor* (INPUT-MOUSE-018), so even it is
-// SDL-free from a consumer's perspective. If any public Input header starts (transitively) including an
-// SDL header, this fails to compile.
+// Guardrail: NO public Input header above may pull SDL into a consumer's TU. If any public Input
+// header starts (transitively) including an SDL header, this fails to compile.
 #if defined(SDL_MAJOR_VERSION) || defined(SDL_h_)
 #error "A public Input header leaked SDL (<SDL3/SDL.h>) into the public API surface."
 #endif

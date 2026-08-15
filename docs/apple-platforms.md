@@ -76,7 +76,7 @@ cna_apple_configure_bundle(my_game)
 The helper uses paths relative to CNA itself, not the outer project's `CMAKE_SOURCE_DIR`. On
 macOS it takes effect only with `CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON`; sign a distributable
 bundle after the post-build dependency fixup. On iOS the call is mandatory, and the translation
-unit containing `main()` must include `CNA/Entrypoint.hpp` before SDL headers so SDL can hand
+unit containing `main()` must include `CNA/Platform/Entrypoint.hpp` before SDL headers so SDL can hand
 process startup to UIKit.
 
 ## Building for iOS
@@ -126,12 +126,12 @@ iOS-specific defaults:
   launch screen declaration UIKit refuses to give the app the full screen and hands it the
   device's compatibility resolution, silently changing every backbuffer size.
 - **A real smoke application is built by default.** `cna_ios_smoke` links the complete selected
-  renderer, includes `CNA/Entrypoint.hpp`, selects a landscape orientation and runs one `Game`
+  renderer, includes `CNA/Platform/Entrypoint.hpp`, selects a landscape orientation and runs one `Game`
   frame. Disable it only with `-DCNA_BUILD_APPLE_SMOKE_APP=OFF`.
-- **`main()` is renamed** by `CNA/Entrypoint.hpp`, which pulls in `<SDL3/SDL_main.h>` on iOS for
+- **`main()` is renamed** by `CNA/Platform/Entrypoint.hpp`, which pulls in `<SDL3/SDL_main.h>` on iOS for
   the same reason it already did on Android: UIKit owns the process, and SDL's own `main()` has
   to run `UIApplicationMain` before the game's `main()` is called. A game that does not include
-  `CNA/Entrypoint.hpp` never gets a `UIApplication`, and therefore no window and no events.
+  `CNA/Platform/Entrypoint.hpp` never gets a `UIApplication`, and therefore no window and no events.
 - **FFmpeg is disabled** (`CNA_FFMPEG_AVAILABLE=OFF`): `pkg-config` on a macOS host resolves to
   Homebrew's *macOS* FFmpeg, which cannot be linked into an iOS binary. `VideoPlayer` and the
   rest of the video surface are therefore absent from an iOS build, exactly as on Android,
@@ -163,19 +163,22 @@ expect build or runtime failures, and nothing about such a configuration is supp
 
 ### Platform identification
 
-`CNA/Platform.hpp` answers the compile-time questions:
+`CNA/TargetPlatform.hpp` answers the compile-time questions:
 
 ```cpp
-CNA::getCurrentPlatform();      // Platform::Desktop on macOS, Platform::iOS on iOS
+CNA::getCurrentPlatform();      // TargetPlatform::Desktop on macOS, TargetPlatform::iOS on iOS
 CNA::isApplePlatform();         // true on both
 CNA::isMobilePlatform();        // true on iOS and Android
 CNA::getCurrentPlatformName();  // "macOS", "iOS", "Linux", "Windows", "Android", "Web"
 CNA::getCurrentDesktopOS();     // DesktopOS::MacOSX on macOS; throws on iOS
 ```
 
-The `CNA_PLATFORM_APPLE`, `CNA_PLATFORM_MACOS` and `CNA_PLATFORM_IOS` macros are defined by the
-same header for preprocessor conditions. macOS deliberately reports `Platform::Desktop` — it is
-a desktop — so `isApplePlatform()` is the query that spans both Apple targets.
+The `CNA_TARGET_APPLE`, `CNA_TARGET_MACOS` and `CNA_TARGET_IOS` macros are defined by the same
+header for preprocessor conditions. They use the `CNA_TARGET_` prefix, not `CNA_PLATFORM_`, so
+they cannot be confused with `CNA_PLATFORM_<NAME>` — that names the selected platform
+*implementation* (`SDL3`, `HEADLESS`, `TERMINAL`), an independent build axis. macOS deliberately
+reports `TargetPlatform::Desktop` — it is a desktop — so `isApplePlatform()` is the query that
+spans both Apple targets.
 
 ### Application lifecycle
 

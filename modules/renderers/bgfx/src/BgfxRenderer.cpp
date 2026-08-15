@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
@@ -140,58 +141,30 @@ namespace CNA::Internal::Renderers::Bgfx
             }
         }
 
-        bgfx::PlatformData CreatePlatformData(SDL_Window* window)
+        bgfx::PlatformData CreatePlatformData(const CNA::Platform::NativeWindowHandle& handle)
         {
             bgfx::PlatformData platformData{};
 
-            const SDL_PropertiesID windowProperties = SDL_GetWindowProperties(window);
-
 #if defined(_WIN32)
-            platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+            CNA::Platform::Win32NativeWindow native;
+            if (CNA::Platform::TryGetWin32(handle, native)) platformData.nwh = native.hwnd;
 #elif defined(__APPLE__)
-            platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
+            CNA::Platform::CocoaNativeWindow native;
+            if (CNA::Platform::TryGetCocoa(handle, native)) platformData.nwh = native.window;
 #elif defined(__linux__)
-            const char* videoDriver = SDL_GetCurrentVideoDriver();
-
-            if (videoDriver && SDL_strcmp(videoDriver, "x11") == 0)
+            CNA::Platform::X11NativeWindow x11;
+            CNA::Platform::WaylandNativeWindow wayland;
+            if (CNA::Platform::TryGetX11(handle, x11))
             {
                 platformData.type = bgfx::NativeWindowHandleType::Default;
-                platformData.ndt = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
-                                                          nullptr);
-
-                const Uint64 windowHandle = SDL_GetNumberProperty(windowProperties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
-                                                                  0);
-                platformData.nwh = reinterpret_cast<void*>(static_cast<uintptr_t>(windowHandle));
-
-                if (!platformData.ndt)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL X11 display handle is not available.");
-                }
-                if (!platformData.nwh)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL X11 window handle is not available.");
-                }
+                platformData.ndt = x11.display;
+                platformData.nwh = reinterpret_cast<void*>(static_cast<uintptr_t>(x11.window));
             }
-            else if (videoDriver && SDL_strcmp(videoDriver, "wayland") == 0)
+            else if (CNA::Platform::TryGetWayland(handle, wayland))
             {
                 platformData.type = bgfx::NativeWindowHandleType::Wayland;
-                platformData.ndt = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,
-                                                          nullptr);
-                platformData.nwh = SDL_GetPointerProperty(windowProperties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,
-                                                          nullptr);
-
-                if (!platformData.ndt)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL Wayland display handle is not available.");
-                }
-                if (!platformData.nwh)
-                {
-                    throw std::runtime_error(
-                        "Failed to initialize BGFX renderer: SDL Wayland surface handle is not available.");
-                }
+                platformData.ndt = wayland.display;
+                platformData.nwh = wayland.surface;
             }
 #endif
 
@@ -978,7 +951,7 @@ namespace CNA::Internal::Renderers::Bgfx
             const bool hasBackbuffer =
                 (formatCaps & BGFX_CAPS_FORMAT_TEXTURE_BACKBUFFER) != 0;
 
-            if (const char* trace = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+            if (const char* trace = std::getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
                 trace != nullptr && trace[0] != '\0' && trace[0] != '0')
             {
                 std::fprintf(stderr,
@@ -1627,31 +1600,23 @@ namespace CNA::Internal::Renderers::Bgfx
         std::fflush(stderr);
     }
 
-    BgfxRenderer::BgfxRenderer(SDL_Window* window, int swapInterval)
-        : window(window)
-        , resetFlags_(swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
+    BgfxRenderer::BgfxRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface, "BgfxRenderer")
+        , resetFlags_(args.swapInterval > 0 ? BGFX_RESET_VSYNC : BGFX_RESET_NONE)
     {
-        if (!window)
-        {
-            throw std::runtime_error("BgfxRenderer initialized with null window.");
-        }
-
-        int width = 0;
-        int height = 0;
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
 
         const uint16_t initialWidth = static_cast<uint16_t>(std::max(width, 1));
         const uint16_t initialHeight = static_cast<uint16_t>(std::max(height, 1));
-        const char* rendererOverride = SDL_getenv(kRendererOverrideEnvVar);
+        const char* rendererOverride = std::getenv(kRendererOverrideEnvVar);
         const bgfx::RendererType::Enum requestedRendererType = Detail::ResolveRendererType(rendererOverride);
 
         // REMED-GFX-154: decided BEFORE bgfx::init, because renderer selection and fallback are
         // among the things bgfx traces and they happen inside init itself.
         {
-            const char* diag = SDL_getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
+            const char* diag = std::getenv("CNA_BGFX_TRACE_DIAGNOSTICS");
             readbackCallback_.traceDiagnostics =
                 diag != nullptr && diag[0] != '\0' && diag[0] != '0';
         }
@@ -1659,7 +1624,7 @@ namespace CNA::Internal::Renderers::Bgfx
         bgfx::Init init;
         init.type = requestedRendererType;
         init.vendorId = BGFX_PCI_ID_NONE;
-        init.platformData = CreatePlatformData(window);
+        init.platformData = CreatePlatformData(surface_.GetNativeHandle());
         init.resolution.width = initialWidth;
         init.resolution.height = initialHeight;
         init.resolution.reset = resetFlags_;
@@ -1668,11 +1633,9 @@ namespace CNA::Internal::Renderers::Bgfx
 
         if (!init.platformData.nwh)
         {
-            const char* videoDriver = SDL_GetCurrentVideoDriver();
             throw std::runtime_error(
-                std::string("Failed to initialize BGFX renderer: native window handle is not available")
-                + (videoDriver ? std::string(" for SDL video driver '") + videoDriver + "'." : ".")
-            );
+                "Failed to initialize BGFX renderer: native window handle is not available for "
+                + CNA::Platform::Describe(surface_.GetNativeHandle()));
         }
 
         if (!bgfx::init(init))
@@ -1702,13 +1665,13 @@ namespace CNA::Internal::Renderers::Bgfx
         // REMED-GFX-155: bgfx's view execution order is not observable through the public API, so it
         // is written to stderr on demand. Read once, here, so no draw path pays for the lookup.
         {
-            const char* trace = SDL_getenv("CNA_BGFX_TRACE_VIEW_ORDER");
+            const char* trace = std::getenv("CNA_BGFX_TRACE_VIEW_ORDER");
             traceViewOrder_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
         }
 
         // REMED-GFX-154: same idea for the readback/resolve sequence, read once for the same reason.
         {
-            const char* trace = SDL_getenv("CNA_BGFX_TRACE_READBACK");
+            const char* trace = std::getenv("CNA_BGFX_TRACE_READBACK");
             traceReadback_ = trace != nullptr && trace[0] != '\0' && trace[0] != '0';
         }
 
@@ -2022,12 +1985,9 @@ namespace CNA::Internal::Renderers::Bgfx
 
     void BgfxRenderer::EnsureViewState()
     {
-        int width = 0;
-        int height = 0;
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        const int width = drawableSize.width;
+        const int height = drawableSize.height;
 
         const uint16_t newWidth = static_cast<uint16_t>(std::max(width, 1));
         const uint16_t newHeight = static_cast<uint16_t>(std::max(height, 1));
@@ -2172,10 +2132,14 @@ namespace CNA::Internal::Renderers::Bgfx
 
     void BgfxRenderer::GetViewportSize(int& width, int& height)
     {
-        if (!SDL_GetWindowSize(window, &width, &height))
-        {
-            throw std::runtime_error(std::string("SDL_GetWindowSize failed: ") + SDL_GetError());
-        }
+        const auto drawableSize = surface_.GetDrawableSize();
+        width = drawableSize.width;
+        height = drawableSize.height;
+    }
+
+    void BgfxRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
     }
 
     std::unique_ptr<ITextureRenderer> BgfxRenderer::CreateTexture(const ImageData& data)
@@ -5013,7 +4977,7 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_BGFX
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Bgfx::BgfxRenderer>(args.window, args.swapInterval);
+        return std::make_unique<Bgfx::BgfxRenderer>(args);
     }
 #endif
 }

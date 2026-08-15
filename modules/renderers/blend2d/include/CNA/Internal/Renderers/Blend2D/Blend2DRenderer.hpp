@@ -2,9 +2,9 @@
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/Blend2D/Blend2DSurface.hpp"
+#include "CNA/Platform/IPlatformSurfacePresenter.hpp"
 
 #include <blend2d/blend2d.h>
-#include <SDL3/SDL.h>
 
 #include <cstdint>
 #include <memory>
@@ -73,9 +73,8 @@ namespace CNA::Internal::Renderers::Blend2D
      * renderer's texture handle reaches this renderer, a caller bug that RequireNativeImageEXT
      * turns into a deliberate std::invalid_argument with an actionable message, thrown before any
      * native BLImage memory is touched -- not an accidental, undiagnosable std::bad_cast (the same
-     * UB concern SdlRenderer.cpp's Draw() overloads document for their own sibling-class
-     * RenderTarget/Texture handles, resolved here through a real virtual interface instead of
-     * relying on GetNativeTexture() alone).
+     * UB concern the native 2D renderer's Draw() overloads document for their own sibling-class
+     * RenderTarget/Texture handles, resolved there through a private sibling interface too).
      */
     class Blend2DNativeImageSourceEXT
     {
@@ -116,7 +115,7 @@ namespace CNA::Internal::Renderers::Blend2D
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const std::uint8_t* rgba, int stride) override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
@@ -145,7 +144,7 @@ namespace CNA::Internal::Renderers::Blend2D
     /// GraphicsResource (which includes every live RenderTarget2D/Texture2D) BEFORE it tears down
     /// its IGraphicsRenderer, so a Blend2DRenderTargetRenderer is always destroyed while owner_ is
     /// still valid under normal (documented) disposal order -- the same raw-backpointer contract
-    /// GraphicsResource itself uses for its own GraphicsDevice* and SdlRenderTargetRenderer uses
+    /// GraphicsResource itself uses for its own GraphicsDevice* and native render-target handles use
     /// for its native handle. A leaked RenderTarget2D that outlives an explicitly-disposed
     /// GraphicsDevice is a pre-existing, codebase-wide caller error, not a BLEND2D-specific gap.
     class Blend2DRenderTargetRenderer final : public IRenderTargetRenderer,
@@ -158,13 +157,13 @@ namespace CNA::Internal::Renderers::Blend2D
 
         [[nodiscard]] int GetWidth() const override { return surface_.Width(); }
         [[nodiscard]] int GetHeight() const override { return surface_.Height(); }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data,
                                    int dataLength) const override;
         [[nodiscard]] const BLImage& NativeImageEXT() const override { return surface_.Image(); }
 
-        /// Activates this target on the owning renderer -- mirrors SdlRenderTargetRenderer's own
-        /// captured-SDL_Renderer* binding shape, just against Blend2DRenderer's single tracked
+        /// Activates this target on the owning renderer -- mirrors the native renderer's captured
+        /// target binding shape, just against Blend2DRenderer's single tracked
         /// "active surface" pointer instead of a native single-target API call.
         void BindAsRenderTarget() override;
         /// Restores the backbuffer, but only if this target is still the active one (a stale
@@ -172,7 +171,7 @@ namespace CNA::Internal::Renderers::Blend2D
         void UnbindAsRenderTarget() override;
 
         /// Blend2D's 2D raster targets never allocate a real depth/stencil plane, regardless of
-        /// the requested DepthFormat -- the same truthful override SDL_Renderer's own 2D-only
+        /// the requested DepthFormat -- the same truthful override the native 2D renderer's
         /// render targets use (IGraphicsRenderer.hpp's HasRealDepthBuffer doc comment, Task 708).
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
         {
@@ -258,18 +257,17 @@ namespace CNA::Internal::Renderers::Blend2D
      * implementation backed by the Blend2D vector rasterizer (https://github.com/blend2d/blend2d).
      *
      * Every draw is real Blend2D CPU rasterization into an owned BLImage backbuffer (or a bound
-     * RenderTarget2D's own BLImage); presentation uploads the completed frame to an SDL streaming
-     * texture -- the same "CPU raster + SDL presentation" shape already established by the SKIA
-     * renderer (docs/skia-renderer.md). SDL never executes a Blend2D draw command, it only
-     * displays the finished image. The 3D pipeline (vertex/index buffers, DrawColoredPrimitives,
+     * RenderTarget2D's own BLImage); presentation sends the completed frame through the narrow
+     * surface presenter -- the same CPU-raster/presenter shape established by the SKIA renderer
+     * (docs/skia-renderer.md). The platform never executes a Blend2D draw command; it only displays
+     * the finished image. The 3D pipeline (vertex/index buffers, DrawColoredPrimitives,
      * depth/stencil) has no Blend2D equivalent and is truthfully refused via
      * Ensure3DSupported/HandleUnsupported3DCall.
      */
     class Blend2DRenderer final : public IGraphicsRenderer
     {
     public:
-        Blend2DRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                        CnaPresentationMode presentationMode, int swapInterval);
+        explicit Blend2DRenderer(const GraphicsRendererCreateArgs& args);
         ~Blend2DRenderer() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -278,9 +276,8 @@ namespace CNA::Internal::Renderers::Blend2D
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override { return window_; }
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override { return presentRenderer_; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -289,7 +286,7 @@ namespace CNA::Internal::Renderers::Blend2D
             int multiSampleCount = 0) override;
         /// Blend2D supports exactly one active render target at a time -- the shared
         /// IGraphicsRenderer::SetRenderTargets default would otherwise silently bind only rts[0]
-        /// and ignore the rest (same Task 709 reasoning SdlRenderer.cpp documents). Cube-face
+        /// and ignore the rest (same Task 709 reasoning the native 2D renderer documents). Cube-face
         /// targets are rejected: Blend2D has no cube-map concept at all.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
         /// GraphicsDevice::SetRenderTarget(RenderTarget2D*) -- the single-target legacy entry
@@ -400,7 +397,7 @@ namespace CNA::Internal::Renderers::Blend2D
         // overloads call it BEFORE their own argument validation (GraphicsDevice.cpp), so an
         // eager override here would make an invalid-argument call report "unsupported" instead of
         // the XNA-faithful ArgumentOutOfRangeException every renderer's argument-guard tests
-        // expect (same reasoning SdlRenderer.cpp's own lack of an override embodies). Rejection
+        // expect (same reasoning the native 2D renderer's lack of an override embodies). Rejection
         // instead happens where the real 3D work would start: DrawColoredPrimitives/
         // DrawIndexedColoredPrimitives below, exactly like every other 2D-only renderer in this
         // codebase.
@@ -445,17 +442,15 @@ namespace CNA::Internal::Renderers::Blend2D
         }
 
     private:
-        void RecreatePresentationTexture();
-        /// Queries the real physical output size of presentRenderer_ (SDL_GetRenderOutputSize),
-        /// or the debug override when DebugSetPresentationOutputSizeEXT() is active.
+        /// Queries the presenter's physical target size, or the active debug override.
         void GetPresentationOutputSize(int& width, int& height) const;
         /// Rebuilds the backbuffer (and, when needed, the presentation texture/logical
         /// presentation) for @p requestedWidth/@p requestedHeight, deriving the actual logical
-        /// width from the live SDL output aspect ratio when presentationMode_ is
+        /// width from the live presentation output aspect ratio when presentationMode_ is
         /// FixedHeightDynamicWidth -- mirrors SkiaRenderer::RecreateBackbuffer exactly (same
         /// formula: outputWidth * requestedHeight / outputHeight, rounded).
         void RecreateBackbuffer(int requestedWidth, int requestedHeight);
-        /// Re-derives and applies the FixedHeightDynamicWidth logical width when the live SDL
+        /// Re-derives and applies the FixedHeightDynamicWidth logical width when the live
         /// output aspect ratio has changed since the backbuffer was last built (a resize can
         /// arrive between draws with no explicit notification) -- mirrors
         /// SkiaRenderer::RefreshDynamicBackbufferIfNeeded. No-op for every other presentation mode
@@ -463,9 +458,8 @@ namespace CNA::Internal::Renderers::Blend2D
         /// dynamic).
         void RefreshDynamicBackbufferIfNeeded();
 
-        SDL_Window* window_;
-        SDL_Renderer* presentRenderer_ = nullptr;
-        SDL_Texture* presentTexture_ = nullptr;
+        RendererSurfaceInfo surfaceInfo_;
+        CNA::Platform::IPlatformSurfacePresenter* presenter_ = nullptr;
         int virtualWidth_;
         int virtualHeight_;
         /// CNAEXT. The caller's originally requested virtual size, preserved across
@@ -477,7 +471,7 @@ namespace CNA::Internal::Renderers::Blend2D
         CnaPresentationMode presentationMode_;
         int swapInterval_;
         /// CNAEXT. Debug-only presentation output size override (window-independent tests have no
-        /// real SDL output to query); mirrors SkiaRenderer's own DebugSetPresentationOutputSizeEXT.
+        /// real presentation output to query); mirrors SkiaRenderer's debug override.
         bool debugOutputSizeOverride_ = false;
         int debugOutputWidth_ = 0;
         int debugOutputHeight_ = 0;

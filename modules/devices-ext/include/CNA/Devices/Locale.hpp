@@ -13,7 +13,7 @@ namespace CNA::Devices
      * @brief Reports the user's preferred locale(s) (language/region).
      *
      * CNA extension — no XNA/WP7 equivalent exists. Backed by SDL3's
-     * `SDL_GetPreferredLocales()` (`third_party/SDL/include/SDL3/SDL_locale.h`), which
+     * `IPlatformSystemInfo::GetPreferredLocales()`, which
      * reads OS-level locale settings on every platform CNA targets, including
      * Web/Emscripten (via the browser's own language settings).
      *

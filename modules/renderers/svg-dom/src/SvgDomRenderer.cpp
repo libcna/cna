@@ -8,8 +8,6 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -18,39 +16,65 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 1/6: creates the SVG surface over the <canvas> SDL3's
-// Emscripten video driver owns -- same host-integration shape as HtmlDom's own root (canvas stays
-// in the layout, hidden, so SDL keeps sizing it and delivering input through it), but the surface
-// itself is a real <svg> element (SVG namespace), not a CSS-styled <div>.
+// plan_svg_dom.md design decision 1/6 and SVGDOM-5/7: creates the SVG surface over the
+// platform-owned <canvas> -- the same host-integration shape as HtmlDom's own root (canvas stays in
+// layout AND in pointer hit testing, via opacity:0 not visibility:hidden, because the platform
+// registered its mouse/touch handlers on that exact element), but the surface itself is a real <svg>
+// element (SVG namespace), not a CSS-styled <div>. The visible SVG surface is pointer-transparent, so
+// events fall through to the canvas. A shrink-wrapped, in-flow viewport owns both elements: the SVG
+// can therefore use renderer-local coordinates without querying layout after every frame's sprite
+// mutations (SVGDOM-7).
 EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     if (typeof document === 'undefined') return;
-    Module['cnaSvgDomRefCount'] = (Module['cnaSvgDomRefCount'] || 0) + 1;
-    if (Module['cnaSvgDomRoot']) return;
-    const canvas = Module['canvas'] || document.querySelector('canvas');
-    if (!canvas) { console.error('[CNA] SVG_DOM: no <canvas> element to anchor the SVG surface to'); return; }
-    if (document.getElementById('cna-svg-dom-root')) {
-        console.error('[CNA] SVG_DOM: the page already has an element with id "cna-svg-dom-root" ' +
-                      'that this renderer did not create -- refusing to proceed.');
+    if (Module['cnaSvgDomRoot']) {
+        Module['cnaSvgDomRefCount'] = (Module['cnaSvgDomRefCount'] || 0) + 1;
         return;
     }
+    const canvas = Module['canvas'] || document.querySelector('canvas');
+    if (!canvas) { console.error('[CNA] SVG_DOM: no <canvas> element to anchor the SVG surface to'); return; }
+    if (document.getElementById('cna-svg-dom-root') ||
+        document.getElementById('cna-svg-dom-viewport')) {
+        console.error('[CNA] SVG_DOM: the page already has an element with id "cna-svg-dom-root" ' +
+                      'or "cna-svg-dom-viewport" that this renderer did not create -- refusing ' +
+                      'to proceed.');
+        return;
+    }
+    // Increment only after every first-instance precondition passed. A missing canvas or host ID
+    // collision creates no owned surface, so DestroyRoot must not later observe a phantom owner.
+    Module['cnaSvgDomRefCount'] = 1;
     const svgNS = 'http://www.w3.org/2000/svg';
+    const viewport = document.createElement('div');
+    viewport.id = 'cna-svg-dom-viewport';
+    // `width:fit-content` preserves the stock Emscripten canvas's auto-margin centering while the
+    // wrapper remains an ordinary in-flow block. Moving page content (download status, responsive
+    // layout, etc.) consequently moves canvas and SVG together for free -- no offsetLeft/Top read.
+    viewport.style.cssText = 'position:relative;display:block;width:fit-content;height:fit-content;' +
+                             'margin-left:auto;margin-right:auto;line-height:0;isolation:isolate;';
     const root = document.createElementNS(svgNS, 'svg');
     root.id = 'cna-svg-dom-root';
-    root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;';
+    root.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;pointer-events:none;';
+    root.setAttribute('pointer-events', 'none');
     const defs = document.createElementNS(svgNS, 'defs');
     const bg = document.createElementNS(svgNS, 'rect');
     bg.setAttribute('x', 0); bg.setAttribute('y', 0);
     bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%');
     root.appendChild(defs);
     root.appendChild(bg);
-    (canvas.parentNode || document.body).insertBefore(root, canvas.nextSibling);
-    Module['cnaSvgDomOriginalCanvasVisibility'] = canvas.style.visibility;
-    canvas.style.visibility = 'hidden';
+    const canvasParent = canvas.parentNode || document.body;
+    if (canvas.parentNode) canvasParent.insertBefore(viewport, canvas);
+    else canvasParent.appendChild(viewport);
+    viewport.appendChild(canvas);
+    viewport.appendChild(root);
+    Module['cnaSvgDomOriginalCanvasOpacity'] = canvas.style.opacity;
+    canvas.style.opacity = '0';
+    Module['cnaSvgDomViewportEl'] = viewport;
     Module['cnaSvgDomRoot'] = root;
     Module['cnaSvgDomDefs'] = defs;
     Module['cnaSvgDomBackgroundRect'] = bg;
     Module['cnaSvgDomBoundCtx'] = null;
     Module['cnaSvgDomFilterCache'] = {};
+    Module['cnaSvgDomBackgroundFill'] = null;
+    Module['cnaSvgDomSurfaceGeometry'] = {};
 
     // SVGDOM-A (was: sibling containers keyed by CLIP-RECT IDENTITY, so cross-region paint order
     // followed each region's own first-CREATION order rather than the actual per-flush draw
@@ -106,10 +130,10 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
             root.appendChild(container);
             slot = { container: container, pool: [], used: 0, spriteHighWater: 0,
                      clipId: null, clipPathEl: null, clipRectEl: null, clipKey: undefined,
-                     frameToken: -1 };
+                     frameToken: -1, idleUsed: -1, idleStreak: 0 };
             slots[idx] = slot;
         }
-        if (slot.container.style.display === 'none') slot.container.style.display = '';
+        if (slot.container.style.display === 'none') slot.container.style.removeProperty('display');
 
         const frameToken = Module['cnaSvgDomFrameToken'];
         if (slot.frameToken !== frameToken) {
@@ -151,19 +175,34 @@ EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
 
 EM_JS(void, CNA_SvgDom_DestroyRoot, (), {
     if (typeof document !== 'undefined') {
-        Module['cnaSvgDomRefCount'] = Math.max(0, (Module['cnaSvgDomRefCount'] || 1) - 1);
+        const refCount = Module['cnaSvgDomRefCount'] || 0;
+        // EnsureRoot can refuse ownership (missing canvas or a host-owned ID collision). In that
+        // case there is no CNA surface to tear down and, critically, no canvas style to restore.
+        if (refCount <= 0) return;
+        Module['cnaSvgDomRefCount'] = refCount - 1;
         if (Module['cnaSvgDomRefCount'] > 0) return;
     }
     const root = Module['cnaSvgDomRoot'];
-    if (root && root.parentNode) root.parentNode.removeChild(root);
     const canvas = Module['canvas'] ||
                    (typeof document === 'undefined' ? null : document.querySelector('canvas'));
-    if (canvas) canvas.style.visibility = Module['cnaSvgDomOriginalCanvasVisibility'] || "";
-    Module['cnaSvgDomOriginalCanvasVisibility'] = null;
+    const viewport = Module['cnaSvgDomViewportEl'];
+    // Restore the host's original child structure exactly: viewport occupied canvas's old DOM
+    // position, so inserting canvas before it and then removing it reverses EnsureRoot's wrapping.
+    if (viewport && viewport.parentNode) {
+        if (canvas) viewport.parentNode.insertBefore(canvas, viewport);
+        viewport.parentNode.removeChild(viewport);
+    } else if (root && root.parentNode) {
+        root.parentNode.removeChild(root);
+    }
+    if (canvas) canvas.style.opacity = Module['cnaSvgDomOriginalCanvasOpacity'] || "";
+    Module['cnaSvgDomOriginalCanvasOpacity'] = null;
+    Module['cnaSvgDomViewportEl'] = null;
     Module['cnaSvgDomRoot'] = null;
     Module['cnaSvgDomDefs'] = null;
     Module['cnaSvgDomBackgroundRect'] = null;
     Module['cnaSvgDomFilterCache'] = null;
+    Module['cnaSvgDomBackgroundFill'] = null;
+    Module['cnaSvgDomSurfaceGeometry'] = null;
     Module['cnaSvgDomFlushSlots'] = null;
     Module['cnaSvgDomFlushCursor'] = 0;
     Module['cnaSvgDomFlushHighWater'] = 0;
@@ -195,8 +234,12 @@ EM_JS(void, CNA_SvgDom_Clear, (double r, double g, double b, double a), {
     }
     const bg = Module['cnaSvgDomBackgroundRect'];
     if (!bg) return;
-    bg.setAttribute('fill', 'rgba(' + Math.round(r * 255) + ',' + Math.round(g * 255) + ',' +
-                    Math.round(b * 255) + ',' + a + ')');
+    const fill = 'rgba(' + Math.round(r * 255) + ',' + Math.round(g * 255) + ',' +
+                 Math.round(b * 255) + ',' + a + ')';
+    if (Module['cnaSvgDomBackgroundFill'] !== fill) {
+        bg.setAttribute('fill', fill);
+        Module['cnaSvgDomBackgroundFill'] = fill;
+    }
     // GraphicsDevice.Clear is a real OPERATION, not merely a "frame start" convention: it must erase
     // everything drawn so far into the active target while leaving anything drawn AFTER it alone
     // (Draw, Clear, Draw, Present must show only the second Draw's content -- both for the
@@ -205,9 +248,10 @@ EM_JS(void, CNA_SvgDom_Clear, (double r, double g, double b, double a), {
     // that "erase everything before, keep everything after" contract; Present()'s own high-water
     // hide (below) then hides any slot nothing after this Clear() reclaimed this frame. Bumping the
     // frame token (rather than eagerly resetting every slot's own `used`) is what lets
-    // cnaSvgDomClaimFlushSlot cheaply tell "was this slot already touched since the last Clear()" so
-    // a stale slot beyond this frame's flush count keeps its LAST frame's sprite count until Present
-    // decides whether to hide it, instead of an O(slot count) sweep on every single Clear() call.
+    // cnaSvgDomClaimFlushSlot cheaply tell "was this slot already touched since the last frame or
+    // Clear boundary" so a stale slot beyond this frame's flush count keeps its LAST frame's sprite
+    // count until Present decides whether to hide it, instead of an O(slot count) sweep on every
+    // single Clear() call.
     Module['cnaSvgDomFlushCursor'] = 0;
     Module['cnaSvgDomLastFlushKey'] = null;
     Module['cnaSvgDomFrameToken'] = (Module['cnaSvgDomFrameToken'] || 0) + 1;
@@ -220,7 +264,9 @@ EM_JS(void, CNA_SvgDom_Clear, (double r, double g, double b, double a), {
 // high-water mark (the same shape HtmlDom's own CNA_HtmlDom_PresentFrame uses for its regions), so
 // a steady frame (same flush sequence, same per-flush sprite counts) touches nothing here at all.
 // There is nothing to swap -- the browser compositor presents the SVG subtree on its next paint
-// tick. Cursors are rewound by CNA_SvgDom_Clear (this renderer's own frame-start marker), not here.
+// tick. SVGDOM-7: Present itself always rewinds the cursors for the NEXT frame. Clear remains able
+// to rewind them MID-frame (Draw, Clear, Draw semantics), but is not a required frame-boundary call:
+// XNA permits a game to cover the whole backbuffer without calling GraphicsDevice.Clear at all.
 EM_JS(void, CNA_SvgDom_PresentFrame, (), {
     const slots = Module['cnaSvgDomFlushSlots'];
     if (!slots) return;
@@ -232,40 +278,106 @@ EM_JS(void, CNA_SvgDom_PresentFrame, (), {
     }
     Module['cnaSvgDomFlushHighWater'] = cursor;
 
-    for (let i = 0; i < cursor; ++i) {
+    for (let i = 0; i < slots.length; ++i) {
         const slot = slots[i];
         const pool = slot.pool;
-        const used = slot.used || 0;
+        // A slot the current frame did not reach is logically empty even though `slot.used` still
+        // contains its last active frame's count (the cursor reset is deliberately lazy).
+        const used = i < cursor ? (slot.used || 0) : 0;
         const spriteHigh = slot.spriteHighWater || 0;
-        for (let j = used; j < spriteHigh; ++j) {
-            const entryEl = pool[j];
-            if (entryEl && !entryEl.cna.hidden) {
-                entryEl.g.style.display = 'none';
-                entryEl.cna.hidden = true;
+        if (i < cursor) {
+            for (let j = used; j < spriteHigh; ++j) {
+                const entryEl = pool[j];
+                if (entryEl && !entryEl.cna.hidden) {
+                    entryEl.g.style.display = 'none';
+                    entryEl.cna.hidden = true;
+                }
             }
+            slot.spriteHighWater = used;
         }
-        slot.spriteHighWater = used;
+
+        // SVGDOM-7: a transient busy scene must not retain every pooled <g>/<svg>/<image>/<rect>
+        // (and optional <pattern>) forever. Shrink only after the exact active count has stayed
+        // unchanged for 180 presents (~9 s for Mobile Eggbert's 20 FPS target), avoiding churn in
+        // normal animation while releasing a genuinely idle tail. Slot containers themselves stay
+        // in place because their permanent document order is the renderer's cross-flush ordering
+        // invariant (SVGDOM-A).
+        if (slot.idleUsed === used) {
+            if (++slot.idleStreak >= 180 && pool.length > used) {
+                for (let j = used; j < pool.length; ++j) {
+                    const entryEl = pool[j];
+                    if (!entryEl) continue;
+                    if (entryEl.pattern && entryEl.pattern.parentNode)
+                        entryEl.pattern.parentNode.removeChild(entryEl.pattern);
+                    if (entryEl.g && entryEl.g.parentNode)
+                        entryEl.g.parentNode.removeChild(entryEl.g);
+                }
+                pool.length = used;
+                slot.spriteHighWater = Math.min(slot.spriteHighWater || 0, used);
+                slot.idleStreak = 0;
+            }
+        } else {
+            slot.idleUsed = used;
+            slot.idleStreak = 0;
+        }
     }
+
+    // Unconditional next-frame boundary. Before SVGDOM-7 this happened only in Clear(), so a game
+    // such as Mobile Eggbert that paints a full-screen background instead of clearing kept
+    // appending every frame's sprites to `slot.used` forever. At 20 FPS that produced tens of
+    // thousands of live SVG nodes within seconds and eventually stalled Firefox and the desktop.
+    Module['cnaSvgDomFlushCursor'] = 0;
+    Module['cnaSvgDomLastFlushKey'] = null;
+    Module['cnaSvgDomFrameToken'] = (Module['cnaSvgDomFrameToken'] || 0) + 1;
 });
 
-// Records the backbuffer's own logical geometry and physical placement (offset + scale). V1:
-// applied unconditionally every Present() (see SvgDomRenderer::Present's own comment) rather than
-// diffed against the previous frame -- a real, smaller-scope-than-HtmlDom simplification.
+// Records the backbuffer's logical geometry and renderer-local physical offset + scale. SVGDOM-5:
+// Present still checks the geometry every frame so window-size changes are observed, but unchanged
+// fields do not get written back. SVGDOM-7: canvas and root now share one in-flow positioned
+// wrapper, so the page-position component follows normal CSS layout and no layout property is read
+// here. The former offsetLeft/offsetTop read occurred after hundreds of sprite attribute writes and
+// forced Firefox to synchronously flush the whole live SVG tree every frame.
 EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
                                               double offsetX, double offsetY,
                                               double scaleX, double scaleY), {
     const root = Module['cnaSvgDomRoot'];
     if (!root) return;
-    root.setAttribute('width', logicalW);
-    root.setAttribute('height', logicalH);
-    root.setAttribute('viewBox', '0 0 ' + logicalW + ' ' + logicalH);
-    root.style.left = offsetX + 'px';
-    root.style.top = offsetY + 'px';
-    root.style.width = (logicalW * scaleX) + 'px';
-    root.style.height = (logicalH * scaleY) + 'px';
+    const geometry = Module['cnaSvgDomSurfaceGeometry'] ||
+                     (Module['cnaSvgDomSurfaceGeometry'] = {});
+    if (geometry.logicalW !== logicalW) {
+        root.setAttribute('width', logicalW);
+        geometry.logicalW = logicalW;
+    }
+    if (geometry.logicalH !== logicalH) {
+        root.setAttribute('height', logicalH);
+        geometry.logicalH = logicalH;
+    }
+    const viewBox = '0 0 ' + logicalW + ' ' + logicalH;
+    if (geometry.viewBox !== viewBox) {
+        root.setAttribute('viewBox', viewBox);
+        geometry.viewBox = viewBox;
+    }
+    if (geometry.offsetX !== offsetX) {
+        root.style.left = offsetX + 'px';
+        geometry.offsetX = offsetX;
+    }
+    if (geometry.offsetY !== offsetY) {
+        root.style.top = offsetY + 'px';
+        geometry.offsetY = offsetY;
+    }
+    const physicalW = logicalW * scaleX;
+    const physicalH = logicalH * scaleY;
+    if (geometry.physicalW !== physicalW) {
+        root.style.width = physicalW + 'px';
+        geometry.physicalW = physicalW;
+    }
+    if (geometry.physicalH !== physicalH) {
+        root.style.height = physicalH + 'px';
+        geometry.physicalH = physicalH;
+    }
     // cnaSvgDomClaimFlushSlot's own "does this rect already cover the whole surface"
     // collapse-to-'full' check (SVGDOM-A/F) needs the CURRENT logical size -- stashed here rather
-    // than re-queried from the SDL window, mirroring HtmlDom's own cnaDomLogicalW/H.
+    // than re-queried from the platform window, mirroring HtmlDom's own cnaDomLogicalW/H.
     Module['cnaSvgDomLogicalW'] = logicalW;
     Module['cnaSvgDomLogicalH'] = logicalH;
 });
@@ -298,15 +410,17 @@ namespace CNA::Internal::Renderers::SvgDom
         }
     }
 
-    SvgDomRenderer::SvgDomRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                  CnaPresentationMode mode)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    SvgDomRenderer::SvgDomRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("SvgDomRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        if (surface_.windowId == 0)
+            throw std::runtime_error("SvgDomRenderer initialized without a platform window.");
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
         SetBoundRenderTargetIdEXT(0);
         SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
         SetCurrentScissorEnableEXT(false);
@@ -326,7 +440,7 @@ namespace CNA::Internal::Renderers::SvgDom
 
     SvgDomRenderer::~SvgDomRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.windowId);
 #if defined(__EMSCRIPTEN__)
         CNA_SvgDom_DestroyRoot();
 #endif
@@ -372,10 +486,12 @@ namespace CNA::Internal::Renderers::SvgDom
     SvgDomRenderer::LogicalViewport SvgDomRenderer::ComputeLogicalViewport() const
     {
         // Same per-CnaPresentationMode geometry every CNA 2D-DOM/CSS renderer implements
-        // (SdlGpuRenderer's own reference shape) -- independently computed here.
+        // (the established GPU reference shape) -- independently computed here.
         LogicalViewport viewport{};
-        int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        const int physW = static_cast<int>(std::lround(
+            surface_.drawableSize.width / surface_.displayScale));
+        const int physH = static_cast<int>(std::lround(
+            surface_.drawableSize.height / surface_.displayScale));
         viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, physW));
         viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, physH));
         if (physW <= 0 || physH <= 0) return viewport;
@@ -441,6 +557,16 @@ namespace CNA::Internal::Renderers::SvgDom
                 "SVG_DOM renderer: invalid CnaPresentationMode ordinal " + std::to_string(mode));
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
         ApplySurfaceGeometryEXT(); // SVGDOM-C: same reasoning as SetVirtualResolution above.
+    }
+
+    void SvgDomRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surface_.windowId)
+            throw std::runtime_error("SvgDomRenderer surface window id changed.");
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        ApplySurfaceGeometryEXT();
     }
 
     bool SvgDomRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -701,7 +827,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<SvgDom::SvgDomRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        return std::make_unique<SvgDom::SvgDomRenderer>(args);
     }
 }

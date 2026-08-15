@@ -17,15 +17,16 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
    AND CNA_GRAPHICS_RENDERER STREQUAL "SOKOL")
     enable_testing()
 
-    # Mirrors the SDL_GPU/Bgfx test macros: the renderer static library and CNA form a genuine
-    # cycle (the renderer implements IGraphicsRenderer while calling back into CNA-defined symbols),
-    # which GNU ld's single-pass archive scan only resolves inside --start-group/--end-group.
+    # The renderer, graphics and input archives form a genuine cycle (the renderer implements
+    # IGraphicsRenderer, while GraphicsDevice routes window state into input). Direct renderer
+    # tests need that cycle rescanned rather than relying on incidental archive order.
     macro(cna_sokol_test target src)
         add_executable(${target} ${src})
         target_include_directories(${target} PRIVATE ${CNA_GRAPHICS_EXAMPLES_DIR})
         if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT WIN32)
             target_link_libraries(${target} PRIVATE
                 CNA
+                "$<LINK_GROUP:RESCAN,cna_input,cna_graphics_core,${RENDERER_TARGET}>"
                 SHARP_RUNTIME SDL3::SDL3)
         else()
             target_link_libraries(${target} PRIVATE CNA ${RENDERER_TARGET} SHARP_RUNTIME SDL3::SDL3)
@@ -276,8 +277,8 @@ if(CNA_BUILD_TESTS AND CNA_BUILD_EXAMPLES
         ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
     # plan_sokol.md SOKOL-45: GL-context creation must share the constructor's transactional
-    # cleanup path -- a real SDL_GL_CreateContext() success followed by an SDL_GL_MakeCurrent()
-    # failure must not leak the context.
+    # cleanup path -- platform CreateContext() succeeding followed by MakeCurrent() failing must
+    # not leak the context.
     cna_sokol_test(cna_test_sokol_gl_context_transactional
                     sokol_gl_context_transactional_test.cpp)
     cna_register_renderer_test(NAME Sokol_GLContext_Transactional

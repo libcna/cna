@@ -8,10 +8,9 @@
 #include <filesystem>
 #include <stdexcept>
 
-#include <SDL3/SDL.h>
+#include <cstdlib>
 
 #include "CNA/Internal/PathContainment.hpp"
-#include "CNA/Platform.hpp"
 #include "System/Threading/EventWaitHandle.hpp"
 
 namespace Microsoft::Xna::Framework::Storage
@@ -73,50 +72,43 @@ namespace Microsoft::Xna::Framework::Storage
         storageRootInitialized_ = true;
 
         const std::string app = appName_.empty() ? "game" : appName_;
-        char* prefPath = SDL_GetPrefPath(nullptr, app.c_str());
-        if (prefPath)
+
+        // Storage is intentionally independent of the selected windowing platform.  Resolve a
+        // conventional per-user data root directly, then ensure it exists before returning it.
+        // This also makes saved games follow the same policy under SDL3, HEADLESS and TERMINAL.
+        fs::path root;
+        if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg != nullptr && *xdg != '\0')
         {
-            storageRoot_ = prefPath;
-            SDL_free(prefPath);
-            // SDL_GetPrefPath creates the directory; strip the trailing separator
-            // so StorageContainer can append its own components cleanly.
-            while (!storageRoot_.empty() &&
-                   (storageRoot_.back() == '/' || storageRoot_.back() == '\\'))
-            {
-                storageRoot_.pop_back();
-            }
-            return storageRoot_;
+            root = fs::path(xdg) / app;
+        }
+        else if (const char* localAppData = std::getenv("LOCALAPPDATA");
+                 localAppData != nullptr && *localAppData != '\0')
+        {
+            root = fs::path(localAppData) / app;
+        }
+        else if (const char* home = std::getenv("HOME"); home != nullptr && *home != '\0')
+        {
+#if defined(__APPLE__)
+            root = fs::path(home) / "Library" / "Application Support" / app;
+#else
+            root = fs::path(home) / ".local" / "share" / app;
+#endif
+        }
+        else
+        {
+            root = fs::current_path() / app;
         }
 
-        // Fallback for Apple targets: ~/Library/Application Support/<app>, the location
-        // SDL_GetPrefPath itself uses there. The XDG layout below is a Linux convention that
-        // exists on neither macOS nor iOS, and on iOS a dot-directory under $HOME is outside the
-        // app's own container, so a save written there would not survive an app update.
-        if constexpr (CNA::isApplePlatform())
+        std::error_code code;
+        fs::create_directories(root, code);
+        if (code)
         {
-            const char* appleHome = SDL_getenv("HOME");
-            if (appleHome && *appleHome)
-            {
-                storageRoot_ = (fs::path(appleHome) / "Library" / "Application Support" / app).string();
-                return storageRoot_;
-            }
+            throw StorageDeviceNotConnectedException(
+                "Unable to create the storage directory.",
+                std::make_exception_ptr(std::filesystem::filesystem_error(
+                    "create_directories", root, code)));
         }
-
-        // Fallback: XDG_DATA_HOME or HOME/.local/share/<app>
-        const char* xdg = SDL_getenv("XDG_DATA_HOME");
-        if (xdg && *xdg)
-        {
-            storageRoot_ = (fs::path(xdg) / app).string();
-            return storageRoot_;
-        }
-        const char* home = SDL_getenv("HOME");
-        if (home && *home)
-        {
-            storageRoot_ = (fs::path(home) / ".local" / "share" / app).string();
-            return storageRoot_;
-        }
-
-        storageRoot_ = fs::current_path().string();
+        storageRoot_ = root.string();
         return storageRoot_;
     }
 

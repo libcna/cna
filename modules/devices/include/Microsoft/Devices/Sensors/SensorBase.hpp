@@ -675,11 +675,10 @@ namespace Microsoft::Devices::Sensors
          * @note Task SENSORBASE-001/ACCEL-005/GYRO-004: `Accelerometer` and
          * `Gyroscope` now honor this value as a real dispatch-rate throttle
          * via `ShouldAcceptUpdateAt()`, called from each class's own
-         * `ProcessSensorUpdateEvent()` (the real SDL event path only — the
+         * `ProcessSensorUpdateEvent()` (the real platform event path only — the
          * CNAEXT synthetic-injection test hooks deliberately bypass it, see
-         * `ShouldAcceptUpdateAt()`'s doc comment). SDL's own underlying
-         * sensor polling rate is not adjusted based on this value — SDL3 has
-         * no public API to do so for `SDL_SENSOR_ACCEL`/`SDL_SENSOR_GYRO` —
+         * `ShouldAcceptUpdateAt()`'s doc comment). The underlying desktop
+         * sensor polling rate cannot be adjusted through the platform service, so
          * so throttling is software-side, dropping events that arrive too
          * soon after the last accepted one. `Compass`/`Motion`'s Android
          * backend (Task `ANDROID-BRIDGE-002`, closed) forwards a live change

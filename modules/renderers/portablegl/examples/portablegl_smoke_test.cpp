@@ -5,7 +5,7 @@
 // not throw" -- proving the renderer genuinely rasterizes through PortableGL's own GPU-shaped
 // pipeline (real glBufferData/glVertexAttribPointer/pglCreateProgram/glDrawArrays calls).
 //
-// Check A -- SDL's video subsystem was never initialized and GetWindowInternal() is null -- this
+// Check A -- SDL's video subsystem was never initialized and GameWindow handle is null -- this
 //   renderer needs no display server or window, matching HEADLESS/SOFTWARE/STUB.
 // Check B -- Clear(r,g,b,a) followed by GetBackBufferData() reads back the exact clear color for
 //   every pixel in the requested region -- a real backbuffer, not a fiction.
@@ -79,7 +79,7 @@ protected:
         // Check A: no real window/video subsystem anywhere.
         check(SDL_WasInit(SDL_INIT_VIDEO) == 0,
               "SDL_INIT_VIDEO was never initialized under the PortableGL renderer");
-        check(renderer.GetWindowInternal() == nullptr,
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr,
               "GraphicsDevice has no real window under the PortableGL renderer");
 
         // Check B: real, correct pixel readback after Clear().

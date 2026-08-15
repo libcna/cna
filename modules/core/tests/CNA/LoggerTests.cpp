@@ -1,118 +1,198 @@
-#include <gtest/gtest.h>
-
-#include <SDL3/SDL.h>
+// SPDX-License-Identifier: MS-PL
+//
+// PLAT-53: Logger owns its own sink.
+//
+// These tests previously asserted SDL's process-wide log priority after SetMinimumLevel() -- i.e.
+// they tested SDL's global state rather than CNA's observable behaviour, and they could not have
+// survived the migration. They now capture the sink and assert what a caller can actually see:
+// which messages are emitted, at what level and category, and in what format.
 
 #include "CNA/Logger.hpp"
-#include "CNA/LogLevel.hpp"
 
-using CNA::Logger;
-using CNA::LogLevel;
+#include <gtest/gtest.h>
 
-namespace
+#include <string>
+#include <vector>
+
+namespace {
+
+using namespace CNA;
+
+struct CapturedLine
 {
-    // Logger::ToSDLPriority() is private; SDL_SetLogPriorities() is a process-wide,
-    // uniform-across-categories call, so this is the lowest practical seam that observes the
-    // exact SDL_LogPriority value SetMinimumLevel() actually hands to SDL.
-    struct LoggerSeverityCase
-    {
-        LogLevel level;
-        SDL_LogPriority expectedSdlPriority;
-        const char* description;
-    };
+    LogLevel level;
+    LogCategory category;
+    std::string message;
+};
 
-    class LoggerSdlPriorityTest : public ::testing::TestWithParam<LoggerSeverityCase>
-    {
-    protected:
-        void SetUp() override
-        {
-            savedLevel_ = Logger::GetMinimumLevel();
-        }
-
-        void TearDown() override
-        {
-            Logger::SetMinimumLevel(savedLevel_);
-        }
-
-    private:
-        LogLevel savedLevel_ = LogLevel::TRACE;
-    };
-}
-
-TEST_P(LoggerSdlPriorityTest, SetMinimumLevelSetsTheExpectedSdlPriority)
+class LoggerTest : public ::testing::Test
 {
-    const LoggerSeverityCase testCase = GetParam();
-
-    Logger::SetMinimumLevel(testCase.level);
-
-    EXPECT_EQ(SDL_GetLogPriority(SDL_LOG_CATEGORY_APPLICATION), testCase.expectedSdlPriority)
-        << testCase.description;
-    EXPECT_EQ(Logger::GetMinimumLevel(), testCase.level) << testCase.description;
-}
-
-// Table-driven over every LogLevel enumerator: REMED-CORE-001's own regression requirement is
-// that a level added later cannot silently fall through to the SDL_LOG_PRIORITY_INFO default
-// without a test noticing.
-INSTANTIATE_TEST_SUITE_P(
-    AllLogLevels,
-    LoggerSdlPriorityTest,
-    ::testing::Values(
-        LoggerSeverityCase{LogLevel::FATAL, SDL_LOG_PRIORITY_CRITICAL, "FATAL"},
-        LoggerSeverityCase{LogLevel::ERROR, SDL_LOG_PRIORITY_ERROR, "ERROR"},
-        LoggerSeverityCase{LogLevel::WARN, SDL_LOG_PRIORITY_WARN, "WARN"},
-        LoggerSeverityCase{LogLevel::INFO, SDL_LOG_PRIORITY_INFO, "INFO"},
-        LoggerSeverityCase{LogLevel::DEBUG, SDL_LOG_PRIORITY_DEBUG, "DEBUG"},
-        LoggerSeverityCase{LogLevel::TRACE, SDL_LOG_PRIORITY_DEBUG, "TRACE"},
-        LoggerSeverityCase{LogLevel::EXPERIMENT, SDL_LOG_PRIORITY_DEBUG, "EXPERIMENT"}
-    ),
-    [](const ::testing::TestParamInfo<LoggerSeverityCase>& info)
+protected:
+    void SetUp() override
     {
-        return std::string(info.param.description);
+        previousLevel_ = Logger::GetMinimumLevel();
+        Logger::SetSink([this](const LogLevel level, const LogCategory category,
+                               const std::string_view message) {
+            captured_.push_back(CapturedLine{level, category, std::string(message)});
+        });
     }
-);
 
-TEST(LoggerTest, SetMinimumLevelWarnDoesNotCollapseToInfo)
+    void TearDown() override
+    {
+        // The sink and the level are process-wide, so leaving either changed would leak into
+        // every later test in this binary.
+        Logger::ResetSink();
+        Logger::SetMinimumLevel(previousLevel_);
+    }
+
+    std::vector<CapturedLine> captured_;
+    LogLevel previousLevel_ = LogLevel::INFO;
+};
+
+// --- what actually reaches the sink -------------------------------------------------------------
+
+TEST_F(LoggerTest, AMessageAtOrAboveTheMinimumLevelReachesTheSink)
 {
-    // REMED-CORE-001's headline symptom: WARN previously fell through to
-    // SDL_LOG_PRIORITY_INFO instead of SDL_LOG_PRIORITY_WARN.
-    const LogLevel saved = Logger::GetMinimumLevel();
-
-    Logger::SetMinimumLevel(LogLevel::WARN);
-    EXPECT_EQ(SDL_GetLogPriority(SDL_LOG_CATEGORY_APPLICATION), SDL_LOG_PRIORITY_WARN);
-    EXPECT_NE(SDL_GetLogPriority(SDL_LOG_CATEGORY_APPLICATION), SDL_LOG_PRIORITY_INFO);
-
-    Logger::SetMinimumLevel(saved);
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    Logger::Info("hello");
+    ASSERT_EQ(captured_.size(), 1u);
+    EXPECT_EQ(captured_[0].level, LogLevel::INFO);
+    EXPECT_EQ(captured_[0].category, LogCategory::APPLICATION);
 }
 
-TEST(LoggerTest, LogDoesNotThrowAtAnySeverity)
+TEST_F(LoggerTest, AMessageBelowTheMinimumLevelIsDiscarded)
 {
-    const LogLevel saved = Logger::GetMinimumLevel();
+    Logger::SetMinimumLevel(LogLevel::WARN);
+    Logger::Info("suppressed");
+    Logger::Debug("also suppressed");
+    EXPECT_TRUE(captured_.empty());
+}
+
+TEST_F(LoggerTest, EverySeverityIsDeliveredWithItsOwnLevel)
+{
+    // The old version pinned each level to a native log priority, which collapsed DEBUG, TRACE and
+    // EXPERIMENT onto one value and so could not tell them apart. Owning the sink means the
+    // level survives to the consumer intact, and this pins that.
+    Logger::SetMinimumLevel(LogLevel::EXPERIMENT);
+
+    Logger::Fatal("f");
+    Logger::Error("e");
+    Logger::Warn("w");
+    Logger::Info("i");
+    Logger::Debug("d");
+    Logger::Trace("t");
+    Logger::Experiment("x");
+
+    ASSERT_EQ(captured_.size(), 7u);
+    EXPECT_EQ(captured_[0].level, LogLevel::FATAL);
+    EXPECT_EQ(captured_[1].level, LogLevel::ERROR);
+    EXPECT_EQ(captured_[2].level, LogLevel::WARN);
+    EXPECT_EQ(captured_[3].level, LogLevel::INFO);
+    EXPECT_EQ(captured_[4].level, LogLevel::DEBUG);
+    EXPECT_EQ(captured_[5].level, LogLevel::TRACE);
+    EXPECT_EQ(captured_[6].level, LogLevel::EXPERIMENT);
+}
+
+TEST_F(LoggerTest, NonApplicationCategoriesAreNoLongerFilteredSeparately)
+{
+    // The concrete regression the migration removes. SDL defaulted RENDER (and most other
+    // non-application categories) to a stricter threshold than APPLICATION, so a Warn on RENDER
+    // could be discarded after CNA's own IsEnabled() had allowed it -- two gates, only one of
+    // them CNA's. There is now exactly one gate.
+    Logger::SetMinimumLevel(LogLevel::WARN);
+    Logger::Warn("render warning", LogCategory::RENDER);
+
+    ASSERT_EQ(captured_.size(), 1u);
+    EXPECT_EQ(captured_[0].category, LogCategory::RENDER);
+}
+
+TEST_F(LoggerTest, EveryCategoryReachesTheSinkUnchanged)
+{
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    for (const LogCategory category :
+         {LogCategory::APPLICATION, LogCategory::ERROR, LogCategory::SYSTEM, LogCategory::AUDIO,
+          LogCategory::VIDEO, LogCategory::RENDER, LogCategory::INPUT, LogCategory::TEST,
+          LogCategory::GPU})
+    {
+        Logger::Info("m", category);
+    }
+
+    ASSERT_EQ(captured_.size(), 9u);
+    EXPECT_EQ(captured_[0].category, LogCategory::APPLICATION);
+    EXPECT_EQ(captured_[5].category, LogCategory::RENDER);
+    EXPECT_EQ(captured_[8].category, LogCategory::GPU);
+}
+
+// --- conditional overloads ------------------------------------------------------------------------
+
+TEST_F(LoggerTest, ConditionalOverloadsRespectTheirCondition)
+{
     Logger::SetMinimumLevel(LogLevel::TRACE);
+    Logger::WarnIf("emitted", true);
+    Logger::WarnIf("skipped", false);
+    Logger::InfoIf("emitted", true);
+    Logger::InfoIf("skipped", false);
 
-    EXPECT_NO_THROW(Logger::Fatal("logger fatal regression check"));
-    EXPECT_NO_THROW(Logger::Error("logger error regression check"));
-    EXPECT_NO_THROW(Logger::Warn("logger warn regression check"));
-    EXPECT_NO_THROW(Logger::Info("logger info regression check"));
-    EXPECT_NO_THROW(Logger::Debug("logger debug regression check"));
-    EXPECT_NO_THROW(Logger::Trace("logger trace regression check"));
-    EXPECT_NO_THROW(Logger::Experiment("logger experiment regression check"));
-
-    Logger::SetMinimumLevel(saved);
+    ASSERT_EQ(captured_.size(), 2u);
+    EXPECT_NE(captured_[0].message.find("emitted"), std::string::npos);
+    EXPECT_NE(captured_[1].message.find("emitted"), std::string::npos);
 }
 
-TEST(LoggerTest, IsEnabledGatingRespectsMinimumLevelOrdering)
+// --- format ----------------------------------------------------------------------------------------
+
+TEST_F(LoggerTest, FormattedLineCarriesLevelCategoryAndMessage)
 {
-    // Not a direct ToSDLPriority test, but a needed companion: this is the OTHER gate (CNA's
-    // own IsEnabled()) that determines whether ToSDLPriority()/SDL_LogMessage() is reached at
-    // all. Setting the minimum to WARN must not silently suppress WARN/ERROR/FATAL themselves.
-    const LogLevel saved = Logger::GetMinimumLevel();
-    Logger::SetMinimumLevel(LogLevel::WARN);
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    Logger::Warn("disk almost full", LogCategory::SYSTEM);
 
-    // FatalIf/ErrorIf/WarnIf log unconditionally when condition is true; this only proves no
-    // crash/throw occurs while the minimum level excludes INFO/DEBUG/TRACE/EXPERIMENT below it.
-    EXPECT_NO_THROW(Logger::FatalIf("fatal", true));
-    EXPECT_NO_THROW(Logger::ErrorIf("error", true));
-    EXPECT_NO_THROW(Logger::WarnIf("warn", true));
-    EXPECT_NO_THROW(Logger::InfoIf("info", true));
-
-    Logger::SetMinimumLevel(saved);
+    ASSERT_EQ(captured_.size(), 1u);
+    EXPECT_EQ(captured_[0].message, "[WARN][SYSTEM] disk almost full");
 }
+
+TEST_F(LoggerTest, FormattedLineHasNoTrailingNewline)
+{
+    // The sink adds its own line ending; embedding one here would double-space every custom sink
+    // and corrupt structured consumers.
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    Logger::Info("x");
+    ASSERT_EQ(captured_.size(), 1u);
+    EXPECT_EQ(captured_[0].message.find('\n'), std::string::npos);
+}
+
+// --- sink lifecycle ----------------------------------------------------------------------------------
+
+TEST_F(LoggerTest, ResetSinkRestoresTheDefaultWithoutCrashing)
+{
+    Logger::SetMinimumLevel(LogLevel::INFO);
+    Logger::ResetSink();
+    // Goes to stderr now; the assertion is that logging with no custom sink is safe, which is the
+    // state every real application runs in.
+    EXPECT_NO_THROW(Logger::Info("to stderr"));
+    EXPECT_TRUE(captured_.empty());
+}
+
+TEST_F(LoggerTest, DefaultSinkWritesToStderrAndNeverStdout)
+{
+    Logger::ResetSink();
+    Logger::SetMinimumLevel(LogLevel::INFO);
+
+    ::testing::internal::CaptureStdout();
+    ::testing::internal::CaptureStderr();
+    Logger::Info("terminal-safe-log-destination");
+    const std::string standardError = ::testing::internal::GetCapturedStderr();
+    const std::string standardOutput = ::testing::internal::GetCapturedStdout();
+
+    EXPECT_TRUE(standardOutput.empty()) << standardOutput;
+    EXPECT_NE(standardError.find("terminal-safe-log-destination"), std::string::npos)
+        << standardError;
+}
+
+TEST_F(LoggerTest, MinimumLevelRoundTrips)
+{
+    Logger::SetMinimumLevel(LogLevel::ERROR);
+    EXPECT_EQ(Logger::GetMinimumLevel(), LogLevel::ERROR);
+    Logger::SetMinimumLevel(LogLevel::TRACE);
+    EXPECT_EQ(Logger::GetMinimumLevel(), LogLevel::TRACE);
+}
+
+} // namespace

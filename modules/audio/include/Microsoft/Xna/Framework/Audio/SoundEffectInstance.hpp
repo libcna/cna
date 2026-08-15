@@ -18,9 +18,9 @@ namespace Microsoft::Xna::Framework::Audio
     class Cue;
 
     // T-4C: DSP filter state (kind/coefficients/recursive state), fully defined only in
-    // SoundEffectInstance.cpp where SDL3_mixer's callback-registration types are available.
+    // SoundEffectInstance.cpp where the mixer callback-registration types are available.
     // Namespace-scope (not a nested class of SoundEffectInstance) so the free-function
-    // SDL3_mixer callback that reads it doesn't need friend access -- it's still effectively
+    // mixer callback that reads it doesn't need friend access -- it's still effectively
     // private, since nothing outside SoundEffectInstance.cpp ever names it.
     struct FilterState;
 
@@ -31,7 +31,7 @@ namespace Microsoft::Xna::Framework::Audio
         // Cue::Play() wires real per-track XACT filter data into INTERNAL_applyXactTrackFilter
         // (P9-XACT-011) -- see that method's declaration below.
         CNAEXT friend class Cue;
-        // Tests need read access to the underlying MIX_Track handle to verify Play() idempotency
+        // Tests need read access to the underlying mixer-track handle to verify Play() idempotency
         // (that a repeated call while already playing doesn't restart the track).
         CNAEXT friend struct SoundEffectInstanceTestAccess;
 
@@ -48,17 +48,17 @@ namespace Microsoft::Xna::Framework::Audio
         // AUD-04-008/009: the CNA::Internal::Audio::GetMixerGeneration() value captured at the
         // moment track_ was created (Play()). Compared against the current generation by
         // GetLiveTrackHandle() below, so a track_ orphaned by AudioMixer::DestroyMixer() (which
-        // frees every MIX_Track the destroyed mixer owned) is detected instead of dereferenced.
+        // frees every track the destroyed mixer owned) is detected instead of dereferenced.
         // 0 is a safe "never captured" sentinel: it only matters once track_ is non-null, and
         // track_ is only ever set alongside this field.
         std::uint64_t trackMixerGeneration_ = 0;
 
-        // AUD-04-008/009: returns track_ as a live MIX_Track* (type-erased to void*, same as
+        // AUD-04-008/009: returns track_ as a live mixer track (type-erased to void*, same as
         // track_ itself), or nullptr -- clearing track_ as a side effect -- if the mixer that
         // owned it has been destroyed since this track was created. Every accessor that needs a
         // live track handle (in this class and DynamicSoundEffectInstance, which shares track_)
         // must go through this instead of reading track_ directly, since AudioMixer::
-        // DestroyMixer() frees every MIX_Track the mixer owned with no way to notify a live
+        // DestroyMixer() frees every track the mixer owned with no way to notify a live
         // SoundEffectInstance directly. const so getStateProperty() (a const query) can call it;
         // mutates via const_cast, matching this class's existing convention for lazily
         // synchronizing cached state from a const getter (see getStateProperty()'s own
@@ -85,7 +85,7 @@ namespace Microsoft::Xna::Framework::Audio
         // exists (e.g. after `SoundEffect(path).CreateInstance()` on a temporary) -- CP-7.
         // Type-erased because SoundEffect::Impl is private and defined only in SoundEffect.cpp.
         std::shared_ptr<void> soundEffectKeepAlive_;
-        void* nativeAudioHandle_ = nullptr; // MIX_Audio*, cached while soundEffect was alive
+        void* nativeAudioHandle_ = nullptr; // opaque mixer audio, cached while soundEffect was alive
 
         // Cached from the originating SoundEffect at construction time, same rationale as
         // nativeAudioHandle_ above -- Play() must never dereference the SoundEffect itself
@@ -120,25 +120,25 @@ namespace Microsoft::Xna::Framework::Audio
         float spatialPan_    = 0.0f;
 
         // Heap-allocated (not inline) so its address is stable across a move of *this* -- the
-        // SDL3_mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
+        // mixer callback holds a raw pointer to it as userdata, and a unique_ptr move
         // transfers ownership without changing that address, so no callback re-registration is
         // needed after moving a SoundEffectInstance with an active filter (T-4C).
         std::unique_ptr<FilterState> filterState_;
 
-        // SDL3_mixer has no aux-send/return bus (no equivalent to FAudio's shared ReverbVoice),
+        // The current mixer engine has no aux-send/return bus (no FAudio ReverbVoice equivalent),
         // so this stays a documented no-op (T-4C). Matches FNA: SoundEffectInstance.cs never has
         // any caller for this method either -- FACT applies XACT reverb routing natively,
         // invisible to the C# layer -- so there is no observable behavior gap versus reference.
         void INTERNAL_applyReverb(float rvGain);
 
         // Real state-variable filter (T-4C), matching FAudio's own algorithm exactly (see
-        // FAudio_internal.c's FAudio_INTERNAL_FilterVoice) via an SDL3_mixer per-track "cooked"
+        // FAudio_internal.c's FAudio_INTERNAL_FilterVoice) via a per-track post-transform
         // callback. `cutoff`/`center` are the pre-computed normalized frequency FAudio expects
         // (2*sin(pi*cutoffHz/sampleRate), range [0,1]), not raw Hz -- matches
         // FAudioFilterParameters::Frequency exactly, since these methods just forward it.
         // P14-ORDER-002: order-independent of Play() -- establishes/updates the pending filter
         // state (kind/frequency/oneOverQ, in filterState_) regardless of whether a live track
-        // exists yet; only the real SDL3_mixer callback registration itself is deferred to
+        // exists yet; only the real mixer callback registration itself is deferred to
         // EnsureTrackDspState() (called from Play()) if there's no track yet. This intentionally
         // does NOT match FNA's own `if (handle == IntPtr.Zero) return;` guard on its equivalent,
         // dead-code (never actually called) SoundEffectInstance.cs methods -- those exist only for
@@ -162,7 +162,7 @@ namespace Microsoft::Xna::Framework::Audio
         // P9-XACT-011: real entry point for a Cue-driven per-track XACT filter (parsed by
         // XactParser.cpp into XsbWaveRef::filterType/filterFrequencyHz/filterQFactorRaw).
         // `filterType` matches FAudioFilterType (0=low-pass, 1=band-pass, 2=high-pass);
-        // `frequencyHz` is the raw authored Hz value, converted to SDL3_mixer's expected
+        // `frequencyHz` is the raw authored Hz value, converted to the mixer engine's expected
         // normalized cutoff via the real device sample rate (INTERNAL_calculateFilterCutoff);
         // `qfactorRaw` is the raw XACT Q-factor byte, converted via
         // INTERNAL_calculateFilterOneOverQ. No-op for an unrecognized filterType (defensive only
@@ -215,12 +215,12 @@ namespace Microsoft::Xna::Framework::Audio
         // setters, this must run for EVERY playing track, not just filtered ones, since the
         // crossfeed pan matrix below now lives in the same callback and needs to run
         // unconditionally. Idempotent -- safe to call on every Play()/Apply3D(), matching
-        // MIX_SetTrackCookedCallback's own documented "may be called... at any time" contract.
+        // the mixer callback's own documented "may be called... at any time" contract.
         // No-op if track_ hasn't been created yet.
         void EnsureTrackDspState();
 
         // Pure conversion helpers (P9-XACT-011), split out of INTERNAL_applyXactTrackFilter so
-        // they're independently unit-testable without a real SDL3_mixer device driving the
+        // they're independently unit-testable without a real mixer output device driving the
         // sample rate. Both match FAudio's exact formulas (FACT_internal.c,
         // FACT_INTERNAL_CalculateFilterFrequency and the inline `1.0f / (qfactor / 3.0f)` at the
         // SOUND_FLAG_COMPLEX track-init site).
@@ -228,7 +228,7 @@ namespace Microsoft::Xna::Framework::Audio
         CNAEXT static float INTERNAL_calculateFilterOneOverQ(uint8_t qfactorRaw);
 
         // P12-PITCH-001: converts the XNA `Pitch` property (range [-1,1], "-1 octave to +1
-        // octave") to the playback-rate ratio SDL3_mixer's `MIX_SetTrackFrequencyRatio` expects.
+        // octave") to the playback-rate ratio the mixer engine expects.
         // Matches FNA exactly (SoundEffectInstance.cs:589-591): `(float)Math.Pow(2.0,
         // INTERNAL_pitch)`, an exponential octave curve -- NOT a linear multiplier. Split out as
         // a pure function, matching INTERNAL_calculatePan/INTERNAL_calculateFilterCutoff above,
@@ -248,7 +248,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // P9-3D-007/P9-3D-010: `Apply3D`'s pan approximation (listener-relative rightward
         // displacement over distance, clamped to [-1,1]), split out so it's independently
-        // unit-testable -- SDL3_mixer has no `MIX_GetTrackStereo` getter (unlike gain/frequency-
+        // unit-testable -- the mixer engine has no stereo-matrix getter (unlike gain/frequency-
         // ratio), so the *result* of `Apply3D`'s pan computation can't be verified by reading the
         // track back; this pure function can be tested directly instead. `rightDisplacement` is
         // the emitter's position projected onto the listener's own Forward/Up-derived right axis
@@ -270,7 +270,7 @@ namespace Microsoft::Xna::Framework::Audio
             float pan, float& ll, float& rl, float& lr, float& rr);
 
         // Test-only hook (SoundEffectInstanceTestAccess): runs this instance's filter state
-        // through the exact same math the real SDL3_mixer callback uses, but synchronously and
+        // through the exact same math the real mixer callback uses, but synchronously and
         // directly -- the real callback only fires asynchronously from the mixing thread, which
         // would make a test either flaky or need a real-time wait. No-op if no filter/pan state
         // is active at all (P11-PAN-001: now also applies the crossfeed pan matrix, a no-op at
@@ -284,7 +284,7 @@ namespace Microsoft::Xna::Framework::Audio
 
         // Test-only hooks (SoundEffectInstanceTestAccess, P11-PAN-001): read/write the DSP
         // state's pan value directly, without a live track -- lets ProcessFilterSamplesForTest's
-        // crossfeed math be exercised in isolation from Play()/setPanProperty()'s SDL3_mixer
+        // crossfeed math be exercised in isolation from Play()/setPanProperty()'s mixer
         // side effects. The setter lazily allocates filterState_ (matching
         // INTERNAL_applyLowPassFilter's own lazy-allocation pattern) so it works even before any
         // filter has ever been applied.
@@ -342,7 +342,7 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Applies 3D spatial audio properties using listener and emitter positions.
          *
-         * SDL3_mixer does not support full 3D audio; this is a distance and pan approximation
+         * The current mixer engine does not support full 3D audio; this is a distance/pan approximation
          * applied directly to the underlying track. It does not modify the Volume or Pan
          * properties, which continue to report only what was last set through their setters.
          *

@@ -84,9 +84,9 @@ ctest --test-dir build --output-on-failure
 - CNAEXT extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
   gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
   device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
-- Single SDL event funnel (`SdlInputBridge::ProcessEvent`), renderer-agnostic — Input behavior is
-  identical across all 4 graphics renderers (EasyGL/Vulkan/bgfx/SDL_RENDERER), verified by the
-  `CnaTests` input suite.
+- Single platform-event funnel (`IPlatform::PollEvents` → `PlatformInputBridge::ProcessEvent`),
+  renderer-agnostic and independent of the selected native event source. SDL3 translation stays
+  inside its platform implementation; the `CnaTests` input suite verifies the shared state path.
 
 ### Rendering
 

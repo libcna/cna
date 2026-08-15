@@ -21,10 +21,10 @@ namespace CNA::Internal::Renderers::Canvas
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         /// plan_canvas.md CANVAS-21: Canvas2D has no native mip chain either (same conclusion
-        /// SDL_RENDERER reached, Task 681) -- level>0 throws, level=0 behaves like UpdatePixels.
+        /// the native 2D renderer reached, Task 681) -- level>0 throws, level=0 behaves like UpdatePixels.
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 
         /// Id into `Module['cnaTextures']`, used by CanvasSpriteBatchRenderer (Phase C4) and

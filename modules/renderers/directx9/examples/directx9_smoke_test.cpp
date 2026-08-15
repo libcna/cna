@@ -1363,7 +1363,7 @@ namespace
         }
 
         CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
-        createArgs.window = sdlWindow;
+        createArgs.surface.windowId = SDL_GetWindowID(sdlWindow);
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
         createArgs.depthStencilFormat = 0;  // DepthFormat::None
@@ -1403,7 +1403,7 @@ namespace
         }
 
         CNA::Internal::Renderers::GraphicsRendererCreateArgs createArgs;
-        createArgs.window = sdlWindow;
+        createArgs.surface.windowId = SDL_GetWindowID(sdlWindow);
         createArgs.virtualWidth = 64;
         createArgs.virtualHeight = 64;
         createArgs.graphicsProfile = 1;  // GraphicsProfile::HiDef

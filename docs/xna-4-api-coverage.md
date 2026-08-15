@@ -625,17 +625,18 @@ both but never throws either from its own Audio source either), not a gap.
 - SDL3 touch renderer is wired up (`feature/input` branch, `plan_input.md` Phase I2, INPUT-TOUCH-*/INPUT-GESTURE-* cluster): `SDL_EVENT_FINGER_*` feeds `TouchPanel::INTERNAL_onTouchEvent`, `TouchDeviceExists`, and `DisplayWidth`/`DisplayHeight` (from the real back-buffer size). Gestures (Tap, DoubleTap, Hold, Horizontal/Vertical/Free drag, Flick, Pinch, PinchComplete) are recognized end-to-end by `GestureDetector` and covered by a dedicated test suite.
 - **Input member-level parity (2026-07-06):** the full public Input surface is now mechanically parity-checked against FNA — member/signature parity via the generated `docs/input-member-parity-matrix.md` (INPUT-API-027) + the compile-time signature freeze (INPUT-API-031), and enum values byte-pinned (INPUT-API-034). Keyboard keycode/scancode maps are byte-identical to FNA (INPUT-KBD-009/010). See `plan_input.md` for the per-type task status.
 - Gesture recognition is a byte-faithful port of FNA's `GestureDetector.cs` (audited, task 829) with deterministic clock-injected tests (task 830); multi-touch edge cases + coordinate scaling covered (tasks 825–828).
-- Known deviation: `TouchPanel::GetState()` falls back to an event-driven `InputManager` snapshot rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714) — CNA's input bridge is event-driven, not poll-driven, throughout. The event-driven `InputManager` map is internally unbounded, but `TouchPanel::GetState()` caps the public snapshot at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
+- Known deviation: `TouchPanel::GetState()` reads a panel-owned event map rather than FNA's per-frame poll population of `touches_` (documented in-source, task 714/PLAT-86) — CNA's input bridge is event-driven, not poll-driven. The map is internally unbounded, but the public snapshot is deterministically capped at `MAX_TOUCHES` (8) to match FNA (DEC-10, 2026-07-05).
 - `TouchPanel::GetCapabilities()` reports `MaximumTouchCount = 0` when disconnected and **4** when connected, matching FNA/XNA (DEC-09, 2026-07-05 — XNA always reports 4; a fixed XNA-compat value, not the `MAX_TOUCHES` tracking cap).
 - **Status:** Implemented
 
 ### `Microsoft::Xna::Framework::Media`
 
-- `Song`, `SongCollection`, `MediaPlayer`, `MediaQueue`: implemented with SDL_mixer.
-- `Album`, `Artist`, `Genre`, `Picture`, `Playlist` and their collections: stub.
-- `MediaLibrary`: stub.
-- `Video`, `VideoPlayer`: implemented (FFmpeg renderer).
-- **Status:** Partial
+- `Song`, `SongCollection`, `MediaPlayer`, `MediaQueue`: implemented through CNA's audio facade.
+- `Album`, `Artist`, `Genre`, `Picture`, `Playlist` and their collections: implemented by the
+  local-library index, including tags, playlists, thumbnails, and platform-provided user folders.
+- `MediaLibrary`: implemented as a synchronous local-library snapshot.
+- `Video`, `VideoPlayer`: implemented with FFmpeg decoding and an opaque CNA mixer playback stream.
+- **Status:** Implemented, with the documented compatibility deviations in `CHECKLIST.md`.
 
 ### `Microsoft::Xna::Framework::Storage`
 
@@ -843,7 +844,7 @@ maturity levels.
 | `PackedVector` (all 17 types) | ~100 % | Full Pack/Unpack with correct rounding; golden-value + edge-case tests |
 | `SpriteFont` / `Model` | ~80 % | Functional for typical use; some edge-case APIs stubs |
 | `SoundEffect / SoundEffectInstance` | ~95 % | SDL3_mixer backend; real filters, instance-tracking cascade; 3D is pan+attenuation+Doppler (no HRTF/elevation, documented) |
-| `MediaPlayer / VideoPlayer` | ~85 % | FFmpeg video; SDL_mixer audio; Album/Artist/Genre stub |
+| `MediaPlayer / VideoPlayer` | ~95 % | FFmpeg video; CNA audio facade; local Album/Artist/Genre/Picture/Playlist library implemented |
 | `ContentManager` | ~65 % | File-extension readers; no XNB; no ServiceProvider property |
 | `StorageDevice / StorageContainer` | ~90 % | Native filesystem; full XNA API shape |
 | `GamePad / Keyboard / Mouse` (XNA 4.0 core) | ~100 % behavior | SDL3 renderer; FNA-faithful `GetHashCode`/`ToString`/ordering, keycode/scancode maps, dead-zone math, button/axis mapping — all wired and tested (`feature/input` Phases I3–I5, I9–I10). `Mouse::SetPosition` now converts logical→window for scaled/letterboxed windows (a-0001, task 846) — no remaining input-layer gap; residual items are platform/hardware-gated only. |

@@ -3,7 +3,7 @@
 # (plan_glbackends.md); the profile define CNA_GL_PROFILE_* is applied by
 # RendererSelection.cmake at identity-selection time.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE easy-gl SDL3::SDL3)
+target_link_libraries(${RENDERER_TARGET} PRIVATE easy-gl)
 
 # Module-owned examples (module-examples campaign): the family's example/test
 # registration is module-local; its historical selection/platform conditions

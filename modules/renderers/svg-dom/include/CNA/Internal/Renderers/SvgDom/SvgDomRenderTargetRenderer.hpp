@@ -36,9 +36,6 @@ namespace CNA::Internal::Renderers::SvgDom
         /** @brief Returns the target height in pixels. */
         [[nodiscard]] int GetHeight() const override { return texture_.GetHeight(); }
 
-        /** @brief Always null -- this renderer has no `SDL_Texture` anywhere in it. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the target's pixels directly, as for a plain texture.
          *

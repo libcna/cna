@@ -176,6 +176,21 @@ namespace Microsoft::Xna::Framework::Input::Touch
         );
 
         /**
+         * @brief Updates one event-driven touch point in the panel-owned state snapshot.
+         * @note CNAEXT — internal platform-bridge entry point, not part of the XNA 4.0 API.
+         * @param touchId The stable CNA touch identifier.
+         * @param state The touch location state of this event.
+         * @param position The touch position in logical pixels.
+         * @param pressure CNAEXT/EXT pressure in the inclusive 0..1 range.
+         */
+        CNAEXT static void INTERNAL_setTouchState(
+            intcs touchId,
+            TouchLocationState state,
+            const Microsoft::Xna::Framework::Vector2& position,
+            float pressure = 0.0f
+        );
+
+        /**
          * @brief Updates one touch slot with a finger id and pixel position.
          * @note CNAEXT — FNA declares `SetFinger` `internal`, not part of the public XNA
          *       `TouchPanel` API.
@@ -189,8 +204,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
          * @brief Advances touch panel state by one frame.
          *
          * Copies the SetFinger()-driven touch array to its previous-frame snapshot, advances the
-         * event-driven InputManager touch map by one frame (see InputManager::AdvanceTouchFrame —
-         * promotes Pressed to Moved, retires Released touches), and updates gesture detection.
+         * panel-owned event state by one frame (promotes Pressed to Moved and retires Released
+         * touches), and updates gesture detection.
          * Must be called at most once per frame; GetState() itself no longer mutates state.
          *
          * @note CNAEXT — FNA declares `Update` `internal`, not part of the public XNA
@@ -199,10 +214,8 @@ namespace Microsoft::Xna::Framework::Input::Touch
         CNAEXT static void Update();
 
         /**
-         * @brief Test-only: resets all process-wide touch/gesture state — the touch arrays, the
-         *        gesture queue, the touch-device-exists flag, and enabled gestures — to defaults.
-         * @note CNAEXT — a CNA test-support helper, not part of the XNA 4.0 API. Display size /
-         *       orientation are left untouched (tests set those explicitly).
+         * @brief Test-only: resets all process-wide touch/gesture state to defaults.
+         * @note CNAEXT — a CNA test-support helper, not part of the XNA 4.0 API.
          */
         CNAEXT static void ResetForTests();
 
@@ -218,8 +231,5 @@ namespace Microsoft::Xna::Framework::Input::Touch
         static std::array<TouchLocation, MAX_TOUCHES> touches_;
         static std::array<TouchLocation, MAX_TOUCHES> previousTouches_;
         static std::vector<TouchLocation> validTouches_;
-
-        static void updateInputManagerTouch(intcs fingerId, TouchLocationState state,
-                                            const Microsoft::Xna::Framework::Vector2& position);
     };
 }

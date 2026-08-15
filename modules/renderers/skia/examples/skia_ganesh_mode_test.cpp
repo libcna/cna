@@ -2,16 +2,17 @@
 // SKIA-160: construction-time raster/Ganesh mode selection, proven transactional both ways.
 //
 // This single source compiles and runs correctly in EITHER CNA_SKIA_MODE:
-//   RASTER (default): SkiaGaneshContext must refuse deterministically, without touching SDL/GL at
+//   RASTER (default): SkiaGaneshContext must refuse deterministically, without touching platform GL at
 //   all -- registered under Skia;Raster (no display needed), proving "no silent fallback" holds
 //   in every ordinary regression build, which never links Ganesh.
 //   GANESH (opt-in, SKIA-159/160): SkiaGaneshContext must genuinely construct a working
-//   GrDirectContext over a real SDL GL context -- registered under Skia;Accelerated;Display,
+//   GrDirectContext over a real platform GL context -- registered under Skia;Accelerated;Display,
 //   giving that label its first real member. The negative (null window) case is proven here too,
 //   so the transactional-failure contract is checked in both directions within the same mode.
 
 #include "CNA/Internal/Renderers/Skia/SkiaGaneshContext.hpp"
 #include "CNA/Internal/Renderers/Skia/SkiaStartupDiagnostic.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -21,6 +22,7 @@
 
 using CNA::Internal::Renderers::Skia::SkiaGaneshContext;
 using CNA::Internal::Renderers::Skia::kSkiaPinnedRevision;
+using CNA::Examples::SdlTestGlContext;
 
 namespace
 {
@@ -33,11 +35,12 @@ namespace
             ++failures;
     }
 
-    [[nodiscard]] bool ThrowsRuntimeError(SDL_Window* window)
+    [[nodiscard]] bool ThrowsRuntimeError(CNA::Platform::IPlatformGlContext* service,
+                                          CNA::Platform::WindowId window)
     {
         try
         {
-            SkiaGaneshContext context(window);
+            SkiaGaneshContext context(service, window);
             (void)context;
             return false;
         }
@@ -52,8 +55,8 @@ namespace
 
 int main()
 {
-    Check(ThrowsRuntimeError(nullptr),
-          "constructing with a null window fails transactionally in GANESH mode too");
+    Check(ThrowsRuntimeError(nullptr, 0),
+          "constructing without a platform GL service fails transactionally in GANESH mode too");
 
     if (!SDL_Init(SDL_INIT_VIDEO))
     {
@@ -74,7 +77,8 @@ int main()
     }
 
     {
-        SkiaGaneshContext context(window);
+        SdlTestGlContext glContext(window);
+        SkiaGaneshContext context(&glContext, SDL_GetWindowID(window));
         Check(context.MaxTextureSize() > 0,
               "a real GrDirectContext reports a positive max texture size");
 
@@ -91,7 +95,8 @@ int main()
     // The destructor above must have released the context cleanly; constructing a second,
     // independent context on the same window proves no state leaked across instances.
     {
-        SkiaGaneshContext second(window);
+        SdlTestGlContext glContext(window);
+        SkiaGaneshContext second(&glContext, SDL_GetWindowID(window));
         Check(second.MaxTextureSize() > 0,
               "a second, independent GrDirectContext also constructs successfully");
     }
@@ -105,12 +110,11 @@ int main()
 
 int main()
 {
-    Check(ThrowsRuntimeError(nullptr),
-          "constructing with a null window fails transactionally in RASTER mode");
-    // A non-null-but-fake pointer proves the refusal does not depend on inspecting the window at
-    // all -- RASTER-mode SkiaGaneshContext must refuse before it would ever dereference it.
-    Check(ThrowsRuntimeError(reinterpret_cast<SDL_Window*>(0x1)),
-          "constructing with any window fails transactionally in RASTER mode, without touching SDL/GL");
+    Check(ThrowsRuntimeError(nullptr, 0),
+          "constructing without platform state fails transactionally in RASTER mode");
+    // A non-zero-but-fake stable id proves the refusal does not inspect a native window at all.
+    Check(ThrowsRuntimeError(nullptr, 1),
+          "constructing with any window id fails in RASTER mode without touching platform GL");
     return failures == 0 ? 0 : 1;
 }
 

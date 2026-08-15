@@ -1,24 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 //
-// Task SDLCORE-011: a small standalone (non-GTest) executable reproducing the exact ordering
-// hazard Microsoft::Devices::VibrateController::getDefaultProperty()'s function-local static
-// singleton exposes -- its destructor (via Detail::SdlHapticVibrateBackend) makes real
-// SDL_CloseHaptic()/SDL_QuitSubSystem() calls, but function-local statics are destroyed at
-// process-exit static teardown, *after* main() returns, which can be after the application's own
-// explicit SDL_Quit() call. The shared CnaTests binary cannot exercise this: calling the real
-// SDL_Quit() there would tear down SDL process-wide for every other test sharing that binary.
-//
-// Touches VibrateController::getDefaultProperty()->getIsSupportedProperty(), which (via
-// AcquireHapticDeviceForProbe() -> EnsureHapticSubsystemInitialized()) sets
-// SdlHapticVibrateBackend's subsystemHeld_ = true -- SDL_InitSubSystem(SDL_INIT_HAPTIC) succeeds
-// even with no physical haptic device attached, so this reliably exercises the
-// SDL_QuitSubSystem(SDL_INIT_HAPTIC) branch this harness is testing regardless of what hardware
-// this container has.
+// Standalone regression harness for VibrateController's static-teardown ordering. Probing the
+// controller makes its platform adapter acquire the haptic subsystem. The normal path calls
+// DevicesShutdownCoordinator::Shutdown(), which destroys that adapter and balances the platform
+// reference before the host's SDL_Quit(). The shared CnaTests binary cannot exercise this because
+// SDL_Quit() would tear native services down for every other test in that process.
 //
 // Pass "--skip-shutdown-call" to omit the Detail::DevicesShutdownCoordinator::Shutdown() call
-// this harness otherwise makes before SDL_Quit() -- reproduces the original bug, used to confirm
-// under ASan (cmake-build-devices-asan) that this actually detects a real heap-use-after-free
-// when the fix's guard is bypassed, not just that the fixed path happens not to crash.
+// this harness otherwise makes before SDL_Quit(), preserving the historical unsafe ordering for
+// sanitizer comparison.
 //
 // Exit code is always 0 if the process reaches the end of main() without crashing -- the actual
 // signal this harness exists to produce is an ASan report (or lack of one) on stderr, checked by

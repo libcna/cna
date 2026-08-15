@@ -185,7 +185,7 @@ namespace Microsoft::Xna::Framework::Audio
         /**
          * @brief Gets the distance scaling factor used in Apply3D attenuation approximations.
          *
-         * SDL3_mixer does not implement full 3D audio; this value is used in Apply3D only.
+         * The current mixer engine does not implement full 3D audio; Apply3D uses this value.
          *
          * @return Distance scale factor.
          */
@@ -202,7 +202,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the Doppler effect scale factor.
          *
          * Applied as a real closed-form pitch-shift factor in Apply3D (matches FAudio's
-         * F3DAudio.c CalculateDoppler exactly), not a native SDL3_mixer Doppler feature.
+         * F3DAudio.c CalculateDoppler exactly), not a native mixer Doppler feature.
          *
          * @return Doppler scale factor.
          */
@@ -219,7 +219,7 @@ namespace Microsoft::Xna::Framework::Audio
          * @brief Gets the speed of sound used in Doppler calculations.
          *
          * Applied as a real closed-form pitch-shift factor in Apply3D (matches FAudio's
-         * F3DAudio.c CalculateDoppler exactly), not a native SDL3_mixer Doppler feature.
+         * F3DAudio.c CalculateDoppler exactly), not a native mixer Doppler feature.
          *
          * @return Speed of sound in units per second.
          */

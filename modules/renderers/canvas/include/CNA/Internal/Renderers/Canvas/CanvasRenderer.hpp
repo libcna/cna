@@ -12,11 +12,18 @@ namespace CNA::Internal::Renderers::Canvas
     /// AlphaBlend and NonPremultiplied are DELIBERATELY kept distinct (not both "SourceOver"): both
     /// resolve to the same ctx.globalCompositeOperation ('source-over'), but AlphaBlend's real
     /// contract (srcBlend=One) assumes the source color is already premultiplied by its own alpha --
-    /// the SDL_RENDERER renderer has a dedicated pixel test (Task 697) constructing genuinely
+    /// the native 2D renderer has a dedicated pixel test (Task 697) constructing genuinely
     /// premultiplied source data specifically to verify this, so a Canvas2D draw under AlphaBlend
-    /// must un-premultiply that data first (see CanvasSpriteBatchRenderer.cpp's per-pixel pass),
-    /// since Canvas2D's own 'source-over' always treats its input as straight alpha.
+    /// must un-premultiply that data first (see CanvasSpriteBatchRenderer.cpp's cached texture
+    /// variant), since Canvas2D's own 'source-over' always treats its input as straight alpha.
     enum class CanvasCompositeOp { Copy = 0, NonPremultipliedSourceOver = 1, AlphaBlendSourceOver = 2, Lighter = 3 };
+
+    /** @brief Blend state shared by one Canvas renderer and the SpriteBatch instances it creates. */
+    struct CanvasRendererState
+    {
+        /** @brief Composite operation captured by a SpriteBatch when it begins. */
+        CanvasCompositeOp compositeOp = CanvasCompositeOp::AlphaBlendSourceOver;
+    };
 
     /// Pure mapping from raw BlendState factors/BlendFunction (see IGraphicsRenderer::ApplyBlendState's
     /// own parameter doc) to a CanvasCompositeOp; throws std::runtime_error for any Blend/BlendFunction
@@ -41,8 +48,7 @@ namespace CNA::Internal::Renderers::Canvas
     class CanvasRenderer final : public IGraphicsRenderer
     {
     public:
-        CanvasRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                               CnaPresentationMode mode);
+        explicit CanvasRenderer(const GraphicsRendererCreateArgs& args);
         ~CanvasRenderer() override;
 
         void Clear(float r, float g, float b, float a) override;
@@ -50,13 +56,12 @@ namespace CNA::Internal::Renderers::Canvas
         void GetViewportSize(int& width, int& height) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         bool TransformWindowToLogical(float windowX, float windowY,
                                       float& logX, float& logY) const override;
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -66,7 +71,7 @@ namespace CNA::Internal::Renderers::Canvas
                                                                     int multiSampleCount = 0) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         // plan_canvas.md CANVAS-26: a Canvas2D context is inherently single-target (same
-        // conclusion SDL_RENDERER's Task 709 reached) -- throws for count > 1.
+        // conclusion the native 2D renderer's Task 709 reached) -- throws for count > 1.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets,
                               int count) override;
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
@@ -81,7 +86,7 @@ namespace CNA::Internal::Renderers::Canvas
 
         // plan_canvas.md CANVAS-65: no Canvas2D target -- main canvas or off-screen -- ever has a
         // real depth/stencil buffer (same reasoning as IRenderTargetRenderer::HasRealDepthBuffer's
-        // override, CANVAS-23), same as SDL_RENDERER's own override for the same reason.
+        // override, CANVAS-23), same as the native 2D renderer's override for the same reason.
         [[nodiscard]] bool SupportsDepthStencil() const override { return false; }
         // SupportsCapability() lets callers check ahead of time; the policy controls what
         // happens if an unsupported call is nevertheless made.
@@ -110,7 +115,7 @@ namespace CNA::Internal::Renderers::Canvas
         std::unique_ptr<ITextureCubeRenderer> CreateTextureCube(
             int size, bool mipMap, int surfaceFormat) override;
         std::unique_ptr<IRenderTargetCubeRenderer> CreateRenderTargetCube(
-            int size, int depthFormat, bool mipMap = false,
+            int size, int depthFormat, bool preserveContents = false, bool mipMap = false,
             int multiSampleCount = 0) override;
 
         void DrawColoredPrimitives(const IVertexBufferRenderer& vb, const Matrix& world, const Matrix& view,
@@ -120,17 +125,17 @@ namespace CNA::Internal::Renderers::Canvas
                                           PrimitiveType primitive, int primitiveCount) override;
 
     private:
-        // Derives the logical (virtual) viewport size from the real canvas/window's physical
+        // Derives the logical (virtual) viewport size from the real canvas/window's client
         // pixel size and virtualWidth_/virtualHeight_/presentationMode_ -- same FixedHeightDynamicWidth
-        // math EasyGLRenderer::getLogicalSize() uses (plan_canvas.md CANVAS-13: this math is
-        // renderer-agnostic, only the underlying physical-size query is renderer-specific, and here
-        // that query is just SDL_GetWindowSize() since SDL3 already keeps the DOM <canvas> element's
-        // width/height attributes in sync with the SDL_Window it backs on Emscripten).
+        // math EasyGLRenderer::getLogicalSize() uses (plan_canvas.md CANVAS-13): this math is
+        // renderer-agnostic; the platform snapshot supplies the drawable size and density.
         void getLogicalSize(int& width, int& height) const;
+        void getWindowSize(int& width, int& height) const;
 
-        SDL_Window* window_ = nullptr;
+        RendererSurfaceInfo surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+        std::shared_ptr<CanvasRendererState> state_ = std::make_shared<CanvasRendererState>();
     };
 }

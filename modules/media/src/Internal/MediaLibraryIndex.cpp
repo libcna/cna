@@ -27,14 +27,14 @@ namespace CNA::Internal::Media
             std::string ext = p.extension().string();
             std::transform(ext.begin(), ext.end(), ext.begin(),
                             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            // Only formats this project's SDL3_mixer build can genuinely PLAY are indexed --
+            // Only formats this project's selected mixer decoder can genuinely PLAY are indexed --
             // advertising a song MediaPlayer::Play() would fail on is worse than not listing it
-            // (plan_media.md MEDIA-199). Verified against third_party/SDL_mixer's own decoder set:
+            // (plan_media.md MEDIA-199). Verified against the bundled decoder set:
             // decoder_vorbis/stb_vorbis (.ogg/.oga), decoder_drmp3/mpg123 (.mp3), decoder_wav
             // (.wav), decoder_flac/drflac (.flac), decoder_opus (.opus).
             //
-            // Deliberately NOT indexed: .m4a/.aac. SDL3_mixer ships no AAC decoder at all (there
-            // is no decoder_aac.c and no SDLMIXER_AAC option), so those files are unplayable here
+            // Deliberately NOT indexed: .m4a/.aac. The bundled mixer ships no AAC decoder or AAC
+            // feature switch, so those files are unplayable here
             // -- indexing them would create library entries that can never be played.
             return ext == ".ogg" || ext == ".oga" || ext == ".mp3" || ext == ".wav" ||
                     ext == ".flac" || ext == ".opus";

@@ -4,11 +4,13 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollection.hpp"
 #include "Microsoft/Xna/Framework/GameComponentCollectionEventArgs.hpp"
@@ -36,6 +38,15 @@ namespace CNA::Internal
     class GameTestPeer;
 }
 
+// Forward-declared rather than included: Game.hpp is included by every game, and the platform
+// contract is an implementation detail of how the loop is driven, not part of the XNA surface a
+// game writes against. The unique_ptr member below is why Game's destructor is defined out of
+// line.
+namespace CNA::Platform
+{
+    class IPlatform;
+}
+
 namespace Microsoft::Xna::Framework
 {
     /** @brief Base class that provides the XNA-style game loop, services, window, content and components. */
@@ -54,7 +65,7 @@ namespace Microsoft::Xna::Framework
         /** @brief Raised when the game is exiting. */
         System::EventHandler<System::EventArgs> Exiting;
 
-        /** @brief Creates a new Game instance and initialises all subsystems. */
+        /** @brief Creates a new Game instance on the build-time platform and initialises it. */
         Game();
 
         /** @brief Destructor; calls Dispose(false) to release unmanaged resources. */
@@ -255,10 +266,46 @@ namespace Microsoft::Xna::Framework
          */
         [[nodiscard]] CNAEXT static double fpsToMillisecondsPerFrame(SharpRuntime::intcs framesPerSecond);
 
+        /**
+         * @brief Gets the platform this game runs on.
+         *
+         * The game owns exactly one platform instance, created when the game is constructed and
+         * destroyed with it. Subsystems that a `Game` owns reach the platform through here rather
+         * than through `CNA::Platform::GetCurrentPlatform()`: the ambient accessor exists for the
+         * static parts of the XNA API (`Keyboard::GetState`, `StorageDevice`) that genuinely
+         * cannot be handed a context, and using it where a context *is* available would make the
+         * dependency invisible.
+         *
+         * @return The platform, which lives as long as this game does.
+         */
+        CNAEXT [[nodiscard]] CNA::Platform::IPlatform& GetPlatformEXT() const;
+
+        /**
+         * @brief Gets the capabilities captured from this game's platform during construction.
+         *
+         * Games use this to select optional UI/input paths once at startup.  It deliberately
+         * returns a cached value: platform capability discovery may probe a host terminal, so it
+         * must never become a per-frame virtual query.
+         */
+        CNAEXT [[nodiscard]] const CNA::Platform::PlatformCapabilities&
+        GetPlatformCapabilitiesEXT() const;
+
         /** @brief Internal loop flag matching the FNA/XNA Game implementation shape. */
         CNAEXT bool RunApplication;
 
     protected:
+        /**
+         * @brief Creates a game that owns an explicitly supplied platform.
+         *
+         * This CNAEXT seam is primarily for embedding hosts and cross-implementation tests. The
+         * platform is installed before any other Game member is constructed, exactly like the
+         * build-time default used by Game(), and remains owned by the Game until its teardown.
+         *
+         * @param platform Platform instance to own; must not be null.
+         * @throws std::invalid_argument If @p platform is null.
+         */
+        CNAEXT explicit Game(std::unique_ptr<CNA::Platform::IPlatform> platform);
+
         /** @brief Called before the game loop starts. */
         virtual void BeginRun();
 
@@ -332,6 +379,16 @@ namespace Microsoft::Xna::Framework
     private:
         friend class CNA::Internal::GameTestPeer;
 
+        struct PlatformEventBatch;
+
+        // Declared before every other member, and therefore constructed first and destroyed last.
+        // The graphics device, the window and the content manager may all reach the platform
+        // during their own construction or teardown, so the platform's lifetime has to strictly
+        // contain theirs. Member order is the only thing that guarantees that.
+        std::unique_ptr<CNA::Platform::IPlatform> platform_;
+        CNA::Platform::PlatformCapabilities platformCapabilities_;
+        std::unique_ptr<PlatformEventBatch> eventBatch_;
+
         GameComponentCollection Components_;
         Graphics::GraphicsDevice GraphicsDevice_;
         Content::ContentManager Content_;
@@ -355,13 +412,14 @@ namespace Microsoft::Xna::Framework
         Graphics::GraphicsAdapter* currentAdapter_;
 
         bool hasInitialized_;
+        bool controllerSubsystemAcquired_;
         bool suppressDraw_;
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
 
-        // Mobile lifecycle (plan_apple.md APPLE-7): true between the operating system's
-        // "did enter background" and "will enter foreground" notifications. Only ever set on
-        // Android and iOS -- SDL raises those events on no other platform.
+        // Mobile lifecycle (plan_apple.md APPLE-7): true between the platform's
+        // WillEnterBackground and DidEnterForeground notifications. Only ever set on Android and
+        // iOS -- no other platform raises those transitions.
         bool isSuspended_;
 
         GameTime gameTime_;

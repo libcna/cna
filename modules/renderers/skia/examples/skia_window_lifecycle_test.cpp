@@ -2,6 +2,7 @@
 // SKIA-8: zero/minimized output, repeated physical resize, and presenter recovery.
 
 #include "CNA/Internal/Renderers/Skia/SkiaRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +15,8 @@
 
 using CNA::Internal::Renderers::CnaPresentationMode;
 using CNA::Internal::Renderers::Skia::SkiaRenderer;
+using CNA::Examples::SdlTestRendererArgs;
+using CNA::Examples::SdlTestSurfacePresenter;
 
 namespace
 {
@@ -69,12 +72,14 @@ int main()
 
     try
     {
-        SkiaRenderer renderer(window, kVirtualWidth, kVirtualHeight,
-                                    CnaPresentationMode::FixedHeightDynamicWidth, 0);
+        SdlTestSurfacePresenter presenter(window);
+        SkiaRenderer renderer(SdlTestRendererArgs(
+            window, nullptr, &presenter, kVirtualWidth, kVirtualHeight,
+            CnaPresentationMode::FixedHeightDynamicWidth, 0));
         int initialOutputWidth = 0;
         int initialOutputHeight = 0;
         const bool initialOutput = SDL_GetRenderOutputSize(
-            renderer.GetRendererInternal(), &initialOutputWidth, &initialOutputHeight);
+            SDL_GetRenderer(window), &initialOutputWidth, &initialOutputHeight);
         int logicalWidth = 0;
         int logicalHeight = 0;
         renderer.GetViewportSize(logicalWidth, logicalHeight);
@@ -163,7 +168,7 @@ int main()
 
             int outputWidth = 0;
             int outputHeight = 0;
-            if (!SDL_GetRenderOutputSize(renderer.GetRendererInternal(), &outputWidth, &outputHeight)
+            if (!SDL_GetRenderOutputSize(SDL_GetRenderer(window), &outputWidth, &outputHeight)
                 || outputWidth <= 0 || outputHeight <= 0)
             {
                 everyResizeMatched = false;

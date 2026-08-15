@@ -195,9 +195,9 @@ TEST_F(SoundEffectContentTypeReaderTest, Xma2IsRejected)
 // silently construct a garbage SoundEffect -- it must fail deterministically. CNA's reader itself
 // doesn't add a new sample-rate check (SoundEffectReader.Read() has none in real FNA either, and
 // AUD-05-001's own investigation confirmed CNA deliberately doesn't add C#-level validation FNA
-// itself lacks), but SDL3's own WAV loader validates this ("Invalid sample rate") -- confirmed
-// here that the failure propagates as a clean, catchable exception all the way through
-// SoundEffect::FromStream/BuildViaWavWrapper, not a crash or hang.
+// itself lacks). The decoder used to reject this itself; after the audio mixer seam was introduced
+// a backend may normalize the malformed WAV header to its output rate, so BuildViaWavWrapper now
+// preserves the same rejection at the XNB boundary that still owns the original metadata.
 TEST_F(SoundEffectContentTypeReaderTest, Pcm8WithZeroSampleRateFailsCleanlyRatherThanCrashing)
 {
     std::vector<uint8_t> bytes;
@@ -672,7 +672,7 @@ TEST_F(SoundEffectContentTypeReaderTest, SmallDurationOracleDisagreementDoesNotT
 // reinterpreting a compressed byte offset as a PCM frame index (or vice versa). This test proves
 // that empirically with a real compression ratio, not just by code inspection: a hand-built
 // IMA-ADPCM fixture (4 full 256-byte blocks, no wSamplesPerBlock extension, exactly matching
-// SDL3's own auto-derive formula in SDL_wave.c's IMA_ADPCM_Init) compresses 1024 bytes down to a
+// the reference IMA ADPCM auto-derive formula) compresses 1024 bytes down to a
 // documented 2020-frame (~4:1) decode. Authored loop values (loopStart=1500, loopLength=400) are
 // deliberately chosen so they are sane relative to the real 2020-frame decoded output but would
 // be nonsensical if misread as byte offsets against the 1024-byte compressed buffer (loopStart
@@ -702,7 +702,7 @@ TEST_F(SoundEffectContentTypeReaderTest, ImaAdpcmLoopPointsSurviveAsDecodedFrame
     constexpr uint16_t kBlockAlign = 256;
     constexpr int kBlockCount = 4;
     constexpr int kCompressedBytes = kBlockAlign * kBlockCount; // 1024
-    // SDL_wave.c's IMA_ADPCM_Init auto-derive formula (no wSamplesPerBlock supplied):
+    // The reference IMA ADPCM auto-derive formula (no wSamplesPerBlock supplied):
     // blockdatasamples = (blockalign - 4*channels) * 8 / (bitspersample*channels);
     // samplesperblock = blockdatasamples + 1.
     constexpr int kSamplesPerBlock = (kBlockAlign - 4) * 8 / 4 + 1; // 505

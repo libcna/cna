@@ -2,83 +2,52 @@
 
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
-#include <SDL3/SDL.h>
-
-#include <stdexcept>
-#include <string>
-
-#include "CNA/Platform.hpp"
-#if defined(CNA_PLATFORM_IOS)
-#include "CNA/Internal/AppleOrientation.hpp"
-#endif
+#include "CNA/Platform/IPlatformWindow.hpp"
 
 namespace Microsoft::Xna::Framework
 {
     namespace
     {
-        std::runtime_error makeSdlError(const char* operation)
-        {
-            return std::runtime_error(std::string(operation) + " failed: " + SDL_GetError());
-        }
-
         bool hasFlag(DisplayOrientation value, DisplayOrientation flag)
         {
             return (static_cast<int>(value) & static_cast<int>(flag)) != 0;
         }
 
-        // plan_apple.md APPLE-15. On a desktop the supported-orientation set is CNA's own
-        // bookkeeping, but on iOS and Android the operating system decides whether the device may
-        // rotate at all, and SDL_HINT_ORIENTATIONS is the only channel it reads: SDL's UIKit view
-        // controller consults the hint every time UIKit asks which orientations the application
-        // accepts. Without this, XNA's SupportedOrientations would silently mean nothing on the
-        // one platform family it was designed for.
+        // plan_apple.md APPLE-15. On a desktop the supported-orientation set is the framework's
+        // own bookkeeping, but on iOS and Android the operating system decides whether the device
+        // may rotate at all, and it only learns the answer if the platform layer is told. Without
+        // forwarding it, XNA's SupportedOrientations would silently mean nothing on the one
+        // platform family it was designed for.
         //
-        // iOS intersects this with the UISupportedInterfaceOrientations array in the bundle's
-        // Info.plist (cmake/AppleInfo.iOS.plist.in), which is the outer bound; the hint can
-        // narrow that set at run time but never widen it.
-        void applySupportedOrientationsHint(DisplayOrientation orientations, SDL_Window* window)
+        // DisplayOrientation::Default means "the game does not care", which maps to the platform's
+        // own no-preference value rather than to an empty set.
+        CNA::Platform::ScreenOrientation toPlatformOrientations(DisplayOrientation orientations)
         {
-            if (!CNA::isMobilePlatform())
+            if (orientations == DisplayOrientation::Default)
             {
-                return;
+                return CNA::Platform::ScreenOrientation::None;
             }
 
-            std::string hint;
+            CNA::Platform::ScreenOrientation accepted = CNA::Platform::ScreenOrientation::None;
             if (hasFlag(orientations, DisplayOrientation::LandscapeLeft))
             {
-                hint += "LandscapeLeft ";
+                accepted = accepted | CNA::Platform::ScreenOrientation::LandscapeLeft;
             }
             if (hasFlag(orientations, DisplayOrientation::LandscapeRight))
             {
-                hint += "LandscapeRight ";
+                accepted = accepted | CNA::Platform::ScreenOrientation::LandscapeRight;
             }
             if (hasFlag(orientations, DisplayOrientation::Portrait))
             {
-                hint += "Portrait ";
+                accepted = accepted | CNA::Platform::ScreenOrientation::Portrait;
             }
-
-            // DisplayOrientation::Default means "the game does not care". Remove CNA's previous
-            // value completely so SDL falls back to the bundle/platform set instead of retaining
-            // an explicitly empty hint value.
-            if (orientations == DisplayOrientation::Default)
-            {
-                SDL_ResetHint(SDL_HINT_ORIENTATIONS);
-            }
-            else
-            {
-                SDL_SetHint(SDL_HINT_ORIENTATIONS, hint.c_str());
-            }
-
-#if defined(CNA_PLATFORM_IOS)
-            CNA::Internal::RequestAppleOrientationUpdate(window);
-#else
-            (void) window;
-#endif
+            return accepted;
         }
     }
 
     GameWindow::GameWindow()
         : window_(nullptr),
+          legacyHandle_(0),
           title_(),
           screenDeviceName_(),
           clientBounds_(),
@@ -95,17 +64,19 @@ namespace Microsoft::Xna::Framework
     {
     }
 
-    GameWindow::GameWindow(SDL_Window* window)
+    GameWindow::GameWindow(CNA::Platform::IPlatformWindow* window)
         : GameWindow()
     {
-        setWindowInternal(window);
+        setWindowInternal(window, 0);
     }
+
+    GameWindow::~GameWindow() = default;
 
     bool GameWindow::getAllowUserResizingProperty() const
     {
         if (window_ != nullptr)
         {
-            return (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
+            return window_->IsResizable();
         }
 
         return allowUserResizing_;
@@ -117,10 +88,7 @@ namespace Microsoft::Xna::Framework
 
         if (window_ != nullptr)
         {
-            if (!SDL_SetWindowResizable(window_, value))
-            {
-                throw makeSdlError("SDL_SetWindowResizable");
-            }
+            window_->SetResizable(value);
         }
     }
 
@@ -128,7 +96,7 @@ namespace Microsoft::Xna::Framework
     {
         if (window_ != nullptr)
         {
-            return queryClientBoundsFromSDL();
+            return queryClientBoundsFromPlatform();
         }
 
         return clientBounds_;
@@ -141,12 +109,14 @@ namespace Microsoft::Xna::Framework
 
     SharpRuntime::IntPtr GameWindow::getHandleProperty() const
     {
-        return reinterpret_cast<SharpRuntime::IntPtr>(window_);
+        return legacyHandle_;
     }
 
-    SDL_Window* GameWindow::GetNativeSdlWindowEXT() const
+    CNA::Platform::NativeWindowHandle GameWindow::GetNativeWindowHandleEXT() const
     {
-        return window_;
+        return window_ != nullptr
+            ? window_->GetNativeHandle()
+            : CNA::Platform::NativeWindowHandle{};
     }
 
     const GameWindow::String& GameWindow::getScreenDeviceNameProperty() const
@@ -172,7 +142,7 @@ namespace Microsoft::Xna::Framework
     {
         if (window_ != nullptr)
         {
-            return (SDL_GetWindowFlags(window_) & SDL_WINDOW_BORDERLESS) != 0;
+            return window_->IsBorderless();
         }
 
         return isBorderless_;
@@ -184,10 +154,7 @@ namespace Microsoft::Xna::Framework
 
         if (window_ != nullptr)
         {
-            if (!SDL_SetWindowBordered(window_, !value))
-            {
-                throw makeSdlError("SDL_SetWindowBordered");
-            }
+            window_->SetBorderless(value);
         }
     }
 
@@ -195,10 +162,7 @@ namespace Microsoft::Xna::Framework
     {
         if (window_ != nullptr)
         {
-            if (!SDL_MinimizeWindow(window_))
-            {
-                throw makeSdlError("SDL_MinimizeWindow");
-            }
+            window_->Minimize();
         }
     }
 
@@ -206,10 +170,7 @@ namespace Microsoft::Xna::Framework
     {
         if (window_ != nullptr)
         {
-            if (!SDL_RestoreWindow(window_))
-            {
-                throw makeSdlError("SDL_RestoreWindow");
-            }
+            window_->Restore();
         }
     }
 
@@ -229,26 +190,24 @@ namespace Microsoft::Xna::Framework
             if (clientWidth > 0 && clientHeight > 0)
             {
 #ifndef __ANDROID__
-                if (!SDL_SetWindowSize(window_, clientWidth, clientHeight))
-                {
-                    throw makeSdlError("SDL_SetWindowSize");
-                }
+                window_->SetSize(clientWidth, clientHeight);
+                window_->Sync();
 #endif
             }
 
             if (hasPendingScreenDeviceChange_)
             {
-                if (!SDL_SetWindowFullscreen(window_, pendingFullScreen_))
-                {
-                    throw makeSdlError("SDL_SetWindowFullscreen");
-                }
+                window_->SetFullscreenMode(
+                    pendingFullScreen_
+                        ? CNA::Platform::WindowFullscreenMode::ExclusiveFullscreen
+                        : CNA::Platform::WindowFullscreenMode::Windowed);
             }
         }
 
         screenDeviceName_ = screenDeviceName;
         hasPendingScreenDeviceChange_ = false;
 
-        refreshCachedSDLState(false);
+        refreshCachedPlatformState(false);
 
         if (oldBounds.Width != clientBounds_.Width || oldBounds.Height != clientBounds_.Height)
         {
@@ -303,7 +262,10 @@ namespace Microsoft::Xna::Framework
     void GameWindow::SetSupportedOrientations(DisplayOrientation orientations)
     {
         supportedOrientations_ = orientations;
-        applySupportedOrientationsHint(orientations, window_);
+        if (window_ != nullptr)
+        {
+            window_->SetSupportedOrientations(toPlatformOrientations(orientations));
+        }
 
         if (!orientationIsSupported(currentOrientation_))
         {
@@ -333,25 +295,28 @@ namespace Microsoft::Xna::Framework
             return;
         }
 
-        if (!SDL_SetWindowTitle(window_, title.c_str()))
-        {
-            throw makeSdlError("SDL_SetWindowTitle");
-        }
+        window_->SetTitle(title);
     }
 
-    void GameWindow::setWindowInternal(SDL_Window* window)
+    void GameWindow::setWindowInternal(CNA::Platform::IPlatformWindow* window,
+                                       const SharpRuntime::IntPtr legacyHandle)
     {
         window_ = window;
+        legacyHandle_ = legacyHandle;
 
         if (window_ != nullptr)
         {
-            const char* nativeTitle = SDL_GetWindowTitle(window_);
-            title_ = nativeTitle != nullptr ? String(nativeTitle) : String();
-            allowUserResizing_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_RESIZABLE) != 0;
-            isBorderless_ = (SDL_GetWindowFlags(window_) & SDL_WINDOW_BORDERLESS) != 0;
+            title_ = window_->GetTitle();
+            allowUserResizing_ = window_->IsResizable();
+            isBorderless_ = window_->IsBorderless();
         }
 
-        refreshCachedSDLState(false);
+        refreshCachedPlatformState(false);
+    }
+
+    CNA::Platform::IPlatformWindow* GameWindow::getPlatformWindowInternal() const
+    {
+        return window_;
     }
 
     void GameWindow::setCurrentOrientationProperty(DisplayOrientation value)
@@ -363,20 +328,20 @@ namespace Microsoft::Xna::Framework
         }
     }
 
-    void GameWindow::updateFromSDL()
+    void GameWindow::updateFromPlatform()
     {
-        refreshCachedSDLState(true);
+        refreshCachedPlatformState(true);
     }
 
-    void GameWindow::refreshCachedSDLState(bool raiseEvents)
+    void GameWindow::refreshCachedPlatformState(bool raiseEvents)
     {
         const Rectangle oldBounds = clientBounds_;
         const String oldScreenDeviceName = screenDeviceName_;
         const DisplayOrientation oldOrientation = currentOrientation_;
 
-        clientBounds_ = queryClientBoundsFromSDL();
+        clientBounds_ = queryClientBoundsFromPlatform();
 
-        const String queriedScreenDeviceName = queryScreenDeviceNameFromSDL();
+        const String queriedScreenDeviceName = queryScreenDeviceNameFromPlatform();
         if (!queriedScreenDeviceName.empty())
         {
             screenDeviceName_ = queriedScreenDeviceName;
@@ -409,51 +374,28 @@ namespace Microsoft::Xna::Framework
         }
     }
 
-    Rectangle GameWindow::queryClientBoundsFromSDL() const
+    Rectangle GameWindow::queryClientBoundsFromPlatform() const
     {
         if (window_ == nullptr)
         {
             return clientBounds_;
         }
 
-        int width = clientBounds_.Width;
-        int height = clientBounds_.Height;
-
-        // Emscripten: SDL3's video backend can report "not initialized" for the first one or two
-        // event-loop ticks after a real SDL_CreateWindow() has already returned a valid window --
-        // the browser-side canvas/context setup it depends on finishes asynchronously, strictly
-        // after control has already returned to C++. This is a real, reproducible startup race
-        // (discovered driving CNA's own Emscripten renderers in a real browser for the first time),
-        // not a caller error: SDL_GetWindowSize failing here is always reached from an event-driven
-        // refresh (a real SDL_EVENT_WINDOW_*_CHANGED the browser itself fired) or a plain property
-        // read, neither of which is a context where "throw and unwind the whole game loop" is an
-        // acceptable response to one transient platform hiccup. Falling back to the last-known
-        // bounds this one tick -- exactly like the `window_ == nullptr` branch above already does --
-        // means the next real resize event (or the next explicit query, once the race has resolved)
-        // still produces the correct size; nothing is permanently lost.
-        if (!SDL_GetWindowSize(window_, &width, &height))
-        {
-            return clientBounds_;
-        }
-
-        return Rectangle(0, 0, width, height);
+        const CNA::Platform::WindowBounds bounds = window_->GetClientBounds();
+        // XNA's ClientBounds is client-local. The platform also carries desktop placement in the
+        // same value for window managers that expose it; that position must not leak into XNA.
+        return Rectangle(0, 0, bounds.width, bounds.height);
     }
 
-    GameWindow::String GameWindow::queryScreenDeviceNameFromSDL() const
+    GameWindow::String GameWindow::queryScreenDeviceNameFromPlatform() const
     {
         if (window_ == nullptr)
         {
             return screenDeviceName_;
         }
 
-        const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window_);
-        if (displayId == 0)
-        {
-            return screenDeviceName_;
-        }
-
-        const char* displayName = SDL_GetDisplayName(displayId);
-        return displayName != nullptr ? String(displayName) : String();
+        const std::string displayName = window_->GetDisplayName();
+        return displayName.empty() ? screenDeviceName_ : String(displayName);
     }
 
     DisplayOrientation GameWindow::orientationFromBounds(const Rectangle& bounds) const

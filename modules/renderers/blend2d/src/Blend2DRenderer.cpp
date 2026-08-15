@@ -1,6 +1,7 @@
 #include "CNA/Internal/Renderers/Blend2D/Blend2DRenderer.hpp"
 #include "CNA/Internal/Renderers/Blend2D/Blend2DCheckedCallEXT.hpp"
 #include "CNA/Internal/Renderers/Blend2D/Blend2DPixelConvert.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,87 +12,61 @@ namespace CNA::Internal::Renderers::Blend2D
 {
     namespace
     {
-        [[nodiscard]] SDL_RendererLogicalPresentation ToSdlPresentation(CnaPresentationMode mode)
+        [[nodiscard]] CNA::Platform::PresentScaleMode ToPresentScaleMode(CnaPresentationMode mode)
         {
             switch (mode)
             {
-                case CnaPresentationMode::Letterbox: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
-                case CnaPresentationMode::Overscan: return SDL_LOGICAL_PRESENTATION_OVERSCAN;
-                case CnaPresentationMode::Stretch: return SDL_LOGICAL_PRESENTATION_STRETCH;
-                case CnaPresentationMode::NativeBackBuffer: return SDL_LOGICAL_PRESENTATION_DISABLED;
+                case CnaPresentationMode::Letterbox: return CNA::Platform::PresentScaleMode::Letterbox;
+                case CnaPresentationMode::Overscan: return CNA::Platform::PresentScaleMode::Overscan;
+                case CnaPresentationMode::Stretch: return CNA::Platform::PresentScaleMode::Stretch;
+                case CnaPresentationMode::NativeBackBuffer: return CNA::Platform::PresentScaleMode::Native;
                 // FixedHeightDynamicWidth's logical WIDTH is recomputed (RecreateBackbuffer) so the
                 // canvas already matches the output aspect ratio; LETTERBOX with a matching aspect
                 // ratio fills the surface exactly with no bars, matching XNA/Windows Phone
                 // behaviour (see the CnaPresentationMode doc comment).
-                case CnaPresentationMode::FixedHeightDynamicWidth: return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+                case CnaPresentationMode::FixedHeightDynamicWidth: return CNA::Platform::PresentScaleMode::Letterbox;
             }
-            return SDL_LOGICAL_PRESENTATION_LETTERBOX;
+            return CNA::Platform::PresentScaleMode::Letterbox;
         }
     } // namespace
 
-    Blend2DRenderer::Blend2DRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                     CnaPresentationMode presentationMode, int swapInterval)
-        : window_(window)
+    Blend2DRenderer::Blend2DRenderer(const GraphicsRendererCreateArgs& args)
+        : surfaceInfo_(args.surface)
+        , presenter_(args.surfacePresenter)
         , virtualWidth_(1)
         , virtualHeight_(1)
-        , preferredVirtualWidth_(virtualWidth)
-        , preferredVirtualHeight_(virtualHeight)
-        , presentationMode_(presentationMode)
-        , swapInterval_(swapInterval)
+        , preferredVirtualWidth_(args.virtualWidth)
+        , preferredVirtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , swapInterval_(args.swapInterval)
         , backbuffer_(1, 1)
     {
-        if (!window_)
-            throw std::runtime_error("Blend2DRenderer initialized with null window.");
+        if (surfaceInfo_.windowId == 0)
+            throw std::runtime_error("Blend2DRenderer initialized without a platform window.");
+        if (presenter_ == nullptr)
+            throw CNA::Platform::PlatformNotSupportedException(
+                CNA::Platform::PlatformCapability::SurfacePresentation, "BLEND2D");
 
         bool registered = false;
         try
         {
-            presentRenderer_ = SDL_CreateRenderer(window_, nullptr);
-            if (!presentRenderer_)
-                throw std::runtime_error(std::string("Blend2D SDL_CreateRenderer failed: ") + SDL_GetError());
-
             SetSwapInterval(swapInterval_);
-            RecreateBackbuffer(virtualWidth, virtualHeight);
+            RecreateBackbuffer(args.virtualWidth, args.virtualHeight);
 
-            IGraphicsRenderer::RegisterForWindow(window_, this);
+            IGraphicsRenderer::RegisterForWindow(surfaceInfo_.windowId, this);
             registered = true;
         }
         catch (...)
         {
             if (registered)
-                IGraphicsRenderer::UnregisterForWindow(window_);
-            if (presentTexture_)
-            {
-                SDL_DestroyTexture(presentTexture_);
-                presentTexture_ = nullptr;
-            }
-            if (presentRenderer_)
-            {
-                SDL_DestroyRenderer(presentRenderer_);
-                presentRenderer_ = nullptr;
-            }
+                IGraphicsRenderer::UnregisterForWindow(surfaceInfo_.windowId);
             throw;
         }
     }
 
     Blend2DRenderer::~Blend2DRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
-        if (presentTexture_) SDL_DestroyTexture(presentTexture_);
-        if (presentRenderer_) SDL_DestroyRenderer(presentRenderer_);
-    }
-
-    void Blend2DRenderer::RecreatePresentationTexture()
-    {
-        if (presentTexture_)
-        {
-            SDL_DestroyTexture(presentTexture_);
-            presentTexture_ = nullptr;
-        }
-        presentTexture_ = SDL_CreateTexture(presentRenderer_, SDL_PIXELFORMAT_RGBA32,
-                                            SDL_TEXTUREACCESS_STREAMING, virtualWidth_, virtualHeight_);
-        if (!presentTexture_)
-            throw std::runtime_error(std::string("Blend2D SDL_CreateTexture failed: ") + SDL_GetError());
+        IGraphicsRenderer::UnregisterForWindow(surfaceInfo_.windowId);
     }
 
     void Blend2DRenderer::GetPresentationOutputSize(int& width, int& height) const
@@ -104,7 +79,7 @@ namespace CNA::Internal::Renderers::Blend2D
         }
         width = 0;
         height = 0;
-        (void)SDL_GetRenderOutputSize(presentRenderer_, &width, &height);
+        presenter_->GetTargetSize(width, height);
     }
 
     void Blend2DRenderer::RecreateBackbuffer(int requestedWidth, int requestedHeight)
@@ -125,13 +100,8 @@ namespace CNA::Internal::Renderers::Blend2D
         virtualWidth_ = width > 0 ? width : 1;
         virtualHeight_ = height > 0 ? height : 1;
         backbuffer_.Resize(virtualWidth_, virtualHeight_);
-        RecreatePresentationTexture();
-        if (!SDL_SetRenderLogicalPresentation(presentRenderer_, virtualWidth_, virtualHeight_,
-                                              ToSdlPresentation(presentationMode_)))
-        {
-            throw std::runtime_error(
-                std::string("Blend2D SDL_SetRenderLogicalPresentation failed: ") + SDL_GetError());
-        }
+        presenter_->SetScaleMode(ToPresentScaleMode(presentationMode_),
+                                 CNA::Platform::PresentFilter::Linear);
     }
 
     void Blend2DRenderer::RefreshDynamicBackbufferIfNeeded()
@@ -195,20 +165,8 @@ namespace CNA::Internal::Renderers::Blend2D
         if (!backbuffer_.ReadPixelsRgba(0, 0, virtualWidth_, virtualHeight_, pixels.data()))
             throw std::runtime_error("Blend2D: backbuffer readback failed during Present().");
 
-        if (!SDL_UpdateTexture(presentTexture_, nullptr, pixels.data(), virtualWidth_ * 4))
-            throw std::runtime_error(std::string("Blend2D SDL_UpdateTexture failed: ") + SDL_GetError());
-
-        SDL_FRect nativeDestination{0.0f, 0.0f, static_cast<float>(virtualWidth_),
-                                    static_cast<float>(virtualHeight_)};
-        const SDL_FRect* destination = presentationMode_ == CnaPresentationMode::NativeBackBuffer
-            ? &nativeDestination : nullptr;
-        if (!SDL_SetRenderDrawColor(presentRenderer_, 0, 0, 0, 255) ||
-            !SDL_RenderClear(presentRenderer_) ||
-            !SDL_RenderTexture(presentRenderer_, presentTexture_, nullptr, destination) ||
-            !SDL_RenderPresent(presentRenderer_))
-        {
-            throw std::runtime_error(std::string("Blend2D SDL presentation failed: ") + SDL_GetError());
-        }
+        presenter_->Present(CNA::Platform::SurfaceFrame{
+            pixels.data(), virtualWidth_, virtualHeight_, virtualWidth_ * 4});
 
         // A resize can arrive between draws without a ClientSizeChanged notification. Preserve the
         // just-completed frame, then make the raster backbuffer match the new dynamic width for
@@ -241,23 +199,23 @@ namespace CNA::Internal::Renderers::Blend2D
         }
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
         // A mode change can change the derived logical width (entering/leaving
-        // FixedHeightDynamicWidth), not just which SDL_RendererLogicalPresentation is applied to
+        // FixedHeightDynamicWidth), not just which presentation-scale mode is applied to
         // the existing size -- recompute the whole backbuffer, mirroring SkiaRenderer.
         RecreateBackbuffer(preferredVirtualWidth_, preferredVirtualHeight_);
     }
 
     void Blend2DRenderer::SetSwapInterval(int interval)
     {
-        if (!SDL_SetRenderVSync(presentRenderer_, interval))
-        {
-            if (interval > 1 && SDL_SetRenderVSync(presentRenderer_, 1))
-            {
-                swapInterval_ = 1;
-                return;
-            }
-            throw std::runtime_error(std::string("Blend2D SDL_SetRenderVSync failed: ") + SDL_GetError());
-        }
-        swapInterval_ = interval;
+        const bool enabled = interval != 0;
+        (void)presenter_->SetVSync(enabled);
+        swapInterval_ = enabled ? 1 : 0;
+    }
+
+    void Blend2DRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surfaceInfo_.windowId)
+            throw std::runtime_error("Blend2DRenderer surface window id changed.");
+        surfaceInfo_ = surface;
     }
 
     std::unique_ptr<ITextureRenderer> Blend2DRenderer::CreateTexture(const ImageData& data)
@@ -530,8 +488,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<Blend2D::Blend2DRenderer>(args.window, args.virtualWidth,
-                                                           args.virtualHeight, args.presentationMode,
-                                                           args.swapInterval);
+        return std::make_unique<Blend2D::Blend2DRenderer>(args);
     }
 } // namespace CNA::Internal::Renderers

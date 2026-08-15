@@ -2,7 +2,7 @@
 # mode), set by RendererSelection.cmake's CNA_SKIA_MODE branch -- never both; the two are
 # mutually exclusive GN builds of the same checkout and cannot be linked into one binary.
 cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 ${CNA_SKIA_LINK_TARGET})
+target_link_libraries(${RENDERER_TARGET} PRIVATE ${CNA_SKIA_LINK_TARGET})
 # SKIA-140/141: SkiaTextureRenderer.cpp calls CNA::Internal::Graphics::DxtUtil/Bc7Util, which
 # live in the CNA graphics core module, not this renderer target -- the reverse edge every
 # renderer now declares (cna_renderer_common_setup) covers exactly this dependency

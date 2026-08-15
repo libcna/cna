@@ -85,7 +85,17 @@ function(cna_configure_vendored_sdl)
     endforeach()
 
     set(_prefix    "${CNA_SDL_PREBUILT_ROOT}/install")
-    set(_cmake_dir "${_prefix}/lib/cmake")
+    if(MSVC)
+        # SDL projects intentionally install package configs directly under cmake/ for MSVC.
+        set(_sdl3_cmake_dir       "${_prefix}/cmake")
+        set(_sdl_image_cmake_dir  "${_prefix}/cmake")
+        set(_sdl_mixer_cmake_dir  "${_prefix}/cmake")
+    else()
+        set(_cmake_dir            "${_prefix}/lib/cmake")
+        set(_sdl3_cmake_dir       "${_cmake_dir}/SDL3")
+        set(_sdl_image_cmake_dir  "${_cmake_dir}/SDL3_image")
+        set(_sdl_mixer_cmake_dir  "${_cmake_dir}/SDL3_mixer")
+    endif()
 
     # Platform-specific shared-library filenames
     if(EMSCRIPTEN)
@@ -158,7 +168,7 @@ function(cna_configure_vendored_sdl)
             BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_image/build"
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                "-DSDL3_DIR=${_sdl3_cmake_dir}"
                 -DBUILD_SHARED_LIBS=${_sdl_shared}
                 -DSDLIMAGE_DEPS_SHARED=${_sdl_shared}
                 -DSDLIMAGE_INSTALL=ON
@@ -180,7 +190,7 @@ function(cna_configure_vendored_sdl)
             BUILDDIR "${CNA_SDL_PREBUILT_ROOT}/SDL_mixer/build"
             CMAKE_ARGS
                 "-DCMAKE_PREFIX_PATH=${_prefix}"
-                "-DSDL3_DIR=${_cmake_dir}/SDL3"
+                "-DSDL3_DIR=${_sdl3_cmake_dir}"
                 -DBUILD_SHARED_LIBS=${_sdl_shared}
                 -DSDLMIXER_DEPS_SHARED=${_sdl_shared}
                 -DSDLMIXER_INSTALL=ON
@@ -200,12 +210,32 @@ function(cna_configure_vendored_sdl)
     endif()
 
     # SDL is now installed — let find_package set up the targets properly.
-    set(SDL3_DIR       "${_cmake_dir}/SDL3"       CACHE PATH "" FORCE)
-    set(SDL3_image_DIR "${_cmake_dir}/SDL3_image"  CACHE PATH "" FORCE)
-    set(SDL3_mixer_DIR "${_cmake_dir}/SDL3_mixer"  CACHE PATH "" FORCE)
+    set(SDL3_DIR       "${_sdl3_cmake_dir}"      CACHE PATH "" FORCE)
+    set(SDL3_image_DIR "${_sdl_image_cmake_dir}" CACHE PATH "" FORCE)
+    set(SDL3_mixer_DIR "${_sdl_mixer_cmake_dir}" CACHE PATH "" FORCE)
     find_package(SDL3       REQUIRED CONFIG)
     find_package(SDL3_image REQUIRED CONFIG)
     find_package(SDL3_mixer REQUIRED CONFIG)
+
+    # Windows resolves a DLL from the executable's own directory first and has no RPATH, so an
+    # executable linked against these import libraries cannot even start unless the DLLs sit
+    # beside it -- the loader fails the process before main() with 0xC0000135, which looks
+    # nothing like a test failure. Every test executable is written to CMAKE_BINARY_DIR, so one
+    # copy there serves all of them. This runs at configure time because that is when the SDL
+    # build above produced the DLLs; a POST_BUILD step per target would copy the same files
+    # dozens of times for no benefit.
+    if(WIN32)
+        file(GLOB _cna_sdl_runtime_dlls "${_prefix}/bin/*.dll")
+        if(_cna_sdl_runtime_dlls)
+            file(COPY ${_cna_sdl_runtime_dlls} DESTINATION "${CMAKE_BINARY_DIR}")
+            list(LENGTH _cna_sdl_runtime_dlls _cna_sdl_dll_count)
+            message(STATUS "CNA: copied ${_cna_sdl_dll_count} SDL runtime DLL(s) next to the test executables")
+        else()
+            message(WARNING
+                "CNA: no SDL runtime DLLs found in ${_prefix}/bin -- Windows test executables "
+                "will fail to start if they link SDL.")
+        endif()
+    endif()
 endfunction()
 
 # ---------------------------------------------------------------------------

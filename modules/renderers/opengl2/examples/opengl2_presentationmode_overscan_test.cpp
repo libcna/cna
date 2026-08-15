@@ -125,8 +125,8 @@ protected:
 
         if (frame_ == 1)
         {
-            SDL_SetWindowSize(renderer.GetWindowInternal(), kWindowW, kWindowH);
-            SDL_SyncWindow(renderer.GetWindowInternal());
+            SDL_SetWindowSize(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), kWindowW, kWindowH);
+            SDL_SyncWindow(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()));
             return;
         }
 

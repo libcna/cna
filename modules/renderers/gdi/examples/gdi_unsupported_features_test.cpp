@@ -26,6 +26,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -425,7 +426,9 @@ int main()
         }
         {
             GdiRenderer renderer(
-                window, 8, 8, CnaPresentationMode::NativeBackBuffer,
+                CNA::Examples::SdlTestRendererArgs(
+                    window, nullptr, nullptr, 8, 8,
+                    CnaPresentationMode::NativeBackBuffer),
                 GdiConfiguration{});
             ok &= ExerciseDirectRendererBoundary(renderer);
         }

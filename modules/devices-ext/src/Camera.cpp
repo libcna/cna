@@ -3,95 +3,145 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_camera.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatformCamera.hpp"
 
-#include "CNA/Devices/Detail/SdlCameraBackend.hpp"
+#include <limits>
+#include <utility>
 
 namespace CNA::Devices
 {
+    namespace
+    {
+        CameraPosition ToPublicPosition(const CNA::Platform::PlatformCameraPosition position)
+        {
+            switch (position)
+            {
+            case CNA::Platform::PlatformCameraPosition::FrontFacing:
+                return CameraPosition::FrontFacing;
+            case CNA::Platform::PlatformCameraPosition::BackFacing:
+                return CameraPosition::BackFacing;
+            case CNA::Platform::PlatformCameraPosition::Unknown:
+            default:
+                return CameraPosition::Unknown;
+            }
+        }
+    } // namespace
+
     bool Camera::getIsSupportedProperty()
     {
-        return SDL_GetNumCameraDrivers() > 0;
+        return CNA::Platform::GetCurrentPlatform().GetCapabilities().camera;
     }
 
     std::vector<CameraDeviceInfo> Camera::getAvailableCamerasProperty()
     {
+        CNA::Platform::IPlatformCameraProvider* provider =
+            CNA::Platform::GetCurrentPlatform().GetCamera();
+        if (provider == nullptr)
+        {
+            return {};
+        }
+
+        const std::vector<CNA::Platform::PlatformCameraInfo> platformCameras =
+            provider->GetCameras();
         std::vector<CameraDeviceInfo> cameras;
-
-        int count = 0;
-        SDL_CameraID* ids = SDL_GetCameras(&count);
-        if (ids == nullptr)
+        cameras.reserve(platformCameras.size());
+        for (const CNA::Platform::PlatformCameraInfo& platformCamera : platformCameras)
         {
-            return cameras;
+            CameraDeviceInfo camera;
+            camera.Name = platformCamera.name;
+            camera.Position = ToPublicPosition(platformCamera.position);
+            cameras.push_back(std::move(camera));
         }
-
-        cameras.reserve(static_cast<std::size_t>(count));
-        for (int i = 0; i < count; ++i)
-        {
-            CameraDeviceInfo info;
-            const char* name = SDL_GetCameraName(ids[i]);
-            info.Name = (name != nullptr) ? name : "";
-
-            switch (SDL_GetCameraPosition(ids[i]))
-            {
-            case SDL_CAMERA_POSITION_FRONT_FACING:
-                info.Position = CameraPosition::FrontFacing;
-                break;
-            case SDL_CAMERA_POSITION_BACK_FACING:
-                info.Position = CameraPosition::BackFacing;
-                break;
-            case SDL_CAMERA_POSITION_UNKNOWN:
-            default:
-                info.Position = CameraPosition::Unknown;
-                break;
-            }
-
-            cameras.push_back(std::move(info));
-        }
-
-        SDL_free(ids);
         return cameras;
     }
 
-    Camera::Camera() : backend_(std::make_unique<Detail::SdlCameraBackend>())
+    Camera::Camera()
     {
-    }
+        CNA::Platform::IPlatformCameraProvider* provider =
+            CNA::Platform::GetCurrentPlatform().GetCamera();
+        if (provider == nullptr)
+        {
+            return;
+        }
 
-    Camera::Camera(std::unique_ptr<Detail::ICameraBackend> backend) : backend_(std::move(backend))
-    {
+        const std::vector<CNA::Platform::PlatformCameraInfo> cameras = provider->GetCameras();
+        if (!cameras.empty())
+        {
+            camera_ = provider->OpenCamera(cameras.front().id);
+        }
     }
 
     Camera::~Camera() = default;
 
     CameraState Camera::getStateProperty() const
     {
-        return backend_->GetState();
+        if (camera_ == nullptr)
+        {
+            return CameraState::NotSupported;
+        }
+
+        switch (camera_->GetState())
+        {
+        case CNA::Platform::PlatformCameraState::Opening:
+            return CameraState::Opening;
+        case CNA::Platform::PlatformCameraState::Denied:
+            return CameraState::Denied;
+        case CNA::Platform::PlatformCameraState::Ready:
+            return CameraState::Ready;
+        case CNA::Platform::PlatformCameraState::Lost:
+            return CameraState::Lost;
+        }
+        return CameraState::Lost;
     }
 
     int Camera::getFrameWidthProperty() const
     {
-        return backend_->GetFrameWidth();
+        return camera_ != nullptr ? camera_->GetFrameWidth() : 0;
     }
 
     int Camera::getFrameHeightProperty() const
     {
-        return backend_->GetFrameHeight();
+        return camera_ != nullptr ? camera_->GetFrameHeight() : 0;
     }
 
     bool Camera::TryAcquireFrame(Microsoft::Xna::Framework::Graphics::Texture2D& outTexture)
     {
-        Detail::CameraFrame frame;
-        if (!backend_->TryAcquireFrame(frame))
+        if (camera_ == nullptr)
         {
             return false;
         }
 
-        if (outTexture.getWidthProperty() != frame.Width || outTexture.getHeightProperty() != frame.Height)
+        CNA::Platform::PlatformCameraFrame frame;
+        if (!camera_->TryAcquireFrame(frame) || frame.width <= 0 || frame.height <= 0)
+        {
+            return false;
+        }
+        if (outTexture.getWidthProperty() != frame.width ||
+            outTexture.getHeightProperty() != frame.height)
         {
             return false;
         }
 
-        outTexture.SetDataRGBA(frame.RgbaPixels.data(), frame.Width * frame.Height);
+        const std::size_t width = static_cast<std::size_t>(frame.width);
+        const std::size_t height = static_cast<std::size_t>(frame.height);
+        if (width > std::numeric_limits<std::size_t>::max() / 4u)
+        {
+            return false;
+        }
+        const std::size_t rowBytes = width * 4u;
+        if (height > std::numeric_limits<std::size_t>::max() / rowBytes ||
+            frame.rgbaPixels.size() != rowBytes * height)
+        {
+            return false;
+        }
+        if (width > static_cast<std::size_t>(std::numeric_limits<int>::max()) / height)
+        {
+            return false;
+        }
+
+        outTexture.SetDataRGBA(
+            frame.rgbaPixels.data(), static_cast<int>(width * height));
         return true;
     }
 } // namespace CNA::Devices

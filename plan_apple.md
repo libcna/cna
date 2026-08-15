@@ -68,24 +68,51 @@ The current contract and validation boundary are maintained in
 | `APPLE-3` | `.app` bundle generation: downstream-safe helper, CNA-owned target sweep, plist templates, macOS dylib embedding/fixup plus bundled-app launch/dependency CI | Done |
 | `APPLE-4` | Conservative iOS renderer allow-list (`SDL_RENDERER` only) + `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` escape hatch | Done |
 | `APPLE-5` | Platform-conditional build surface: deployment/architecture/sysroot-keyed SDL cache, static SDL3/image/mixer, Apple toolchain propagation, FFmpeg off on iOS, multi-process tests excluded | Done |
-| `APPLE-6` | `CNA/Platform.hpp`: `CNA_PLATFORM_APPLE`/`_MACOS`/`_IOS` macros, `isApplePlatform()`, `isMobilePlatform()`, `getCurrentPlatformName()` | Done |
+| `APPLE-6` | `CNA/TargetPlatform.hpp`: `CNA_TARGET_APPLE`/`_MACOS`/`_IOS` macros, `isApplePlatform()`, `isMobilePlatform()`, `getCurrentPlatformName()` | Done |
 | `APPLE-7` | Mobile application lifecycle in `Game`: suspend/resume timing, termination/low-memory handling, focused event-state test | Done |
-| `APPLE-8` | `CNA/Entrypoint.hpp`: pull in `<SDL3/SDL_main.h>` on iOS so UIKit owns the process | Done |
+| `APPLE-8` | `CNA/Platform/Entrypoint.hpp`: pull in `<SDL3/SDL_main.h>` on iOS so UIKit owns the process | Done |
 | `APPLE-9` | `.github/workflows/apple-ci.yml`: host-portable checks, macOS build/tests, final-linked iOS device/simulator app validation, simulator install/launch | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
 | `APPLE-9a` | `scripts/check-apple-platform-cmake.sh`: exercises the Apple CMake layer from any host, since every line of it is behind `if(APPLE)` and unreachable otherwise | Done — passes on Linux |
-| `APPLE-10` | `modules/core/tests/CNA/PlatformTests.cpp`: platform-helper coverage, including the macOS/iOS-specific expectations | Done |
+| `APPLE-10` | `modules/core/tests/CNA/TargetPlatformTests.cpp`: platform-helper coverage, including the macOS/iOS-specific expectations | Done |
 | `APPLE-11` | `METAL` on iOS: refused by default, configurable through `CNA_APPLE_ALLOW_UNVALIDATED_RENDERER` | Done (gate only) |
 | `APPLE-12` | Storage-root fallback follows the Apple convention instead of the Linux XDG layout | Done |
-| `APPLE-13` | Minimal `CNA/Entrypoint` + `Game::RunOneFrame()` app is final-linked for both Apple platforms and launched from macOS bundle/simulator CI | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
-| `APPLE-15` | Initial orientation hint is set before SDL video init; later `SupportedOrientations` changes invalidate UIKit's cached answer | Done |
+| `APPLE-13` | Minimal `CNA/Platform/Entrypoint` + `Game::RunOneFrame()` app is final-linked for both Apple platforms and launched from macOS bundle/simulator CI | Done — [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749) |
+| `APPLE-15` | Initial orientation set is seeded before the video subsystem starts; later `SupportedOrientations` changes reach the OS through `IPlatformWindow::SetSupportedOrientations` and invalidate UIKit's cached answer | Done |
 | `APPLE-20` | Enforce macOS 13.3 / iOS 16.3 libc++ availability floors and request only CNA's sharp-runtime component closure | Done |
+
+## Re-landed on the platform abstraction (merge of `next`)
+
+`next` introduced the CNA-owned platform contract (`plan_platform.md`), which decoupled
+`modules/core`, `modules/runtime`, `modules/graphics` and `modules/storage` from SDL entirely and
+put a hard 0/0 SDL ratchet on production sources. Several APPLE rows were written against the
+pre-contract layout and were re-stated rather than merged verbatim:
+
+| Was | Now |
+|---|---|
+| `CNA/Platform.hpp`, `CNA::Platform` enum | `CNA/TargetPlatform.hpp`, `CNA::TargetPlatform` (`CNA::Platform` is now a namespace) |
+| `CNA_PLATFORM_APPLE`/`_MACOS`/`_IOS` | `CNA_TARGET_APPLE`/`_MACOS`/`_IOS`, so the target-OS axis stops colliding with `CNA_PLATFORM_<IMPL>` |
+| `CNA/Entrypoint.hpp` (modules/core) | `CNA/Platform/Entrypoint.hpp` (modules/platform), keyed on `CNA_PLATFORM_SDL3` + `CNA_TARGET_IOS` |
+| `modules/runtime/src/AppleOrientation.mm` | `modules/platform/src/Sdl3/Sdl3AppleOrientation.mm` |
+| Orientation hint written from `GameWindow`/`GraphicsDevice` | `IPlatformWindow::SetSupportedOrientations` + seeding in `Sdl3Platform`'s constructor |
+| SDL lifecycle constants in `Game::PollEvents` | `CNA::Platform::AppLifecycleEvent`; `AppLifecycleKind::Terminating` added to the contract |
+| `SDL_WaitEventTimeout` in the suspended loop | `IPlatform::Delay` + `PollEvents` (the contract has no blocking wait, by design) |
+| Tests injecting `SDL_PushEvent` / creating `SDL_Window` | Scripted `PlatformEvent`s via `PlatformTestDecorator`, and the Headless platform |
+
+Two behavioural notes from the re-statement:
+
+- Suspension is now driven by `WillEnterBackground`/`DidEnterForeground` rather than the tighter
+  `DidEnterBackground`/`WillEnterForeground` pair, because those are the transitions the platform
+  contract exposes. It suspends marginally earlier and resumes marginally later, which is the safe
+  direction on both iOS and Android.
+- The suspended wait polls every 16 ms instead of blocking up to 250 ms, so resume latency is
+  bounded by a frame rather than by the old timeout.
 
 ## Verification status
 
 | Claim | Evidence |
 |---|---|
 | The Apple CMake layer parses and its policies stay connected | Linux smoke check: renderer gate/override, non-Apple no-ops, deployment floors, all static SDL switches, bundle fixup and orientation bridge |
-| Non-Apple configures are unaffected | Linux `HEADLESS` configure completes, the whole `CnaTests` corpus builds, and `PlatformTest.*` / `GameWindowTest.*` / `Storage*` / `*DesktopOS*` pass (24 cases; the one unrelated pre-existing failure, `GameWindowTest.MinimizeAndRestoreEXT_UsingSdlWindow`, only appears under `SDL_VIDEODRIVER=dummy`, which rejects minimize/restore, and skips otherwise) |
+| Non-Apple configures are unaffected | Re-verified after the `next` merge on a Linux `FNA3D` build (`cmake-build-next-fna3d`, Xvfb + llvmpipe): `TargetPlatformTest.*` / `GameWindowTest.*` / `GameTest.*` / `Storage*` / `*DesktopOS*` / `*PlatformEvent*` / `*Sdl3EventMapper*` all pass, and the full corpus runs 6774 tests with 6754 passing. The 3 failures are the documented environmental set (`PollEventsClearsStaleCallerContent/SDL3` passes standalone; the two `GameEventSemanticsGoldenTest` Headless/Terminal cases need a renderer that can build a windowless device, which FNA3D refuses). The **SDL3** parameterization of that golden test passes, which is what shows the lifecycle re-statement preserves the captured event semantics. |
 | macOS builds and its platform contracts hold | Green `macos-build` in [run 31736845749](https://github.com/openeggbert/cna/actions/runs/31736845749): CnaTests, focused suites, self-contained bundle verification and launch |
 | CNA final-links an iOS device application | Green `ios-build/device` in the same run: Mach-O platform, plist, entry-point symbols and dependency-closure checks |
 | A minimal CNA application runs in the iOS simulator | Green `ios-build/simulator` in the same run: install, launch and `CNA_APPLE_SMOKE_OK` after one `Game` frame |

@@ -74,8 +74,6 @@ namespace CNA::Internal::Renderers::Magnum
         [[nodiscard]] int GetWidth() const override { return width_; }
         /** @brief Level-0 height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
-        /** @brief Always null: this renderer owns no SDL texture. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
         /** @brief Binds this texture to texture unit 0. */
         void BindGL(int /*unit*/) const override;
         /**

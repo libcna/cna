@@ -37,7 +37,7 @@ cna_renderer_common_setup()
 # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --
 # design decision 9/16 keep the stock pipeline dependency-free; it lives on the isolated effect
 # target only.
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 d3d9)
+target_link_libraries(${RENDERER_TARGET} PRIVATE d3d9)
 # D9-112: DirectX9Renderer::CreateEffectRenderer() needs to construct a real D3D9EffectRenderer,
 # so ${RENDERER_TARGET} links the isolated, d3dcompiler-carrying effect target.
 if(TARGET cna_renderer_d3d9_effect)

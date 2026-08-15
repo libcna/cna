@@ -3,6 +3,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <array>
@@ -12,8 +13,6 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-struct SDL_Window;
 
 namespace CNA::Internal::Renderers::Sokol
 {
@@ -78,11 +77,6 @@ namespace CNA::Internal::Renderers::Sokol
          */
         [[nodiscard]] int GetHeight() const override;
 
-        /**
-         * @brief Returns null; this renderer renders through sokol_gfx, not SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override;
 
         /**
          * @brief Replaces mip level 0 in place.
@@ -215,11 +209,6 @@ namespace CNA::Internal::Renderers::Sokol
          */
         [[nodiscard]] int GetHeight() const override;
 
-        /**
-         * @brief Returns null; this renderer renders through sokol_gfx, not SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override;
 
         /** @brief Bind is driven entirely by SokolRenderer's own bound-target tracking;
          *         this override exists only to satisfy the pure-virtual interface. */
@@ -1294,9 +1283,9 @@ namespace CNA::Internal::Renderers::Sokol
     /**
      * @brief CNA graphics renderer implemented on sokol_gfx (https://github.com/floooh/sokol).
      *
-     * CNA keeps ownership of the SDL window and the game loop; this class creates only the GPU
-     * context (SDL_GL_CreateContext for the GL APIs) and drives sokol_gfx inside it, so sokol_app
-     * is deliberately not used.
+     * CNA keeps ownership of the platform window and the game loop; this class creates only the
+     * GPU context through `IPlatformGlContext` and drives sokol_gfx inside it, so sokol_app is
+     * deliberately not used.
      *
      * Scope: 2D (`Texture2D`, `SpriteBatch`, `VertexBuffer`/`IndexBuffer`), 3D (`BasicEffect`
      * incl. textured/lit/fog, `DualTextureEffect`, `EnvironmentMapEffect`, `SkinnedEffect`,
@@ -1318,24 +1307,6 @@ namespace CNA::Internal::Renderers::Sokol
          *             multisample count and swap interval are honoured.
          */
         explicit SokolRenderer(const GraphicsRendererCreateArgs& args);
-
-        /**
-         * @brief CNAEXT test-only constructor (plan_sokol.md SOKOL-45) that can force the first
-         * `SDL_GL_MakeCurrent()` call this instance makes to fail regardless of its real return
-         * value, and counts every `SDL_GL_DestroyContext()` call this instance makes -- so a
-         * regression test can prove construction stays fully transactional even when
-         * `SDL_GL_CreateContext()` itself already succeeded before the failure.
-         *
-         * @param args Renderer creation arguments, identical meaning to the public constructor.
-         * @param forceMakeCurrentFailureEXT When true, treat the first `SDL_GL_MakeCurrent()` call
-         *                                   as failed even if SDL itself reports success.
-         * @param contextDestroyCountEXT Optional counter incremented on every real
-         *                               `SDL_GL_DestroyContext()` call this instance makes; left
-         *                               untouched when null.
-         */
-        CNAEXT SokolRenderer(const GraphicsRendererCreateArgs& args,
-                                    bool forceMakeCurrentFailureEXT,
-                                    int* contextDestroyCountEXT);
 
         /** @brief Shuts sokol_gfx down and destroys the GPU context. */
         ~SokolRenderer() override;
@@ -1400,6 +1371,8 @@ namespace CNA::Internal::Renderers::Sokol
          * @param height Receives the logical height in pixels.
          */
         void GetViewportSize(int& width, int& height) override;
+        /** @brief Refreshes drawable size and display scale for the same platform window. */
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
         /**
          * @brief Updates the logical presentation size at runtime.
@@ -1441,18 +1414,6 @@ namespace CNA::Internal::Renderers::Sokol
          */
         bool TransformLogicalToWindow(float logX, float logY,
                                       float& windowX, float& windowY) const override;
-
-        /**
-         * @brief Returns the SDL window this renderer renders into.
-         * @return The window; never null for a successfully constructed renderer.
-         */
-        [[nodiscard]] SDL_Window* GetWindowInternal() const override;
-
-        /**
-         * @brief Returns null; this renderer does not use SDL_Renderer.
-         * @return Always nullptr.
-         */
-        [[nodiscard]] SDL_Renderer* GetRendererInternal() const override;
 
         /**
          * @brief Creates a sokol_gfx-backed 2D texture.
@@ -2226,12 +2187,6 @@ namespace CNA::Internal::Renderers::Sokol
             std::size_t operator()(const SamplerKey& key) const;
         };
 
-        void CreateGpuContext(SDL_Window* window, int multiSampleCount);
-        /// Destroys glContext_ if one was ever created, nulls it out, and increments
-        /// contextDestroyCountEXT_ when a test supplied one (plan_sokol.md SOKOL-45) -- the single
-        /// path both the constructor's transactional-cleanup catch block and the destructor use, so
-        /// a leaked or double-destroyed context cannot happen via one path but not the other.
-        void DestroyGpuContextIfAnyEXT();
         void SetupSokol();
         void CreateSpriteResources();
         void BeginPassIfNeeded();
@@ -2369,12 +2324,10 @@ namespace CNA::Internal::Renderers::Sokol
         /// same reasoning CurrentPassSampleCountEXT's own doc comment gives for sample_count.
         [[nodiscard]] int CurrentPassColorAttachmentCountEXT() const;
 
-        SDL_Window* window_ = nullptr;
-        void* glContext_ = nullptr;
-        /// plan_sokol.md SOKOL-45 test-only failure injection -- see the CNAEXT constructor's doc
-        /// comment. Always false/null via the public constructor.
-        bool forceMakeCurrentFailureEXT_ = false;
-        int* contextDestroyCountEXT_ = nullptr;
+        // Declared before every sokol/raw-GL resource so it is destroyed last. The owner also
+        // makes context creation transactional when the platform refuses MakeCurrent().
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
+        PlatformGlSurfaceState surface_;
         int virtualWidth_ = 0;
         int virtualHeight_ = 0;
         CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;

@@ -147,24 +147,29 @@ done
 }
 
 # ---------------------------------------------------------------------------
-# 7. iOS orientation changes happen at two distinct times: SDL's documented initial hint must
-#    exist before SDL_INIT_VIDEO, while later XNA GraphicsDeviceManager changes need a UIKit
-#    invalidation after the window exists. Keep both halves connected to the build.
+# 7. iOS orientation changes happen at two distinct times: the documented initial hint must exist
+#    before the video subsystem starts, while later XNA GraphicsDeviceManager changes need a UIKit
+#    invalidation after the window exists. Both halves live in the platform module, which is the
+#    one place allowed to touch a native windowing API; keep both connected to the build.
 # ---------------------------------------------------------------------------
-graphics_device="${repo_root}/modules/graphics/src/Xna/GraphicsDevice.cpp"
-orientation_adapter="${repo_root}/modules/runtime/src/AppleOrientation.mm"
-runtime_cmake="${repo_root}/modules/runtime/CMakeLists.txt"
+platform_impl="${repo_root}/modules/platform/src/Sdl3/Sdl3Platform.cpp"
+orientation_adapter="${repo_root}/modules/platform/src/Sdl3/Sdl3AppleOrientation.mm"
+platform_cmake="${repo_root}/modules/platform/CMakeLists.txt"
 
-grep -q 'SDL_GetHint(SDL_HINT_ORIENTATIONS)' "${graphics_device}" || {
-    echo "FAIL: the pre-SDL-init mobile orientation default is missing" >&2
+grep -q 'SDL_GetHint(SDL_HINT_ORIENTATIONS)' "${platform_impl}" || {
+    echo "FAIL: the pre-video-init mobile orientation default is missing" >&2
     exit 1
 }
 grep -q 'setNeedsUpdateOfSupportedInterfaceOrientations' "${orientation_adapter}" || {
-    echo "FAIL: the iOS runtime orientation adapter does not invalidate UIKit orientation state" >&2
+    echo "FAIL: the iOS orientation adapter does not invalidate UIKit orientation state" >&2
     exit 1
 }
-grep -q 'src/AppleOrientation.mm' "${runtime_cmake}" || {
-    echo "FAIL: the iOS runtime orientation adapter is not part of cna_runtime" >&2
+grep -q 'src/Sdl3/Sdl3AppleOrientation.mm' "${platform_cmake}" || {
+    echo "FAIL: the iOS orientation adapter is not part of cna_platform" >&2
+    exit 1
+}
+grep -q 'SetSupportedOrientations' "${repo_root}/modules/platform/include/CNA/Platform/IPlatformWindow.hpp" || {
+    echo "FAIL: the platform window contract does not carry the supported-orientation request" >&2
     exit 1
 }
 
