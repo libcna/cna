@@ -121,7 +121,7 @@ def run_viewer(viewer: Path, asset: Path, png: Path, extra_arguments: list[str],
 
 def validate_policy(policy: dict[str, Any], asset_ids: list[str]) -> None:
     if policy.get("schemaVersion") != 1 or policy.get("renderer") not in (
-        "OPENGLES3/EasyGL", "VULKAN",
+        "OPENGLES3/EasyGL", "VULKAN", "SOFTWARE",
     ):
         raise RuntimeError("unsupported L7 policy schema or renderer")
     overrides = policy.get("overrides", {})
@@ -143,7 +143,7 @@ def main() -> int:
     parser.add_argument("--viewer-source", type=Path,
                         help="optional viewer checkout for provenance")
     parser.add_argument("--policy", type=Path,
-                        help="override the committed EasyGL L7 policy (for example Vulkan)")
+                        help="override the committed EasyGL L7 policy (for example Vulkan or SOFTWARE)")
     parser.add_argument("--output", type=Path,
                         help="empty directory in which to retain the two raw runs")
     parser.add_argument("--report-out", type=Path,
@@ -186,7 +186,7 @@ def main() -> int:
             # Hardware GPUs remain useful development comparisons, but cannot share a byte oracle.
             "LIBGL_ALWAYS_SOFTWARE": "1",
         }
-    else:
+    elif policy["renderer"] == "VULKAN":
         golden_root = repo / "tests/gltf-l7/vulkan"
         renderer_output_prefix = "[Vulkan] GPU: "
         capture_environment = {
@@ -195,6 +195,13 @@ def main() -> int:
         }
         if os.environ.get("VK_DRIVER_FILES"):
             capture_environment["VK_DRIVER_FILES"] = os.environ["VK_DRIVER_FILES"]
+    else:
+        golden_root = repo / "tests/gltf-l7/software"
+        renderer_output_prefix = "CNA: graphics renderer: "
+        capture_environment = {
+            "SDL_VIDEODRIVER": "x11",
+            "SDL_AUDIODRIVER": "dummy",
+        }
 
     expectations = {
         asset_id: json.loads(
