@@ -19,7 +19,7 @@ identity rather than an alias (`docs/renderer-registry.md`'s no-alias rule):
 
 No existing identity occupies the fixed-function + CPU + third-party-library cell.
 
-Target platforms: anything with a C99 compiler and OpenMP. No platform gate is declared in
+Target platforms: anything with a C99 compiler; OpenMP acceleration is optional. No platform gate is declared in
 `cmake/RendererSelection.cmake`, matching `PORTABLEGL`.
 
 Pinned upstream: commit `36a7987e7bebfda19615ea33341b1cc0ff9c3b13` (2023-11-04), fetched and built
@@ -130,7 +130,7 @@ them are refused one step earlier.
 | ID | Task | Status |
 |---|---|---|
 | `TINYGL-0` | Existence-gate spike: prove TinyGL can clear, rasterize, texture and read back with no GPU/window | **DONE** — `tinygl-spike/`, all checks pass |
-| `TINYGL-1` | `cmake/ThirdPartyTinyGL.cmake`: pinned FetchContent + OpenMP link | **DONE** |
+| `TINYGL-1` | `cmake/ThirdPartyTinyGL.cmake`: pinned FetchContent + optional OpenMP acceleration | **DONE** |
 | `TINYGL-2` | Registry: enum, selector, compile definition, name, identity-check table (46 → 47) | **DONE** |
 | `TINYGL-3` | Module skeleton `modules/renderers/tinygl/` + source-partition declaration | **DONE** |
 | `TINYGL-4` | Context lifecycle, clear, resize, readback | **DONE** |
@@ -148,6 +148,7 @@ them are refused one step earlier.
 | `TINYGL-14c` | `TinyGL_Contract` (30 checks): post-implementation audit regressions for framebuffer alignment, effect identity/modulation, offsets, SpriteBatch geometry/viewport/alpha, mip/MSAA refusals, capability hooks and validation ordering | **DONE** |
 | `TINYGL-15` | `docs/tinygl-renderer.md` capability boundary | **DONE** |
 | `TINYGL-20` | Post-audit contract remediation: explicit effect identity, vertex-alpha cutout, depth-clear validation and transactional overflow-safe resize | **DONE** |
+| `TINYGL-21` | Make OpenMP optional: accelerated when found, complete single-threaded archive with no runtime dependency otherwise | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
 | `TINYGL-18` | `VertexPositionNormalTexture` (stride 32) route, prerequisite for TINYGL-16 | **OPEN** |
@@ -243,11 +244,10 @@ cmake --build cmake-build-tinygl -j4
 TinyGL is fetched at configure time. For an offline build, point CMake at an existing checkout with
 `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/tinygl`.
 
-OpenMP is required: upstream compiles `glopCopyTexImage2D` and `glopDrawPixels` with OpenMP pragmas,
-so the archive carries unresolved `GOMP_*` references even though this renderer calls neither.
-Upstream's own CMake checks the incorrectly-cased `OPENMP_C_FOUND` name instead of CMake's
-`OpenMP_C_FOUND`. `cmake/ThirdPartyTinyGL.cmake` therefore enables C, requires the OpenMP C
-component before adding the upstream directory, and explicitly links `OpenMP::OpenMP_C`.
+OpenMP is optional. Every upstream pragma is guarded by `_OPENMP`, so without OpenMP the same source
+builds a complete single-threaded archive with no `GOMP_*`/`omp_*` references. Upstream's own CMake
+checks the incorrectly-cased `OPENMP_C_FOUND` name instead of CMake's `OpenMP_C_FOUND`, so CNA finds
+the C component quietly and explicitly links `OpenMP::OpenMP_C` only when the imported target exists.
 
 Upstream compiles with `-march=native` when not cross-compiling, so the archive is tuned for the
 build host. That is upstream's own choice and CNA builds TinyGL per machine; it is stated rather

@@ -173,8 +173,8 @@ cmake --build cmake-build-tinygl -j4
 ```
 
 TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/tinygl` points at an
-existing checkout for an offline build. An OpenMP-capable toolchain is required — see
-`plan_tinygl.md` §Build for why.
+existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
+without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
 
 Six suites, 81 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), and the post-audit `TinyGL_Contract` (30). All pass.

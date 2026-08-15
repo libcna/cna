@@ -64,16 +64,16 @@ cmake -S ~/deps/tinygl -B ~/deps/tinygl/build -DCMAKE_BUILD_TYPE=Release \
       -DTINYGL_BUILD_SHARED=OFF -DTINYGL_BUILD_STATIC=ON
 cmake --build ~/deps/tinygl/build -j4
 
-g++ -std=c++23 -O1 -fopenmp -I ~/deps/tinygl/include \
+g++ -std=c++23 -O1 -I ~/deps/tinygl/include \
     tinygl_existence_gate.cpp -L ~/deps/tinygl/build/src -ltinygl-static -lm \
     -o tinygl_existence_gate
 ./tinygl_existence_gate
 ```
 
-`-fopenmp` is required: `glopCopyTexImage2D` and `glopDrawPixels` are compiled with OpenMP
-pragmas (`TGL_FEATURE_MULTITHREADED_COPY_TEXIMAGE_2D`, `TGL_FEATURE_MULTITHREADED_DRAWPIXELS`), so
-the static library carries unresolved `GOMP_*` references even for callers that never invoke those
-two entry points. `cmake/ThirdPartyTinyGL.cmake` links `OpenMP::OpenMP_C` for the same reason.
+`-fopenmp` is optional. `glopCopyTexImage2D`, `glopDrawPixels` and the math helpers contain OpenMP
+pragmas, but each pragma is guarded by `_OPENMP`. A build without OpenMP therefore produces a
+complete single-threaded archive with no `GOMP_*`/`omp_*` references; CNA enables and links the
+OpenMP C target only when the toolchain provides it.
 
 Per the repository's spike rule, the `.cpp` and this `README.md` stay committed; built binaries and
 object files are gitignored.
