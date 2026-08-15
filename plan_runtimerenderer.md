@@ -780,7 +780,7 @@ keep compiling the corpus exactly as today throughout.
 | RTR-P9-3 | ✅ | **Audit published.** Classified every renderer-gated site by whether its file also includes a renderer-family header (which makes a runtime gate impossible). Counts below. |
 | RTR-P9-4 | 🟨 | Convert class (a) in `modules/graphics/tests` — batch 1: capability/format suites. |
 | RTR-P9-5 | 🟨 | Convert class (a) — batch 2: draw/indexed-draw suites. |
-| RTR-P9-6 | ⬜ | Convert class (a) — batch 3: vertex-layout/declaration suites. |
+| RTR-P9-6 | ✅ | Convert class (a) — batch 3: vertex-layout/declaration suites. `VertexDeclarationLayoutTests.cpp` goes from **36** renderer-preprocessor sites to **2**. Converted: the `DECLARATION_LAYOUT_ORACLE` set, the `MEASURED` set, the 14-arm display-name chain, the four `!defined(CNA_RENDERER_BGFX)` expectation gates and the EasyGL ShaderEffect control. The 2 that stay are genuine class (b) — they `#include <bgfx/bgfx.h>` and call `bgfx::` directly. Worth recording: `TheTranslatingRendererStillRendersEveryCollidingDeclaration` now **exists and reports a skip** on every non-bgfx build instead of silently not being compiled, which is the coverage-visibility gap this phase exists to close. Gate: OPENGLES3 6376 ran / 6369 passed / 7 skipped / **0 failed**. |
 | RTR-P9-7 | ⬜ | Convert class (a) — batch 4: render-target/readback suites. |
 | RTR-P9-8 | ⬜ | Convert class (a) — batch 5: SpriteBatch/2D suites. |
 | RTR-P9-9 | ✅ | Class (b) sites keep `#ifdef`, but on the family's **private** define, so a multi build compiles them for each family that is present. |

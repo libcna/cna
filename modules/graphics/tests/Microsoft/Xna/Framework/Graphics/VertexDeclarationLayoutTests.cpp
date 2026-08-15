@@ -46,6 +46,13 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include <string>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -110,51 +117,34 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The renderers that rasterize a stock 3D draw and read the result back through
 // RenderTarget2D::GetData -- InstancedDiffuseColorTests.cpp's own suite set.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_SDL_GPU) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12) || \
-    defined(CNA_RENDERER_WICKED)
-#define CNA_DECLARATION_LAYOUT_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool DeclarationLayout()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, Software, SdlGpu, 
+                            DirectX9, DirectX11, DirectX12, Wicked);
+}
 
 // The renderers measured on a real display here. D3D9/D3D11/D3D12 stay outside it because no D3D
 // display is reachable in this environment; every leg still PRINTS its reading there.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_SOFTWARE) || defined(CNA_RENDERER_SDL_GPU) || \
-    defined(CNA_RENDERER_WICKED)
-#define CNA_DECLARATION_LAYOUT_MEASURED 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-6: the same set, evaluated at runtime.
+[[nodiscard]] inline bool DeclarationLayoutMeasured()
+{
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx,
+                           Vulkan, WebGPU, Software, SdlGpu, Wicked);
+}
 
-#ifdef CNA_DECLARATION_LAYOUT_ORACLE
 
 namespace
 {
-    constexpr const char* kRendererName =
-#if defined(CNA_RENDERER_EASYGL)
-        "EasyGL";
-#elif defined(CNA_RENDERER_VULKAN)
-        "Vulkan";
-#elif defined(CNA_RENDERER_BGFX)
-        "bgfx";
-#elif defined(CNA_RENDERER_WEBGPU)
-        "WebGPU";
-#elif defined(CNA_RENDERER_SOFTWARE)
-        "Software";
-#elif defined(CNA_RENDERER_SDL_GPU)
-        "SDL_GPU";
-#elif defined(CNA_RENDERER_DIRECTX9)
-        "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        "DIRECTX12";
-#elif defined(CNA_RENDERER_WICKED)
-        "Wicked";
-#else
-        "unknown";
-#endif
+    // plan_runtimerenderer.md RTR-P9-6: was a hand-maintained #if/#elif chain of display names that
+    // had to be extended for every renderer and answered with a placeholder when it was not. The
+    // runtime accessor knows the ACTIVE renderer, and knows all 46 names.
+    inline std::string RendererName()
+    {
+        return std::string(CNA::getGraphicsRendererName(
+            CNA::GraphicsRendererSelection::GetSelected()));
+    }
 
     constexpr int kTargetSize = 256;
     constexpr int kColumnCount = 4;
@@ -620,7 +610,7 @@ protected:
 
     static void Print(const DeclarationCase& c, Route route, const RouteResult& r)
     {
-        std::cout << "[ GFX-216  ] " << kRendererName << ' ' << c.name << '/' << RouteName(route)
+        std::cout << "[ GFX-216  ] " << RendererName() << ' ' << c.name << '/' << RouteName(route)
                   << " stride=" << c.stride;
         if (!r.rendered)
             std::cout << ": REJECTED -- \"" << r.rejection << '"' << std::endl;
@@ -655,60 +645,64 @@ protected:
     static void ExpectStaircase(const DeclarationCase& c, Route route, const RouteResult& r)
     {
         Print(c, route, r);
-#ifdef CNA_DECLARATION_LAYOUT_MEASURED
-#if !defined(CNA_RENDERER_BGFX)
-        if (c.deviatesElsewhere)
+        if (DeclarationLayoutMeasured())
         {
-            EXPECT_FALSE(r.rendered)
-                << c.name << '/' << RouteName(route) << " on " << kRendererName
-                << " was ACCEPTED. This declaration collides with the byte-stride table this "
-                   "renderer infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
-                   "before any native work. If the picture below is correct, REMED-GFX-217/218's "
-                   "real translator has landed and this arm is stale; if it is wrong, the guard "
-                   "regressed and a draw is being rendered from the wrong bytes"
-                << DescribeFrame(r.frame);
+            // plan_runtimerenderer.md RTR-P9-6: bgfx infers no byte-stride table, so this expectation
+            // is not its contract. Asked at runtime, it steps aside for whichever renderer is active.
+            if (!CNA_RENDERER_IS(Bgfx))
+            {
+                if (c.deviatesElsewhere)
+                {
+                    EXPECT_FALSE(r.rendered)
+                        << c.name << '/' << RouteName(route) << " on " << RendererName()
+                        << " was ACCEPTED. This declaration collides with the byte-stride table this "
+                           "renderer infers its native layout from, so REMED-GFX-DECL-GUARD must refuse it "
+                           "before any native work. If the picture below is correct, REMED-GFX-217/218's "
+                           "real translator has landed and this arm is stale; if it is wrong, the guard "
+                           "regressed and a draw is being rendered from the wrong bytes"
+                        << DescribeFrame(r.frame);
+                    if (!r.rendered)
+                        EXPECT_FALSE(r.rejection.empty())
+                            << c.name << '/' << RouteName(route)
+                            << ": the refusal has to say why -- a silent refusal is not a boundary";
+                    return;
+                }
+            }
             if (!r.rendered)
+            {
                 EXPECT_FALSE(r.rejection.empty())
                     << c.name << '/' << RouteName(route)
-                    << ": the refusal has to say why -- a silent refusal is not a boundary";
-            return;
+                    << ": the draw was refused without saying why. A renderer may decline a declaration "
+                       "it cannot express, but the refusal has to be legible";
+                return;
+            }
+            for (int column = 0; column < kColumnCount; ++column)
+            {
+                const ColumnReading got = ReadColumn(r.frame, column);
+                const Rgba want =
+                    ExpectedColor(kColumnColors[static_cast<std::size_t>(column)], c.hasColor);
+                const std::string where =
+                    std::string(c.name) + '/' + RouteName(route) + " column " +
+                    std::to_string(column);
+                EXPECT_EQ(kQuadTop, got.topRow)
+                    << where << ": the quad starts at row " << got.topRow << " instead of "
+                    << kQuadTop << " -- the POSITION attribute is being read from the wrong bytes"
+                    << DescribeFrame(r.frame);
+                EXPECT_EQ(1, got.distinct)
+                    << where << ": " << got.distinct
+                    << " distinct colours in one flat quad -- the records are desynchronised"
+                    << DescribeFrame(r.frame);
+                EXPECT_EQ(ExpectedLit(column), got.lit)
+                    << where << ": " << got.lit << " lit pixels instead of " << ExpectedLit(column)
+                    << " -- this column's staircase step moved, so a record was read at the wrong "
+                       "stride" << DescribeFrame(r.frame);
+                EXPECT_TRUE(NearlyEqual(got.color, want))
+                    << where << ": carried " << got.color.ToString() << ", expected "
+                    << want.ToString()
+                    << " -- the COLOUR attribute is being read from the wrong byte offset or format"
+                    << DescribeFrame(r.frame);
+            }
         }
-#endif
-        if (!r.rendered)
-        {
-            EXPECT_FALSE(r.rejection.empty())
-                << c.name << '/' << RouteName(route)
-                << ": the draw was refused without saying why. A renderer may decline a declaration "
-                   "it cannot express, but the refusal has to be legible";
-            return;
-        }
-        for (int column = 0; column < kColumnCount; ++column)
-        {
-            const ColumnReading got = ReadColumn(r.frame, column);
-            const Rgba want =
-                ExpectedColor(kColumnColors[static_cast<std::size_t>(column)], c.hasColor);
-            const std::string where =
-                std::string(c.name) + '/' + RouteName(route) + " column " +
-                std::to_string(column);
-            EXPECT_EQ(kQuadTop, got.topRow)
-                << where << ": the quad starts at row " << got.topRow << " instead of "
-                << kQuadTop << " -- the POSITION attribute is being read from the wrong bytes"
-                << DescribeFrame(r.frame);
-            EXPECT_EQ(1, got.distinct)
-                << where << ": " << got.distinct
-                << " distinct colours in one flat quad -- the records are desynchronised"
-                << DescribeFrame(r.frame);
-            EXPECT_EQ(ExpectedLit(column), got.lit)
-                << where << ": " << got.lit << " lit pixels instead of " << ExpectedLit(column)
-                << " -- this column's staircase step moved, so a record was read at the wrong "
-                   "stride" << DescribeFrame(r.frame);
-            EXPECT_TRUE(NearlyEqual(got.color, want))
-                << where << ": carried " << got.color.ToString() << ", expected "
-                << want.ToString()
-                << " -- the COLOUR attribute is being read from the wrong byte offset or format"
-                << DescribeFrame(r.frame);
-        }
-#endif
     }
 };
 
@@ -718,6 +712,9 @@ protected:
 
 TEST_F(VertexDeclarationLayoutTest, EveryDeclarationRendersItsOwnLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const DeclarationCase& c : kMatrix)
         ExpectStaircase(c, Route::OrdinaryIndexed16,
@@ -731,6 +728,9 @@ TEST_F(VertexDeclarationLayoutTest, EveryDeclarationRendersItsOwnLayout)
 
 TEST_F(VertexDeclarationLayoutTest, SameStrideDifferentElementsDoNotCollide)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     // Stride 16: Position@0+Color@12 versus Color@0+Position@4.
@@ -752,6 +752,9 @@ TEST_F(VertexDeclarationLayoutTest, SameStrideDifferentElementsDoNotCollide)
 
 TEST_F(VertexDeclarationLayoutTest, PaddedEquivalentDeclarationKeepsItsSemantics)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     // The same Position@0 + Color@12 semantics at stride 16 and at stride 32. Only the padding
@@ -768,6 +771,9 @@ TEST_F(VertexDeclarationLayoutTest, PaddedEquivalentDeclarationKeepsItsSemantics
 
 TEST_F(VertexDeclarationLayoutTest, EveryRouteBindsTheDeclaredLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const DeclarationCase& c : {kPositionOnly12, kPositionColor16, kColorPosition16,
                                      kPositionColorPadded32})
@@ -785,6 +791,9 @@ TEST_F(VertexDeclarationLayoutTest, EveryRouteBindsTheDeclaredLayout)
 
 TEST_F(VertexDeclarationLayoutTest, GeometryVertexOffsetAddressesDeclaredRecords)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const DeclarationCase& c : {kPositionOnly12, kPositionColor16, kColorPosition16})
     {
@@ -800,6 +809,9 @@ TEST_F(VertexDeclarationLayoutTest, GeometryVertexOffsetAddressesDeclaredRecords
 
 TEST_F(VertexDeclarationLayoutTest, DeclarationTransitionsDoNotReuseAStaleLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     const std::array<DeclarationCase, 8> sequence{
         kPositionOnly12,          // A: stride 12
@@ -923,16 +935,22 @@ protected:
     }
 };
 
-#if !defined(CNA_RENDERER_BGFX)
-
 // A refused draw must produce NOTHING: no partial geometry, no half-queued command that a later
 // Present flushes. The target still holds exactly the clear colour it was given.
 TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 {
+    // plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
+    // refusing it, so the refusal contract below is not its contract -- see
+    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
+    if (CNA_RENDERER_IS(Bgfx))
+        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     RenderTarget2D target = MakeTarget();
     const GuardedDraw got = DrawInto(target, kColorPosition16, false, false);
-    std::cout << "[ DECL-GUARD ] " << kRendererName << " colorPosition16 refusal: "
+    std::cout << "[ DECL-GUARD ] " << RendererName() << " colorPosition16 refusal: "
               << (got.rendered ? std::string("ACCEPTED") : '"' + got.rejection + '"') << std::endl;
     ASSERT_FALSE(got.rendered)
         << "a declaration this renderer infers no faithful layout for was accepted"
@@ -948,6 +966,14 @@ TEST_F(DeclarationGuardTest, ARefusedDeclarationRasterizesNothing)
 // render its own declaration exactly.
 TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 {
+    // plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
+    // refusing it, so the refusal contract below is not its contract -- see
+    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
+    if (CNA_RENDERER_IS(Bgfx))
+        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     RenderTarget2D target = MakeTarget();
 
@@ -977,6 +1003,14 @@ TEST_F(DeclarationGuardTest, AValidDrawAfterARefusedOneStillRenders)
 // covers the one upload path the collision matrix happens to use is not a boundary.
 TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 {
+    // plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
+    // refusing it, so the refusal contract below is not its contract -- see
+    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
+    if (CNA_RENDERER_IS(Bgfx))
+        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const bool dynamicUpload : {false, true})
     {
@@ -984,7 +1018,7 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
         {
             RenderTarget2D target = MakeTarget();
             const GuardedDraw got = DrawInto(target, kColorPosition16, dynamicUpload, use32);
-            std::cout << "[ DECL-GUARD ] " << kRendererName << " colorPosition16 "
+            std::cout << "[ DECL-GUARD ] " << RendererName() << " colorPosition16 "
                       << (dynamicUpload ? "dynamic" : "static") << '/'
                       << (use32 ? "index32" : "index16") << ": "
                       << (got.rendered ? std::string("ACCEPTED") : "refused") << std::endl;
@@ -1002,6 +1036,14 @@ TEST_F(DeclarationGuardTest, EveryUploadAndIndexWidthReachesTheSameBoundary)
 // works.
 TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 {
+    // plan_runtimerenderer.md RTR-P9-6: bgfx TRANSLATES a colliding declaration rather than
+    // refusing it, so the refusal contract below is not its contract -- see
+    // TheTranslatingRendererStillRendersEveryCollidingDeclaration for what it does instead.
+    if (CNA_RENDERER_IS(Bgfx))
+        GTEST_SKIP() << "bgfx translates colliding declarations instead of refusing them";
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     RenderTarget2D target = MakeTarget();
     BasicEffect effect(device);
@@ -1028,7 +1070,7 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
     };
 
     const std::string refused = drawUser(kColorPosition16);
-    std::cout << "[ DECL-GUARD ] " << kRendererName << " DrawUser colorPosition16: "
+    std::cout << "[ DECL-GUARD ] " << RendererName() << " DrawUser colorPosition16: "
               << (refused.empty() ? std::string("ACCEPTED") : '"' + refused + '"') << std::endl;
     EXPECT_FALSE(refused.empty())
         << "DrawUserIndexedPrimitives bypassed the declaration guard"
@@ -1042,7 +1084,6 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
         ExpectContract(Capture(target), kPositionColor16, "DrawUser after the refusal");
 }
 
-#else   // CNA_RENDERER_BGFX
 
 // The control. bgfx derives its native layout from the declaration (REMED-GFX-216), so the very
 // declarations the other renderers now refuse must still render their own contract here -- which is
@@ -1050,6 +1091,11 @@ TEST_F(DeclarationGuardTest, DrawUserPrimitivesReachesTheSameBoundary)
 // declarations are invalid.
 TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDeclaration)
 {
+    // plan_runtimerenderer.md RTR-P9-6: this is bgfx's own contract, asked at runtime.
+    CNA_SKIP_IF_RENDERER_IS_NOT(Bgfx);
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const DeclarationCase& c : {kColorPosition16, kPositionTextureColor24,
                                      kPositionColorPadded32})
@@ -1066,9 +1112,7 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
     }
 }
 
-#endif  // CNA_RENDERER_BGFX
 
-#ifdef CNA_RENDERER_EASYGL
 
 // REMED-GFX-218's control. EasyGL's CUSTOM ShaderEffect path documents its own convention --
 // attribute location N is the Nth element of the declaration, exactly as ApplyLayout binds it --
@@ -1077,6 +1121,11 @@ TEST_F(DeclarationGuardTest, TheTranslatingRendererStillRendersEveryCollidingDec
 // there is no stock input list to compare against and nothing is being reinterpreted.
 TEST_F(DeclarationGuardTest, CustomShaderEffectKeepsItsElementIndexConvention)
 {
+    // plan_runtimerenderer.md RTR-P9-6: EasyGL's own convention, asked of the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2);
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     // Location 0 is this declaration's FIRST element (the colour at byte 0) and location 1 its
@@ -1155,7 +1204,6 @@ void main() { FragColor = vColor; }
     }
 }
 
-#endif  // CNA_RENDERER_EASYGL
 
 // ---------------------------------------------------------------------------
 // bgfx-only: the native layout itself. The rendering legs above prove the OUTCOME; this proves the
@@ -1221,6 +1269,9 @@ protected:
 
 TEST_F(BgfxVertexLayoutTest, NativeLayoutMatchesTheDeclaration)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
     for (const DeclarationCase& c : kMatrix)
     {
@@ -1259,6 +1310,9 @@ TEST_F(BgfxVertexLayoutTest, NativeLayoutMatchesTheDeclaration)
 
 TEST_F(BgfxVertexLayoutTest, SameStrideDifferentDeclarationsGetDifferentNativeLayouts)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     const NativeLayout a = LayoutFor(kPositionColor16);
@@ -1288,6 +1342,9 @@ TEST_F(BgfxVertexLayoutTest, SameStrideDifferentDeclarationsGetDifferentNativeLa
 
 TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     // A `VertexBuffer`'s declaration is immutable, so the way one native buffer object comes to
@@ -1337,6 +1394,9 @@ TEST_F(BgfxVertexLayoutTest, RecycledBufferAddressesDoNotInheritAStaleLayout)
 // the renderer shipped before is a regression here rather than a rendering surprise later.
 TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     struct Attribute
@@ -1436,6 +1496,9 @@ TEST_F(BgfxVertexLayoutTest, BuiltInDeclarationsKeepTheirEstablishedLayout)
 // submitted -- never replaced by a nearby built-in guess, which is what the stride table did.
 TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     const auto upload = [&](const VertexDeclaration& decl, int stride) {
@@ -1491,6 +1554,9 @@ TEST_F(BgfxVertexLayoutTest, UnsupportedDeclarationsAreRejectedDeterministically
 
 TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!DeclarationLayout())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireThreeD();
 
     const std::vector<std::uint8_t> mesh = BuildMesh(kPositionColor16, false);
@@ -1524,4 +1590,3 @@ TEST_F(BgfxVertexLayoutTest, ContentsOnlyRewriteCreatesNoNativeResource)
 
 #endif   // CNA_RENDERER_BGFX
 
-#endif   // CNA_DECLARATION_LAYOUT_ORACLE
