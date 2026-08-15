@@ -1592,7 +1592,8 @@ namespace CNA::Internal::Renderers::Vulkan
         // Vertex binding=0: per-vertex VERTEX rate; binding=1: per-instance INSTANCE rate (stride=64).
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash> pipelinesInstanced3D_;
 
-        // PbrEffect resources (unskinned, stride 48: VertexPositionNormalTangentTexture).
+        // PbrEffect resources (stride 48: VertexPositionNormalTangentTexture, or stride 60 with
+        // the importer-appended TextureCoordinate1 channel).
         // 5 combined image samplers (baseColor@0, normalMap@1, metallicRoughnessMap@2,
         // emissiveMap@3, occlusionMap@4) + 1 dynamic UBO (PbrParams@5, world/lights1-2/emissive/
         // eyePos/metallic-roughness/fog -- everything FillExtPushConst's 128-byte PC has no room
@@ -1603,14 +1604,14 @@ namespace CNA::Internal::Renderers::Vulkan
         std::unordered_map<PipelineKey, VkPipeline, PipelineKeyHash>             pipelinesPbr3D_;
         std::array<std::unordered_map<uint64_t, EffectDescSetEntry>,
                    MaxFramesInFlight>                        pbrDescSets_;
-        static constexpr uint32_t kPbrUBOStride   = 512; // 416 bytes used (104 floats), padded to 512
+        static constexpr uint32_t kPbrUBOStride   = 512; // 432 bytes used (108 floats), padded to 512
         static constexpr uint32_t kPbrUBOMaxDraws = 512;
         std::array<VkBuffer,       MaxFramesInFlight> pbrUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrUBOPtr_ = {};
 
-        // SkinnedPbrEffect resources (PBR + skinning combo, stride 68:
-        // VertexPositionNormalTangentTextureSkinned). Same 5 samplers as descriptorSetLayoutPbr_
+        // SkinnedPbrEffect resources (PBR + skinning combo, stride 68, or stride 76 with the
+        // importer-appended TextureCoordinate1 channel). Same 5 samplers as descriptorSetLayoutPbr_
         // above, plus a dynamic bone-palette UBO (binding=5, same shape as
         // descriptorSetLayoutSkinned_'s own BoneBlock) and a PbrParams dynamic UBO at binding=6
         // (WeightsPerVertex packed alongside the fog vector, mirroring
@@ -1626,7 +1627,7 @@ namespace CNA::Internal::Renderers::Vulkan
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedBoneUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedBoneUBOMem_ = {};
         std::array<void*,          MaxFramesInFlight> pbrSkinnedBoneUBOPtr_ = {};
-        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 416-byte PbrParams block
+        static constexpr uint32_t kPbrSkinnedUBOStride   = 512; // same 432-byte PbrParams block
         static constexpr uint32_t kPbrSkinnedUBOMaxDraws = 32;
         std::array<VkBuffer,       MaxFramesInFlight> pbrSkinnedUBO_    = {};
         std::array<VkDeviceMemory, MaxFramesInFlight> pbrSkinnedUBOMem_ = {};
@@ -1741,9 +1742,10 @@ namespace CNA::Internal::Renderers::Vulkan
             // roughnessFactor, [40..43]=fogColor+weightsPerVertex, [44..47]=fogVector,
             // [48..51]=alphaTest, [52..55]=normal scale + occlusion strength + padding,
             // [56..59]=base/emissive decode + output-encode flags + padding,
-            // [60..63]=dielectric F0 RGB + F90, [64..103]=ten affine texture-transform rows.
-            // 104 floats = 416 bytes; the dynamic UBO stride is padded to 512 bytes.
-            float                   pbrUboData[104]   = {};
+            // [60..63]=dielectric F0 RGB + F90, [64..103]=ten affine texture-transform rows,
+            // [104]=five-bit texture-coordinate-set mask, [105..107]=deterministic padding.
+            // 108 floats = 432 bytes; the dynamic UBO stride is padded to 512 bytes.
+            float                   pbrUboData[108]   = {};
             bool                    useLitTextured    = false; // true = LitTextured3D pipeline (Task 897)
             // Task 1103: true = select the PreferPerPixelLighting=false (XNA's real default)
             // per-vertex-lit pipeline sibling instead of the (historically always-selected)
@@ -2214,7 +2216,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                VkImageView normalMap, VkImageView metallicRoughness,
                                                VkImageView emissive, VkImageView occlusion,
                                                const VkSampler (&samplers)[5]);
-        VkPipeline GetOrCreatePipelinePbr3D(VkPrimitiveTopology,
+        VkPipeline GetOrCreatePipelinePbr3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
                                              uint32_t colorAttachmentCount, bool wireframe,
@@ -2227,7 +2229,7 @@ namespace CNA::Internal::Renderers::Vulkan
                                                       VkImageView normalMap, VkImageView metallicRoughness,
                                                       VkImageView emissive, VkImageView occlusion,
                                                       const VkSampler (&samplers)[5]);
-        VkPipeline GetOrCreatePipelinePbrSkinned3D(VkPrimitiveTopology,
+        VkPipeline GetOrCreatePipelinePbrSkinned3D(std::size_t stride, VkPrimitiveTopology,
                                              bool depthTest, bool depthWrite,
                                              bool blend, int cullMode,
                                              uint32_t colorAttachmentCount, bool wireframe,
@@ -2238,11 +2240,11 @@ namespace CNA::Internal::Renderers::Vulkan
         void       EnsureDefaultFlatNormalTexture();
         void       FillExtPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
         void       FillAlphaTestPushConst(float (&pc)[32], const Matrix& wvp, const GpuDrawParams& p);
-        // Fills the 104-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
+        // Fills the 108-float PbrParams UBO layout shared by pbr3d.vert/frag.glsl and
         // pbr3d_skinned.vert/frag.glsl (see Pending3DDraw::pbrUboData's own layout comment).
         // weightsPerVertex is only meaningful for the pbr+skinned combo (stride 68); pass 0 for
         // the unskinned PbrEffect path (stride 48), where it's unused.
-        void       FillPbrUboData(float (&out)[104], const GpuDrawParams& p, float weightsPerVertex);
+        void       FillPbrUboData(float (&out)[108], const GpuDrawParams& p, float weightsPerVertex);
         // BasicEffect lit-textured path (Task 897) — DirectionalLight1/2 + EmissiveColor,
         // forwarded via a small UBO (set=0,binding=1) alongside the unchanged 128-byte PC
         // (set=0,binding=0 stays the texture sampler; PC content unchanged from FillExtPushConst).

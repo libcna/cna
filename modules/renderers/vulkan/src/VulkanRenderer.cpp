@@ -4446,9 +4446,10 @@ namespace CNA::Internal::Renderers::Vulkan
         uint64_t s = 0;
         switch (stride) { case 20: s = 1; break; case 24: s = 2; break; case 32: s = 3; break;
                           case 52: s = 4; break;
-                          // PbrEffect (48, unskinned) / CNB-67 skinned+color (56) /
-                          // SkinnedPbrEffect (68, PBR + skinning combo).
+                          // PbrEffect (48, or dual-UV 60) / CNB-67 skinned+color (56) /
+                          // SkinnedPbrEffect (68, or dual-UV 76).
                           case 48: s = 5; break; case 56: s = 6; break; case 68: s = 7; break;
+                          case 60: s = 8; break; case 76: s = 9; break;
                           default: s = 0; }
         uint64_t t = 0;
         switch (topo) {
@@ -4634,11 +4635,11 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     // Shared fill for pbr3d.vert/frag.glsl's and pbr3d_skinned.vert/frag.glsl's identical
-    // PbrParams UBO layout (104 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
+    // PbrParams UBO layout (108 floats -- see pbr3d.frag.glsl's own struct). DirectionalLight0,
     // DiffuseColor (base color factor), and AmbientColor are NOT here -- they travel through the
     // 128-byte PC via FillExtPushConst instead (reused unchanged for PbrEffect/SkinnedPbrEffect,
     // same field semantics).
-    void VulkanRenderer::FillPbrUboData(float (&out)[104], const GpuDrawParams& p,
+    void VulkanRenderer::FillPbrUboData(float (&out)[108], const GpuDrawParams& p,
                                                 float weightsPerVertex)
     {
         out[0] = p.light1Dir[0]; out[1] = p.light1Dir[1]; out[2] = p.light1Dir[2]; out[3] = 0.f;
@@ -4671,6 +4672,10 @@ namespace CNA::Internal::Renderers::Vulkan
         for (int row = 0; row < 10; ++row)
             for (int component = 0; component < 4; ++component)
                 out[64 + row * 4 + component] = p.pbrTextureTransformRows[row][component];
+        // The dual-UV shaders consume the five low bits; the legacy stride-48/68 shaders retain
+        // their byte-identical 104-float block and simply never address this appended vec4.
+        out[104] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x1fu);
+        out[105] = 0.f; out[106] = 0.f; out[107] = 0.f;
     }
 
     void VulkanRenderer::FillInstancedPushConst(float (&pc)[32], const Matrix& view,
@@ -6702,7 +6707,9 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo bufInfo{};
         bufInfo.buffer = pbrUBO_[frameIdx];
         bufInfo.offset = 0;
-        bufInfo.range  = 256; // 64 floats -- see pbrUboData's own layout comment
+        // The shader reads through byte 431 (texture-coordinate selector + transform rows).
+        // The old 256-byte range made the existing 416-byte block formally out of bounds.
+        bufInfo.range  = sizeof(float) * 108;
 
         VkWriteDescriptorSet writes[6]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -6727,33 +6734,42 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkPipeline VulkanRenderer::GetOrCreatePipelinePbr3D(
-        VkPrimitiveTopology topo,
+        std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsurePbrResources();
 
-        constexpr std::size_t kPbrStride = 48;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        if (stride != 48 && stride != 60)
+            throw std::runtime_error("Vulkan PbrEffect requires vertex stride 48 or 60");
+        const bool dualUv = stride == 60;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesPbr3D_.find(key);
         if (it != pipelinesPbr3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kPbr3dVertSpv, kPbr3dVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kPbr3dFragSpv, kPbr3dFragSpv_size);
+        VkShaderModule vert = dualUv
+            ? CreateShaderModule(kPbr3dDualUvVertSpv, kPbr3dDualUvVertSpv_size)
+            : CreateShaderModule(kPbr3dVertSpv, kPbr3dVertSpv_size);
+        VkShaderModule frag = dualUv
+            ? CreateShaderModule(kPbr3dDualUvFragSpv, kPbr3dDualUvFragSpv_size)
+            : CreateShaderModule(kPbr3dFragSpv, kPbr3dFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, kPbrStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[4]{};
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[5]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
         attrs[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,       40 }; // aUV
+        if (dualUv)
+            attrs[4] = { 4, 0, VK_FORMAT_R32G32_SFLOAT,   48 }; // aUV1
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 4; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = dualUv ? 5u : 4u;
+        vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -6962,7 +6978,7 @@ namespace CNA::Internal::Renderers::Vulkan
         VkDescriptorBufferInfo paramsBufInfo{};
         paramsBufInfo.buffer = pbrSkinnedUBO_[frameIdx];
         paramsBufInfo.offset = 0;
-        paramsBufInfo.range  = 256; // 64 floats
+        paramsBufInfo.range  = sizeof(float) * 108;
 
         VkWriteDescriptorSet writes[7]{};
         for (uint32_t i = 0; i < 5; ++i) {
@@ -6993,35 +7009,44 @@ namespace CNA::Internal::Renderers::Vulkan
     }
 
     VkPipeline VulkanRenderer::GetOrCreatePipelinePbrSkinned3D(
-        VkPrimitiveTopology topo,
+        std::size_t stride, VkPrimitiveTopology topo,
         bool depthTest, bool depthWrite, bool blend, int cullMode,
         uint32_t colorAttachmentCount, bool wireframe, bool msaa,
         const DepthStencilKeyParams& dsParams, const BlendKeyParams& blendParams, VkFormat targetDepthFmt)
     {
         EnsurePbrSkinnedResources();
 
-        constexpr std::size_t kPbrSkinnedStride = 68;
-        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(kPbrSkinnedStride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
+        if (stride != 68 && stride != 76)
+            throw std::runtime_error("Vulkan SkinnedPbrEffect requires vertex stride 68 or 76");
+        const bool dualUv = stride == 76;
+        PipelineKey key = { FoldDepthFormatIntoKey(MakeExt3DKey(stride, topo, depthTest, depthWrite, blend, cullMode, colorAttachmentCount, wireframe, msaa, dsParams), targetDepthFmt), PackBlendBits(blend, blendParams), PackColorWriteBits(blendParams), blendParams.sampleMask };
         auto it = pipelinesPbrSkinned3D_.find(key);
         if (it != pipelinesPbrSkinned3D_.end()) return it->second;
 
         using namespace Shaders;
-        VkShaderModule vert = CreateShaderModule(kPbr3dSkinnedVertSpv, kPbr3dSkinnedVertSpv_size);
-        VkShaderModule frag = CreateShaderModule(kPbr3dSkinnedFragSpv, kPbr3dSkinnedFragSpv_size);
+        VkShaderModule vert = dualUv
+            ? CreateShaderModule(kPbr3dSkinnedDualUvVertSpv, kPbr3dSkinnedDualUvVertSpv_size)
+            : CreateShaderModule(kPbr3dSkinnedVertSpv, kPbr3dSkinnedVertSpv_size);
+        VkShaderModule frag = dualUv
+            ? CreateShaderModule(kPbr3dSkinnedDualUvFragSpv, kPbr3dSkinnedDualUvFragSpv_size)
+            : CreateShaderModule(kPbr3dSkinnedFragSpv, kPbr3dSkinnedFragSpv_size);
 
-        VkVertexInputBindingDescription bind{ 0, kPbrSkinnedStride, VK_VERTEX_INPUT_RATE_VERTEX };
-        VkVertexInputAttributeDescription attrs[6]{};
+        VkVertexInputBindingDescription bind{ 0, static_cast<uint32_t>(stride), VK_VERTEX_INPUT_RATE_VERTEX };
+        VkVertexInputAttributeDescription attrs[7]{};
         attrs[0] = { 0, 0, VK_FORMAT_R32G32B32_SFLOAT,    0  }; // aPos
         attrs[1] = { 1, 0, VK_FORMAT_R32G32B32_SFLOAT,    12 }; // aNormal
         attrs[2] = { 2, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 24 }; // aTangent
         attrs[3] = { 3, 0, VK_FORMAT_R32G32_SFLOAT,       40 }; // aUV
         attrs[4] = { 4, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 48 }; // aBoneWeights
         attrs[5] = { 5, 0, VK_FORMAT_R8G8B8A8_UINT,       64 }; // aBoneIndices
+        if (dualUv)
+            attrs[6] = { 6, 0, VK_FORMAT_R32G32_SFLOAT,   68 }; // aUV1
 
         VkPipelineVertexInputStateCreateInfo vis{};
         vis.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         vis.vertexBindingDescriptionCount   = 1; vis.pVertexBindingDescriptions   = &bind;
-        vis.vertexAttributeDescriptionCount = 6; vis.pVertexAttributeDescriptions = attrs;
+        vis.vertexAttributeDescriptionCount = dualUv ? 7u : 6u;
+        vis.pVertexAttributeDescriptions = attrs;
 
         VkPipelineShaderStageCreateInfo stages[2]{};
         stages[0] = { VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
@@ -7930,11 +7955,11 @@ namespace CNA::Internal::Renderers::Vulkan
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.usePbrSkinned) {
-                    pipe = GetOrCreatePipelinePbrSkinned3D(draw.topology,
+                    pipe = GetOrCreatePipelinePbrSkinned3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.usePbr) {
-                    pipe = GetOrCreatePipelinePbr3D(draw.topology,
+                    pipe = GetOrCreatePipelinePbr3D(draw.stride, draw.topology,
                                                         draw.depthTest, draw.depthWrite,
                                                         draw.blend, draw.cullMode, nColor, draw.wireframe, drawMsaa, draw.dsParams, draw.blendParams, targetDepthFmt);
                 } else if (draw.useInstanced) {

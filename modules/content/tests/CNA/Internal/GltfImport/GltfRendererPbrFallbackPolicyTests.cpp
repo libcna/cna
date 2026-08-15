@@ -726,11 +726,11 @@ namespace
         {"vulkan",
          "out[64 + row * 4 + component] = p.pbrTextureTransformRows[row][component]",
          "pbr.textureTransformRows[slot * 2 + 1].xyz",
-         {{"texture(uTexture, CnaPbrTransformUV(vUV, 0))",
-           "texture(uNormalMap, CnaPbrTransformUV(vUV, 1))",
-           "texture(uMetallicRoughnessMap, CnaPbrTransformUV(vUV, 2))",
-           "texture(uEmissiveMap, CnaPbrTransformUV(vUV, 3))",
-           "texture(uOcclusionMap, CnaPbrTransformUV(vUV, 4))"}}, 2},
+         {{"texture(uTexture, CnaPbrTransformUV(CNA_PBR_UV(0), 0))",
+           "texture(uNormalMap, CnaPbrTransformUV(CNA_PBR_UV(1), 1))",
+           "texture(uMetallicRoughnessMap, CnaPbrTransformUV(CNA_PBR_UV(2), 2))",
+           "texture(uEmissiveMap, CnaPbrTransformUV(CNA_PBR_UV(3), 3))",
+           "texture(uOcclusionMap, CnaPbrTransformUV(CNA_PBR_UV(4), 4))"}}, 2},
         {"webgpu",
          "p.pbrTextureTransformRows[row][component]",
          "pf.textureTransformRows[slot * 2u + 1u].xyz",
@@ -979,10 +979,10 @@ namespace
          "mr.b * pbrp.metallicFactor",
          "texture(uOcclusionMap, cnaPbrTransformUV(fragUV, 4)).r", 1},
         {"vulkan",
-         "texture(uNormalMap, CnaPbrTransformUV(vUV, 1)).rgb * 2.0 - 1.0",
+         "texture(uNormalMap, CnaPbrTransformUV(CNA_PBR_UV(1), 1)).rgb * 2.0 - 1.0",
          "mr.g * pbr.emissive_roughness.w",
          "mr.b * pbr.eyePos_metallic.w",
-         "texture(uOcclusionMap, CnaPbrTransformUV(vUV, 4)).r", 2},
+         "texture(uOcclusionMap, CnaPbrTransformUV(CNA_PBR_UV(4), 4)).r", 2},
         {"webgpu",
          "textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0",
          "mr.g * pf.metallicRoughness.y",
@@ -1326,10 +1326,9 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
         }
     }
 
-    // EasyGL is currently the renderer that closes GLTF-182/183 at L7. Lock the slot-to-selector
-    // mapping in both its rigid and skinned builders as well as the generic packed-channel math
-    // above: exchanging normal and MR selectors would retain the correct .rgb/.g/.b expressions
-    // while sampling the wrong authored coordinate stream.
+    // Lock EasyGL's slot-to-selector mapping in both rigid and skinned builders as well as the
+    // generic packed-channel math above: exchanging normal and MR selectors would retain the
+    // correct .rgb/.g/.b expressions while sampling the wrong authored coordinate stream.
     const std::string easy = RendererSlotText(renderers, "easygl");
     for (const char* selector : {
              "baseUv = dualUv ? \"cnaPbrUV(uTextureCoordinateSets.x)\" : \"vUV\"",
@@ -1341,6 +1340,35 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderUsesTheGltfPackedTextureChanne
         EXPECT_EQ(2u, CountOccurrences(easy, Normalize(selector)))
             << "EasyGL rigid/skinned PBR builders must agree on selector: " << selector;
     }
+
+    // GLTF-385's production-viewer retake exposed that Vulkan had advertised PBR support while
+    // hard-coding stride 48/68 and sampling every map from UV0. Keep the entire repaired chain
+    // together: real draw stride -> distinct pipeline/cache variants -> appended UV1 attributes
+    // -> transported per-map selector -> all five shader samples. The shader source occurs twice
+    // because rigid and skinned PBR intentionally share the same contract.
+    const std::string vulkan = RendererSlotText(renderers, "vulkan");
+    for (const char* evidence : {
+             "GetOrCreatePipelinePbr3D(draw.stride, draw.topology",
+             "GetOrCreatePipelinePbrSkinned3D(draw.stride, draw.topology",
+             "stride != 48 && stride != 60",
+             "stride != 68 && stride != 76",
+             "attrs[4] = { 4, 0, VK_FORMAT_R32G32_SFLOAT, 48 }",
+             "attrs[6] = { 6, 0, VK_FORMAT_R32G32_SFLOAT, 68 }",
+             "out[104] = static_cast<float>(p.pbrTextureCoordinateSetMask & 0x1fu)"})
+    {
+        EXPECT_NE(std::string::npos, vulkan.find(Normalize(evidence)))
+            << "Vulkan dual-UV PBR path is missing: " << evidence;
+    }
+    for (std::size_t slot = 0; slot < 5; ++slot)
+    {
+        const std::string sample = "CNA_PBR_UV(" + std::to_string(slot) + ")";
+        EXPECT_EQ(2u, CountOccurrences(vulkan, Normalize(sample)))
+            << "Vulkan rigid/skinned shaders do not select the authored UV set for map slot "
+            << slot;
+    }
+    EXPECT_EQ(2u, CountOccurrences(vulkan, Normalize(
+        "int mask = int(pbr.textureCoordinateSets.x + 0.5)")))
+        << "both Vulkan dual-UV PBR fragment variants must decode the transported selector";
 }
 
 TEST(GltfRendererPbrFallbackPolicy, EverySkinnedPbrShaderInverseTransposesTheJointMatrix)

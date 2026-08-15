@@ -115,6 +115,14 @@ def compile_glsl(source: str, kind: int, filename: str) -> bytes:
     return spv
 
 
+def with_defines(source: str, defines: tuple[str, ...]) -> str:
+    """Insert variant defines immediately after GLSL's mandatory first #version line."""
+    if not defines:
+        return source
+    version_end = source.find("\n") + 1
+    return source[:version_end] + "".join(f"#define {name} 1\n" for name in defines) + source[version_end:]
+
+
 def spv_to_cpp_array(name: str, spv: bytes) -> str:
     # SPIR-V is an array of uint32_t words
     assert len(spv) % 4 == 0, "SPIR-V size not a multiple of 4"
@@ -191,10 +199,18 @@ def main():
         # occlusion), DirectionalLight1/2 + World + EyePosition + PBR factors + fog in a dynamic UBO.
         ("pbr3d.vert.glsl",              VERTEX_SHADER,   "kPbr3dVertSpv"),
         ("pbr3d.frag.glsl",              FRAGMENT_SHADER, "kPbr3dFragSpv"),
+        # Stride-60 companion: the same sources compiled with a second UV input/varying and the
+        # appended per-map selector. Keeping a separate SPIR-V variant preserves stride 48's
+        # exact established shader shape and L7 pixels.
+        ("pbr3d.vert.glsl",              VERTEX_SHADER,   "kPbr3dDualUvVertSpv"),
+        ("pbr3d.frag.glsl",              FRAGMENT_SHADER, "kPbr3dDualUvFragSpv"),
         # SkinnedPbrEffect pipeline — stride 68 (VertexPositionNormalTangentTextureSkinned): the
         # PBR BRDF plus bone-palette skinning applied to position/normal/tangent.
         ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedVertSpv"),
         ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedFragSpv"),
+        # Stride-76 companion, selected only for dual-UV skinned PBR vertices.
+        ("pbr3d_skinned.vert.glsl",      VERTEX_SHADER,   "kPbr3dSkinnedDualUvVertSpv"),
+        ("pbr3d_skinned.frag.glsl",      FRAGMENT_SHADER, "kPbr3dSkinnedDualUvFragSpv"),
         # Instanced 3D pipeline — binding=0 per-vertex (pos only), binding=1 per-instance mat4.
         # Dedicated FS (Task 899: previously reused colored3d's, but that now has a 2nd
         # descriptor binding for fog, incompatible with Instanced3D's unmodified 1-binding layout).
@@ -224,6 +240,8 @@ def main():
             print(f"ERROR: {glsl_path} not found", file=sys.stderr)
             sys.exit(1)
         source = glsl_path.read_text()
+        defines = ("CNA_PBR_DUAL_UV",) if "DualUv" in cname else ()
+        source = with_defines(source, defines)
         print(f"Compiling {filename} ...", end=" ", flush=True)
         spv = compile_glsl(source, kind, filename)
         print(f"OK ({len(spv)} bytes, {len(spv)//4} words)")

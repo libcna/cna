@@ -7,6 +7,9 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec4 aTangent;
 layout(location = 3) in vec2 aUV;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 4) in vec2 aUV1;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -14,6 +17,9 @@ layout(location = 2) out float vBitangentSign;
 layout(location = 3) out vec2  vUV;
 layout(location = 4) out float vFogFactor;
 layout(location = 5) out vec3  vWorldPos;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) out vec2  vUV1;
+#endif
 
 // 128-byte push constant block (shared with every other 3D variant — see FillExtPushConst).
 // diffuseColor -> PBR base color factor; ambientColor -> PBR ambient; light0Dir/light0Diffuse ->
@@ -49,6 +55,9 @@ layout(set = 0, binding = 5) uniform PbrParams {
     vec4 srgbFlags;             // x = decode base, y = decode emissive, z = encode output
     vec4 dielectricFresnel;     // xyz = dielectric F0, w = dielectric F90
     vec4 textureTransformRows[10];
+#ifdef CNA_PBR_DUAL_UV
+    vec4 textureCoordinateSets; // x = five-bit per-map TEXCOORD_1 selector mask
+#endif
 } pbr;
 
 float cnaDirectionHandedness(mat3 m) {
@@ -73,6 +82,9 @@ void main() {
     vTangent = mat3(pbr.world) * aTangent.xyz;
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world));
     vUV = aUV;
+#ifdef CNA_PBR_DUAL_UV
+    vUV1 = aUV1;
+#endif
     vWorldPos = (pbr.world * vec4(aPos, 1.0)).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(aPos, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }

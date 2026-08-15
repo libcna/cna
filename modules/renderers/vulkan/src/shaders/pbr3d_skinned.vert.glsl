@@ -12,6 +12,9 @@ layout(location = 2) in vec4  aTangent;
 layout(location = 3) in vec2  aUV;
 layout(location = 4) in vec4  aBoneWeights;
 layout(location = 5) in uvec4 aBoneIndices;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) in vec2  aUV1;
+#endif
 
 layout(location = 0) out vec3  vNormal;
 layout(location = 1) out vec3  vTangent;
@@ -19,6 +22,9 @@ layout(location = 2) out float vBitangentSign;
 layout(location = 3) out vec2  vUV;
 layout(location = 4) out float vFogFactor;
 layout(location = 5) out vec3  vWorldPos;
+#ifdef CNA_PBR_DUAL_UV
+layout(location = 6) out vec2  vUV1;
+#endif
 
 layout(push_constant) uniform PC {
     mat4  mvp;
@@ -52,6 +58,9 @@ layout(set = 0, binding = 6) uniform PbrParams {
     vec4 srgbFlags;              // x = decode base, y = decode emissive, z = encode output
     vec4 dielectricFresnel;      // xyz = dielectric F0, w = dielectric F90
     vec4 textureTransformRows[10];
+#ifdef CNA_PBR_DUAL_UV
+    vec4 textureCoordinateSets;  // x = five-bit per-map TEXCOORD_1 selector mask
+#endif
 } pbr;
 
 vec3 cnaSkinNormal(mat3 m, vec3 n) {
@@ -93,6 +102,9 @@ void main() {
     vBitangentSign = aTangent.w * cnaDirectionHandedness(mat3(pbr.world))
                                 * cnaDirectionHandedness(skinNormalMat);
     vUV = aUV;
+#ifdef CNA_PBR_DUAL_UV
+    vUV1 = aUV1;
+#endif
     vWorldPos = (pbr.world * skinnedPos).xyz;
     vFogFactor = 1.0 - clamp(dot(vec4(skinnedPos.xyz, 1.0), pbr.fogVector), 0.0, 1.0); // REMED-GFX-010: FNA view-space fog vector
 }
