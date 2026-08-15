@@ -41,8 +41,13 @@
 #include <cerrno>
 #include <optional>
 #include <cstring>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
+
+#include "System/Security/Cryptography/SHA256.hpp"
 #include <gtest/gtest.h>
 #include <spawn.h>
 #include <string>
@@ -3169,4 +3174,109 @@ TEST(GltfToCnjToolTest, StructuredImportDiagnosticsSurviveBothLoadPaths)
         EXPECT_EQ(directReport.PrimitiveCount, offlineReport.PrimitiveCount);
         EXPECT_EQ(directReport.ImportedLightCount, offlineReport.ImportedLightCount);
     }
+}
+
+// --- plan_gltf.md GLTF-459 (§27.2 row 9): the large-asset budget ---------------------------------
+//
+// The row wants "large real-world assets load within a stated time and memory budget", and
+// GLTF-019 already decided such an asset is fetched, never committed -- it is a benchmark input,
+// not evidence. So this is opt-in exactly like GLTF-405's ChronographWatch row: without the
+// environment variables it skips, and with them it refuses anything but the pinned bytes, because
+// a budget measured against an unknown asset states nothing.
+//
+// Fetch them with:
+//   scripts/fetch-gltf-sample-assets.sh DEST Sponza RecursiveSkeletons
+//   CNA_GLTF_LARGE_MESH_ASSET=DEST/Models/Sponza/glTF/Sponza.gltf \
+//   CNA_GLTF_MANY_JOINT_ASSET=DEST/Models/RecursiveSkeletons/glTF/RecursiveSkeletons.gltf \
+//     CnaTests --gtest_filter='GltfToCnjToolTest.LargeReference*'
+//
+// Two assets rather than one, and that is the finding rather than a convenience: no Khronos sample
+// carries >= 50 MB, >= 200 k triangles AND >= 150 joints at once. Sponza supplies the first two
+// (50.2 MB, 262 267 triangles) and RecursiveSkeletons the third (840 joints over 84 skins, 924
+// nodes), so the row's three thresholds are met by the pair and each is named with the asset that
+// meets it instead of one number implying all three.
+//
+// The ceilings are the phase's own convention -- generous enough that only a pathological
+// regression trips them, never tuned to today's number, because a benchmark that fails on a loaded
+// machine gets deleted. Measured medians on an idle machine are ~5.3 s and ~1.2 s; the ceilings are
+// 60 s and 20 s. `docs/gltf-performance.md` carries the numbers, including the peak RSS, which is
+// measured with /usr/bin/time rather than asserted here: `ru_maxrss` is a process-wide high-water
+// mark, so inside the shared CnaTests binary it reports whatever suite ran first.
+namespace
+{
+    std::string Sha256File(const std::string& path)
+    {
+        std::ifstream file(path, std::ios::binary);
+        if (!file) { return {}; }
+        const std::vector<std::uint8_t> bytes{
+            std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+        System::Security::Cryptography::SHA256 sha;
+        const std::vector<std::uint8_t> digest = sha.ComputeHash(bytes);
+        std::ostringstream out;
+        out << std::hex << std::setfill('0');
+        for (const std::uint8_t byte : digest) { out << std::setw(2) << static_cast<unsigned>(byte); }
+        return out.str();
+    }
+
+    // Converts `assetPath` once and returns the wall-clock milliseconds, or -1.0 if the tool failed.
+    double MillisecondsToConvert(const std::string& assetPath, const std::string& baseName)
+    {
+        const std::filesystem::path outDir =
+            std::filesystem::temp_directory_path() / ("cna-gltf-budget-" + baseName);
+        std::filesystem::remove_all(outDir);
+        std::filesystem::create_directories(outDir);
+
+        const auto start = std::chrono::steady_clock::now();
+        const int rc = RunGltfToCnjTool(assetPath, outDir.string(), baseName);
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+
+        std::filesystem::remove_all(outDir);
+        if (rc != 0)
+        {
+            ADD_FAILURE() << baseName << ": converter exited " << rc;
+            return -1.0;
+        }
+        return std::chrono::duration<double, std::milli>(elapsed).count();
+    }
+}
+
+TEST(GltfToCnjToolTest, LargeReferenceMeshAssetImportsInsideItsStatedBudget)
+{
+    const char* assetPath = std::getenv("CNA_GLTF_LARGE_MESH_ASSET");
+    if (assetPath == nullptr || *assetPath == '\0')
+    {
+        GTEST_SKIP() << "set CNA_GLTF_LARGE_MESH_ASSET to the pinned Sponza.gltf "
+                        "(scripts/fetch-gltf-sample-assets.sh DEST Sponza)";
+    }
+    ASSERT_EQ("646c10cbc8fab990ca29f363e90e2d65155f3a3569506852eb1434a9465b9501",
+              Sha256File(assetPath))
+        << "this is not the pinned Sponza -- a budget measured against an unknown asset states "
+           "nothing";
+
+    const double ms = MillisecondsToConvert(assetPath, "Sponza");
+    ASSERT_GE(ms, 0.0);
+    RecordProperty("sponzaImportMs", static_cast<int>(ms));
+    EXPECT_LT(ms, 60000.0)
+        << "the 50.2 MB / 262 267-triangle import took " << ms
+        << " ms, an order of magnitude over its measured ~5.3 s -- see docs/gltf-performance.md";
+}
+
+TEST(GltfToCnjToolTest, LargeReferenceJointAssetImportsInsideItsStatedBudget)
+{
+    const char* assetPath = std::getenv("CNA_GLTF_MANY_JOINT_ASSET");
+    if (assetPath == nullptr || *assetPath == '\0')
+    {
+        GTEST_SKIP() << "set CNA_GLTF_MANY_JOINT_ASSET to the pinned RecursiveSkeletons.gltf "
+                        "(scripts/fetch-gltf-sample-assets.sh DEST RecursiveSkeletons)";
+    }
+    ASSERT_EQ("9ebca751395f63359e7868d4a9b82ee1632c20680c5c05daa7f54a246eb9de85",
+              Sha256File(assetPath))
+        << "this is not the pinned RecursiveSkeletons";
+
+    const double ms = MillisecondsToConvert(assetPath, "RecursiveSkeletons");
+    ASSERT_GE(ms, 0.0);
+    RecordProperty("recursiveSkeletonsImportMs", static_cast<int>(ms));
+    EXPECT_LT(ms, 20000.0)
+        << "the 840-joint / 924-node import took " << ms
+        << " ms, an order of magnitude over its measured ~1.2 s -- see docs/gltf-performance.md";
 }

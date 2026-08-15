@@ -1842,9 +1842,10 @@ does not get relabelled as core glTF 2.0.
 ### 27.2 `GLTF ROBUST`
 
 **Assessed 2026-08-15** (`GLTF-459`), row by row against the tree rather than against the closed-row
-count. Eight rows are green; four are not, and the four are not near-misses — three of them are
-whole features the campaign deliberately scoped out, which is why `GLTF ROBUST` is a separate
-milestone and not a formality after `CORE`.
+count. **Nine rows are green**; three are not, and the three are not near-misses — each is a whole
+feature the campaign deliberately scoped out, which is why `GLTF ROBUST` is a separate milestone and
+not a formality after `CORE`. (Row 9 was open at the start of that assessment and was closed by it:
+it needed a measurement, and the measurement is now in `docs/gltf-performance.md`.)
 
 | # | Requirement | State | Evidence, or what is actually missing |
 |---|---|---|---|
@@ -1856,15 +1857,16 @@ milestone and not a formality after `CORE`.
 | 6 | Point and spot lights with real falloff and cone angles, beyond the 3-directional approximation | ⬜ | **Not implemented, deliberately.** `GLTF-326`/`327` count and report the loss (`ignoredRangeCount`, `ignoredConeAngleCount`) and `GLTF-331` records the four-step design sketch and why it is scoped out: the light block is shared shader ABI across every renderer, and XNA's `IEffectLights` names exactly three directional lights and cannot express a point or spot light at all. This is the largest single item between here and ROBUST. |
 | 7 | Imported cameras (perspective incl. infinite far, and orthographic) | ✅ | `GltfCameras` (12): each projection against the specification's own formula, an infinite far plane as its own matrix rather than a large `zfar`, orthographic half-extents, the view matrix as the inverse of the node's world transform, animated camera placement, and authored-vs-assumed aspect ratio. |
 | 8 | Every malformed-input fixture produces a deterministic, actionable error; **zero** ASan/UBSan findings across the whole corpus | ✅ | `GltfContainerRobustness` (14) + `GltfContainerValidation` (12) name every refusal; the STUB ASan+UBSan tree runs the whole `*Gltf*` selection with zero findings. |
-| 9 | Large real-world assets (≥ 50 MB, ≥ 200 k triangles, ≥ 150 joints) load within a stated time and memory budget | ⬜ | No such asset is reachable. `GLTF-019` decided deliberately that a benchmark input is fetched, never committed, and `docs/gltf-performance.md` §"Large-asset budgets" records the row as blocked on `GLTF-405`'s licensed third-party corpus. Everything else in Phase 22 is measured; this row needs an asset, not code. |
+| 9 | Large real-world assets (≥ 50 MB, ≥ 200 k triangles, ≥ 150 joints) load within a stated time and memory budget | ✅ | **Measured 2026-08-15** and recorded in `docs/gltf-performance.md`. `GLTF-405`'s fetcher supplies the assets, `GLTF-019`'s decision keeps them out of the repository, and the two ceilings are committed as opt-in tests that pin each asset by SHA-256 and skip without it. **No single Khronos sample carries all three thresholds**, so the pair carries them between them and each is named with the asset that meets it: `Sponza` is 50.2 MB and 262 267 triangles at **5.31 s / 18.8 MB peak RSS**, `RecursiveSkeletons` is 840 joints over 84 skins and 924 nodes at **1.16 s / 8.2 MB**. The memory figure corrected the expectation the row was written with: a 50 MB asset imports inside 18.8 MB because peak RSS tracks the largest mesh working set, not asset size — the converter copies encoded images through rather than decoding them, which is also why a 262 k-triangle asset and a 61 k-triangle one land 1 MB apart. Stated with its boundary: that bound is the offline converter's, and `ContentManager`'s runtime path additionally decodes every image into a `Texture2D`. |
 | 10 | Lifetime stress passes: repeated load/unload, `ContentManager::Unload`, simulated device loss, concurrent `Model::Draw` | ✅ | All four, each with its own closed row: `GLTF-436` (1 000 load/`Unload` cycles clean under ASan/LSan), `GLTF-438` (no dangling effect/buffer afterwards), `GLTF-439` (a real OPENGLES3 context loss survived with the original object graph), `GLTF-444` (`static` → `static thread_local`, which the test aborts without). |
 | 11 | The performance hazards in §26 are measured and either fixed or documented with numbers | ✅ | All eight §26 rows closed with figures in `docs/gltf-performance.md`, not adjectives: the 4× unpack ceiling, the 2× morph duplication (19 MB extrapolated at 200 k vertices), the 73 µs occlusion remap, the `ContentManager` caching correction. |
 | 12 | The retake matrix passes on ≥ 4 renderers including one Direct3D path | ⬜ | Gate C's 14 rows/15 cases passed on **one** CNA renderer (OPENGLES3/EasyGL); the other renderer names in `docs/gltf-viewer-retake-report.json` are the *reference* renderer's ANGLE/SwiftShader and WebKit contexts, not CNA's. Three more CNA renderers and a Direct3D path (Wine/DXVK) remain, and `GLTF-379`/`385`–`387` already record that Vulkan, DirectX11/DXVK and SOFTWARE have strong numerical evidence but no whole-corpus L7 capture/tolerance policy. |
 
-**Therefore ROBUST is blocked on four things, in rough ascending order of cost:** an asset (row 9),
-a renderer-specific L7 capture policy applied three more times plus a D3D path (row 12), the dual-UV
+**Therefore ROBUST is blocked on three things, in rough ascending order of cost:** a
+renderer-specific L7 capture policy applied three more times plus a D3D path (row 12), the dual-UV
 foundation and two texture bindings on three renderers (row 3), and real point/spot lighting through
-a shared light ABI that XNA's own interface cannot express (row 6). None is a documentation gap.
+a shared light ABI that XNA's own interface cannot express (row 6). None is a documentation gap, and
+none is finishable by measurement the way row 9 was.
 
 ---
 

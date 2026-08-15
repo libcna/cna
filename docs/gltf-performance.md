@@ -172,8 +172,53 @@ is 145 assets, including four real Draco streams, and remains inside every exist
 raising one. Future rows must remeasure after materially increasing either fixture size or the
 number of subprocess-based tool cases; no further extrapolation is needed for `GLTF-399`.
 
+## Large-asset budgets (`GLTF ROBUST` §27.2 row 9)
+
+Measured 2026-08-15 against `GLTF-405`'s fetched, pinned reference models. The assets are **not**
+committed — `GLTF-019` decided a benchmark input is fetched rather than carried, because it is an
+input and not evidence — so the budget tests are opt-in and skip without them:
+
+```bash
+scripts/fetch-gltf-sample-assets.sh DEST Sponza RecursiveSkeletons
+CNA_GLTF_LARGE_MESH_ASSET=DEST/Models/Sponza/glTF/Sponza.gltf \
+CNA_GLTF_MANY_JOINT_ASSET=DEST/Models/RecursiveSkeletons/glTF/RecursiveSkeletons.gltf \
+  build/CnaTests --gtest_filter='GltfToCnjToolTest.LargeReference*'
+```
+
+**No single Khronos sample meets all three thresholds**, and that is a finding rather than an
+inconvenience: the row's ≥ 50 MB, ≥ 200 k triangles and ≥ 150 joints do not co-occur in the sample
+set, so the pair below meets them between them and each threshold is named with the asset that
+actually carries it.
+
+| Asset | On disk | Triangles | Joints / nodes | Median wall | Peak RSS | `.cnj` out |
+|---|---|---|---|---|---|---|
+| `Sponza` | 50.2 MB | 262 267 | 0 / 1 | **5.31 s** | **18.8 MB** | 53 MB |
+| `RecursiveSkeletons` | 1.0 MB | 76 | **840** over 84 skins / 924 | **1.16 s** | 8.2 MB | 9.6 MB |
+| `BrainStem` (control) | 3.2 MB | 61 666 | 18 / 22 | 0.99 s | 17.9 MB | 6.3 MB |
+
+Three runs each on an idle machine, median reported, Debug build of `cna_tool_gltf_to_cnj`; wall
+clock and peak RSS from `/usr/bin/time -v`.
+
+**The memory number is the one worth reading twice: a 50 MB asset imports inside 18.8 MB.** Peak
+RSS does not track asset size because it does not track the part that makes these assets large.
+Sponza is 50 MB of JPEG/PNG, and the converter copies encoded image files through to the output
+rather than decoding them — 69 images arrive in the `.cnj` payload as files. What is resident is
+the largest mesh working set, which is why 262 k triangles (18.8 MB) and 61 k triangles (17.9 MB)
+land so close together and why the 840-joint asset, whose geometry is 76 triangles, is the
+smallest of the three at 8.2 MB.
+
+**That bound is the offline converter's, not the runtime's.** `ContentManager`'s direct `.gltf`
+path decodes every image into a `Texture2D`, so an application loading Sponza pays the decoded
+texture payload on top of this, and that figure is a renderer-memory question this document does
+not answer. Stated here so the 18.8 MB is not read as the cost of showing Sponza on screen.
+
+The committed ceilings are 60 s and 20 s — an order of magnitude above the medians, following this
+phase's rule that a ceiling tuned to today's number is a flake generator. Peak RSS is deliberately
+*not* asserted in a test: `ru_maxrss` is a process-wide high-water mark, so inside the shared
+`CnaTests` binary it reports whichever suite ran first, not this import.
+
 ## What is not measured here, and why
 
 | Row | Why not |
 |---|---|
-| Large-asset budgets (`GLTF ROBUST` §27.2 row 9) | Needs a ≥ 50 MB, ≥ 200 k-triangle, ≥ 150-joint asset, which is `GLTF-405`'s licensed third-party corpus. |
+| Runtime (`ContentManager`) memory for a large textured asset | Needs decoded-texture accounting through a real `GraphicsDevice`; the offline bound above deliberately excludes it. |
