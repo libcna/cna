@@ -44,6 +44,8 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
+    env:
+      CMAKE_GENERATOR: Ninja
     strategy:
       fail-fast: false
       matrix:
