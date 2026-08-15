@@ -341,6 +341,57 @@ and unrelated to renderer selection:
   diagnoses and GCC does not. Until it is fixed upstream, add
   `-DCMAKE_CXX_FLAGS="-Wno-error=unused-function"`.
 
+## What a multi-renderer build costs
+
+Measured on 2026-08-15, Debug, GCC, on this project's own build trees. Sizes are of the `CnaTests`
+executable, which links every renderer in the build and is therefore the widest binary the project
+produces — a game linking one renderer's own library pays far less.
+
+**Stripped size is the honest column.** A Debug build's symbol tables dwarf the code: the same
+executable is 232 MB unstripped and 32 MB stripped, so an unstripped comparison mostly measures
+debug info, not renderers.
+
+| Build | Renderers | `CnaTests`, stripped | vs. single HEADLESS |
+|---|---|---|---|
+| single | `HEADLESS` | 32.1 MB | — |
+| single | `SOFTWARE` | 32.1 MB | +0.0 MB |
+| single | `OPENGLES3` | 32.6 MB | +0.5 MB |
+| multi | `HEADLESS;LLGL;SOFTWARE;STUB` | 36.2 MB | **+4.1 MB** |
+
+Four renderers in one binary, including a large third-party one, cost about **13 %** over a
+single-renderer build of the same executable. That is the number to weigh against the convenience
+of choosing a renderer at startup.
+
+### Where the size goes, per renderer
+
+CNA's own renderer archives in that multi build:
+
+| Renderer archive | Size |
+|---|---|
+| `libcna_renderer_llgl.a` | 7.19 MB |
+| `libcna_renderer_software.a` | 6.19 MB |
+| `libcna_renderer_headless.a` | 3.97 MB |
+| `libcna_renderer_stub.a` | 1.65 MB |
+
+The third-party archives behind LLGL are much larger than CNA's own wrapper — `libLLGL_VulkanD.a`
+40.2 MB, `libLLGL_OpenGLD.a` 34.3 MB, `libLLGLD.a` 21.4 MB, `libLLGL_NullD.a` 7.2 MB — yet the
+final executable grows by only ~4 MB, because the linker takes what is referenced rather than whole
+archives. **A renderer's cost in the binary is not its library's size on disk**, and estimating from
+archive sizes overstates it by an order of magnitude here.
+
+### What is NOT measured here, and why
+
+- **Build time.** A trustworthy figure needs from-scratch builds of each set, and this project's
+  build rules cap parallelism and treat repeated clean rebuilds as real SSD wear to be avoided
+  (`../CLAUDE.md`). Timing several full builds for a table was not judged worth that cost. The
+  incremental cost is the one developers actually pay, and it is dominated by how many renderer
+  archives must relink, which the per-renderer table above already indicates.
+- **Sets containing bgfx, FNA3D, WebGPU or the Windows/macOS families.** Those need dependencies or
+  operating systems not available on the machine these numbers come from. Their rows are absent
+  rather than estimated.
+- The `OPENGLES3` tree uses the Makefiles generator where the others use Ninja. That affects build
+  time, not binary size, so it is left in the size table and out of any timing claim.
+
 ## See also
 
 - `plan_runtimerenderer.md` — the design decisions and the full task breakdown.

@@ -835,7 +835,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-22 | 🟨 | Emscripten multi set: `WEBGL2 + CANVAS + HTML_DOM + SVG_DOM` — one wasm bundle, renderer chosen from JS before start. Highest practical payoff of the whole plan. |
 | RTR-P10-23 | ⬜ | JS-side selection surface for that Emscripten set (a `Module` property or exported function feeding `SetPreferred()`), documented in `docs/runtime-renderer-selection.md`. |
 | RTR-P10-24 | ⬜ | macOS multi set: `METAL + OPENGL4 + SOFTWARE`. |
-| RTR-P10-25 | ⬜ | Record binary size and build time for every set above; publish the table so the cost of each addition is visible. |
+| RTR-P10-25 | 🟨 | Record binary size and build time for every set above; publish the table so the cost of each addition is visible. **Sizes published** in `docs/runtime-renderer-selection.md`: a four-renderer set (`HEADLESS;LLGL;SOFTWARE;STUB`) costs **+4.1 MB stripped, ~13 %**, over a single-renderer `HEADLESS` build of the same executable (36.2 vs 32.1 MB). Stripped is the only honest column — the same binary is 232 MB unstripped, so Debug symbols, not renderers, dominate that number. Per-renderer archives are listed too, with the point that **a renderer's cost in the binary is not its library's size on disk**: LLGL's third-party archives total ~103 MB yet the executable grows ~4 MB, because the linker takes what is referenced. **Deliberately not done:** build times, which need from-scratch builds of each set — the project's own build rules treat repeated clean rebuilds as real SSD wear, and timing a table was not worth that; and sets needing bgfx/FNA3D/WebGPU or Windows/macOS, whose rows are absent rather than estimated. Left 🟨 for that reason rather than claimed complete. |
 
 ---
 
