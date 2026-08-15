@@ -195,7 +195,7 @@ namespace
               SAMPLER2D(s_texMetallicRoughness, 2);
               SAMPLER2D(s_texEmissive, 3);
               SAMPLER2D(s_texOcclusion, 4);)"}}},
-        {"diligent", "shader-resource names; sampler-state slots 0,1,2,3,4",
+        {"diligent", "shader-resource names; sampler-state slots 0 through 6",
          {{R"(texture = params->texture0)",
            R"(cached.textureVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_Texture"))",
            R"(pipeline.textureVariable->Set(view))",
@@ -203,6 +203,8 @@ namespace
            R"(cached.metallicRoughnessVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_MetallicRoughnessMap"))",
            R"(cached.emissiveMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EmissiveMap"))",
            R"(cached.occlusionMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_OcclusionMap"))",
+           R"(cached.specularMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularMap"))",
+           R"(cached.specularColorMapVariable = cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularColorMap"))",
            R"(BindPbrMap(pipeline.normalMapVariable, params != nullptr ? params->pbrNormalMap : nullptr,
                          flatNormalTextureView_, 1))",
            R"(BindPbrMap(pipeline.metallicRoughnessVariable,
@@ -212,6 +214,11 @@ namespace
                          params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_, 3))",
            R"(BindPbrMap(pipeline.occlusionMapVariable,
                          params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_, 4))",
+           R"(BindPbrMap(pipeline.specularMapVariable,
+                         params != nullptr ? params->pbrSpecularMap : nullptr, fallbackTextureView_, 5))",
+           R"(BindPbrMap(pipeline.specularColorMapVariable,
+                         params != nullptr ? params->pbrSpecularColorMap : nullptr,
+                         fallbackTextureView_, 6))",
            R"(Texture2D g_Texture;
               SamplerState g_Texture_sampler;
               Texture2D g_NormalMap;
@@ -221,7 +228,11 @@ namespace
               Texture2D g_EmissiveMap;
               SamplerState g_EmissiveMap_sampler;
               Texture2D g_OcclusionMap;
-              SamplerState g_OcclusionMap_sampler;)"}}},
+              SamplerState g_OcclusionMap_sampler;
+              Texture2D g_SpecularMap;
+              SamplerState g_SpecularMap_sampler;
+              Texture2D g_SpecularColorMap;
+              SamplerState g_SpecularColorMap_sampler;)"}}},
         {"directx9", "sampler registers s0 through s6",
          {{R"(BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
               BindPbrSampler(device_.Get(), 1, params.pbrNormalMap, ResolveD3D9TextureEXT(GetOrCreateDefaultFlatNormalTextureEXT()));
@@ -670,13 +681,13 @@ namespace
            "texture2D(s_texEmissive, rtFlipUV(pbrTransformUV(v_texcoord0, 3), u_rtFlipV.w))",
            "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4))"}}, 1},
         {"diligent",
-         "std::memcpy(values + 16, params.pbrTextureTransformRows",
+         "std::memcpy(values + 20, params.pbrTextureTransformRows",
          "g_PbrTextureTransformRows[slot * 2 + 1].xyz",
-         {{"g_Texture.Sample(g_Texture_sampler, CnaPbrTransformUv(psIn.UV, 0))",
-           "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(psIn.UV, 1))",
-           "g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(psIn.UV, 2))",
-           "g_EmissiveMap.Sample(g_EmissiveMap_sampler, CnaPbrTransformUv(psIn.UV, 3))",
-           "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(psIn.UV, 4))"}}, 1},
+         {{"g_Texture.Sample(g_Texture_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 0), 0))",
+           "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 1), 1))",
+           "g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 2), 2))",
+           "g_EmissiveMap.Sample(g_EmissiveMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 3), 3))",
+           "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 4), 4))"}}, 1},
         {"directx9",
          "TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, \"TextureTransformRows\", &params.pbrTextureTransformRows[0][0])",
          "TextureTransformRows[slot * 2 + 1].xyz",
@@ -802,8 +813,8 @@ namespace
          "vec3 F90 = mix(vec3_splat(u_dielectricFresnel.w), vec3_splat(1.0), metallic)",
          "vec3 F = F0 + (F90 - F0) *", 1},
         {"diligent",
-         "float3 F0 = lerp(g_PbrDielectricFresnel.xyz, albedo, metallic)",
-         "float3 F90 = lerp(float3(g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F0 = lerp(dielectricF0, albedo, metallic)",
+         "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 1},
         {"directx9",
          "float3 F0 = lerp(dielectricF0, albedo, metallic)",
@@ -958,10 +969,10 @@ namespace
          "mr.b * u_metallicRoughnessFactor.x",
          "texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4)).r", 1},
         {"diligent",
-         "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(psIn.UV, 1)).rgb * 2.0 - 1.0",
+         "g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 1), 1)).rgb * 2.0 - 1.0",
          "mr.g * g_PbrEmissiveRoughness.w",
          "mr.b * g_PbrAmbientMetallic.w",
-         "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(psIn.UV, 4)).r", 1},
+         "g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 4), 4)).r", 1},
         {"directx9",
          "tex2D(NormalMap, CnaPbrTransformUv(pin.UV, 1)).rgb * 2.0 - 1.0",
          "mr.g * MetallicRoughnessFactor.y",
@@ -1998,6 +2009,49 @@ TEST(GltfRendererPbrFallbackPolicy, VulkanSamplesBothKhrMaterialsSpecularTexture
     {
         EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
             << "missing Vulkan specular binding evidence: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, DiligentSamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "diligent");
+    ASSERT_FALSE(source.empty());
+
+    // CPU transport, public vertex-layout routing and dynamic shader-resource binding all need
+    // independent evidence: a correct shader alone cannot prove that the authored maps reach it.
+    for (const char* evidence : {
+             "pbrDesc.Size = 76 * sizeof(float)",
+             "params.pbrDielectricF0Unclamped[0]",
+             "params.pbrSpecularFactor",
+             "params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f",
+             "params.pbrTextureCoordinateSetMask & 0x7fu",
+             "std::memcpy(values + 60, params.pbrSpecularTextureTransformRows",
+             "case 60: variant = ShaderVariant::PbrDualUv3D",
+             "case 76: variant = ShaderVariant::SkinnedPbrDualUv3D",
+             "Dg::LayoutElement{4, 0, 2, Dg::VT_FLOAT32, Dg::False, 48, 60}",
+             "Dg::LayoutElement{6, 0, 2, Dg::VT_FLOAT32, Dg::False, 68, 76}",
+             "usesDualPbrUv ? \"float2 UV1 : TEX_COORD1;\" : \"\"",
+             "Dg::ShaderResourceVariableDesc variables[9]",
+             "g_SpecularMap", "g_SpecularColorMap",
+             "params != nullptr ? params->pbrSpecularMap : nullptr, fallbackTextureView_, 5",
+             "params != nullptr ? params->pbrSpecularColorMap : nullptr, fallbackTextureView_, 6"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing Diligent specular/dual-UV state: " << evidence;
+    }
+
+    for (const char* shaderEvidence : {
+             "Texture2D g_SpecularMap",
+             "Texture2D g_SpecularColorMap",
+             "CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 5), 0)).a",
+             "CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 6), 1)).rgb",
+             "lerp(specularColorTex, CnaSrgbToLinear(specularColorTex), g_PbrSpecularState.x)",
+             "min(g_PbrDielectricFresnel.xyz * specularColorTex, float3(1.0, 1.0, 1.0)) * specularWeight",
+             "lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(shaderEvidence)))
+            << "missing Diligent specular shader evidence: " << shaderEvidence;
     }
 }
 

@@ -549,6 +549,7 @@ struct VSInput
     float3 Normal  : ATTRIB1;
     float4 Tangent : ATTRIB2;
     float2 UV      : ATTRIB3;
+    /* CNA_PBR_UV1_RIGID_ATTRIBUTE */
 };
 
 struct PSInput
@@ -557,6 +558,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -586,6 +588,7 @@ void main(in VSInput vsIn, out PSInput psIn)
                           vsIn.Tangent.w * CnaDirectionHandedness(worldDirectionMat));
 
     psIn.UV       = vsIn.UV;
+    /* CNA_PBR_UV1_ASSIGNMENT */
     psIn.WorldPos = mul(float4(vsIn.Pos, 1.0), g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(vsIn.Pos);
 }
@@ -608,6 +611,10 @@ Texture2D    g_EmissiveMap;
 SamplerState g_EmissiveMap_sampler;
 Texture2D    g_OcclusionMap;
 SamplerState g_OcclusionMap_sampler;
+Texture2D    g_SpecularMap;
+SamplerState g_SpecularMap_sampler;
+Texture2D    g_SpecularColorMap;
+SamplerState g_SpecularColorMap_sampler;
 
 cbuffer PbrConstants
 {
@@ -615,8 +622,12 @@ cbuffer PbrConstants
     float4 g_PbrEmissiveRoughness; // xyz = emissive colour, w = roughness factor
     // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive.
     float4 g_PbrMapScales;
-    float4 g_PbrDielectricFresnel; // xyz = dielectric F0, w = dielectric F90
+    // xyz = unclamped dielectric F0 before the colour texture, w = specular factor.
+    float4 g_PbrDielectricFresnel;
+    // x = decode specular-colour texture, y = seven-bit TEXCOORD_1 selector mask.
+    float4 g_PbrSpecularState;
     float4 g_PbrTextureTransformRows[10]; // two affine UV rows per PBR map
+    float4 g_PbrSpecularTextureTransformRows[4];
 };
 
 struct PSInput
@@ -625,6 +636,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -641,6 +653,18 @@ float2 CnaPbrTransformUv(float2 uv, int slot)
     float3 value = float3(uv, 1.0);
     return float2(dot(value, g_PbrTextureTransformRows[slot * 2].xyz),
                   dot(value, g_PbrTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrSpecularTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, g_PbrSpecularTextureTransformRows[slot * 2].xyz),
+                  dot(value, g_PbrSpecularTextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrUv(PSInput value, int slot)
+{
+    /* CNA_PBR_UV_SELECTOR */
 }
 
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
@@ -665,7 +689,8 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 void main(in PSInput psIn, out PSOutput psOut)
 {
-    float4 baseColorTex = g_Texture.Sample(g_Texture_sampler, CnaPbrTransformUv(psIn.UV, 0));
+    float4 baseColorTex = g_Texture.Sample(
+        g_Texture_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 0), 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb),
                             g_PbrMapScales.z);
     float3 albedo = baseColor * g_DiffuseColor.rgb;
@@ -674,31 +699,45 @@ void main(in PSInput psIn, out PSOutput psOut)
     float3 N = normalize(psIn.Normal);
     float3 T = normalize(psIn.Tangent.xyz - N * dot(N, psIn.Tangent.xyz));
     float3 B = cross(N, T) * psIn.Tangent.w;
-    float3 sampledNormal = g_NormalMap.Sample(g_NormalMap_sampler, CnaPbrTransformUv(psIn.UV, 1)).rgb * 2.0 - 1.0;
+    float3 sampledNormal = g_NormalMap.Sample(
+        g_NormalMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 1), 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= g_PbrMapScales.x;
     // Spell out the tangent-basis transform. HLSL-to-GLSL conversion otherwise disagrees with
     // native HLSL/SPIR-V about mul(float3, float3x3)'s row/column interpretation for non-axis-
     // aligned normals, while this linear combination states the intended basis unambiguously.
     float3 finalNormal = normalize(sampledNormal.x * T + sampledNormal.y * B + sampledNormal.z * N);
 
-    float4 mr = g_MetallicRoughnessMap.Sample(g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(psIn.UV, 2));
+    float4 mr = g_MetallicRoughnessMap.Sample(
+        g_MetallicRoughnessMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 2), 2));
     float roughness = clamp(mr.g * g_PbrEmissiveRoughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * g_PbrAmbientMetallic.w, 0.0, 1.0);
 
     float3 V = normalize(g_EyePositionSpecularPower.xyz - psIn.WorldPos);
-    float3 F0 = lerp(g_PbrDielectricFresnel.xyz, albedo, metallic);
-    float3 F90 = lerp(float3(g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w,
-                             g_PbrDielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic);
+    float specularWeight = g_PbrDielectricFresnel.w * g_SpecularMap.Sample(
+        g_SpecularMap_sampler,
+        CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 5), 0)).a;
+    float3 specularColorTex = g_SpecularColorMap.Sample(
+        g_SpecularColorMap_sampler,
+        CnaPbrSpecularTransformUv(CnaPbrUv(psIn, 6), 1)).rgb;
+    specularColorTex = lerp(specularColorTex, CnaSrgbToLinear(specularColorTex),
+                            g_PbrSpecularState.x);
+    float3 dielectricF0 = min(g_PbrDielectricFresnel.xyz * specularColorTex,
+                              float3(1.0, 1.0, 1.0)) * specularWeight;
+    float3 F0 = lerp(dielectricF0, albedo, metallic);
+    float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight),
+                      float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
     Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[0].xyz), g_LightDiffuse[0].xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[1].xyz), g_LightDiffuse[1].xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-g_LightDir[2].xyz), g_LightDiffuse[2].xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = g_OcclusionMap.Sample(g_OcclusionMap_sampler, CnaPbrTransformUv(psIn.UV, 4)).r;
+    float occlusion = g_OcclusionMap.Sample(
+        g_OcclusionMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 4), 4)).r;
     occlusion = 1.0 + g_PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = g_PbrAmbientMetallic.xyz * albedo * occlusion;
-    float3 emissiveSample = g_EmissiveMap.Sample(g_EmissiveMap_sampler, CnaPbrTransformUv(psIn.UV, 3)).rgb;
+    float3 emissiveSample = g_EmissiveMap.Sample(
+        g_EmissiveMap_sampler, CnaPbrTransformUv(CnaPbrUv(psIn, 3), 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), g_PbrMapScales.w);
     float3 emissive = g_PbrEmissiveRoughness.xyz * emissiveSample;
 
@@ -719,6 +758,7 @@ struct VSInput
     float2 UV           : ATTRIB3;
     float4 BlendWeights : ATTRIB4;
     uint4  BlendIndices : ATTRIB5;
+    /* CNA_PBR_UV1_SKINNED_ATTRIBUTE */
 };
 
 struct PSInput
@@ -727,6 +767,7 @@ struct PSInput
     float3 Normal   : NORMAL;
     float4 Tangent  : TANGENT;
     float2 UV       : TEX_COORD;
+    /* CNA_PBR_UV1_INTERPOLANT */
     float  FogKeep  : FOG_KEEP;
     float3 WorldPos : WORLD_POS;
 };
@@ -749,6 +790,7 @@ void main(in VSInput vsIn, out PSInput psIn)
                               * CnaDirectionHandedness(skinNormalMat));
 
     psIn.UV       = vsIn.UV;
+    /* CNA_PBR_UV1_ASSIGNMENT */
     psIn.WorldPos = mul(skinnedPos, g_World).xyz;
     psIn.FogKeep  = ComputeFogKeep(skinnedPos.xyz);
 }

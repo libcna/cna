@@ -140,6 +140,18 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND CNA_GRAPHICS_RENDERER STREQUAL "DILIGE
                       ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_fresnel_factors_test.cpp)
     cna_register_diligent_test(Diligent_Pbr_FresnelFactors cna_test_diligent_pbr_fresnel_factors)
 
+    # plan_gltf.md GLTF-182/183/224..227: the renderer-shared material-map test additionally
+    # exercises Diligent's stride-60/76 UV0+UV1 vertex variants on rigid and skinned PBR paths.
+    cna_diligent_test(cna_test_diligent_pbr_material_maps
+                      ${CMAKE_SOURCE_DIR}/modules/renderers/easygl/examples/easygl_pbr_material_maps_test.cpp)
+    cna_register_diligent_test(Diligent_Pbr_MaterialMaps cna_test_diligent_pbr_material_maps)
+
+    # plan_gltf.md GLTF-344/373: all seven PBR texture resources, including both
+    # KHR_materials_specular maps, must survive the generic public renderer boundary.
+    cna_diligent_test(cna_test_diligent_pbr_texture_slots
+                      ${CMAKE_SOURCE_DIR}/modules/graphics/examples/pbr_texture_slot_mapping_test.cpp)
+    cna_register_diligent_test(Diligent_Pbr_TextureSlots cna_test_diligent_pbr_texture_slots)
+
     # plan_diligent.md DILIGENT-49: RasterizerState.DepthBias/SlopeScaleDepthBias pixel verification.
     cna_diligent_test(cna_test_diligent_depthbias diligent_depthbias_test.cpp)
     cna_register_diligent_test(Diligent_DepthBias cna_test_diligent_depthbias)

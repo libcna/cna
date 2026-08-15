@@ -224,7 +224,7 @@ with albedo for metals, and Schlick uses `F90 - F0` rather than assuming the gra
 always one. The core defaults are algebraically identical to the former constants. The repository-
 wide renderer audit pins every CPU upload and shader expression, while the shared six-check pixel
 test exercises the runnable backends. `KHR_materials_ior` is therefore implemented and claimed.
-`KHR_materials_specular` is implemented with a named limit and remains unclaimed because six PBR
+`KHR_materials_specular` is implemented with a named limit and remains unclaimed because five PBR
 renderers still need bindings for its two optional textures.
 
 **Test.** Effect default/setter/clone tests cover both classes. `mat-factor-only-gold` authors IOR
@@ -236,7 +236,7 @@ output is exactly `F0/(4π)`: both PBR programs produce `(11,11,11)` for core an
 fixture factors. A grazing pair holds F0 at `.04` while changing only F90 from 1 to `.3`, producing
 `(33,33,33)` versus `(15,15,15)`. The same test now runs across backend harnesses; platform-only
 shader paths are compiler-verified. Section 1.4b now transports both texture inputs; EasyGL,
-OpenGL2, OpenGL4, DirectX9/11/12, Magnum, SDL GPU and Vulkan sample them, and the remaining six
+OpenGL2, OpenGL4, DirectX9/11/12, Diligent, Magnum, SDL GPU and Vulkan sample them, and the remaining five
 renderer bindings stay explicitly open.
 
 ---
@@ -306,6 +306,14 @@ passes the six-check analytic Fresnel witness on an Xvfb llvmpipe OpenGL 4.5 con
 SDL GPU likewise binds white identity maps plus the separately imported sampler states at bindings
 5/6. Its regenerated 12,656-byte fragment SPIR-V, rigid/skinned PBR tests and seven-check analytic
 Fresnel/factor test all pass on a software GPU under Xvfb.
+Vulkan carries seven independent image/sampler pairs through both descriptor layouts, a 124-float
+PBR block and rigid/skinned single/dual-UV SPIR-V. Its validation-clean lavapipe runs pass the
+22-check texture-slot program plus the golden and analytic Fresnel programs under Xvfb.
+Diligent uses seven named dynamic shader resources and independent sampler slots, a 76-float PBR
+constant block, and stride-60/76 dual-UV variants alongside the existing stride-48/68 programs.
+Its shared HLSL is compiled through both Vulkan and OpenGL under Xvfb; each device type passes
+21/21 material-map pixels, 22/22 texture-slot pixels, 7/7 analytic Fresnel pixels and 12/12 sRGB
+pixels.
 
 ---
 

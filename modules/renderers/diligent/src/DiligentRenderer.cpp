@@ -1731,8 +1731,8 @@ namespace CNA::Internal::Renderers::Diligent
 
         Dg::BufferDesc pbrDesc;
         pbrDesc.Name = "CNA PBR constants";
-        // Four material rows followed by ten per-map affine texture-transform rows.
-        pbrDesc.Size = 56 * sizeof(float);
+        // Five material/state rows followed by ten core and four extension-map affine rows.
+        pbrDesc.Size = 76 * sizeof(float);
         pbrDesc.BindFlags = Dg::BIND_UNIFORM_BUFFER;
         pbrDesc.Usage = Dg::USAGE_DYNAMIC;
         pbrDesc.CPUAccessFlags = Dg::CPU_ACCESS_WRITE;
@@ -1753,7 +1753,7 @@ namespace CNA::Internal::Renderers::Diligent
 
     void DiligentRenderer::UploadPbrConstants(const GpuDrawParams& params)
     {
-        float values[56] = {
+        float values[76] = {
             params.ambientColor[0], params.ambientColor[1], params.ambientColor[2],
             params.pbrMetallicFactor,
             params.emissiveColor[0], params.emissiveColor[1], params.emissiveColor[2],
@@ -1761,11 +1761,15 @@ namespace CNA::Internal::Renderers::Diligent
             params.pbrNormalScale, params.pbrOcclusionStrength,
             params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
             params.pbrEmissiveTextureIsSrgb ? 1.0f : 0.0f,
-            params.pbrDielectricF0[0], params.pbrDielectricF0[1],
-            params.pbrDielectricF0[2], params.pbrDielectricF90,
+            params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+            params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor,
+            params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f,
+            static_cast<float>(params.pbrTextureCoordinateSetMask & 0x7fu), 0.0f, 0.0f,
         };
-        std::memcpy(values + 16, params.pbrTextureTransformRows,
+        std::memcpy(values + 20, params.pbrTextureTransformRows,
                     sizeof(params.pbrTextureTransformRows));
+        std::memcpy(values + 60, params.pbrSpecularTextureTransformRows,
+                    sizeof(params.pbrSpecularTextureTransformRows));
         void* mapped = nullptr;
         context_->MapBuffer(pbrBuffer_, Dg::MAP_WRITE, Dg::MAP_FLAG_DISCARD, mapped);
         if (mapped == nullptr)
@@ -2909,6 +2913,7 @@ namespace CNA::Internal::Renderers::Diligent
         bool usesEnvironmentMap = false;
         bool usesBones = false;
         bool usesPbr = false;
+        bool usesDualPbrUv = false;
 
         switch (key.variant)
         {
@@ -3079,6 +3084,23 @@ namespace CNA::Internal::Renderers::Diligent
                 usesTexture = true;
                 usesPbr = true;
                 break;
+            case ShaderVariant::PbrDualUv3D:
+                vertexSource = kPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    // The public stride is 60 rather than the tightly packed 56 because the
+                    // importer appends four bytes of tail padding after UV1. State it explicitly:
+                    // Diligent's automatic stride is the end of the last attribute.
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 60},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 60}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 60}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 60}, // UV0
+                    Dg::LayoutElement{4, 0, 2, Dg::VT_FLOAT32, Dg::False, 48, 60}, // UV1
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesDualPbrUv = true;
+                break;
             case ShaderVariant::SkinnedPbr3D:
                 vertexSource = kSkinnedPbrVertexHlsl;
                 pixelSource = kPbrPixelHlsl;
@@ -3096,34 +3118,100 @@ namespace CNA::Internal::Renderers::Diligent
                 usesPbr = true;
                 usesBones = true;
                 break;
+            case ShaderVariant::SkinnedPbrDualUv3D:
+                vertexSource = kSkinnedPbrVertexHlsl;
+                pixelSource = kPbrPixelHlsl;
+                layout = {
+                    Dg::LayoutElement{0, 0, 3, Dg::VT_FLOAT32, Dg::False, 0, 76},  // Position
+                    Dg::LayoutElement{1, 0, 3, Dg::VT_FLOAT32, Dg::False, 12, 76}, // Normal
+                    Dg::LayoutElement{2, 0, 4, Dg::VT_FLOAT32, Dg::False, 24, 76}, // Tangent
+                    Dg::LayoutElement{3, 0, 2, Dg::VT_FLOAT32, Dg::False, 40, 76}, // UV0
+                    Dg::LayoutElement{4, 0, 4, Dg::VT_FLOAT32, Dg::False, 48, 76}, // BlendWeights
+                    Dg::LayoutElement{5, 0, 4, Dg::VT_UINT8, Dg::False, 64, 76},   // BlendIndices
+                    Dg::LayoutElement{6, 0, 2, Dg::VT_FLOAT32, Dg::False, 68, 76}, // UV1
+                };
+                usesTexture = true;
+                usesPbr = true;
+                usesBones = true;
+                usesDualPbrUv = true;
+                break;
         }
 
-        const std::string vertexHlsl = std::string(kConstantsHlsl) + kVertexLightingHlsl +
-            (usesBones ? kBonesHlsl : "") + vertexSource;
-        const std::string pixelHlsl = std::string(kConstantsHlsl) + kPixelHelpersHlsl + pixelSource;
+        std::string vertexHlsl = std::string(kConstantsHlsl) +
+            kVertexLightingHlsl + (usesBones ? kBonesHlsl : "") + vertexSource;
+        std::string pixelHlsl = std::string(kConstantsHlsl) +
+            kPixelHelpersHlsl + pixelSource;
+        if (usesPbr)
+        {
+            // Diligent's HLSL-to-GLSL converter analyses tokens inside inactive #if branches.
+            // Expand the tiny UV-layout template here so both converters receive one clean HLSL
+            // program containing exactly the attributes that its native input layout supplies.
+            const auto ReplaceAll = [](std::string& source, const char* marker,
+                                       const char* replacement) {
+                const std::size_t markerLength = std::strlen(marker);
+                const std::size_t replacementLength = std::strlen(replacement);
+                for (std::size_t at = source.find(marker); at != std::string::npos;
+                     at = source.find(marker, at + replacementLength))
+                    source.replace(at, markerLength, replacement);
+            };
+            const char* rigidAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB4;" : "";
+            const char* skinnedAttribute = usesDualPbrUv ? "float2 UV1 : ATTRIB6;" : "";
+            const char* interpolant = usesDualPbrUv ? "float2 UV1 : TEX_COORD1;" : "";
+            const char* assignment = usesDualPbrUv ? "psIn.UV1 = vsIn.UV1;" : "";
+            const char* selector = usesDualPbrUv
+                ? "int selectorMask = int(g_PbrSpecularState.y + 0.5);\n"
+                  "    return (selectorMask & (1 << slot)) != 0 ? value.UV1 : value.UV;"
+                : "return value.UV;";
+            for (std::string* source : {&vertexHlsl, &pixelHlsl})
+            {
+                ReplaceAll(*source, "/* CNA_PBR_UV1_RIGID_ATTRIBUTE */", rigidAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_SKINNED_ATTRIBUTE */", skinnedAttribute);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_INTERPOLANT */", interpolant);
+                ReplaceAll(*source, "/* CNA_PBR_UV1_ASSIGNMENT */", assignment);
+                ReplaceAll(*source, "/* CNA_PBR_UV_SELECTOR */", selector);
+                if (source->find("/* CNA_PBR_UV") != std::string::npos)
+                    throw std::runtime_error("CNA Diligent: unexpanded PBR UV shader marker");
+            }
+        }
 
         Dg::ShaderCreateInfo shaderCI;
         shaderCI.SourceLanguage = Dg::SHADER_SOURCE_LANGUAGE_HLSL;
         shaderCI.Desc.UseCombinedTextureSamplers = true;
         shaderCI.EntryPoint = "main";
 
+        const auto ShaderFailure = [](const char* stage, const Dg::IDataBlob* output) {
+            std::string message = "CNA Diligent: ";
+            message += stage;
+            message += " shader compilation failed";
+            if (output != nullptr && output->GetConstDataPtr() != nullptr && output->GetSize() > 0)
+            {
+                const auto* begin = static_cast<const char*>(output->GetConstDataPtr());
+                const auto* end = std::find(begin, begin + output->GetSize(), '\0');
+                message += ": ";
+                message.append(begin, end);
+            }
+            return message;
+        };
+
         Dg::RefCntAutoPtr<Dg::IShader> vertexShader;
+        Dg::RefCntAutoPtr<Dg::IDataBlob> compilerOutput;
         shaderCI.Desc.ShaderType = Dg::SHADER_TYPE_VERTEX;
         shaderCI.Desc.Name = "CNA vertex shader";
         shaderCI.Source = vertexHlsl.c_str();
         shaderCI.SourceLength = vertexHlsl.size();
-        device_->CreateShader(shaderCI, &vertexShader, nullptr);
+        device_->CreateShader(shaderCI, &vertexShader, &compilerOutput);
         if (!vertexShader)
-            throw std::runtime_error("CNA Diligent: vertex shader compilation failed");
+            throw std::runtime_error(ShaderFailure("vertex", compilerOutput));
 
         Dg::RefCntAutoPtr<Dg::IShader> pixelShader;
+        compilerOutput.Release();
         shaderCI.Desc.ShaderType = Dg::SHADER_TYPE_PIXEL;
         shaderCI.Desc.Name = "CNA pixel shader";
         shaderCI.Source = pixelHlsl.c_str();
         shaderCI.SourceLength = pixelHlsl.size();
-        device_->CreateShader(shaderCI, &pixelShader, nullptr);
+        device_->CreateShader(shaderCI, &pixelShader, &compilerOutput);
         if (!pixelShader)
-            throw std::runtime_error("CNA Diligent: pixel shader compilation failed");
+            throw std::runtime_error(ShaderFailure("pixel", compilerOutput));
 
         Dg::GraphicsPipelineStateCreateInfo psoCI;
         psoCI.PSODesc.Name = "CNA pipeline";
@@ -3202,7 +3290,7 @@ namespace CNA::Internal::Renderers::Diligent
         psoCI.pVS = vertexShader;
         psoCI.pPS = pixelShader;
 
-        Dg::ShaderResourceVariableDesc variables[7];
+        Dg::ShaderResourceVariableDesc variables[9];
         Dg::Uint32 variableCount = 0;
         if (usesTexture)
         {
@@ -3225,7 +3313,8 @@ namespace CNA::Internal::Renderers::Diligent
         if (usesPbr)
         {
             for (const char* name :
-                 {"g_NormalMap", "g_MetallicRoughnessMap", "g_EmissiveMap", "g_OcclusionMap"})
+                 {"g_NormalMap", "g_MetallicRoughnessMap", "g_EmissiveMap", "g_OcclusionMap",
+                  "g_SpecularMap", "g_SpecularColorMap"})
             {
                 variables[variableCount++] = Dg::ShaderResourceVariableDesc{
                     Dg::SHADER_TYPE_PIXEL, name, Dg::SHADER_RESOURCE_VARIABLE_TYPE_DYNAMIC};
@@ -3269,6 +3358,10 @@ namespace CNA::Internal::Renderers::Diligent
                 cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_EmissiveMap");
             cached.occlusionMapVariable =
                 cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_OcclusionMap");
+            cached.specularMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularMap");
+            cached.specularColorMapVariable =
+                cached.binding->GetVariableByName(Dg::SHADER_TYPE_PIXEL, "g_SpecularColorMap");
         }
 
         return pipelines_.emplace(key, std::move(cached)).first->second;
@@ -3707,7 +3800,9 @@ namespace CNA::Internal::Renderers::Diligent
                     : ShaderVariant::Skinned3D;
                 break;
             case 48: variant = ShaderVariant::Pbr3D; break;
+            case 60: variant = ShaderVariant::PbrDualUv3D; break;
             case 68: variant = ShaderVariant::SkinnedPbr3D; break;
+            case 76: variant = ShaderVariant::SkinnedPbrDualUv3D; break;
             default:
                 throw std::runtime_error("CNA Diligent: unsupported vertex stride " +
                                          std::to_string(stride));
@@ -3722,13 +3817,13 @@ namespace CNA::Internal::Renderers::Diligent
             throw std::runtime_error(
                 "CNA Diligent: EnvironmentMapEffect needs a position/normal/UV vertex layout "
                 "(stride 32)");
-        if (params != nullptr && params->pbr && !params->skinned && stride != 48)
+        if (params != nullptr && params->pbr && !params->skinned && stride != 48 && stride != 60)
             throw std::runtime_error(
                 "CNA Diligent: PbrEffect needs a position/normal/tangent/UV vertex layout "
-                "(stride 48)");
-        if (params != nullptr && params->pbr && params->skinned && stride != 68)
+                "(stride 48 or 60)");
+        if (params != nullptr && params->pbr && params->skinned && stride != 68 && stride != 76)
             throw std::runtime_error(
-                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68)");
+                "CNA Diligent: SkinnedPbrEffect needs a skinned PBR vertex layout (stride 68 or 76)");
 
         SyncSwapChainSize();
         EnsureRenderTargetsBound();
@@ -3799,11 +3894,15 @@ namespace CNA::Internal::Renderers::Diligent
             constants.flags[1] = 1.0f;
         }
         UploadConstants(constants);
-        if ((variant == ShaderVariant::Skinned3D || variant == ShaderVariant::SkinnedVertexLit3D ||
-            variant == ShaderVariant::SkinnedPbr3D) &&
+        if ((variant == ShaderVariant::Skinned3D ||
+             variant == ShaderVariant::SkinnedVertexLit3D ||
+             variant == ShaderVariant::SkinnedPbr3D ||
+             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
             params != nullptr)
             UploadBoneTransforms(*params);
-        if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::SkinnedPbr3D) &&
+        if ((variant == ShaderVariant::Pbr3D || variant == ShaderVariant::PbrDualUv3D ||
+             variant == ShaderVariant::SkinnedPbr3D ||
+             variant == ShaderVariant::SkinnedPbrDualUv3D) &&
             params != nullptr)
             UploadPbrConstants(*params);
 
@@ -3862,9 +3961,9 @@ namespace CNA::Internal::Renderers::Diligent
         {
             // PbrEffect's optional maps: an unbound one is ordinary XNA (glTF materials frequently
             // omit some), not an error -- BindPbrMap()'s own fallback view is each map's "absent"
-            // identity (flat tangent-space normal, or white for the other three -- see
-            // flatNormalTextureView_/fallbackTextureView_'s own doc comments). Slots 1-4 match
-            // pbr3d.frag.hlsl's own t1..t4 convention (base colour is slot 0, bound above).
+            // identity (flat tangent-space normal, or white for the other five -- see
+            // flatNormalTextureView_/fallbackTextureView_'s own doc comments). Slots 1-6 match
+            // the six named PBR maps (base colour is slot 0, bound above).
             const auto BindPbrMap = [this](Dg::IShaderResourceVariable* variable,
                                            const ITextureRenderer* texture,
                                            Dg::ITextureView* fallback, int slotIndex) {
@@ -3887,6 +3986,11 @@ namespace CNA::Internal::Renderers::Diligent
                       params != nullptr ? params->pbrEmissiveMap : nullptr, fallbackTextureView_, 3);
             BindPbrMap(pipeline.occlusionMapVariable,
                       params != nullptr ? params->pbrOcclusionMap : nullptr, fallbackTextureView_, 4);
+            BindPbrMap(pipeline.specularMapVariable,
+                      params != nullptr ? params->pbrSpecularMap : nullptr, fallbackTextureView_, 5);
+            BindPbrMap(pipeline.specularColorMapVariable,
+                      params != nullptr ? params->pbrSpecularColorMap : nullptr,
+                      fallbackTextureView_, 6);
         }
 
         context_->SetPipelineState(pipeline.pipeline);

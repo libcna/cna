@@ -232,7 +232,7 @@ normal-incidence image looked correct.
 | Renderer | Native F0/F90 carrier | Focused evidence |
 |---|---|---|
 | Bgfx | `u_dielectricFresnel` | four shader dialects compile; OpenGL rigid/skinned pixel test |
-| Diligent | fourth PBR `float4`, `g_PbrDielectricFresnel` | Vulkan and OpenGL rigid/skinned pixel tests |
+| Diligent | fourth row of the 76-float PBR block, `g_PbrDielectricFresnel`; textured state in row five and four extension-transform rows | Vulkan and OpenGL rigid/skinned, material-map and seven-slot pixel tests |
 | DirectX 9 | pixel constant `c13` | Microsoft `ps_3_0` compile/disassembly plus WineD3D diagnostic |
 | DirectX 11 / 12 | `D3DPbrPerDrawConstants::DielectricFresnel` at byte 208; textured specular inputs at bytes 400–495 | Microsoft `ps_5_0` compile and both MinGW frontends; D3D11 WineD3D diagnostic |
 | EasyGL | `uDielectricFresnel` | OPENGLES2/3 analytic rigid/skinned pixel test |
@@ -252,7 +252,7 @@ yielding bytes 33 and 15. `EveryPbrShaderHonorsTransportedFresnelEndpoints` sepa
 all 15 CPU uploads, dielectric/metal endpoint mixes and Schlick expressions, with explicit counts
 for separately stored rigid/skinned shader sources. The optional `specularTexture` and
 `specularColorTexture` are not part of this factor-only slice. EasyGL, OpenGL2/4, DirectX9/11/12,
-Magnum, SDL GPU and Vulkan now consume both; the other six renderer bindings remain the named `GLTF-344`
+Diligent, Magnum, SDL GPU and Vulkan now consume both; the other five renderer bindings remain the named `GLTF-344`
 limit. DirectX9's two ps_3_0 variants use 7 texture and 271 arithmetic instruction slots (278 total of the 512-slot
 limit), with compiler-extracted c24–c29 constants and s5/s6 samplers.
 Magnum's shared rigid/skinned GLSL binds white units 5/6, and both its six-check analytic Fresnel
@@ -265,6 +265,12 @@ extension maps at 6/7; skinned inserts the bone block at 5 and moves the PBR blo
 maps to 6–8. Four rigid/skinned single/dual-UV shader pairs carry a seven-bit selector and separate
 extension transforms. Validation-clean lavapipe runs pass the 22-check texture executable, both
 8-check golden programs and the seven-check Fresnel/factor oracle under Xvfb.
+Diligent declares seven independent named texture resources and attaches each public sampler slot
+before binding. Its 304-byte constant block carries pre-clamp F0, scalar strength, colour decode,
+the seven-bit UV selector and both extension transforms. The same HLSL builds as rigid/skinned
+stride-48/68 and dual-UV stride-60/76 pipelines. Both Diligent Vulkan and OpenGL devices pass the
+21-check material-map, 22-check texture-slot, 7-check analytic Fresnel and 12-check sRGB executables
+under Xvfb; the Vulkan runs additionally enable Khronos validation.
 
 ## PBR alpha coverage (`GLTF-372`, `GLTF-379`)
 
@@ -439,7 +445,7 @@ ordinary `CnaTests`/glTF conformance run even on a host that cannot build that b
 | EasyGL | flat normal + white, rigid and skinned | `EasyGL_Pbr_TextureSlots`, `EasyGL_PbrEffect_Golden`, `EasyGL_SkinnedPbrEffect_Golden` |
 | Vulkan | flat normal + white, rigid and skinned | `Vulkan_Pbr_TextureSlots`, `Vulkan_PbrEffect_HandDerived` |
 | Bgfx | flat normal + white, rigid and skinned | `Bgfx_PbrEffect`, `Bgfx_SkinnedPbrEffect` |
-| Diligent | flat normal + white, rigid and skinned | `Diligent_Pbr` |
+| Diligent | flat normal + white, rigid and skinned | `Diligent_Pbr`, `Diligent_Pbr_MaterialMaps`, `Diligent_Pbr_TextureSlots` on Vulkan and OpenGL |
 | DirectX 9 | flat normal + white, rigid and skinned | `DirectX9_Pbr` |
 | DirectX 11 | flat normal + white, rigid and skinned | `DirectX11_Pbr_VertexColor` (emissive/no-map route) |
 | DirectX 12 | flat normal + white, rigid and skinned | source-policy lock; no dedicated PBR pixel executable yet |
