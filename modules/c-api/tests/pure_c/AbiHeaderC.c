@@ -1158,3 +1158,27 @@ _Static_assert(sizeof(CNA_InputDeviceInfo) == 16U &&
                    offsetof(CNA_InputDeviceInfo, id) == 8U &&
                    sizeof(((CNA_InputDeviceInfo*)0)->id) == 8U,
                "CNA_InputDeviceInfo layout must remain stable");
+
+/* The two media source identities are 0 and 4: the canonical gap is reproduced rather than
+   renumbered into a dense range, so there is deliberately no MAXIMUM to compare against. */
+_Static_assert(sizeof(CNA_MediaState) == sizeof(uint32_t) &&
+                   CNA_MEDIA_STATE_STOPPED == UINT32_C(0) &&
+                   CNA_MEDIA_STATE_PLAYING == UINT32_C(1) &&
+                   CNA_MEDIA_STATE_PAUSED == UINT32_C(2) &&
+                   CNA_MEDIA_STATE_MAXIMUM == UINT32_C(2) &&
+                   sizeof(CNA_MediaSourceType) == sizeof(uint32_t) &&
+                   CNA_MEDIA_SOURCE_TYPE_LOCAL_DEVICE == UINT32_C(0) &&
+                   CNA_MEDIA_SOURCE_TYPE_WINDOWS_MEDIA_CONNECT == UINT32_C(4) &&
+                   sizeof(CNA_VideoSoundtrackType) == sizeof(uint32_t) &&
+                   CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC == UINT32_C(0) &&
+                   CNA_VIDEO_SOUNDTRACK_TYPE_DIALOG == UINT32_C(1) &&
+                   CNA_VIDEO_SOUNDTRACK_TYPE_MUSIC_AND_DIALOG == UINT32_C(2) &&
+                   CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM == UINT32_C(2),
+               "CNA media identities must remain stable");
+
+_Static_assert(CNA_VISUALIZATION_DATA_SIZE == UINT32_C(256) &&
+                   sizeof(CNA_VisualizationData) == 2056U &&
+                   _Alignof(CNA_VisualizationData) == 4U &&
+                   offsetof(CNA_VisualizationData, frequencies) == 8U &&
+                   offsetof(CNA_VisualizationData, samples) == 1032U,
+               "CNA_VisualizationData layout must remain stable");

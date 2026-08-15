@@ -53,5 +53,6 @@
 #include "CNA/C/net_sessions.h"
 #include "CNA/C/storage.h"
 #include "CNA/C/audio.h"
+#include "CNA/C/media.h"
 
 #endif

@@ -827,3 +827,11 @@ static_assert(offsetof(CNA_SensorInfo, type) == 12U);
 static_assert(sizeof(CNA_InputDeviceInfo) == 16U);
 static_assert(alignof(CNA_InputDeviceInfo) == 8U);
 static_assert(offsetof(CNA_InputDeviceInfo, id) == 8U);
+
+static_assert(sizeof(CNA_MediaState) == sizeof(uint32_t));
+static_assert(CNA_MEDIA_STATE_MAXIMUM == UINT32_C(2));
+static_assert(CNA_MEDIA_SOURCE_TYPE_WINDOWS_MEDIA_CONNECT == UINT32_C(4));
+static_assert(CNA_VIDEO_SOUNDTRACK_TYPE_MAXIMUM == UINT32_C(2));
+static_assert(CNA_VISUALIZATION_DATA_SIZE == UINT32_C(256));
+static_assert(sizeof(CNA_VisualizationData) == 2056U);
+static_assert(offsetof(CNA_VisualizationData, samples) == 1032U);

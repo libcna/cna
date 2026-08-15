@@ -370,7 +370,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 |---|---:|---|---|---|
 | CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
 | CBIND-037B | 599 | Complete the input module | ✅ | `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration) are mapped. Decomposed into CBIND-037B1–B7 below; **closed by CBIND-037B7b**, after which the `input` module records 834 implemented, 0 partial, 0 planned and 27 not applicable. |
-| CBIND-037C | 325 | Complete the media module | ⬜ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. |
+| CBIND-037C | 325 | Complete the media module | 🟨 | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. Decomposed into CBIND-037C1–C7 below; the parent becomes complete only when all seven rows and every `media` inventory row are closed. |
 | CBIND-037D | 289 | Complete the devices and devices-ext modules | ⬜ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). |
 | CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
@@ -397,6 +397,24 @@ snapshot, and the `GamePad` statics need both.
 | CBIND-037B7 | 92 | Complete the remaining input extensions | ✅ | Map the remaining `CNA::Input` joystick, sensor, device-enumeration, clipboard and power surfaces. The key-modifier, button-label, text-input-type and connection-state identities this row originally owned were borrowed into `CBIND-037B3`, `B4a` and `B4d`, which is why 92 rows remain rather than the 102 first partitioned. Split by concern into `CBIND-037B7a`–`B7b` below, because the joystick family is a device surface with its own values, snapshot and hot-plug events while the rest are small host-system queries. |
 | CBIND-037B7a | 54 | Complete the raw joystick family | ✅ | `input_joystick.h` and `CnaCApiInputJoystick.cpp` map `JoystickTypeEXT`, `JoystickHatPositionEXT`, `JoystickInfoEXT`, `JoystickCapabilitiesEXT`, `JoystickStateEXT` and the `Joysticks` facade. Like haptics this is a CNA-namespace surface, so the routes take no `_ext` suffix except the two hot-plug events and the test reset, which follow their canonical member names. **The one deliberate departure from the input families' fixed-POD rule is the snapshot**, and it is the decision the slice turns on: `JoystickStateEXT` carries four heterogeneous variable-length arrays with no canonical maximum — unlike the touch panel's fixed eight slots — so a fixed value would have to invent a capacity that silently truncates a real HOTAS setup, while four independent per-array queries would answer from four different instants. `cna_joysticks_capture_state` therefore captures once into an owned `CNA_JoystickStateHandle` (`ObjectKind` 69) and each array is read with its own count/copy pair against that one instant; trackball motion is relative, so capturing consumes it, which is another reason one capture must serve all four arrays. **The hat is an identity, not a bit set** — the plan's own guess said "probably a bit set", and the canonical header says the opposite: the platform's combinable up/down and left/right bits are enumerated as the nine reachable combinations, so `RIGHT_UP` is the ordinal 5 and composing these values is wrong. That is pinned by an ABI assertion and stated in the header. The haptics **closed-device-is-not-an-error** contract carries over unchanged: an unconnected identifier answers `cna_joysticks_get_capabilities` with the canonical disconnected defaults, a power percent of -1 meaning "unknown" rather than "empty", and two empty strings, and answers `cna_joysticks_capture_state` with four empty arrays — which is the path every verification tree actually exercises, and it is asserted rather than skipped. The device name and GUID stay outside the capability value for the same reason the haptic device name does, so `cna_joystick_capabilities_equals` takes both strings alongside both values and reproduces the canonical ten-field comparison exactly; `cna_joystick_info_equals` does the same with the descriptor name. Both static multicast fields become owned registrations (`ObjectKind` 70) with one shared release route, mirroring the text-input surface, plus raise routes that invoke the same public field the platform layer invokes — no `Internal` bridge crosses the ABI. The slice gets its own strict-C `JoystickSmoke.c` and `CApi_JoystickSmoke` target, matching its own adapter file. Green in all four trees (53/53) and under ASan+UBSan with leak detection on. |
 | CBIND-037B7b | 38 | Complete host sensors, device enumeration, clipboard and power | ✅ | `input_devices.h` and `CnaCApiInputDevices.cpp` map the last four `CNA::Input` extensions by reusing the shapes `CBIND-037B7a` settled rather than inventing new ones: the descriptor value with its name outside the POD and an `_equals` taking both names, the index-addressed enumeration, and the process-wide event registration (`ObjectKind` 71, one shared release route for all four events). Three decisions are worth recording. The two sensor reads follow the **availability-separate-from-the-answer** rule the gamepad sensors established, and go one step further: when the flag reports no sensor the reading output is **left exactly as the caller left it**, because that is what the canonical query does with its reference — the test proves it by pre-filling sentinel components and asserting they survive. `CNA_InputDeviceInfo` carries a **`uint64_t`** identifier where the sensor and joystick descriptors carry `uint32_t`, because a touch-device identifier is 64-bit natively; the test round-trips a value above the 32-bit range so a narrowing conversion could not pass unnoticed. And `cna_clipboard_set_text` **reports that the request was made, not that it succeeded**: the canonical setter returns nothing, so there is no platform outcome to forward and this ABI does not invent one — a headless session or a gesture-gated browser may ignore the write. The clipboard is process-external state the suite does not own, so its test captures the pre-existing content, asserts a *relationship* (if the write took effect, the read must return exactly those bytes; the presence flag must agree with a non-empty read in both directions), proves the empty and buffer-too-small cases only on a platform that actually stored the text, and restores the original content. One strict-C `InputDevicesSmoke.c` covers all four families, driving the three device enumerations through a single shared validator so the protocol is proven identically for mice, keyboards and touch devices. Green in all four trees (54/54) and under ASan+UBSan with leak detection on. **This closes parent `CBIND-037B7`, parent `CBIND-037B` and the whole `input` module**: 834 implemented, 27 not applicable, no partial and no planned row left. |
+
+#### CBIND-037C media implementation slices
+
+The 325 `media` rows split by what each part needs to exist: the identities and standalone values
+first, then the song that everything plays, then the library entities and their collections, then
+the library that owns them, then the player that consumes them, and video last because it composes
+the graphics surface as well. `cna_c_api` gained its `cna_media` link edge in `CBIND-037C1` — the
+module list stays exactly what the C API adapts.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-037C1 | 25 | Establish media identities, visualization and sources | ✅ | `media.h` and `CnaCApiMedia.cpp` map `MediaState`, `MediaSourceType`, `VideoSoundtrackType`, `VisualizationData` and `MediaSource`. Two decisions carry the slice. **`CNA_MediaSourceType` keeps its canonical 0/4 gap** rather than being renumbered into a dense range, so it deliberately has no `MAXIMUM` and consumers validate membership of the two defined values instead of an upper bound — the same rule that kept `CNA_LOG_LEVEL_EXPERIMENT` at 100. And **the canonical source enumeration's ownership never crosses the ABI**: `MediaSource::GetAvailableMediaSources` allocates its sources with `new` and hands back raw pointers its caller must free, so each C route enumerates, reads the one source it was asked about and destroys the whole list before returning; an index is a point-in-time value with nothing to release, and the sanitizer tree with leak detection is what proves it rather than a comment claiming it. `ToString` needs no route of its own because the canonical implementation returns the display name unchanged, and the media-source type name is addressed by index because the canonical member is an instance method on a type not constructible from outside the library. `CNA_VisualizationData` is a fixed 2,056-byte value rather than a handle, since both canonical buffers are fixed at 256 floats and the canonical type exposes them both as fields and through getters — one value is both. Strict-C `MediaSmoke.c` plus C and C++ ABI assertions; green in all four trees (55/55) and under ASan+UBSan with leak detection on. |
+| CBIND-037C2 | 40 | Complete Song and SongCollection | ⬜ | Map `Song` and `SongCollection`. Decide the ownership split first: a song built from a file path is owned by its C caller, while a song reached through a library collection is owned by the library — the borrowed-view-keeps-its-parent-alive rule the net and model slices already use. Watch for the canonical hash, which is deliberately content-based where FNA's is identity-based, and for `IsRated`, which is not the same as a nonzero rating. |
+| CBIND-037C3 | 102 | Complete albums, artists, genres, playlists and their collections | ⬜ | Map `Album`, `Artist`, `Genre`, `Playlist` and their four collections. All five entity types are library-owned, so they should share one borrowed-view shape rather than five. |
+| CBIND-037C4 | 54 | Complete pictures and picture albums | ⬜ | Map `Picture`, `PictureAlbum` and their two collections, including thumbnail and image access — the first media rows that produce pixel data, so decide whether they reuse the existing texture transfer or a raw byte copy. |
+| CBIND-037C5 | 18 | Complete MediaLibrary | ⬜ | Map `MediaLibrary`, the owner of every collection above. |
+| CBIND-037C6 | 44 | Complete MediaPlayer and MediaQueue | ⬜ | Map the `MediaPlayer` statics, its events and the active queue. Expect the process-wide event registration shape the mouse, text-input and joystick surfaces already use. |
+| CBIND-037C7 | 42 | Complete Video and VideoPlayer | ⬜ | Map `Video` and `VideoPlayer`, the only media rows that touch the graphics device. FFmpeg is available in all four verification trees, so the decoder is real rather than compiled out; the per-frame texture must reuse the existing `CNA_Texture2DHandle` contract rather than inventing a second one. |
 
 #### CBIND-036B content implementation slices
 
@@ -531,8 +549,8 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-**Snapshot (2026-08-15, after `CBIND-037B7b`):** 414 headers / 6,415 symbols —
-**4,499 implemented, 30 partial, 1,757 planned, 129 not applicable.**
+**Snapshot (2026-08-15, after `CBIND-037C1`):** 414 headers / 6,415 symbols —
+**4,524 implemented, 30 partial, 1,732 planned, 129 not applicable.**
 Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 
 ### What is closed
@@ -548,7 +566,7 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,757 rows), the B7 hardening phase
+Everything still open belongs to `CBIND-037` (1,732 rows), the B7 hardening phase
 (`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
 done and is not waiting on `CBIND-037`.
 `CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
@@ -556,7 +574,7 @@ later one composes the earlier ones:
 
 | Order | Slice | Rows left | Note |
 |---:|---|---:|---|
-| 1 | `CBIND-037C` media | 325 | sub-partition on arrival; FFmpeg is available in all four trees, so `VideoPlayer` is buildable |
+| 1 | `CBIND-037C` media | 300 (after `C1`) | sub-partitioned into `C1`–`C7`; `C1` is done, `C2` Song is next |
 | 2 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info. **The whole `devices-ext` surface is `#ifdef CNA_DEVICES`, which is OFF in all four trees** — see the handoff |
 | 3 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
 | 4 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
@@ -883,7 +901,13 @@ touch-device identifier is natively that wide; and the clipboard setter reports 
 made rather than that the platform honored it, because the canonical setter returns nothing and this
 ABI does not invent an outcome. The clipboard test therefore asserts a relationship and restores the
 content it found. The snapshot is now 4,499 implemented, 30 partial, 1,757 planned and 129 not
-applicable, with five modules fully mapped.
+applicable, with five modules fully mapped. CBIND-037C1 then opens the media module with its 25
+identity, visualization and media-source rows, and adds the `cna_media` link edge the C API did not
+have. Two decisions are recorded: the media-source identity keeps its canonical 0/4 gap rather than
+being renumbered dense, so it has no maximum and consumers validate membership; and the canonical
+source enumeration's `new`-ed pointers never cross the ABI — each route owns and destroys the list
+it enumerated, which the sanitizer tree with leak detection proves. The snapshot is now 4,524
+implemented, 30 partial, 1,732 planned and 129 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -896,28 +920,21 @@ what remains. This section carries only what a fresh context cannot infer from t
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037C`, the `media` module — **325 rows**, the first slice outside the input
-  and networking families. Sub-partition it on arrival, as every slice over roughly a hundred rows
-  has been. The rows split by header:
+- **Next task:** `CBIND-037C2`, `Song` and `SongCollection` — **40 rows**. `CBIND-037C1` is done:
+  `media.h`, `CnaCApiMedia.cpp` and `MediaSmoke.c` exist, `cna_c_api` now links `cna_media`, and the
+  media identities plus `CNA_VisualizationData` are frozen. The remaining media slices and their row
+  counts are in the `CBIND-037C` table above.
 
-  | rows | header | shape to expect |
-  |---:|---|---|
-  | 31 | `MediaPlayer.hpp` | statics plus events; expect the process-wide registration shape |
-  | 27 | `Song.hpp` | owned resource |
-  | 27 | `Video/VideoPlayer.hpp` | owned resource; produces a texture per frame |
-  | 18 | `Album.hpp` | collection element |
-  | 18 | `MediaLibrary.hpp` | owned resource holding collections |
-  | 17 | `Picture.hpp` | collection element |
-  | 15 | `Video/Video.hpp` | value or owned resource — check |
-  | 172 | the remaining media collections and value headers | count/copy collections |
-
-  Known before starting, so it need not be rediscovered: **FFmpeg is available in all four
-  verification trees** (`modules/media/CMakeLists.txt` gates `VideoDecoder.cpp`,
-  `VideoPlayer.cpp` and `Video.cpp` on `CNA_FFMPEG_AVAILABLE`, and every tree's cache has
-  `LIBAVCODEC_FOUND=1`), so the video surface is buildable rather than a compiled-out stub. But
-  `cna_c_api` does **not** link `cna_media` yet — `modules/c-api/CMakeLists.txt` links the exact
-  modules it adapts, so this slice must add it, which is the first thing to do and the first thing
-  that can go wrong.
+  The decision `C2` must make first is **ownership**. A `Song` built from a file path (the two
+  public constructors and `FromUri`) is the C caller's to release; a `Song` reached through a
+  library collection is owned by the `MediaLibrary` that scanned it, and its `getAlbumProperty`,
+  `getArtistProperty` and `getGenreProperty` are non-owning back-pointers that are **null** for any
+  standalone song. That is the borrowed-view-keeps-its-parent-alive rule the net and model slices
+  already use; do not invent a third shape. Two canonical behaviors to preserve rather than tidy,
+  both documented in `Song.hpp` itself: the hash is deliberately **content-based** where FNA's is
+  identity-based (FNA's own choice violates the Equals/GetHashCode contract, and CNA fixed it on
+  purpose), and `getIsRatedProperty` is **not** "rating != 0" — both tag formats reserve zero for
+  unrated, so an explicit zero rating still reports not-rated.
 - **`CBIND-037D` has an environment decision already made by the owner (2026-08-15):** the entire
   `devices-ext` public surface is wrapped in `#ifdef CNA_DEVICES`, and that option is **OFF in all
   four verification trees**, so 83 of that slice's rows would otherwise only ever be tested in
@@ -941,13 +958,13 @@ order:
 
 | File | Role |
 |---|---|
-| `include/CNA/C/<family>.h` | the public surface. One header per family — 49 today (`input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
+| `include/CNA/C/<family>.h` | the public surface. One header per family — 50 today (`media.h`, `input_devices.h`, `input_joystick.h`, `input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `net_sessions.h`, `storage.h`, `core_ext.h`, …). Add a new one when the family is genuinely new; extend an existing one when it is not. |
 | `include/CNA/C/cna.h` | the umbrella. **Every new header must be added here** or a strict-C consumer never sees it. |
-| `src/CnaCApi<Family>.cpp` | the adapter — 39 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
+| `src/CnaCApi<Family>.cpp` | the adapter — 40 files today. Routes go in `extern "C"` scope; helpers in an anonymous namespace above them. |
 | `src/CnaCApiDetail.hpp` | shared substrate: the `ObjectKind` handle-kind enum (**next free number is 72**), the `HandleRegistry`, `CallWithExceptionBarrier` and its 18 exception arms, `CopyStringView`, `Fail`. A new handle kind or a new canonical exception conversion lands here. |
 | `src/CnaCApi<Family>Detail.hpp` | cross-file borrow helpers, when one family's adapter must reach another's resource (`CnaCApiGraphicsDetail.hpp` exposes `GetOwnedTexture2D`, `CnaCApiNetDetail.hpp` exposes `BorrowPacketReader`, …). |
-| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (54 tests today). |
-| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 49 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
+| `CMakeLists.txt` | the `cna_c_api` source list, and the per-test executable + `add_test` block (55 tests today). |
+| `tests/pure_c/<Family>Smoke.c` | the strict-C17 behavior test. 50 files; prefer extending the family's existing one over adding a target — but a family with its own adapter file has earned its own test target, as haptics did. |
 | `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` | freeze every new identity value and every new struct size/alignment/offset. Both must compile — the surface has to be valid C17 *and* C++23. |
 | `tests/cpp/BoundaryDetailTest.cpp` | only when a slice adds an exception-firewall arm; returns a distinct code per case. |
 | `tools/c-api/coverage_mappings.json` | the rules that close inventory rows. |
@@ -1043,7 +1060,7 @@ unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap paral
 | `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
 | `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
 
-All four run the same 54 C API tests green. The sanitizer tree runs with
+All four run the same 55 C API tests green. The sanitizer tree runs with
 `ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
 `detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
 `-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no

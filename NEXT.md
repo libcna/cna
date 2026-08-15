@@ -526,6 +526,24 @@
 > yet, and that FFmpeg is available in all four trees so the video surface is real rather than a
 > compiled-out stub.
 >
+> CBIND-037C1 then opens that module with its 25 identity, visualization and media-source rows, in
+> `media.h` / `CnaCApiMedia.cpp` / `MediaSmoke.c`, and adds the `cna_media` link edge. The media
+> family is sub-partitioned into C1–C7 in `plan_binding.md`. Two decisions are recorded.
+> `CNA_MediaSourceType` **keeps its canonical 0/4 gap** rather than being renumbered into a dense
+> range, so it deliberately has no `MAXIMUM` and consumers validate membership of the two defined
+> values — the same rule that kept the experiment log level at 100. And the canonical
+> `MediaSource::GetAvailableMediaSources` allocates its sources with `new` and returns raw pointers
+> its caller must free: **none of that ownership crosses the ABI**, because each C route enumerates,
+> reads the one source it was asked about and destroys the whole list before returning, so an index
+> is a point-in-time value with nothing to release. The ASan tree with leak detection is what proves
+> that, rather than a comment claiming it. `ToString` needed no route of its own — the canonical
+> implementation returns the display name unchanged — and `CNA_VisualizationData` is a fixed
+> 2,056-byte value rather than a handle, because both canonical buffers are fixed at 256 floats and
+> the canonical type exposes them both as public fields and through getters. The inventory is now
+> 4,524 implemented, 30 partial, 1,732 planned and 129 N/A; all four trees are green at 55/55 with
+> the new `CApi_MediaSmoke` target. **Next: CBIND-037C2**, `Song` and `SongCollection` (40 rows),
+> whose first decision is the owned-versus-library-borrowed split.
+>
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /
 > TextureCube, input events and other families that later slices implemented. It belongs to

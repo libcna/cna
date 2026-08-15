@@ -3972,6 +3972,69 @@
       "tests": "`InputDevicesSmoke.c` asserts the state is a defined identity, that both numbers are written and within their documented ranges (-1 or 0 through 100 for the percent), and covers each null-output refusal plus the wrong-thread refusal",
       "status": "implemented",
       "task": "CBIND-037B7b"
+    },
+    {
+      "id": "media-state",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaState(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_MediaState` with one `CNA_MEDIA_STATE_*` macro per canonical value at its canonical ordinal, plus `CNA_MEDIA_STATE_MAXIMUM` for validation",
+      "tests": "the ordinals and the maximum are pinned by C and C++ ABI assertions; the identity is consumed by the media-player routes that report playback state",
+      "status": "implemented",
+      "task": "CBIND-037C1"
+    },
+    {
+      "id": "media-source-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaSourceType(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_MediaSourceType` with one macro per canonical value **at its canonical ordinal, gap included**: the two values are 0 and 4, not 0 and 1, so the identity deliberately has no dense `MAXIMUM` and every consumer validates against the two defined values instead of an upper bound",
+      "tests": "`MediaSmoke.c` asserts every enumerated source reports one of the two defined identities and never a value between them; both ordinals are pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037C1"
+    },
+    {
+      "id": "video-soundtrack-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VideoSoundtrackType(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_VideoSoundtrackType` with one `CNA_VIDEO_SOUNDTRACK_TYPE_*` macro per canonical value at its canonical ordinal, plus a maximum for validation. The canonical header records that this is metadata only — nothing in playback branches on it — and the C header repeats that rather than implying the value changes mixing behavior",
+      "tests": "the ordinals and the maximum are pinned by C and C++ ABI assertions; the identity is consumed by the video routes that report a video's soundtrack kind",
+      "status": "implemented",
+      "task": "CBIND-037C1"
+    },
+    {
+      "id": "media-source",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::MediaSource(::(getMediaSourceTypeProperty|getNameProperty|GetAvailableMediaSources|ToString|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "the index-addressed enumeration `cna_media_source_get_available_count` plus `cna_media_source_get_type_at`, the name count/copy pair and the type-name count/copy pair. **The canonical enumeration allocates its sources with `new` and returns raw pointers its caller must free; C never exposes that ownership** — each route enumerates, reads the one source it was asked about and destroys the whole list before returning, which is why an index is a point-in-time value rather than a handle. `ToString` needs no route of its own: the canonical implementation returns the display name unchanged, so one count/copy pair is both the name and the text. The type name is addressed by index rather than being a free function, because the canonical member is an instance method and the source object is not constructible from outside the library",
+      "tests": "`MediaSmoke.c` enumerates every source the device reports, asserts at least one local-device source exists with a non-empty name, round-trips both strings with their exact byte counts, checks the fully-qualified type name literally, and covers the out-of-range index, null-output and buffer-too-small refusals on every route. The whole suite runs under ASan with leak detection on, which is what proves the borrowed-list release rather than a comment claiming it",
+      "status": "implemented",
+      "task": "CBIND-037C1"
+    },
+    {
+      "id": "visualization-data",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Media::VisualizationData(::(VisualizationData|Size|freq|samp|getFrequenciesProperty|getSamplesProperty|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constant",
+        "field",
+        "constructor",
+        "method"
+      ],
+      "mapping": "one fixed 2,056-byte `CNA_VisualizationData` value plus `cna_visualization_data_init` for the canonical zeroed constructor, and a free type-name count/copy pair. Both canonical buffers are fixed at `CNA_VISUALIZATION_DATA_SIZE` (256) values, so this is a value rather than a handle with count/copy arrays: nothing about it is variable. The canonical type exposes the same two arrays both as public fields and through getters, and the one value is both — a second spelling would only let the two disagree",
+      "tests": "`MediaSmoke.c` asserts the canonical default is zeroed across the whole length of both buffers, round-trips the fully-qualified type name and covers its buffer-too-small and null-argument refusals; the size constant and the layout are pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037C1"
     }
   ]
 }

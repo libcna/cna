@@ -145,6 +145,8 @@ Runtime boundary. The owned content/cache
 contract is in [`CONTENT.md`](CONTENT.md); the device/container/stream ownership and fake-async
 contract is in [`STORAGE.md`](STORAGE.md); the networking values, packet buffers and
 join-failure contract are in [`NET.md`](NET.md). The
-[audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary. The
+[audio ownership/control contract](AUDIO.md) defines the PCM and mixer-thread boundary; the
+media identities, visualization value and media-source enumeration contract is in
+[`MEDIA.md`](MEDIA.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.
