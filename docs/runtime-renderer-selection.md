@@ -286,6 +286,20 @@ environment variable. A renderer with no smoke test registered in that build is 
 **skipped**, never as a pass — `ctest -L <label that matches nothing>` exits 0, so a wrong label
 would otherwise look like success.
 
+### Comparing renderers against the XNA oracle, from one binary
+
+```bash
+scripts/run-oracle-corpus-multi.sh <cna_oracle_render_exe> "OPENGLES3;OPENGL33"
+```
+
+Renders the 39-scene oracle corpus once per renderer and diffs each scene against the same
+checked-in XNA 4.0 reference PNGs. Every renderer is measured against the *same* fixed point, so
+agreement with XNA implies agreement with each other — the cross-renderer question that previously
+needed one build per renderer and a comparison done by hand.
+
+A renderer that is not compiled into that binary, or cannot start, is probed once and reported as
+skipped rather than as 39 scene failures.
+
 ### Verifying a fallback chain
 
 `CNA_DEBUG_UNAVAILABLE_RENDERERS` is a comma-separated list of renderer names to treat as though
