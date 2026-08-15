@@ -1,11 +1,12 @@
-# Three issues found while implementing runtime renderer selection
+# Issues found while implementing runtime renderer selection
 
-Found on 2026-08-15 while implementing `plan_runtimerenderer.md`. **None of the three is caused by
+Found on 2026-08-15 while implementing `plan_runtimerenderer.md`. **None of them is caused by
 that work**, and none is fixed by it — each was surfaced by exercising code paths the campaign
 happened to reach, and each is recorded here so it can be decided on its own merits rather than
 silently absorbed into an unrelated change.
 
-They are ordered by how likely they are to be a real defect.
+They are ordered by how likely they are to be a real defect. A fourth was found later, while
+converting the test corpus, and is appended at the end.
 
 ---
 
@@ -180,3 +181,69 @@ unnoticed until someone tries the target. CNA has an Emscripten preset (`CMakePr
 | 1 | `WEBGL1` may take ES 3.0 paths | no — needs a browser | no | no, preserved verbatim and documented |
 | 2 | `OPENGL33` glTF segfault | yes, at `c5045553b` | no | no |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | worked around with flags only |
+| 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes (mechanism) | no | behaviour preserved, trap removed |
+
+---
+
+## 4. A backslash-continued comment silently removed `PORTABLEGL` from a test's renderer list
+
+**Where:** `modules/graphics/tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp`, the
+`kCubeStorageSupported` / `kCubeLevel0ReadbackSupported` guard (before its conversion to runtime).
+
+**Status:** confirmed mechanism, open question about the right answer. Behaviour preserved, not
+changed.
+
+### What was found
+
+The guard listed the renderers with no cube-map storage:
+
+```c
+#if defined(CNA_RENDERER_SDL_RENDERER) || \
+    ...
+    defined(CNA_RENDERER_OPENVG)
+// OPENVG keeps IGraphicsRenderer::CreateTextureCube's nullptr default ... above. || \
+    defined(CNA_RENDERER_PORTABLEGL)
+constexpr bool kCubeLevel0ReadbackSupported = false;
+```
+
+The explanatory `//` comment ends in a backslash. A backslash at the end of a `//` comment continues
+the **comment** onto the next line, so `defined(CNA_RENDERER_PORTABLEGL)` was swallowed by it and
+never part of the condition. Verified with a minimal preprocessor case rather than by reading:
+
+```c
+#if defined(A) || \
+    defined(B)
+// comment ending with backslash. || \
+    defined(C)
+int in_list = 1;
+#else
+int in_list = 0;
+#endif
+```
+
+`gcc -E -DC` yields `in_list = 0` — `defined(C)` is not in the condition.
+
+### Consequence
+
+Under a `PORTABLEGL` build, `kCubeStorageSupported` was `true`, so the suite asserted that this CPU
+software renderer stores and reads back cube-map faces. Whether it actually does is the open
+question; the surrounding comments place it with the renderers that do **not**.
+
+### What was done about it
+
+The guard is now a runtime function, which has no line continuations, so the trap cannot recur.
+`PortableGL` is deliberately left **out** of the list, reproducing today's behaviour exactly —
+deciding whether it belongs there is a question about that renderer, not about the conversion. The
+reasoning is recorded at the code.
+
+### How to settle it
+
+Build single-renderer `PORTABLEGL` and run `CnaTests --gtest_filter="*Cube*"`. If the suite fails,
+`PortableGL` belongs in the no-storage list and adding it is a one-line change; if it passes, the
+current (accidental) behaviour was right all along and should be made deliberate.
+
+### Worth checking elsewhere
+
+The same pattern — a `//` comment ending in a backslash inside a multi-line `#if` — would silently
+drop a condition anywhere it occurs. A grep for `//.*\\$` inside preprocessor conditionals across
+the corpus would find any others.

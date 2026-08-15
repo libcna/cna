@@ -22,6 +22,11 @@
 // lives in the EasyGL pixel-readback integration test: modules/renderers/easygl/examples/easygl_texturecube_faces_test.cpp.
 
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
@@ -75,33 +80,35 @@ using Microsoft::Xna::Framework::Graphics::TextureCollection;
 // plan_sokol.md SOKOL-27: SokolTextureCubeRenderer stores every declared mip level's six faces in a
 // real CPU shadow (SetData/GetData round-trip exactly, at every level -- not level-0-only like
 // Software), even though nothing on this renderer samples a cube texture as a GPU resource yet.
-#if defined(CNA_RENDERER_SDL_RENDERER) || \
-    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || defined(CNA_RENDERER_GDI) || \
-    defined(CNA_RENDERER_BLEND2D) || \
-    defined(CNA_RENDERER_OPENVG)
-// OPENVG keeps IGraphicsRenderer::CreateTextureCube's nullptr default under the default Throw
-// policy (OpenVgRenderer::CreateTextureCube only ever returns a real object under the opt-in
-// WarnAndStub policy, and even then a discard-everything null object, never real storage) --
-// ShivaVG/OpenVG has no cube-map concept at all. Same "no cube resource exists" shape as
-// SDL_Renderer/Canvas/HTML_DOM/FreeDirect/GDI above. || \
-    defined(CNA_RENDERER_PORTABLEGL)
-constexpr bool kCubeLevel0ReadbackSupported = false;
-constexpr bool kCubeStorageSupported        = false;
-#else
-constexpr bool kCubeLevel0ReadbackSupported = true;
-constexpr bool kCubeStorageSupported        = true;
-#endif
+// plan_runtimerenderer.md RTR-P9-4: evaluated at runtime, so these describe the ACTIVE renderer
+// rather than the build default.
+//
+// FINDING while converting this, preserved rather than fixed here: PORTABLEGL was silently NOT in
+// the list below. The preceding OPENVG explanation was a `//` comment whose last line ended in a
+// backslash, so the preprocessor continued the COMMENT onto the following
+// `defined(CNA_RENDERER_PORTABLEGL)` line and swallowed it -- verified with a minimal preprocessor
+// case. That made CubeStorageSupported() true under PORTABLEGL, claiming cube storage this CPU
+// software renderer may well not have.
+//
+// The runtime form has no line continuations, so the trap cannot recur; PortableGL is left OUT to
+// reproduce today's behaviour exactly, because deciding whether it belongs in that set is a
+// question about that renderer, not about this conversion. Answering it needs a single-renderer
+// PORTABLEGL run of this suite.
+[[nodiscard]] inline bool CubeStorageSupported()
+{
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi, Blend2D, OpenVg);
+}
 
-// Readback above level 0 is a separate question from readback at level 0, and the two constants
-// above deliberately only answer the latter -- their names say so. OpenGL ES 1.1 reads a cube face
-// back by attaching it to a framebuffer, and GL_OES_framebuffer_object requires an attached
-// texture's level to be 0, so no mip level above 0 can be read there however much storage exists.
-#if defined(CNA_RENDERER_OPENGLES1)
-constexpr bool kCubeMipReadbackSupported = false;
-#else
-constexpr bool kCubeMipReadbackSupported = kCubeLevel0ReadbackSupported;
-#endif
+/// Level-0 readback and storage are the same set: a renderer either owns cube pixels or it does not.
+[[nodiscard]] inline bool CubeLevel0ReadbackSupported() { return CubeStorageSupported(); }
+
+/// Readback ABOVE level 0 is a separate question. OpenGL ES 1.1 reads a cube face back by attaching
+/// it to a framebuffer, and GL_OES_framebuffer_object requires the attached level to be 0, so no mip
+/// level above 0 can be read there however much storage exists.
+[[nodiscard]] inline bool CubeMipReadbackSupported()
+{
+    return !CNA_RENDERER_IS(OpenGLES1) && CubeLevel0ReadbackSupported();
+}
 
 /// Runs one TextureCube::SetData call and asserts REMED-GFX-135's contract for this renderer:
 /// it either completes, or it refuses with System::NotSupportedException. Never both, never
@@ -109,7 +116,7 @@ constexpr bool kCubeMipReadbackSupported = kCubeLevel0ReadbackSupported;
 template <typename Fn>
 void ExpectUploadStoredOrRefused(Fn&& upload)
 {
-    if (kCubeStorageSupported)
+    if (CubeStorageSupported())
         EXPECT_NO_THROW(upload());
     else
         EXPECT_THROW(upload(), System::NotSupportedException);
@@ -216,7 +223,7 @@ TEST_F(TextureCubeTest, SetDataExactElementCountStoresOrRefusesDeterministically
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, first.data(), 4); });
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, second.data(), 0, 4); });
 
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, got.data(), 4));
@@ -277,7 +284,7 @@ TEST_F(TextureCubeTest, SetDataRectWithinBoundsStoresOnlyThatTexel)
     const Rectangle rect(0, 0, 1, 1);
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1); });
 
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, got.data(), 4));
@@ -313,14 +320,14 @@ TEST_F(TextureCubeTest, SetDataNullRectAtMipLevelUsesReducedSize)
     std::vector<Color> buf(4, Color(1, 2, 3, 4));
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::PositiveX, 1, nullptr, buf.data(), 0, 4); });
 
-    if (kCubeMipReadbackSupported)
+    if (CubeMipReadbackSupported())
     {
         std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 1, nullptr, got.data(), 0, 4));
         for (const Color& c : got)
             EXPECT_EQ(c.getPackedValueProperty(), buf[0].getPackedValueProperty());
     }
-    else if (kCubeLevel0ReadbackSupported)
+    else if (CubeLevel0ReadbackSupported())
     {
         // The store above is still asserted; only reading a mip level back is unavailable, and it
         // must refuse rather than hand back undefined pixels.
@@ -397,7 +404,7 @@ TEST_F(TextureCubeTest, GetDataRectWithinBoundsReturnsUploadedTexelOrRejectsDete
     const Color sentinel(0xCD, 0xCD, 0xCD, 0xCD);
     Color buf[1] = { sentinel };
     const Rectangle rect(0, 0, 1, 1);
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::PositiveX, 0, &rect, buf, 0, 1));
         EXPECT_EQ(buf[0].getPackedValueProperty(), uploaded[0].getPackedValueProperty());
@@ -499,7 +506,7 @@ TEST_F(TextureCubeTest, SetDataAllSixValidFacesStoreIndependently)
         ExpectUploadStoredOrRefused([&] { tex.SetData(faces[f], buf.data(), 4); });
     }
 
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         for (int f = 0; f < 6; ++f)
         {
@@ -530,7 +537,7 @@ TEST_F(TextureCubeTest, SetDataNonZeroStartIndexUploadsOnlyItsOwnWindow)
                   static_cast<std::uint8_t>(25), static_cast<std::uint8_t>(180 - i));
     ExpectUploadStoredOrRefused([&] { tex.SetData(CubeMapFace::NegativeY, src.data(), 3, 4); });
 
-    if (kCubeLevel0ReadbackSupported)
+    if (CubeLevel0ReadbackSupported())
     {
         std::vector<Color> got(4, Color(0xCD, 0xCD, 0xCD, 0xCD));
         ASSERT_NO_THROW(tex.GetData(CubeMapFace::NegativeY, got.data(), 4));
@@ -566,7 +573,7 @@ TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
                               static_cast<int>(src.size())); });
     }
 
-    if (!kCubeLevel0ReadbackSupported) return;
+    if (!CubeLevel0ReadbackSupported()) return;
 
     // Read back in reverse, so a renderer that kept only the LAST write cannot pass either.
     for (int level = levels - 1; level >= 0; --level)
@@ -574,7 +581,7 @@ TEST_F(TextureCubeTest, EveryDeclaredMipLevelStoresItsOwnContent)
         // A renderer that stores the whole chain but can only read the base level back still has
         // its level-0 content verified; the levels it cannot read are skipped rather than
         // asserted away.
-        if (!kCubeMipReadbackSupported && level != 0) continue;
+        if (!CubeMipReadbackSupported() && level != 0) continue;
         const int dim = 8 >> level;
         const Color expected(static_cast<std::uint8_t>(30 + level * 50),
                              static_cast<std::uint8_t>(200 - level * 40),
@@ -823,7 +830,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesSizeFormatAndLevelCount)
     // REMED-GFX-135: DDSFromStreamEXT decodes on the CPU and then uploads every face through
     // SetData, which on a renderer with no cube storage is now a deterministic refusal instead of a
     // silent discard -- so the whole load fails rather than returning a TextureCube holding nothing.
-    if (!kCubeStorageSupported)
+    if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
         return;
@@ -852,7 +859,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
 
     // REMED-GFX-135: see the sibling test above -- a renderer that cannot store a cube face now
     // fails the load outright rather than handing back an empty resource.
-    if (!kCubeStorageSupported)
+    if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)TextureCube::DDSFromStreamEXT(gd, stream), System::NotSupportedException);
         return;
@@ -878,7 +885,7 @@ TEST_F(TextureCubeTest, DDSFromStreamEXTDecodesAllSixFacesWithDistinctColours)
         // cube face back, and the deterministic rejection (destination untouched) where it cannot.
         const Color sentinel(0xA5, 0xA5, 0xA5, 0xA5);
         std::vector<Color> got(16, sentinel);
-        if (kCubeLevel0ReadbackSupported)
+        if (CubeLevel0ReadbackSupported())
         {
             ASSERT_NO_THROW(tex.GetData(faces[i], got.data(), 16));
             EXPECT_EQ(got[0].getRProperty(), expected[i].getRProperty()) << "face " << i;

@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MS-PL
 
 #include <gtest/gtest.h>
+
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -358,110 +363,146 @@ protected:
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, NormalizedByte4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::NormalizedByte4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Bgra5551Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Bgra5551), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, SingleThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Single), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Vector4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Vector4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfSingleThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfSingle), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector2Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector2), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HalfVector4Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HalfVector4), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, HdrBlendableThrows)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::HdrBlendable), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba1010102Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba1010102), std::runtime_error);
+    }
 }
 
 TEST_F(UnsupportedFormatConstructionTest, Rgba64Throws)
 {
-#ifdef CNA_RENDERER_SKIA
-    EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
-#else
-    EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
-#endif
+    if (CNA_RENDERER_IS(Skia))
+    {
+        EXPECT_NO_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64));
+    }
+    else
+    {
+        EXPECT_THROW(Texture2D(gd, 2, 2, false, SurfaceFormat::Rgba64), std::runtime_error);
+    }
 }
 
 // Task 290: exhaustive sweep over every SurfaceFormat value. This stays correct automatically if
@@ -500,8 +541,11 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
 
     for (SurfaceFormat format : kAllFormats)
     {
+        // plan_runtimerenderer.md RTR-P9-4: the Skia-promoted format list, evaluated at runtime so
+        // this assertion describes the ACTIVE renderer rather than the build default.
+        const bool skia = CNA_RENDERER_IS(Skia);
         const bool supported = format == SurfaceFormat::Color
-#ifdef CNA_RENDERER_SKIA
+            || (skia && (false
             || format == SurfaceFormat::Bgr565
             || format == SurfaceFormat::Bgra5551
             || format == SurfaceFormat::Bgra4444
@@ -522,7 +566,7 @@ TEST_F(UnsupportedFormatConstructionTest, EverySurfaceFormatEitherWorksOrThrowsC
             || format == SurfaceFormat::NormalizedByte2
             || format == SurfaceFormat::NormalizedByte4
             || format == SurfaceFormat::HdrBlendable
-#endif
+            ))
             ;
         if (supported)
         {
