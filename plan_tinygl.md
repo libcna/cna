@@ -36,7 +36,7 @@ Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
 Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, while Windows/MSVC
 x86_64 configures successfully and is still working through portability debt in the pinned
 `sharp-runtime`, before CNA or the TinyGL tests are compiled. Each cycle advances through a
-*different* error class, not a repeat of one: build step 37 → 55 → 91 of 596 so far.
+*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 of 596 so far.
 
 ## Implemented
 
@@ -182,9 +182,9 @@ portability debt in the shared `sharp-runtime`, not a TinyGL rendering-contract 
 ### Repositories and pushed heads
 
 - CNA: `/rv/data/development/github.com/openeggbert/cnanext`, branch `next`, pushed head
-  `9ad2194d9` plus the commit carrying this plan update and the pin below.
+  `b7a9cb532` plus the commit carrying this plan update.
 - SharpRuntime: `/rv/data/development/github.com/openeggbert/sharp-runtime`, branch `develop`, pushed
-  head `498a130460768312c4ce72aa153253254aa25d22`. The user explicitly authorized direct pushes to
+  head `062b9286a0ffc26a777f1a86d4dd727fde4c4abb`. The user explicitly authorized direct pushes to
   `sharp-runtime/develop` for this work.
 - `.github/workflows/tinygl-cross-platform-ci.yml` pins that complete SharpRuntime SHA and TinyGL
   SHA `36a7987e7bebfda19615ea33341b1cc0ff9c3b13`; do not replace either pin with a moving branch.
@@ -226,10 +226,45 @@ executables, pushed to `develop`, then pinned by its full SHA in the workflow.
 | `3ad2dd90` | `TimeSpan.cpp` C4996, deprecated `std::sscanf` (step 37/596) | `sscanf_s` on MSVC only |
 | `4df333e6` | `Calendar.hpp` C4244 (step 55/596), plus three more found locally | see below |
 | `707a5b9b` | `IdnMapping.cpp` C2015, UTF-8 `char32_t` literals read in the host code page | MSVC compiles with `/utf-8` |
-| `498a1304` | `FileSystemInfo.cpp` C2039/C3861, `file_clock::to_sys`/`from_sys` absent (step 91/596) | `requires`-detected direct members, `std::chrono::clock_cast` otherwise |
+| `498a1304` | `FileSystemInfo.cpp` C2039/C3861, `file_clock::to_sys`/`from_sys` absent (step 91/596) | *superseded — see below* |
+| `391563f1` | the above fix broke the green macOS job | preprocessor split on `_MSVC_STL_VERSION` |
+| `062b9286` | `Socket.cpp`/`TcpClient.cpp` C2589/C4003, `windows.h` `min`/`max` macros (step 154/596) | `NOMINMAX`, plus two Winsock narrowings CI had not yet reached |
 
-Matching CNA pin commits: `1faefcd4b`, `3d5303410`, `9ad2194d9`, and the commit carrying this
-update. Linux/GCC x86_64 and macOS/AppleClang arm64 passed 14/14 in every one of these runs.
+Matching CNA pin commits: `1faefcd4b`, `3d5303410`, `9ad2194d9`, `5e4457e27`, `4dd97692c`,
+`b7a9cb532`. Linux/GCC x86_64 and macOS/AppleClang arm64 passed 14/14 in every one of these runs
+except the `498a1304` cycle, which is the cautionary one: a `requires`-based detection of
+`file_clock::to_sys` looked portable and broke the previously green macOS job. Microsoft's STL
+*diagnoses* that requires-expression rather than evaluating it to false, because `file_clock` is
+not a dependent type there, and Apple's libc++ does not declare `std::chrono::clock_cast` at all,
+so naming it even in a discarded `if constexpr` branch fails at definition time. Only text the
+preprocessor removes is safe across these three libraries.
+
+**Two local censuses replace most CI round-trips. Use them before every push.** Neither needs a
+build directory; both are `-fsyntax-only` over `modules/*/src/**.cpp` with
+`-I` for each `modules/*/include` and `-isystem vendor`:
+
+1. *Host census*, for the `/W4` diagnostics GCC does not emit:
+   `clang++ -std=c++23 -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion -Wshadow -Wshadow-all`.
+2. *Windows-branch census*, the more valuable one, because until 2026-08-15 no local compiler had
+   ever built this repository's `_WIN32` code at all:
+   `clang++ --target=x86_64-w64-mingw32 -std=c++23 -fsyntax-only -Wshorten-64-to-32
+   -Wfloat-conversion -Wshadow -Wunused-parameter -Wunused-variable`. MinGW-w64 GCC 14 and its
+   headers are installed on this machine, and clang targets them directly.
+
+Census 2 reproduced exactly the four `TcpClient.cpp` lines MSVC named — validate a detector that
+way before trusting its silence — and then found four more in `NetworkStream.cpp` and
+`UdpClient.cpp` that CI had not reached. Both censuses are clean as of `062b9286`: zero errors
+(other than `zlib.h`, which only CI's vcpkg provides) and zero warnings. What they cannot see:
+MSVC-STL-only strictness like the `file_clock` case, `windows.h` macro collisions (MinGW's headers
+do not define `min`/`max` the same way), and C4127.
+
+**Watch item, not yet a failure.** The Windows-target census rejects `CNA::Internal::JsonValue`
+(`modules/content/include/CNA/Internal/Json.hpp:37`): its `std::vector<std::pair<std::string,
+JsonValue>>` member instantiates `~vector` while `JsonValue` is still incomplete. GCC and
+clang/libc++ accept it, clang/libstdc++ does not, and MSVC is unknown — Windows has not compiled
+any CNA translation unit yet. If MSVC rejects it, the fix is a user-declared destructor defined
+out of line in a `.cpp`, so the implicit one is not instantiated at class-definition time. Do not
+change it speculatively: the header is included widely and a rebuild is expensive.
 
 The `4df333e6` cycle bundled four fixes because they were found *without* CI: compiling all 217
 SharpRuntime translation units with `clang++ -fsyntax-only -Wshorten-64-to-32 -Wfloat-conversion
@@ -253,8 +288,9 @@ permission. A pushed change to the watched workflow/source paths starts the matr
 
 ### Work remaining
 
-1. Watch the run triggered by the pin of SharpRuntime `498a1304`. If MSVC exposes the next
+1. Watch the run triggered by the pin of SharpRuntime `062b9286`. If MSVC exposes the next
    portability error, repeat the cycle: focused fix, no weakened warnings, no `develop` pin.
+   Run both censuses above first -- they are what turned three separate cycles into one.
 2. In SharpRuntime, build with at most two jobs, run the relevant focused tests, then run the full
    build and `scripts/run_component_tests.sh build`. Require zero warnings and all 16,344+ checks.
    Commit only the relevant files and push the completed fix to `develop`.
