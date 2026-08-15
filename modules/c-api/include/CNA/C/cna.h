@@ -60,5 +60,6 @@
 #include "CNA/C/sensors.h"
 #include "CNA/C/devices.h"
 #include "CNA/C/runtime_components.h"
+#include "CNA/C/runtime_window.h"
 
 #endif

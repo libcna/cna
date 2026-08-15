@@ -78,8 +78,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > backend, and `CBIND-037E1` opens the runtime module with the component model: components of both
 > kinds built from a C callback set, the game's component collection with both change events, and a
 > named-identity view of the service container, and `CBIND-037E2` adds the game's own state, frame
-> control, events, launch parameters, framework pump and title content. The
-> generated inventory currently records 5,154 implemented, 34 partial, 993 planned and 234
+> control, events, launch parameters, framework pump and title content, and `CBIND-037E3` adds the
+> game window with its state, metrics and events. The
+> generated inventory currently records 5,176 implemented, 34 partial, 958 planned and 247
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

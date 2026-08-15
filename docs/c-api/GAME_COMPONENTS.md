@@ -104,3 +104,28 @@ open stream. This ABI has no stream handle for title content, and a title asset 
 incremental reads are the deliberate omission. The title path is process-wide, exactly as
 canonically, and a missing file reports `CNA_RESULT_IO` rather than surfacing the canonical plain
 runtime error as an internal failure.
+
+## The window, and the one-per-game question
+
+Every `cna_game_window_*` route addresses the game handle. That is the **fourth** time this ABI has
+answered the same question the same way — after the display metrics, the component collection and the
+service container — and the reason is always the reason: a game owns exactly one of these, so a
+handle would add a lifetime to track and nothing to gain.
+
+Two canonical shapes collapse into one route each. The platform-handle property and the
+native-window accessor answer the same pointer, so there is one
+`cna_game_window_get_native_handle_ext`. The name-only screen-device-change overload is the sized one
+with the current client size, so there is one `cna_game_window_end_screen_device_change` and a
+non-positive size means "keep it".
+
+**A window state change is a request to the platform.** Resizing, borderlessness, minimize, restore
+and the screen-device change all report `CNA_RESULT_PLATFORM` when the platform refuses — which a
+headless video driver does for a window it never really showed. A session with no native window at
+all accepts them and does nothing, which is the canonical behavior. Both answers are correct, and a
+caller that treats either as fatal will be wrong on some machine.
+
+The window's protected hooks are **not** mapped, and that is the same test the component model
+applied with the opposite result: this ABI supplies the derived class for a component, so a
+component's protected hooks are callbacks; it does not derive the window, so the window's are out of
+reach. The deciding question is never "is it protected" — it is "does this ABI have a derived class
+to hang it on".

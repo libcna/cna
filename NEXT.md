@@ -824,7 +824,27 @@
 > **whole**, because this ABI has no stream handle for it, and incremental reads are the omission.
 > The inventory is now 5,154 implemented, 34 partial, 993 planned and 234 N/A; all four trees green
 > at 64/64, ASan+UBSan clean.
-> **Next: CBIND-037E3**, the 33-row game-window slice.
+> CBIND-037E3 then adds the window — 35 rows, two more than the plan's estimate. The one-per-game
+> question is answered the **fourth** time the same way: every `cna_game_window_*` route addresses
+> the game handle, as the display metrics, the component collection and the service container already
+> do, because a game owns exactly one of each and a handle would add a lifetime to track for nothing.
+> Two canonical shapes collapse into one route each — the platform-handle property and the
+> native-window accessor answer the same pointer, and the name-only screen-device-change overload is
+> the sized one with the current client size, so a non-positive size means keep it.
+>
+> The slice found a result code this ABI had not been using. **A window state change is a request to
+> the platform**, and one the platform refuses is neither an argument fault nor an internal failure:
+> it is `CNA_RESULT_PLATFORM`. A dummy video driver refuses to minimize a window it never really
+> showed, which is why this was the one slice whose first green run was tree-dependent — headless
+> passed, `sdlrenderer` failed, and the difference was a real answer rather than a flaky test.
+>
+> The window's protected hooks are not mapped, by the same test `CBIND-037E1` applied with the
+> opposite result: this ABI supplies the derived class for a component and does not derive the
+> window. The deciding question is never "is it protected" — it is "does this ABI have a derived
+> class to hang it on". The inventory is now 5,176 implemented, 34 partial, 958 planned and 247 N/A;
+> all four trees green at 64/64, ASan+UBSan clean.
+> **Next: CBIND-037E4**, the 80-row graphics-device-manager slice, after which only `CBIND-037E2b`'s
+> three content-manager rows remain in the runtime module.
 >
 > Two findings from reading the canonical source, neither fixed here. `ExitingEventArgs` exists and
 > **nothing ever constructs or delivers it**: `Game::Exiting` is declared with the plain

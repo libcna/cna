@@ -5116,6 +5116,54 @@
       "tests": "`RuntimeGameSmoke.c` reads the path, points the title at the working directory, writes a file and reads it back byte-for-byte, covers the buffer-too-small case with no partial write, asserts a missing file is an I/O failure, and restores the original path",
       "status": "implemented",
       "task": "CBIND-037E2"
+    },
+    {
+      "id": "game-window-accessor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::getWindowProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no accessor of its own: a game owns exactly one window, so every `cna_game_window_*` route addresses it from the game handle. That is the **fourth** time this ABI answers the one-per-game question the same way, after the display metrics, the component collection and the service container",
+      "tests": "covered by `RuntimeGameSmoke.c`, which drives the whole window surface through the game handle",
+      "status": "implemented",
+      "task": "CBIND-037E3"
+    },
+    {
+      "id": "game-window",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow(::(ClientSizeChanged|OrientationChanged|ScreenDeviceNameChanged|getAllowUserResizingProperty|setAllowUserResizingProperty|getClientBoundsProperty|getCurrentOrientationProperty|getHandleProperty|GetNativeSdlWindowEXT|getScreenDeviceNameProperty|getTitleProperty|getIsBorderlessEXTProperty|setIsBorderlessEXTProperty|MinimizeEXT|RestoreEXT|BeginScreenDeviceChange|EndScreenDeviceChange|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "event",
+        "method"
+      ],
+      "mapping": "`cna_game_window_*` routes on the game handle: the resizing pair, the client bounds, the current orientation as the existing `CNA_DisplayOrientation` identity, the display-name and title count/copy pairs, the borderless pair, minimize and restore, the screen-device-change bracket, a type-name pair and `cna_game_window_subscribe` for all three events. Two canonical shapes collapse: the platform handle property and the native-window accessor answer the **same pointer**, so C has one route, and the name-only screen-device-change overload is the sized one with the current client size, so a non-positive size means keep it. The title is set with `cna_game_set_window_title`, which this ABI has had since its first release. A window registration is released by `cna_game_unsubscribe`: it is the same kind of thing as a game registration. Every window state change is a **request to the platform**: one the platform refuses reports `CNA_RESULT_PLATFORM` rather than an internal failure, which is what a headless video driver answers for a window it never really showed",
+      "tests": "`RuntimeGameSmoke.c` round-trips the resizing and borderless flags, reads the bounds, orientation and native handle, sets and reads the title back with its buffer-too-small case, checks the exact type name, brackets a screen-device change both ways, exercises minimize and restore — which a windowless session accepts and ignores while a dummy-driver window refuses at the platform level, and both answers are accepted as correct — and attaches and detaches all three events with the undefined-identity and null-handler refusals",
+      "status": "implemented",
+      "task": "CBIND-037E3"
+    },
+    {
+      "id": "game-window-lifetime-and-aliases",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::(GameWindow|~GameWindow|String|intcs)$",
+      "kinds": [
+        "constructor",
+        "destructor",
+        "alias"
+      ],
+      "mapping": "No C mapping: the game creates and destroys its one window, including the constructor that adopts a platform window, and the two type aliases are C++ spellings of a UTF-8 string and a 32-bit integer, which C already has",
+      "tests": "Doxygen declaration inventory; no callable native operation exists for C",
+      "status": "not-applicable",
+      "task": "CBIND-037E3"
+    },
+    {
+      "id": "game-window-protected-hooks",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::(OnActivated|OnClientSizeChanged|OnDeactivated|OnOrientationChanged|OnPaint|OnScreenDeviceNameChanged|SetSupportedOrientations|SetTitle)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: these are the window's protected raise points and its derived-class hooks, and **this ABI has no derived window** — the game creates a plain one. That is the same test `CBIND-037E1` applied to a component's protected members and reached the opposite answer with: a component's hooks are mapped because this ABI supplies the derived class, and a window's are not because it does not",
+      "tests": "Doxygen declaration inventory; the observable half is the window event coverage in `RuntimeGameSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E3"
     }
   ]
 }

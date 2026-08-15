@@ -356,6 +356,132 @@ static int validate_events(const CNA_Handle game, EventState* const exiting)
         exiting->calls >= 0;
 }
 
+/* A window state change is a request to the platform, and a platform that cannot honour it says so:
+   a headless video driver refuses to minimize a window it never really showed, which is a platform
+   failure rather than a fault in the call. Both answers are correct, so both are accepted here. */
+static int accepted_or_refused_by_platform(const CNA_Result result)
+{
+    return result == CNA_RESULT_SUCCESS || result == CNA_RESULT_PLATFORM;
+}
+
+/* A game owns exactly one window, so every window route addresses the game handle -- the fourth time
+   this ABI answers the one-per-game question the same way. */
+static int validate_window(const CNA_Handle game)
+{
+    CNA_GameEventRegistrationHandle client_size = CNA_INVALID_HANDLE;
+    CNA_GameEventRegistrationHandle orientation = CNA_INVALID_HANDLE;
+    CNA_GameEventRegistrationHandle screen_name = CNA_INVALID_HANDLE;
+    CNA_GameEventRegistrationHandle rejected = CNA_INVALID_HANDLE;
+    CNA_DisplayOrientation display_orientation = UINT32_C(99);
+    CNA_Rectangle bounds;
+    EventState events = {0};
+    CNA_Bool flag = UINT8_C(9);
+    uint64_t bytes = UINT64_C(9);
+    uint64_t native = UINT64_C(1);
+    char text[256];
+    char device_name[256];
+
+    if (cna_game_window_get_allow_user_resizing(game, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE) ||
+        !accepted_or_refused_by_platform(
+            cna_game_window_set_allow_user_resizing(game, CNA_TRUE)) ||
+        !accepted_or_refused_by_platform(
+            cna_game_window_set_allow_user_resizing(game, CNA_FALSE)) ||
+        cna_game_window_get_allow_user_resizing(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    memset(&bounds, 9, sizeof(bounds));
+    if (cna_game_window_get_client_bounds(game, &bounds) != CNA_RESULT_SUCCESS ||
+        bounds.width < 0 || bounds.height < 0 ||
+        cna_game_window_get_current_orientation(game, &display_orientation) != CNA_RESULT_SUCCESS ||
+        cna_game_window_get_native_handle_ext(game, &native) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The title round-trips through the route this ABI has had since its first release. */
+    memset(text, 0, sizeof(text));
+    if (cna_game_set_window_title(game, view("C API window smoke")) != CNA_RESULT_SUCCESS ||
+        cna_game_window_get_title_size(game, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes != UINT64_C(18) ||
+        cna_game_window_copy_title(game, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "C API window smoke") != 0 ||
+        cna_game_window_copy_title(game, text, UINT64_C(2), &bytes) !=
+            CNA_RESULT_BUFFER_TOO_SMALL) {
+        return 0;
+    }
+    memset(device_name, 0, sizeof(device_name));
+    if (cna_game_window_get_screen_device_name_size(game, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(device_name) ||
+        cna_game_window_copy_screen_device_name(
+            game, device_name, (uint64_t)sizeof(device_name), &bytes) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    memset(text, 0, sizeof(text));
+    if (cna_game_window_get_type_name_size(game, &bytes) != CNA_RESULT_SUCCESS ||
+        cna_game_window_copy_type_name(game, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "Microsoft.Xna.Framework.GameWindow") != 0) {
+        return 0;
+    }
+    /* A session with no native window accepts every state request and does nothing, which is the
+       canonical behavior rather than a failure invented here. */
+    if (cna_game_window_get_is_borderless_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        !accepted_or_refused_by_platform(cna_game_window_set_is_borderless_ext(game, CNA_TRUE)) ||
+        !accepted_or_refused_by_platform(cna_game_window_set_is_borderless_ext(game, CNA_FALSE)) ||
+        !accepted_or_refused_by_platform(cna_game_window_minimize_ext(game)) ||
+        !accepted_or_refused_by_platform(cna_game_window_restore_ext(game))) {
+        return 0;
+    }
+    /* The canonical name-only overload is the sized one with the current client size, so a
+       non-positive size means "keep it" rather than being refused. */
+    if (cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        !accepted_or_refused_by_platform(
+            cna_game_window_end_screen_device_change(game, view(device_name), 0, 0)) ||
+        cna_game_window_begin_screen_device_change(game, CNA_FALSE) != CNA_RESULT_SUCCESS ||
+        !accepted_or_refused_by_platform(
+            cna_game_window_end_screen_device_change(game, view(device_name), 640, 480)) ||
+        !accepted_or_refused_by_platform(
+            cna_game_window_end_screen_device_change(game, view(device_name), 0, 0))) {
+        return 0;
+    }
+    if (cna_game_window_subscribe(
+            game,
+            CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED,
+            on_game_event,
+            &events,
+            &client_size) != CNA_RESULT_SUCCESS ||
+        cna_game_window_subscribe(
+            game,
+            CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED,
+            on_game_event,
+            &events,
+            &orientation) != CNA_RESULT_SUCCESS ||
+        cna_game_window_subscribe(
+            game,
+            CNA_GAME_WINDOW_EVENT_SCREEN_DEVICE_NAME_CHANGED,
+            on_game_event,
+            &events,
+            &screen_name) != CNA_RESULT_SUCCESS ||
+        cna_game_window_subscribe(
+            game,
+            CNA_GAME_WINDOW_EVENT_MAXIMUM + UINT32_C(1),
+            on_game_event,
+            &events,
+            &rejected) != CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE ||
+        cna_game_window_subscribe(
+            game, CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED, 0, &events, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* A window registration is released by the game's own unsubscribe route: they are the same kind
+       of thing and one route releases both. */
+    return cna_game_unsubscribe(client_size) == CNA_RESULT_SUCCESS &&
+        cna_game_unsubscribe(orientation) == CNA_RESULT_SUCCESS &&
+        cna_game_unsubscribe(screen_name) == CNA_RESULT_SUCCESS &&
+        cna_game_unsubscribe(screen_name) == CNA_RESULT_INVALID_HANDLE;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -366,7 +492,7 @@ static CNA_Result on_update(
     GameSmokeState* const state = (GameSmokeState*)context;
     EventState exiting = {0};
     if (game_time == 0 || !validate_properties(game) || !validate_launch_parameters(game) ||
-        !validate_title(game) || !validate_events(game, &exiting)) {
+        !validate_title(game) || !validate_events(game, &exiting) || !validate_window(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;

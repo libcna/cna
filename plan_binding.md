@@ -375,7 +375,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037E1 | 93 | Establish the component model and the service container | ✅ | `runtime_components.h` and `CnaCApiGameComponents.cpp` map `IGameComponent`, `IUpdateable`, `IDrawable`, `GameComponent`, `DrawableGameComponent`, the component collection with its event argument, and `GameServiceContainer`. This is the slice where the ABI's direction reverses: **a component is behavior the caller supplies**, and since C cannot implement a C++ interface, a component is a callback set this ABI wraps in a derived object. That derivation is also why the canonical **protected** content hooks are mapped here while a sensor's protected members were not — the deciding question is whether this ABI has a derived class to hang them on. The service container is the one canonical type C cannot fully have: it is keyed by C++ type identity, so lookup and removal are exposed over a named-identity subset (recorded `partial`) and **registration has no C form at all** (recorded `not-applicable`). Canonical behaviors reported rather than corrected: the comparison is inverted, a second disposal is a no-op, adding the same component twice is allowed, and a missing component answers -1. One deliberate addition with no canonical counterpart: releasing a component removes it from the collection first, because a handle-based ABI must not leave the runtime holding a released pointer. Strict-C `RuntimeComponentsSmoke.c`; green in all four trees (63/63) and under ASan+UBSan with leak detection on. |
 | CBIND-037E2 | 57 | Complete the game object and the frame | ✅ | The rest of `Game`'s own state and frame control, its four events, `GameTime`'s constructors, `LaunchParameters`, `FrameworkDispatcher`, `TitleContainer` and `TitleLocation`. The slice's real decision is the five canonical frame hooks: they arrive as a **second** table, `CNA_GameFrameHooks`, rather than as new members on the published `CNA_GameCallbacks`. Appending would have been ABI-safe — the structure is size-prefixed exactly so it can grow — but it leaves every positional initializer a consumer has already written incomplete, which a strict build rejects; that was tried first and reverted, and the finding belongs in `ABI_VERSIONING.md`'s eventual growth section. One rule extended: `cna_game_tick` is **refused from inside a lifecycle callback**, joining running and destroying the game, because a frame step called from within a frame re-enters the loop it is part of. Canonical behaviors preserved: launch parameters split on a **colon**, drop what they cannot parse and keep the first occurrence of a name; the title path is process-wide; and a missing title file's plain runtime error is reported as I/O rather than as an internal failure. One deliberate narrowing: title content is read **whole**, because this ABI has no stream handle for it. Two rows are deliberately left: the content-manager property to `CBIND-037E2b` and the window accessors to `CBIND-037E3`. Strict-C `RuntimeGameSmoke.c`; green in all four trees (64/64) and under ASan+UBSan with leak detection on. |
 | CBIND-037E2b | 3 | Map the game's content manager | ⬜ | Map `Game::getContentProperty` (both overloads) and `setContentProperty`. The blocker `CBIND-037E2` stopped at is a contract, not a signature: the content module already owns `CNA_Handle` content managers with an owned-resource counter, and the game's own manager is **not** owned by C — it needs a borrowed handle the game-destroy path invalidates, like the borrowed graphics device, and `cna_content_manager_destroy` must refuse one. Settle that contract first, in `OWNERSHIP.md`, then map the three rows. Note the canonical setter takes a `const ContentManager&` and copies it, which is worth checking before deciding what the C setter takes. |
-| CBIND-037E3 | 31 | Complete the game window | ⬜ | Map `GameWindow` and its two type aliases. Expect a decision this ABI has so far avoided: whether a window earns a handle of its own or stays addressed through the game, as `CBIND-037D3`'s display queries and `CBIND-037E1`'s collection routes both chose. Whichever way it goes, the reason belongs in the docs, because the same question returns for every one-per-game object. |
+| CBIND-037E3 | 35 | Complete the game window | ✅ | `runtime_window.h` and the window half of `CnaCApiGameProperties.cpp` map `GameWindow`, its two aliases and `Game::getWindowProperty`. The one-per-game question is answered the **fourth** time the same way — every route addresses the game handle — and the reason is written down beside the other three. Two canonical shapes collapse into one route each: the platform-handle property and the native-window accessor answer the same pointer, and the name-only screen-device-change overload is the sized one with the current client size, so a non-positive size means keep it. The slice found a result code this ABI had not been using: **a window state change is a request to the platform**, and one the platform refuses reports `CNA_RESULT_PLATFORM` rather than an internal failure — which is exactly what a dummy video driver answers for minimize on a window it never really showed, and what made this the one slice whose first green run was tree-dependent. The window's protected hooks are not mapped, by the same test `E1` applied with the opposite result: this ABI derives a component and does not derive a window. Strict-C coverage in `RuntimeGameSmoke.c`; green in all four trees (64/64), with and without a real SDL window, and under ASan+UBSan with leak detection on. |
 | CBIND-037E4 | 80 | Complete the graphics device manager | ⬜ | Map `GraphicsDeviceManager`, `GraphicsDeviceInformation`, `IGraphicsDeviceManager`, `PreparingDeviceSettingsEventArgs` and `PresentationMode`. Expect heavy overlap with `CBIND-034`'s graphics-device surface and with `CBIND-037E1`'s service identities — the manager is what registers both services — so check before naming. `IGraphicsDeviceManager` is an interface a caller could in principle implement, which raises the same question `CBIND-037E1` answered for components; the answer may differ, since the runtime creates the manager itself. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
@@ -1010,7 +1010,10 @@ events, deciding that the five canonical frame hooks arrive as a **second** call
 than as new members on the published one — appending was tried, and it leaves every positional
 initializer a consumer has already written incomplete — and extending the callback-reentrancy rule to
 the frame step. The snapshot is now 5,154 implemented, 34 partial, 993 planned and 234 not
-applicable.
+applicable. CBIND-037E3 then adds the window, answering the one-per-game question the fourth time the
+same way and finding the result code a window state change actually needs: a platform that refuses is
+neither an argument fault nor an internal one. The snapshot is now 5,176 implemented, 34 partial, 958
+planned and 247 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1019,24 +1022,26 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037E2` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037E3` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037E3`, the game window — **33 rows**: `GameWindow`, its two type aliases
-  and `Game::getWindowProperty` (both overloads, deliberately left by `E2`). `E1` and `E2` are done,
-  so `runtime_components.h`, `CnaCApiGameComponents.cpp`, `CnaCApiGameProperties.cpp`,
-  `RuntimeComponentsSmoke.c` and `RuntimeGameSmoke.c` exist, and `CnaCApiRuntimeDetail.hpp` already
-  exposes `GetGameWindow` — added by `CBIND-037D3` for the display queries and still the only way in.
+- **Next task:** `CBIND-037E4`, the graphics device manager — **80 rows**: `GraphicsDeviceManager`,
+  `GraphicsDeviceInformation`, `IGraphicsDeviceManager`, `PreparingDeviceSettingsEventArgs` and
+  `PresentationMode`. After it, only `CBIND-037E2b` (3 rows, the content-manager property) remains in
+  the runtime module.
 
-  Three things are already known and should not be rediscovered: this ABI has answered the
-  one-per-game question the same way three times now — the display queries, the component collection
-  and the service container all address the game handle rather than earning a handle of their own —
-  so the window should follow unless something about it genuinely differs, and the reason belongs in
-  `GAME_COMPONENTS.md` beside the others; `cna_game_set_window_title` already exists from
-  `CBIND-032`, so check every row against it before naming a route; and a headless tree has a window
-  object but no native window, so expect the same zero-and-empty answers `cna_display_info_*` already
-  documents.
+  Four things are already known and should not be rediscovered: the manager is what **registers both
+  services** `CBIND-037E1` named, so its identities already exist and its presence is already
+  observable; `CBIND-034` mapped a large part of the device surface through
+  `cna_graphics_device_*`, so check every row against it before naming a route — the manager's
+  preferred-format and back-buffer properties are the ones most likely to overlap;
+  `IGraphicsDeviceManager` is an interface a caller could in principle implement, which is the
+  question `CBIND-037E1` answered for components — but the runtime creates the manager itself, so
+  the answer may well be the opposite, and whichever it is belongs in `GAME_COMPONENTS.md` with the
+  other three; and `CBIND-037E3` established that a window state change reports
+  `CNA_RESULT_PLATFORM` when the platform refuses, which is the code a failed device reset or
+  full-screen toggle should use too.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

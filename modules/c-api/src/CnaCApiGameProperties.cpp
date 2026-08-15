@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 
-#include "CNA/C/runtime.h"
+#include "CNA/C/runtime_window.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/FrameworkDispatcher.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
+#include "Microsoft/Xna/Framework/GameWindow.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
 #include "Microsoft/Xna/Framework/LaunchParameters.hpp"
 #include "Microsoft/Xna/Framework/TitleContainer.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
@@ -766,6 +768,378 @@ CNA_Result cna_title_container_read_ext(
                     CNA_ERROR_CATEGORY_IO,
                     "The title file could not be read completely.");
             }
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result BorrowWindow(
+    const CNA_Handle gameHandle,
+    Microsoft::Xna::Framework::GameWindow** const outWindow)
+{
+    return CNA::C::Detail::GetGameWindow(gameHandle, outWindow);
+}
+
+// Every canonical window state change reports an SDL failure as a plain runtime error naming the
+// call. That is the platform refusing, not an internal fault, and the route says so: a headless
+// video driver refuses to minimize a window it never really showed.
+template<typename TAction>
+[[nodiscard]] CNA_Result RequestWindowChange(TAction&& action)
+{
+    try {
+        action();
+    } catch (const std::runtime_error& exception) {
+        return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_game_window_get_allow_user_resizing(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outAllowed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outAllowed == nullptr) {
+            return InvalidInput("The resizing output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAllowed = window->getAllowUserResizingProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_set_allow_user_resizing(
+    const CNA_Handle gameHandle,
+    const CNA_Bool allowed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return RequestWindowChange([&]() { window->setAllowUserResizingProperty(allowed != CNA_FALSE); });
+    });
+}
+
+CNA_Result cna_game_window_get_client_bounds(
+    const CNA_Handle gameHandle,
+    CNA_Rectangle* const outBounds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBounds == nullptr) {
+            return InvalidInput("The client bounds output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const Microsoft::Xna::Framework::Rectangle bounds = window->getClientBoundsProperty();
+        CNA_Rectangle mapped = {};
+        mapped.x = bounds.X;
+        mapped.y = bounds.Y;
+        mapped.width = bounds.Width;
+        mapped.height = bounds.Height;
+        *outBounds = mapped;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_get_current_orientation(
+    const CNA_Handle gameHandle,
+    CNA_DisplayOrientation* const outOrientation)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outOrientation == nullptr) {
+            return InvalidInput("The orientation output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outOrientation =
+            static_cast<CNA_DisplayOrientation>(window->getCurrentOrientationProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_get_native_handle_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHandle == nullptr) {
+            return InvalidInput("The native window output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical property and the canonical native accessor answer the same pointer.
+        *outHandle = static_cast<uint64_t>(window->getHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_get_screen_device_name_size(
+    const CNA_Handle gameHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The display name size output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = window->getScreenDeviceNameProperty().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_copy_screen_device_name(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(window->getScreenDeviceNameProperty(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_game_window_get_title_size(const CNA_Handle gameHandle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The window title size output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = window->getTitleProperty().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_copy_title(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(window->getTitleProperty(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_game_window_get_is_borderless_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outBorderless)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBorderless == nullptr) {
+            return InvalidInput("The borderless output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBorderless = window->getIsBorderlessEXTProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_set_is_borderless_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool borderless)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return RequestWindowChange([&]() { window->setIsBorderlessEXTProperty(borderless != CNA_FALSE); });
+    });
+}
+
+CNA_Result cna_game_window_minimize_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return RequestWindowChange([&]() { window->MinimizeEXT(); });
+    });
+}
+
+CNA_Result cna_game_window_restore_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return RequestWindowChange([&]() { window->RestoreEXT(); });
+    });
+}
+
+CNA_Result cna_game_window_begin_screen_device_change(
+    const CNA_Handle gameHandle,
+    const CNA_Bool willBeFullScreen)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        window->BeginScreenDeviceChange(willBeFullScreen != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_end_screen_device_change(
+    const CNA_Handle gameHandle,
+    const CNA_StringView screenDeviceName,
+    const int32_t clientWidth,
+    const int32_t clientHeight)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string name;
+        if (const CNA_Result result =
+                BorrowText(screenDeviceName, "The display name is not valid UTF-8.", &name);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical name-only overload is this one with the current client size, so a caller
+        // asks for that by passing a size this ABI reads as "keep it".
+        if (clientWidth < 1 || clientHeight < 1) {
+            return RequestWindowChange([&]() { window->EndScreenDeviceChange(name); });
+        }
+        return RequestWindowChange([&]() {
+            window->EndScreenDeviceChange(
+                name,
+                static_cast<SharpRuntime::intcs>(clientWidth),
+                static_cast<SharpRuntime::intcs>(clientHeight));
+        });
+    });
+}
+
+CNA_Result cna_game_window_get_type_name_size(const CNA_Handle gameHandle, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The type-name size output is null.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = window->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_window_copy_type_name(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(window->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_game_window_subscribe(
+    const CNA_Handle gameHandle,
+    const CNA_GameWindowEvent event,
+    const CNA_GameEventCallback callback,
+    void* const context,
+    CNA_GameEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The window registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The window event callback is null.");
+        }
+        if (event > CNA_GAME_WINDOW_EVENT_MAXIMUM) {
+            return InvalidInput("The window event is not a defined identity.");
+        }
+        Microsoft::Xna::Framework::GameWindow* window = nullptr;
+        if (const CNA_Result result = BorrowWindow(gameHandle, &window);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        System::EventHandler<System::EventArgs>* source = nullptr;
+        switch (event) {
+        case CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED:
+            source = &window->ClientSizeChanged;
+            break;
+        case CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED:
+            source = &window->OrientationChanged;
+            break;
+        default:
+            source = &window->ScreenDeviceNameChanged;
+            break;
+        }
+        const auto token = source->Add(
+            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::GameEventRegistration,
+            std::static_pointer_cast<GameRegistrationBase>(
+                std::make_shared<GameRegistration>(source, token)),
+            outRegistration);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The window registration could not be created.");
         }
         return CNA_RESULT_SUCCESS;
     });

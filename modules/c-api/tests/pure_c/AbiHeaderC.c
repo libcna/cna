@@ -1260,6 +1260,13 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_GameWindowEvent) == sizeof(uint32_t) &&
+                   CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED == UINT32_C(0) &&
+                   CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED == UINT32_C(1) &&
+                   CNA_GAME_WINDOW_EVENT_SCREEN_DEVICE_NAME_CHANGED == UINT32_C(2) &&
+                   CNA_GAME_WINDOW_EVENT_MAXIMUM == UINT32_C(2),
+               "CNA game window event identities must remain stable");
+
 _Static_assert(sizeof(CNA_GameEvent) == sizeof(uint32_t) &&
                    CNA_GAME_EVENT_ACTIVATED == UINT32_C(0) &&
                    CNA_GAME_EVENT_DEACTIVATED == UINT32_C(1) &&
