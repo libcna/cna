@@ -36,7 +36,7 @@ Linux baseline has 14 CTest suites, 113 checks and 14/14 passing under
 Linux/GCC x86_64 and macOS/AppleClang arm64 pass all 14/14 suites in every run, while Windows/MSVC
 x86_64 configures successfully and is still working through portability debt in the pinned
 `sharp-runtime`, before CNA or the TinyGL tests are compiled. Each cycle advances through a
-*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 → 168 → 257 of 596 so far; all of `sharp-runtime` now compiles.
+*different* error class, not a repeat of one: build step 37 → 55 → 91 → 154 → 168 → 257 → 329 → 571 of 596 so far. All of `sharp-runtime`, all of TinyGL and all of CNA now compile on MSVC; the remaining failures are at the link stage.
 
 ## Implemented
 
@@ -267,7 +267,13 @@ way before trusting its silence — and then found four more in `NetworkStream.c
 MSVC-STL-only strictness like the `file_clock` case, `windows.h` macro collisions (MinGW's headers
 do not define `min`/`max` the same way), and C4127.
 
-**Watch item, not yet a failure.** The Windows-target census rejects `CNA::Internal::JsonValue`
+**Watch item — resolved 2026-08-15: MSVC accepts it.** Windows compiled every CNA translation
+unit, `ContentManager.cpp` included, and reached the link stage, so the incomplete-type question
+below is a clang/libstdc++ strictness difference and not a portability defect for this matrix.
+Left recorded because the census still reports it and the next reader needs to know it is a known
+false positive on that toolchain, not an unexplored risk. The original note follows.
+
+**Original watch item.** The Windows-target census rejects `CNA::Internal::JsonValue`
 (`modules/content/include/CNA/Internal/Json.hpp:37`) in 56 places across the CI closure, all one
 root cause: its `objectValue` member is a `std::vector<std::pair<std::string, JsonValue>>`, and
 `~vector` is instantiated while `JsonValue` is still incomplete. The sibling `arrayValue` is fine
