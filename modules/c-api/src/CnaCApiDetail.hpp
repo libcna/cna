@@ -18,6 +18,7 @@
 // translation unit that never throws one.
 #include "CNA/CNAException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
+#include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
@@ -133,6 +134,9 @@ enum class ObjectKind : uint32_t {
     PictureAlbumCollection = 86,
     MediaQueue = 87,
     MediaPlayerEventRegistration = 88,
+    Accelerometer = 91,
+    Gyroscope = 92,
+    SensorEventRegistration = 93,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX
@@ -146,6 +150,10 @@ struct LastError final {
     // message alone, so the firewall records it here rather than dropping it.
     bool hasJoinError = false;
     uint32_t joinError = 0U;
+    // A sensor failure carries the same kind of payload: an error id the message does not spell
+    // out, recorded here for the same reason.
+    bool hasSensorErrorId = false;
+    int32_t sensorErrorId = 0;
 };
 
 [[nodiscard]] const LastError& GetLastError() noexcept;
@@ -163,6 +171,8 @@ void SetLastError(
     std::string_view message) noexcept;
 
 void SetLastJoinError(uint32_t joinError) noexcept;
+
+void SetLastSensorErrorId(int32_t sensorErrorId) noexcept;
 
 template<typename TCallable>
 [[nodiscard]] CNA_Result CallWithExceptionBarrier(TCallable&& callable) noexcept
@@ -193,6 +203,11 @@ template<typename TCallable>
     } catch (
         const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Devices::Sensors::SensorFailedException& exception) {
+        const CNA_Result result =
+            Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+        SetLastSensorErrorId(static_cast<int32_t>(exception.getErrorIdProperty()));
+        return result;
     } catch (const Microsoft::Xna::Framework::Net::NetworkSessionJoinException& exception) {
         const CNA_Result result =
             Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());

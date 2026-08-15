@@ -670,6 +670,778 @@ CNA_C_API CNA_Result cna_motion_reading_copy_type_name(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/* ---- Sensor devices ---- */
+
+/** @brief Owned handle to one sensor event subscription. */
+typedef CNA_Handle CNA_SensorEventRegistrationHandle;
+
+/**
+ * @brief Handler invoked for a sensor event that carries no data.
+ *
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_SensorEventCallback)(void* context);
+
+/**
+ * @brief Handler invoked with a new accelerometer reading.
+ *
+ * @param reading The reading, borrowed for the duration of the call.
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_AccelerometerReadingCallback)(
+    const CNA_AccelerometerReading* reading,
+    void* context);
+
+/**
+ * @brief Handler invoked with a new gyroscope reading.
+ *
+ * @param reading The reading, borrowed for the duration of the call.
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_GyroscopeReadingCallback)(
+    const CNA_GyroscopeReading* reading,
+    void* context);
+
+/**
+ * @brief Returns the error identifier of the last sensor failure on this thread.
+ *
+ * @param out_error_id Receives the identifier the canonical exception carried.
+ * @param out_has_error_id Receives `CNA_TRUE` when the last failure on this thread was a sensor
+ *        failure carrying an identifier.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * A sensor failure's identifier is not expressible in its message, so the exception firewall records
+ * it per thread — the same treatment a network join failure already gets. Read it immediately after
+ * the failing call: the next failed call replaces it.
+ */
+CNA_C_API CNA_Result cna_sensors_get_last_error_id_ext(
+    int32_t* out_error_id,
+    CNA_Bool* out_has_error_id);
+
+/**
+ * @brief Releases a sensor event registration.
+ *
+ * @param registration Owned registration handle from any sensor subscribe route.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle failure.
+ *
+ * One route releases every sensor event, because a registration already knows which event and which
+ * sensor it came from.
+ */
+CNA_C_API CNA_Result cna_sensor_unsubscribe_ext(
+    CNA_SensorEventRegistrationHandle registration);
+
+/** @brief Owned handle to one accelerometer sensor. */
+typedef CNA_Handle CNA_AccelerometerHandle;
+
+/**
+ * @brief Reports whether this device supports an accelerometer.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_supported Receives `CNA_TRUE` when the sensor is supported.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical query is static and probes the platform. A device without the sensor is an ordinary
+ * answer of `CNA_FALSE`, which is what every verification tree reports.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_is_supported(CNA_Handle game, CNA_Bool* out_supported);
+
+/**
+ * @brief Creates an accelerometer sensor.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_sensor Receives an owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * Creation succeeds even where the sensor is unsupported; the state reports which case it is.
+ */
+CNA_C_API CNA_Result cna_accelerometer_create(CNA_Handle game, CNA_AccelerometerHandle* out_sensor);
+
+/**
+ * @brief Returns the sensor's current state.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_state Receives one `CNA_SENSOR_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_state(CNA_AccelerometerHandle sensor, CNA_SensorState* out_state);
+
+/**
+ * @brief Starts data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed or
+ *         acquisition is already started — the canonical failure carries an error id, readable with
+ *         `cna_sensors_get_last_error_id_ext`.
+ */
+CNA_C_API CNA_Result cna_accelerometer_start(CNA_AccelerometerHandle sensor);
+
+/**
+ * @brief Stops data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed or
+ *         acquisition was never started.
+ */
+CNA_C_API CNA_Result cna_accelerometer_stop(CNA_AccelerometerHandle sensor);
+
+/**
+ * @brief Disposes the sensor without releasing its handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * Disposal stops acquisition and releases the platform subsystem hold. **Disposing twice is
+ * refused** with `CNA_RESULT_INVALID_STATE`, unlike most disposables in this ABI — the canonical
+ * sensor treats a second disposal as use-after-disposal rather than a no-op, and that is reported
+ * rather than smoothed over. Every other route reports the same failure afterwards, which is how a
+ * caller observes the disposed state: the canonical disposal flag is protected, so there is no
+ * query route for it.
+ */
+CNA_C_API CNA_Result cna_accelerometer_dispose(CNA_AccelerometerHandle sensor);
+
+
+/**
+ * @brief Returns the sensor's most recent reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_reading Receives the reading.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **An unsupported sensor refuses this call** with `CNA_RESULT_INVALID_STATE` rather than
+ * answering a default, because the canonical property throws there: check
+ * `cna_accelerometer_get_is_supported` first. A supported sensor that has produced nothing yet
+ * answers the canonical default reading, which `cna_accelerometer_get_is_data_valid` tells apart
+ * from a real measurement.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_current_value(
+    CNA_AccelerometerHandle sensor,
+    CNA_AccelerometerReading* out_reading);
+
+/**
+ * @brief Reports whether the sensor's current reading is real data.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_valid Receives `CNA_TRUE` once a reading has been produced.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_is_data_valid(CNA_AccelerometerHandle sensor, CNA_Bool* out_valid);
+
+/**
+ * @brief Returns the requested interval between updates.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_ticks Receives the interval in 100-nanosecond ticks; zero means "as fast as possible".
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_time_between_updates_ticks(
+    CNA_AccelerometerHandle sensor,
+    int64_t* out_ticks);
+
+/**
+ * @brief Sets the requested interval between updates.
+ *
+ * @param sensor Owned sensor handle.
+ * @param ticks New interval in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * Setting a different value raises the interval-changed event.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_time_between_updates_ticks(
+    CNA_AccelerometerHandle sensor,
+    int64_t ticks);
+
+/**
+ * @brief Subscribes to the sensor's reading-changed event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked with each new reading.
+ * @param context Caller context passed back to the handler; may be null.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null callback or output.
+ *
+ * The canonical event carries an event-argument object wrapping the reading; C delivers the reading
+ * itself, because that is the only thing the wrapper holds. Release the registration with
+ * `cna_sensor_unsubscribe_ext`; it detaches from the sensor it was created for, which must still
+ * exist.
+ */
+CNA_C_API CNA_Result cna_accelerometer_subscribe_current_value_changed(
+    CNA_AccelerometerHandle sensor,
+    CNA_AccelerometerReadingCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+
+/**
+ * @brief Feeds the sensor a synthetic reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param x First axis value.
+ * @param y Second axis value.
+ * @param z Third axis value.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * This maps the canonical test-support injector, which exists so a caller can exercise its own
+ * event wiring on a machine with no sensor hardware — which is every machine this ABI is currently
+ * verified on. The values are **platform units**, and the reading that comes back out is in the
+ * canonical unit: an accelerometer injection in metres per second squared is reported in g, so
+ * injecting 9.80665 yields a reading of 1.
+ */
+CNA_C_API CNA_Result cna_accelerometer_inject_synthetic_update_ext(
+    CNA_AccelerometerHandle sensor,
+    float x,
+    float y,
+    float z);
+
+/**
+ * @brief Forces the sensor's started flag.
+ *
+ * @param sensor Owned sensor handle.
+ * @param started New started state.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_started_for_tests_ext(
+    CNA_AccelerometerHandle sensor,
+    CNA_Bool started);
+
+/**
+ * @brief Forces the sensor's supported flag.
+ *
+ * @param sensor Owned sensor handle.
+ * @param supported New supported state.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * This overrides the platform probe for this instance only, which is what lets a test drive the
+ * supported path on a machine without the hardware.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_supported_for_tests_ext(
+    CNA_AccelerometerHandle sensor,
+    CNA_Bool supported);
+
+/**
+ * @brief Reports whether the sensor currently holds the platform subsystem.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_held Receives `CNA_TRUE` while the hold is taken.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_subsystem_held_for_tests_ext(
+    CNA_AccelerometerHandle sensor,
+    CNA_Bool* out_held);
+
+/**
+ * @brief Registers the sensor in the started-instance list the dispatcher walks.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_register_started_instance_for_tests_ext(CNA_AccelerometerHandle sensor);
+
+/**
+ * @brief Removes the sensor from the started-instance list.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_unregister_started_instance_for_tests_ext(CNA_AccelerometerHandle sensor);
+
+/**
+ * @brief Dispatches one synthetic reading to an explicit set of sensors.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param sensors Array of sensor handles; may be null only when @p count is zero.
+ * @param count Number of handles in @p sensors.
+ * @param x First axis value.
+ * @param y Second axis value.
+ * @param z Third axis value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a nonzero
+ *         count, `CNA_RESULT_INVALID_HANDLE` when an element is not a live sensor, or a documented
+ *         handle/thread/native failure.
+ *
+ * The canonical helper takes a vector of instances; C takes an array of handles, which is the same
+ * set expressed the only way this ABI can express it.
+ */
+CNA_C_API CNA_Result cna_accelerometer_dispatch_to_instances_for_tests_ext(
+    CNA_Handle game,
+    const CNA_AccelerometerHandle* sensors,
+    uint64_t count,
+    float x,
+    float y,
+    float z);
+
+/**
+ * @brief Forces the platform event-watch registration to fail.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param should_fail `CNA_TRUE` to make the next registration fail.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * Process-wide state: set it back when the test is done.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(
+    CNA_Handle game,
+    CNA_Bool should_fail);
+
+/**
+ * @brief Returns how many exceptions the dispatcher has swallowed.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical dispatcher must not let a subscriber's exception escape into the platform event
+ * loop, so it counts them instead; this is how a caller sees that happened.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_dispatch_exception_count_for_tests_ext(
+    CNA_Handle game,
+    int32_t* out_count);
+
+/**
+ * @brief Returns the byte count of the dispatcher's last swallowed exception message.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_last_dispatch_exception_message_size_for_tests_ext(
+    CNA_Handle game,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the dispatcher's last swallowed exception message.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_copy_last_dispatch_exception_message_for_tests_ext(
+    CNA_Handle game,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a platform sensor identifier is currently connected.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param sensor_id Platform sensor identifier.
+ * @param out_connected Receives `CNA_TRUE` when that identifier is connected.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_is_sensor_connected_for_tests_ext(
+    CNA_Handle game,
+    int64_t sensor_id,
+    CNA_Bool* out_connected);
+
+/**
+ * @brief Installs a hook invoked while the sensor is being disposed.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked during disposal; null clears the hook.
+ * @param context Caller context passed back to the handler; may be null.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * The hook is a single slot rather than a subscription list, exactly as the canonical setter is, so
+ * installing a second one replaces the first. The context must outlive the sensor.
+ */
+CNA_C_API CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
+    CNA_AccelerometerHandle sensor,
+    CNA_SensorEventCallback callback,
+    void* context);
+
+/**
+ * @brief Returns the byte count of the sensor type's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_get_type_name_size(CNA_AccelerometerHandle sensor, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the sensor type's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_accelerometer_copy_type_name(
+    CNA_AccelerometerHandle sensor,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a sensor handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ *
+ * Releasing disposes the sensor if it has not been disposed already, which is what the canonical
+ * destructor does.
+ */
+CNA_C_API CNA_Result cna_accelerometer_destroy(CNA_AccelerometerHandle sensor);
+
+/** @brief Owned handle to one gyroscope sensor. */
+typedef CNA_Handle CNA_GyroscopeHandle;
+
+/**
+ * @brief Reports whether this device supports a gyroscope.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_supported Receives `CNA_TRUE` when the sensor is supported.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical query is static and probes the platform. A device without the sensor is an ordinary
+ * answer of `CNA_FALSE`, which is what every verification tree reports.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_is_supported(CNA_Handle game, CNA_Bool* out_supported);
+
+/**
+ * @brief Creates a gyroscope sensor.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_sensor Receives an owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * Creation succeeds even where the sensor is unsupported; the state reports which case it is.
+ */
+CNA_C_API CNA_Result cna_gyroscope_create(CNA_Handle game, CNA_GyroscopeHandle* out_sensor);
+
+/**
+ * @brief Returns the sensor's current state.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_state Receives one `CNA_SENSOR_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_state(CNA_GyroscopeHandle sensor, CNA_SensorState* out_state);
+
+/**
+ * @brief Starts data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed or
+ *         acquisition is already started — the canonical failure carries an error id, readable with
+ *         `cna_sensors_get_last_error_id_ext`.
+ */
+CNA_C_API CNA_Result cna_gyroscope_start(CNA_GyroscopeHandle sensor);
+
+/**
+ * @brief Stops data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed or
+ *         acquisition was never started.
+ */
+CNA_C_API CNA_Result cna_gyroscope_stop(CNA_GyroscopeHandle sensor);
+
+/**
+ * @brief Disposes the sensor without releasing its handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * Disposal stops acquisition and releases the platform subsystem hold. **Disposing twice is
+ * refused** with `CNA_RESULT_INVALID_STATE`, unlike most disposables in this ABI — the canonical
+ * sensor treats a second disposal as use-after-disposal rather than a no-op, and that is reported
+ * rather than smoothed over. Every other route reports the same failure afterwards, which is how a
+ * caller observes the disposed state: the canonical disposal flag is protected, so there is no
+ * query route for it.
+ */
+CNA_C_API CNA_Result cna_gyroscope_dispose(CNA_GyroscopeHandle sensor);
+
+
+/**
+ * @brief Returns the sensor's most recent reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_reading Receives the reading.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **An unsupported sensor refuses this call** with `CNA_RESULT_INVALID_STATE` rather than
+ * answering a default, because the canonical property throws there: check
+ * `cna_gyroscope_get_is_supported` first. A supported sensor that has produced nothing yet answers
+ * the canonical default reading, which `cna_gyroscope_get_is_data_valid` tells apart from a real
+ * measurement.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_current_value(
+    CNA_GyroscopeHandle sensor,
+    CNA_GyroscopeReading* out_reading);
+
+/**
+ * @brief Reports whether the sensor's current reading is real data.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_valid Receives `CNA_TRUE` once a reading has been produced.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_is_data_valid(CNA_GyroscopeHandle sensor, CNA_Bool* out_valid);
+
+/**
+ * @brief Returns the requested interval between updates.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_ticks Receives the interval in 100-nanosecond ticks; zero means "as fast as possible".
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_time_between_updates_ticks(
+    CNA_GyroscopeHandle sensor,
+    int64_t* out_ticks);
+
+/**
+ * @brief Sets the requested interval between updates.
+ *
+ * @param sensor Owned sensor handle.
+ * @param ticks New interval in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * Setting a different value raises the interval-changed event.
+ */
+CNA_C_API CNA_Result cna_gyroscope_set_time_between_updates_ticks(
+    CNA_GyroscopeHandle sensor,
+    int64_t ticks);
+
+/**
+ * @brief Subscribes to the sensor's reading-changed event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked with each new reading.
+ * @param context Caller context passed back to the handler; may be null.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null callback or output.
+ *
+ * The canonical event carries an event-argument object wrapping the reading; C delivers the reading
+ * itself, because that is the only thing the wrapper holds. Release the registration with
+ * `cna_sensor_unsubscribe_ext`; it detaches from the sensor it was created for, which must still
+ * exist.
+ */
+CNA_C_API CNA_Result cna_gyroscope_subscribe_current_value_changed(
+    CNA_GyroscopeHandle sensor,
+    CNA_GyroscopeReadingCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+
+/**
+ * @brief Feeds the sensor a synthetic reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param x First axis value.
+ * @param y Second axis value.
+ * @param z Third axis value.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * This maps the canonical test-support injector, which exists so a caller can exercise its own
+ * event wiring on a machine with no sensor hardware — which is every machine this ABI is currently
+ * verified on. The reading is delivered exactly as a real one would be.
+ */
+CNA_C_API CNA_Result cna_gyroscope_inject_synthetic_update_ext(
+    CNA_GyroscopeHandle sensor,
+    float x,
+    float y,
+    float z);
+
+/**
+ * @brief Forces the sensor's started flag.
+ *
+ * @param sensor Owned sensor handle.
+ * @param started New started state.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_set_started_for_tests_ext(
+    CNA_GyroscopeHandle sensor,
+    CNA_Bool started);
+
+/**
+ * @brief Forces the sensor's supported flag.
+ *
+ * @param sensor Owned sensor handle.
+ * @param supported New supported state.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * This overrides the platform probe for this instance only, which is what lets a test drive the
+ * supported path on a machine without the hardware.
+ */
+CNA_C_API CNA_Result cna_gyroscope_set_supported_for_tests_ext(
+    CNA_GyroscopeHandle sensor,
+    CNA_Bool supported);
+
+/**
+ * @brief Reports whether the sensor currently holds the platform subsystem.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_held Receives `CNA_TRUE` while the hold is taken.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_subsystem_held_for_tests_ext(
+    CNA_GyroscopeHandle sensor,
+    CNA_Bool* out_held);
+
+/**
+ * @brief Registers the sensor in the started-instance list the dispatcher walks.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_register_started_instance_for_tests_ext(CNA_GyroscopeHandle sensor);
+
+/**
+ * @brief Removes the sensor from the started-instance list.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_unregister_started_instance_for_tests_ext(CNA_GyroscopeHandle sensor);
+
+/**
+ * @brief Dispatches one synthetic reading to an explicit set of sensors.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param sensors Array of sensor handles; may be null only when @p count is zero.
+ * @param count Number of handles in @p sensors.
+ * @param x First axis value.
+ * @param y Second axis value.
+ * @param z Third axis value.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null array with a nonzero
+ *         count, `CNA_RESULT_INVALID_HANDLE` when an element is not a live sensor, or a documented
+ *         handle/thread/native failure.
+ *
+ * The canonical helper takes a vector of instances; C takes an array of handles, which is the same
+ * set expressed the only way this ABI can express it.
+ */
+CNA_C_API CNA_Result cna_gyroscope_dispatch_to_instances_for_tests_ext(
+    CNA_Handle game,
+    const CNA_GyroscopeHandle* sensors,
+    uint64_t count,
+    float x,
+    float y,
+    float z);
+
+/**
+ * @brief Forces the platform event-watch registration to fail.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param should_fail `CNA_TRUE` to make the next registration fail.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * Process-wide state: set it back when the test is done.
+ */
+CNA_C_API CNA_Result cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(
+    CNA_Handle game,
+    CNA_Bool should_fail);
+
+/**
+ * @brief Returns how many exceptions the dispatcher has swallowed.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical dispatcher must not let a subscriber's exception escape into the platform event
+ * loop, so it counts them instead; this is how a caller sees that happened.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_dispatch_exception_count_for_tests_ext(
+    CNA_Handle game,
+    int32_t* out_count);
+
+/**
+ * @brief Returns the byte count of the dispatcher's last swallowed exception message.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_last_dispatch_exception_message_size_for_tests_ext(
+    CNA_Handle game,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the dispatcher's last swallowed exception message.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext(
+    CNA_Handle game,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a platform sensor identifier is currently connected.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param sensor_id Platform sensor identifier.
+ * @param out_connected Receives `CNA_TRUE` when that identifier is connected.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_is_sensor_connected_for_tests_ext(
+    CNA_Handle game,
+    int64_t sensor_id,
+    CNA_Bool* out_connected);
+
+/**
+ * @brief Installs a hook invoked while the sensor is being disposed.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked during disposal; null clears the hook.
+ * @param context Caller context passed back to the handler; may be null.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * The hook is a single slot rather than a subscription list, exactly as the canonical setter is, so
+ * installing a second one replaces the first. The context must outlive the sensor.
+ */
+CNA_C_API CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
+    CNA_GyroscopeHandle sensor,
+    CNA_SensorEventCallback callback,
+    void* context);
+
+/**
+ * @brief Returns the byte count of the sensor type's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_bytes Receives the UTF-8 byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_get_type_name_size(CNA_GyroscopeHandle sensor, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the sensor type's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gyroscope_copy_type_name(
+    CNA_GyroscopeHandle sensor,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a sensor handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ *
+ * Releasing disposes the sensor if it has not been disposed already, which is what the canonical
+ * destructor does.
+ */
+CNA_C_API CNA_Result cna_gyroscope_destroy(CNA_GyroscopeHandle sensor);
+
 #ifdef __cplusplus
 }
 #endif

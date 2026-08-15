@@ -3,10 +3,16 @@
 #include "CNA/C/sensors.h"
 #include "CnaCApiDetail.hpp"
 
+#include "CnaCApiRuntimeDetail.hpp"
+
+#include "Microsoft/Devices/Sensors/Accelerometer.hpp"
 #include "Microsoft/Devices/Sensors/AccelerometerReading.hpp"
 #include "Microsoft/Devices/Sensors/AttitudeReading.hpp"
 #include "Microsoft/Devices/Sensors/CompassReading.hpp"
+#include "Microsoft/Devices/Sensors/Gyroscope.hpp"
 #include "Microsoft/Devices/Sensors/GyroscopeReading.hpp"
+#include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
+#include "Microsoft/Devices/Sensors/SensorReadingEventArgs.hpp"
 #include "Microsoft/Devices/Sensors/MotionReading.hpp"
 #include "Microsoft/Devices/Sensors/SensorState.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -15,15 +21,25 @@
 #include "System/DateTimeOffset.hpp"
 #include "System/TimeSpan.hpp"
 
+#include <cstddef>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::ValidateActiveGameHandle;
 
 namespace {
 
+using Microsoft::Devices::Sensors::Accelerometer;
 using Microsoft::Devices::Sensors::AccelerometerReading;
+using Microsoft::Devices::Sensors::Gyroscope;
+using Microsoft::Devices::Sensors::SensorReadingEventArgs;
 using Microsoft::Devices::Sensors::AttitudeReading;
 using Microsoft::Devices::Sensors::CompassReading;
 using Microsoft::Devices::Sensors::GyroscopeReading;
@@ -226,6 +242,85 @@ template<typename T>
     return CNA_RESULT_SUCCESS;
 }
 
+// A sensor owns its canonical object; every event registration keeps that resource alive, so a
+// subscription can never outlive the sensor it detaches from.
+template<typename TSensor>
+struct SensorResource final {
+    std::unique_ptr<TSensor> value;
+};
+
+template<typename TSensor>
+struct SensorKind;
+
+template<>
+struct SensorKind<Accelerometer> {
+    static constexpr ObjectKind Kind = ObjectKind::Accelerometer;
+};
+
+template<>
+struct SensorKind<Gyroscope> {
+    static constexpr ObjectKind Kind = ObjectKind::Gyroscope;
+};
+
+template<typename TSensor>
+[[nodiscard]] CNA_Result BorrowSensor(
+    const CNA_Handle handle,
+    std::shared_ptr<SensorResource<TSensor>>* const outSensor);
+
+class SensorRegistrationBase {
+public:
+    SensorRegistrationBase() = default;
+    SensorRegistrationBase(const SensorRegistrationBase&) = delete;
+    SensorRegistrationBase& operator=(const SensorRegistrationBase&) = delete;
+    virtual ~SensorRegistrationBase() = default;
+};
+
+template<typename TEventArgs>
+class SensorRegistration final : public SensorRegistrationBase {
+public:
+    using Source = System::EventHandler<TEventArgs>;
+    using Token = typename Source::Token;
+
+    SensorRegistration(std::shared_ptr<void> owner, Source* const source, const Token token)
+        : owner_(std::move(owner))
+        , source_(source)
+        , token_(token)
+    {
+    }
+
+    ~SensorRegistration() override
+    {
+        source_->Remove(token_);
+    }
+
+private:
+    std::shared_ptr<void> owner_;
+    Source* source_;
+    Token token_;
+};
+
+[[nodiscard]] CNA_Result PublishRegistration(
+    std::shared_ptr<SensorRegistrationBase> registration,
+    CNA_Handle* const outRegistration)
+{
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+        ObjectKind::SensorEventRegistration,
+        std::move(registration),
+        outRegistration);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The sensor registration could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_AccelerometerReading MapAccelerometerReadingValue(
+    const AccelerometerReading& value);
+
+[[nodiscard]] CNA_GyroscopeReading MapGyroscopeReadingValue(const GyroscopeReading& value);
+
 [[nodiscard]] CNA_AttitudeReading MapAttitudeReading(const AttitudeReading& value)
 {
     CNA_AttitudeReading mapped = {};
@@ -237,6 +332,45 @@ template<typename T>
     mapped.yaw = value.getYawProperty();
     mapped.quaternion = MapQuaternion(value.getQuaternionProperty());
     mapped.rotation_matrix = MapMatrix(value.getRotationMatrixProperty());
+    return mapped;
+}
+
+template<typename TSensor>
+[[nodiscard]] CNA_Result BorrowSensor(
+    const CNA_Handle handle,
+    std::shared_ptr<SensorResource<TSensor>>* const outSensor)
+{
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Get(
+        handle,
+        SensorKind<TSensor>::Kind,
+        outSensor);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The sensor handle is invalid for this call.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_AccelerometerReading MapAccelerometerReadingValue(
+    const AccelerometerReading& value)
+{
+    CNA_AccelerometerReading mapped = {};
+    mapped.struct_size = sizeof(CNA_AccelerometerReading);
+    mapped.struct_version = StructureVersion;
+    mapped.timestamp = MapTimestamp(value.getTimestampProperty());
+    mapped.acceleration = MapVector(value.getAccelerationProperty());
+    return mapped;
+}
+
+[[nodiscard]] CNA_GyroscopeReading MapGyroscopeReadingValue(const GyroscopeReading& value)
+{
+    CNA_GyroscopeReading mapped = {};
+    mapped.struct_size = sizeof(CNA_GyroscopeReading);
+    mapped.struct_version = StructureVersion;
+    mapped.timestamp = MapTimestamp(value.getTimestampProperty());
+    mapped.rotation_rate = MapVector(value.getRotationRateProperty());
     return mapped;
 }
 
@@ -930,5 +1064,1004 @@ CNA_Result cna_motion_reading_copy_type_name(
     return CallWithExceptionBarrier([&]() -> CNA_Result {
         const MotionReading native;
         return CopyText(native.GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_sensors_get_last_error_id_ext(
+    int32_t* const outErrorId,
+    CNA_Bool* const outHasErrorId)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outErrorId == nullptr || outHasErrorId == nullptr) {
+            return InvalidInput("The sensor error identifier output is null.");
+        }
+        const CNA::C::Detail::LastError& lastError = CNA::C::Detail::GetLastError();
+        *outHasErrorId = lastError.hasSensorErrorId ? CNA_TRUE : CNA_FALSE;
+        *outErrorId = lastError.hasSensorErrorId ? lastError.sensorErrorId : 0;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sensor_unsubscribe_ext(const CNA_SensorEventRegistrationHandle registration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorRegistrationBase> resource;
+        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
+            registration,
+            ObjectKind::SensorEventRegistration,
+            &resource);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                getResult,
+                ErrorCategoryForResult(getResult),
+                "The sensor registration handle is invalid for this call.");
+        }
+        const CNA_Result releaseResult =
+            CNA::C::Detail::GetRuntimeHandles().Release(registration);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The sensor registration handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The sensor support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = Accelerometer::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_create(const CNA_Handle gameHandle, CNA_AccelerometerHandle* const outSensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSensor == nullptr) {
+            return InvalidInput("The sensor output is null.");
+        }
+        *outSensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<SensorResource<Accelerometer>>();
+        resource->value = std::make_unique<Accelerometer>();
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Accelerometer,
+            std::move(resource),
+            outSensor);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The sensor handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_state(const CNA_AccelerometerHandle sensor, CNA_SensorState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The sensor state output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_start(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Start();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_stop(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_dispose(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_current_value(
+    const CNA_AccelerometerHandle sensor,
+    CNA_AccelerometerReading* const outReading)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outReading == nullptr) {
+            return InvalidInput("The sensor reading output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outReading = MapAccelerometerReadingValue(resource->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_is_data_valid(const CNA_AccelerometerHandle sensor, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValid == nullptr) {
+            return InvalidInput("The sensor data-validity output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValid = resource->value->getIsDataValidProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_time_between_updates_ticks(
+    const CNA_AccelerometerHandle sensor,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return InvalidInput("The sensor interval output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTicks = static_cast<int64_t>(
+            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_set_time_between_updates_ticks(
+    const CNA_AccelerometerHandle sensor,
+    const int64_t ticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->setTimeBetweenUpdatesProperty(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_subscribe_current_value_changed(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_AccelerometerReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The sensor registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The sensor reading callback is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &resource->value->CurrentValueChanged;
+        const auto token = source->Add(
+            [callback, context](System::Object*, const SensorReadingEventArgs<AccelerometerReading>& args) {
+                const CNA_AccelerometerReading reading = MapAccelerometerReadingValue(args.getSensorReadingProperty());
+                callback(&reading, context);
+            });
+        return PublishRegistration(
+            std::make_shared<SensorRegistration<SensorReadingEventArgs<AccelerometerReading>>>(
+                resource, source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_accelerometer_inject_synthetic_update_ext(
+    const CNA_AccelerometerHandle sensor,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->InjectSyntheticSensorUpdate(x, y, z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_set_started_for_tests_ext(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_Bool started)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetStartedForTesting(started != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_set_supported_for_tests_ext(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_Bool supported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetSupportedForTesting(supported != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_subsystem_held_for_tests_ext(
+    const CNA_AccelerometerHandle sensor,
+    CNA_Bool* const outHeld)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeld == nullptr) {
+            return InvalidInput("The subsystem-hold output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeld = resource->value->GetSubsystemHeldForTesting() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_register_started_instance_for_tests_ext(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Accelerometer::RegisterStartedInstanceForTesting(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_unregister_started_instance_for_tests_ext(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Accelerometer::UnregisterStartedInstanceForTesting(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_dispatch_to_instances_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const CNA_AccelerometerHandle* const sensors,
+    const uint64_t count,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (sensors == nullptr && count != UINT64_C(0)) {
+            return InvalidInput("The sensor array is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<Accelerometer*> instances;
+        instances.reserve(static_cast<std::size_t>(count));
+        for (uint64_t index = UINT64_C(0); index < count; ++index) {
+            std::shared_ptr<SensorResource<Accelerometer>> resource;
+            if (const CNA_Result result = BorrowSensor<Accelerometer>(sensors[index], &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            instances.push_back(resource->value.get());
+        }
+        Accelerometer::DispatchToInstancesForTesting(instances, x, y, z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_set_event_watch_registration_failure_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool shouldFail)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Accelerometer::SetEventWatchRegistrationFailureForTesting(shouldFail != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_dispatch_exception_count_for_tests_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The dispatch exception count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<int32_t>(Accelerometer::GetDispatchExceptionCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_last_dispatch_exception_message_size_for_tests_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The dispatch exception message byte-count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = Accelerometer::GetLastDispatchExceptionMessageForTesting().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_copy_last_dispatch_exception_message_for_tests_ext(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            Accelerometer::GetLastDispatchExceptionMessageForTesting(),
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_accelerometer_is_sensor_connected_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const int64_t sensorId,
+    CNA_Bool* const outConnected)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outConnected == nullptr) {
+            return InvalidInput("The sensor connection output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outConnected = Accelerometer::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensorId))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_set_disposal_cleanup_hook_for_tests_ext(
+    const CNA_AccelerometerHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (callback == nullptr) {
+            resource->value->SetDisposalCleanupHookForTesting(nullptr);
+            return CNA_RESULT_SUCCESS;
+        }
+        resource->value->SetDisposalCleanupHookForTesting(
+            [callback, context]() { callback(context); });
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_get_type_name_size(const CNA_AccelerometerHandle sensor, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The sensor type-name byte-count output is null.");
+        }
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = resource->value->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_accelerometer_copy_type_name(
+    const CNA_AccelerometerHandle sensor,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_accelerometer_destroy(const CNA_AccelerometerHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Accelerometer>> resource;
+        if (const CNA_Result result = BorrowSensor<Accelerometer>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The sensor handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_is_supported(const CNA_Handle gameHandle, CNA_Bool* const outSupported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSupported == nullptr) {
+            return InvalidInput("The sensor support output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSupported = Gyroscope::getIsSupportedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_create(const CNA_Handle gameHandle, CNA_GyroscopeHandle* const outSensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSensor == nullptr) {
+            return InvalidInput("The sensor output is null.");
+        }
+        *outSensor = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<SensorResource<Gyroscope>>();
+        resource->value = std::make_unique<Gyroscope>();
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+            ObjectKind::Gyroscope,
+            std::move(resource),
+            outSensor);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The sensor handle could not be created.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_state(const CNA_GyroscopeHandle sensor, CNA_SensorState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return InvalidInput("The sensor state output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_SensorState>(resource->value->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_start(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Start();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_stop(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_dispose(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->Dispose();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_current_value(
+    const CNA_GyroscopeHandle sensor,
+    CNA_GyroscopeReading* const outReading)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outReading == nullptr) {
+            return InvalidInput("The sensor reading output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outReading = MapGyroscopeReadingValue(resource->value->getCurrentValueProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_is_data_valid(const CNA_GyroscopeHandle sensor, CNA_Bool* const outValid)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValid == nullptr) {
+            return InvalidInput("The sensor data-validity output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValid = resource->value->getIsDataValidProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_time_between_updates_ticks(
+    const CNA_GyroscopeHandle sensor,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return InvalidInput("The sensor interval output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTicks = static_cast<int64_t>(
+            resource->value->getTimeBetweenUpdatesProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_set_time_between_updates_ticks(
+    const CNA_GyroscopeHandle sensor,
+    const int64_t ticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->setTimeBetweenUpdatesProperty(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_subscribe_current_value_changed(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_GyroscopeReadingCallback callback,
+    void* const context,
+    CNA_SensorEventRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The sensor registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The sensor reading callback is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &resource->value->CurrentValueChanged;
+        const auto token = source->Add(
+            [callback, context](System::Object*, const SensorReadingEventArgs<GyroscopeReading>& args) {
+                const CNA_GyroscopeReading reading = MapGyroscopeReadingValue(args.getSensorReadingProperty());
+                callback(&reading, context);
+            });
+        return PublishRegistration(
+            std::make_shared<SensorRegistration<SensorReadingEventArgs<GyroscopeReading>>>(
+                resource, source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_gyroscope_inject_synthetic_update_ext(
+    const CNA_GyroscopeHandle sensor,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->InjectSyntheticSensorUpdate(x, y, z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_set_started_for_tests_ext(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_Bool started)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetStartedForTesting(started != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_set_supported_for_tests_ext(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_Bool supported)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        resource->value->SetSupportedForTesting(supported != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_subsystem_held_for_tests_ext(
+    const CNA_GyroscopeHandle sensor,
+    CNA_Bool* const outHeld)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeld == nullptr) {
+            return InvalidInput("The subsystem-hold output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeld = resource->value->GetSubsystemHeldForTesting() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_register_started_instance_for_tests_ext(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Gyroscope::RegisterStartedInstanceForTesting(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_unregister_started_instance_for_tests_ext(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Gyroscope::UnregisterStartedInstanceForTesting(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_dispatch_to_instances_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const CNA_GyroscopeHandle* const sensors,
+    const uint64_t count,
+    const float x,
+    const float y,
+    const float z)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (sensors == nullptr && count != UINT64_C(0)) {
+            return InvalidInput("The sensor array is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::vector<Gyroscope*> instances;
+        instances.reserve(static_cast<std::size_t>(count));
+        for (uint64_t index = UINT64_C(0); index < count; ++index) {
+            std::shared_ptr<SensorResource<Gyroscope>> resource;
+            if (const CNA_Result result = BorrowSensor<Gyroscope>(sensors[index], &resource);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            instances.push_back(resource->value.get());
+        }
+        Gyroscope::DispatchToInstancesForTesting(instances, x, y, z);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_set_event_watch_registration_failure_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Bool shouldFail)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Gyroscope::SetEventWatchRegistrationFailureForTesting(shouldFail != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_dispatch_exception_count_for_tests_ext(
+    const CNA_Handle gameHandle,
+    int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidInput("The dispatch exception count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<int32_t>(Gyroscope::GetDispatchExceptionCountForTesting());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_last_dispatch_exception_message_size_for_tests_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The dispatch exception message byte-count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = Gyroscope::GetLastDispatchExceptionMessageForTesting().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_copy_last_dispatch_exception_message_for_tests_ext(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(
+            Gyroscope::GetLastDispatchExceptionMessageForTesting(),
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_gyroscope_is_sensor_connected_for_tests_ext(
+    const CNA_Handle gameHandle,
+    const int64_t sensorId,
+    CNA_Bool* const outConnected)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outConnected == nullptr) {
+            return InvalidInput("The sensor connection output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outConnected = Gyroscope::IsSensorConnectedForTesting(static_cast<std::int64_t>(sensorId))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_set_disposal_cleanup_hook_for_tests_ext(
+    const CNA_GyroscopeHandle sensor,
+    const CNA_SensorEventCallback callback,
+    void* const context)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (callback == nullptr) {
+            resource->value->SetDisposalCleanupHookForTesting(nullptr);
+            return CNA_RESULT_SUCCESS;
+        }
+        resource->value->SetDisposalCleanupHookForTesting(
+            [callback, context]() { callback(context); });
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_get_type_name_size(const CNA_GyroscopeHandle sensor, uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidInput("The sensor type-name byte-count output is null.");
+        }
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = resource->value->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gyroscope_copy_type_name(
+    const CNA_GyroscopeHandle sensor,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyText(resource->value->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_gyroscope_destroy(const CNA_GyroscopeHandle sensor)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SensorResource<Gyroscope>> resource;
+        if (const CNA_Result result = BorrowSensor<Gyroscope>(sensor, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Release(sensor);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The sensor handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
     });
 }

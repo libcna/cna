@@ -69,6 +69,12 @@ void SetLastJoinError(const uint32_t joinError) noexcept
     lastError.joinError = joinError;
 }
 
+void SetLastSensorErrorId(const int32_t sensorErrorId) noexcept
+{
+    lastError.hasSensorErrorId = true;
+    lastError.sensorErrorId = sensorErrorId;
+}
+
 void SetLastError(
     const CNA_Result result,
     const CNA_ErrorCategory category,
@@ -78,6 +84,8 @@ void SetLastError(
     lastError.category = category;
     lastError.hasJoinError = false;
     lastError.joinError = 0U;
+    lastError.hasSensorErrorId = false;
+    lastError.sensorErrorId = 0;
     try {
         if (message.empty()) {
             lastError.message.clear();

@@ -411,7 +411,8 @@ the compiled-out contract. Both states must stay green.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-037D1 | 70 | Establish sensor readings, timestamps and state | ✅ | `sensors.h` and `CnaCApiSensors.cpp` map `SensorState`, `ISensorReading` and all five reading types as fixed values. The slice settles the ABI's **second** point-in-time form: `CNA_DateTimeOffset` is two 100-nanosecond tick counts — local time from **0001-01-01** plus the UTC offset — because that is the canonical runtime type's own base, exactly as the picture date uses the Unix epoch because *its* canonical type does. The reading interface becomes the `timestamp` field every reading carries rather than an abstract type C cannot use, and its virtual destructor is the one `not-applicable` row. Three canonical behaviors are preserved rather than tidied: **each constructor keeps its own argument order** even though the five disagree (the accelerometer takes the timestamp first, the gyroscope the rate first, the compass the true heading last) — normalizing them would make the C API easier to remember and harder to check; equality pairs the values **with** the timestamp; and the text conversions carry only part of each reading, with the motion reading's omitting the attitude and rotation rate a reader would expect. All six state identities are exposed, including the two the canonical header records as currently unreachable, because an identity is not a claim that something produces it. `cna_c_api` gained its `cna_devices` link edge here. Strict-C `SensorValuesSmoke.c` needs no game at all; green in all four trees (59/59) and under ASan+UBSan with leak detection on. |
-| CBIND-037D2 | 126 | Complete the sensor devices, their events and failures | ⬜ | Map `SensorBase`, `Accelerometer`, `Gyroscope`, `Compass` and `Motion`, the reading event-argument types (including the `SensorReadingEventArgs<T>` template, whose four concrete instantiations are what the events actually deliver), `CalibrationEventArgs`, and the two sensor exception types. Expect the availability-separate-from-the-answer rule for `IsSupported`, the process-wide event-registration shape for the reading and calibration events, and a decision about how `SensorFailedException`'s error id reaches C — the network join-error precedent in `CnaCApiDetail.hpp` is the shape to copy. |
+| CBIND-037D2a | 80 | Map the motion sensors, their failures and the test-support surface | ✅ | `Accelerometer` and `Gyroscope` are owned handles in `sensors.h`; `CnaCApiSensors.cpp` carries them, and the two exception types become one route rather than a type. The common base is a **class template**, so C repeats its contract per sensor instead of modeling a base — the reading-changed callback delivers the reading itself, because the event-argument wrapper adds nothing. Three canonical behaviors are reported, not smoothed: reading an unsupported sensor's value fails `INVALID_STATE` (the canonical property throws rather than defaulting), a **second disposal is refused** where every other disposable in this ABI is idempotent, and there is no disposal query at all because the canonical flag is protected — the disposed state is observed through the refusals. `SensorFailedException`'s error id reaches C exactly as the network join error does: recorded per thread by the barrier, read back with `cna_sensors_get_last_error_id_ext`. The **test-support surface is mapped deliberately** — no verification machine has motion sensors, so `set_supported_for_tests_ext` plus `inject_synthetic_update_ext` are what let a C consumer reach the supported path and the real dispatch chain; the injector takes platform units, so 9.80665 m/s² reads back as 1 g. Strict-C `SensorDeviceSmoke.c` covers both dispatch paths, the detaching registration, the double-start failure and its error id, the disposal hook firing once, and every post-disposal and stale-handle refusal; green in all four trees (60/60) and under ASan+UBSan with leak detection on. |
+| CBIND-037D2b | 46 | Complete the remaining sensors and the reading events | ⬜ | Map `Compass` and `Motion` on the shape `CBIND-037D2a` settled, plus `AccelerometerReadingEventArgs`, `CalibrationEventArgs` and the `SensorReadingEventArgs<T>` template with its four concrete instantiations, and wire `Accelerometer::ReadingChanged` — the deliberately obsolete legacy event `D2a` left planned so both reading events land with the types they deliver. Expect `Compass` to be an honest `NotSupported` stub everywhere but Android, so its unsupported path is the one the trees exercise; expect `Compass::Calibrate` and its calibration event to have no way to fire here. Decide whether the event-args types earn C values of their own or collapse into their payload the way `D2a`'s did — the answer should be the same for both, and the reason belongs in `DEVICES.md`. |
 | CBIND-037D3 | 69 | Complete VibrateController and the CNA system services | ⬜ | Map `VibrateController`, `Clipboard`, `PowerState`/`PowerInfo`, `Locale`/`LocaleInfo`, `DisplayInfo`, `SystemInfo`, `UrlLauncher`, `MessageBox`/`MessageBoxType`, `FileDialog`/`FileDialogFilter` and `SystemTray`. **Every `CNA::Devices` header is `#ifdef CNA_DEVICES`**, so each route needs the `CnaCApiGraphicsExt.cpp` shape: exported in both build states, reporting `NOT_SUPPORTED` when the extension layer is compiled out. Note the clipboard here is a *different* type from the input module's `CNA::Input::Clipboard`, which `CBIND-037B7b` already mapped — check whether they wrap the same platform state before naming the routes. |
 | CBIND-037D4 | 24 | Complete the camera extension | ⬜ | Map `Camera`, `CameraState`, `CameraPosition` and `CameraDeviceInfo` under the same `CNA_DEVICES` rule. A camera produces frames, so decide whether they reuse the texture contract `CBIND-037C7` established or a raw byte transfer, and expect no capture hardware in any verification tree — the unavailable path is the one that will be exercised. |
 
@@ -966,7 +967,15 @@ form — ticks from 0001-01-01 plus a UTC offset, because that is the canonical 
 and preserving three canonical quirks rather than tidying them: each reading constructor keeps its
 own argument order, equality pairs values with the timestamp, and the text conversions carry only
 part of each reading. The snapshot is now 4,844 implemented, 30 partial, 1,362 planned and 179 not
-applicable.
+applicable. CBIND-037D2a then maps the two motion sensors that produce those readings, deciding
+that a class-template base is repeated per sensor rather than modeled, that an event delivering
+nothing but a reading hands over the reading, and that the canonical **test-support** surface is
+mapped deliberately — it is the only way a machine with no motion sensors reaches the supported path
+and the real dispatch chain. Three canonical behaviors are reported rather than smoothed: an
+unsupported sensor refuses to answer its current value, a second disposal is refused where every
+other disposable in this ABI is idempotent, and the disposed state has no query route because the
+canonical flag is protected. The snapshot is now 4,904 implemented, 30 partial, 1,282 planned and
+199 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -975,23 +984,28 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037B7b` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037D2a` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037D2`, the sensor devices — **126 rows**: `SensorBase`, `Accelerometer`,
-  `Gyroscope`, `Compass`, `Motion`, the reading event-argument types, `CalibrationEventArgs` and the
-  two sensor exception types. `D1` is done, so `sensors.h`, `CnaCApiSensors.cpp` and
-  `SensorValuesSmoke.c` exist, `cna_c_api` links `cna_devices`, and every reading value the devices
-  produce is already mapped and tested.
+- **Next task:** `CBIND-037D2b`, the rest of the sensors — **46 rows**: `Compass`, `Motion`, the
+  reading event-argument types, `CalibrationEventArgs`, and `Accelerometer::ReadingChanged`, the
+  obsolete legacy event `D2a` deliberately left planned so it lands with the type it delivers.
+  `D1` and `D2a` are done, so `sensors.h`, `CnaCApiSensors.cpp`, `SensorValuesSmoke.c` and
+  `SensorDeviceSmoke.c` exist, `cna_c_api` links `cna_devices`, the reading values are mapped, and
+  the whole owned-sensor-handle shape — support probe, state, start/stop, current value, data
+  validity, update interval, reading callback, error id, test-support injection — is settled and
+  should be repeated, not redesigned.
 
-  Three things are already known and should not be rediscovered: `SensorState` records that
+  Four things are already known and should not be rediscovered: `SensorState` records that
   `NoData` and `NoPermissions` are produced by **no** sensor class today, so those two identities
   will stay untested by behavior; `SensorReadingEventArgs<T>` is a **template**, and only its four
-  concrete instantiations matter — flatten each event to the reading it carries rather than trying
-  to name the wrapper; and `SensorFailedException` carries an **error id** that has to reach C
-  somehow, for which the network join-error precedent in `CnaCApiDetail.hpp` (`LastError::joinError`
-  plus a query route) is the shape to copy.
+  concrete instantiations matter — `D2a` already flattened its event to the reading it carries, and
+  `D2b` should decide once whether the wrapper types earn C values at all; `SensorFailedException`'s
+  **error id** already reaches C through `cna_sensors_get_last_error_id_ext`, recorded by the
+  barrier exactly as the network join error is, so `D2b` only has to use it; and `Compass` is an
+  honest `NotSupported` stub on every platform but Android, so no verification tree will ever reach
+  its supported path or fire its calibration event.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

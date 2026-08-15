@@ -4455,6 +4455,104 @@
       "tests": "`SensorValuesSmoke.c` asserts the canonical default, round-trips every constructor argument, separates on a field of the nested attitude, refuses an invalid or null nested attitude, and asserts the text contains the acceleration and gravity but **not** the attitude, proves equal readings hash equal, checks the exact type name, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
       "status": "implemented",
       "task": "CBIND-037D1"
+    },
+    {
+      "id": "sensor-base-public",
+      "qualified_name_regex": "^(template<typename TSensorReading> Microsoft::Devices::Sensors::SensorBase|Microsoft::Devices::Sensors::SensorBase(::(SensorBase|~SensorBase|CurrentValueChanged|getCurrentValueProperty|getIsDataValidProperty|getTimeBetweenUpdatesProperty|setTimeBetweenUpdatesProperty|Dispose|Start|Stop))?)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "event"
+      ],
+      "mapping": "the common sensor contract, expressed once per concrete sensor rather than as a base type C cannot derive from: `cna_<sensor>_get_current_value`, `_get_is_data_valid`, `_get_time_between_updates_ticks`/`_set_...`, `_start`, `_stop`, `_dispose`, `_destroy` and `_subscribe_current_value_changed`. The canonical template is instantiated per reading type, so the C routes are too, and the reading-changed event delivers the **reading itself** rather than the event-argument wrapper, which holds nothing else. One canonical refusal is preserved and documented: reading the current value of an **unsupported** sensor fails with `CNA_RESULT_INVALID_STATE` rather than answering a default, because the canonical property throws there",
+      "tests": "`SensorDeviceSmoke.c` covers the interval round trip, the invalid-then-valid data flag, the current value before and after a synthetic reading, the unsupported-sensor refusal — the branch that actually runs on every verification machine — and the subscribe/detach cycle",
+      "status": "implemented",
+      "task": "CBIND-037D2a",
+      "signature_regex": "(?!\\(bool disposing\\)).*"
+    },
+    {
+      "id": "sensor-base-protected",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::SensorBase(::DisposalTerminalStateGuard)?::(TimeBetweenUpdatesChanged|getIsDisposedProperty|ClaimDisposalOnce|WaitForDisposalToComplete|DisposalTerminalStateGuard|~DisposalTerminalStateGuard|setCurrentValueProperty|SetCurrentValueAndMarkDataValid|setIsDataValidProperty|setIsSupportedProperty|ShouldAcceptUpdateAt|ResetUpdateThrottle)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "event"
+      ],
+      "mapping": "No C mapping: these are **protected** members of a class template, existing so a derived sensor can publish readings, throttle updates and coordinate disposal. C cannot derive from a C++ class, so none of them is reachable — including the protected disposal flag and interval-changed event, which is why this ABI has no disposal query and no interval-changed subscription. A caller observes disposal behaviorally instead: every acquisition route reports `CNA_RESULT_INVALID_STATE` afterwards",
+      "tests": "Doxygen declaration inventory; the observable half of this state is covered in `SensorDeviceSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037D2a"
+    },
+    {
+      "id": "sensor-accelerometer",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Accelerometer(::(Accelerometer|~Accelerometer|getIsSupportedProperty|getStateProperty|Start|Stop|GetTypeName|InjectSyntheticSensorUpdate|SetStartedForTesting|SetSupportedForTesting|GetSubsystemHeldForTesting|SetDisposalCleanupHookForTesting|RegisterStartedInstanceForTesting|UnregisterStartedInstanceForTesting|DispatchToInstancesForTesting|SetEventWatchRegistrationFailureForTesting|GetDispatchExceptionCountForTesting|GetLastDispatchExceptionMessageForTesting|IsSensorConnectedForTesting))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_AccelerometerHandle` with `cna_accelerometer_create`, the static support probe, the state query, start/stop, dispose, release and a type-name pair. **The canonical test-support surface is mapped rather than skipped, and it is what makes this family testable at all**: no verification machine has motion-sensor hardware, so `cna_accelerometer_set_supported_for_tests_ext` and `cna_accelerometer_inject_synthetic_update_ext` are how a C consumer — or this suite — drives the supported path and the real dispatch chain. The instance-list registration, the explicit dispatch (an array of handles where the canonical helper takes a vector of instances), the event-watch failure switch, the swallowed-exception counters and the connection probe are mapped the same way, and the disposal hook becomes a single callback slot because the canonical setter is a single slot rather than a subscription list. Two canonical behaviors are reported rather than smoothed: **disposing twice is refused**, not a no-op, and the injector's values are **platform units** while the reading is canonical — an accelerometer injection in metres per second squared comes back in g",
+      "tests": "`SensorDeviceSmoke.c` forces the supported flag, subscribes, injects a reading and asserts the callback and the current value both receive it **after the canonical unit conversion**, proves the registration detaches, drives the instance-list and explicit dispatch paths, reads the dispatcher's exception counters, restores every process-wide switch it flips, triggers the canonical double-start failure and reads back its error identifier, sees the disposal hook run exactly once, and covers the refused second disposal, the post-disposal refusals and every stale-handle case",
+      "status": "implemented",
+      "task": "CBIND-037D2a",
+      "signature_regex": "(?!\\(bool disposing\\)).*"
+    },
+    {
+      "id": "sensor-gyroscope",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Gyroscope(::(Gyroscope|~Gyroscope|getIsSupportedProperty|getStateProperty|Start|Stop|GetTypeName|InjectSyntheticSensorUpdate|SetStartedForTesting|SetSupportedForTesting|GetSubsystemHeldForTesting|SetDisposalCleanupHookForTesting|RegisterStartedInstanceForTesting|UnregisterStartedInstanceForTesting|DispatchToInstancesForTesting|SetEventWatchRegistrationFailureForTesting|GetDispatchExceptionCountForTesting|GetLastDispatchExceptionMessageForTesting|IsSensorConnectedForTesting))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_GyroscopeHandle` with `cna_gyroscope_create`, the static support probe, the state query, start/stop, dispose, release and a type-name pair. **The canonical test-support surface is mapped rather than skipped, and it is what makes this family testable at all**: no verification machine has motion-sensor hardware, so `cna_gyroscope_set_supported_for_tests_ext` and `cna_gyroscope_inject_synthetic_update_ext` are how a C consumer — or this suite — drives the supported path and the real dispatch chain. The instance-list registration, the explicit dispatch (an array of handles where the canonical helper takes a vector of instances), the event-watch failure switch, the swallowed-exception counters and the connection probe are mapped the same way, and the disposal hook becomes a single callback slot because the canonical setter is a single slot rather than a subscription list. Two canonical behaviors are reported rather than smoothed: **disposing twice is refused**, not a no-op, and the injector's values are **platform units** while the reading is canonical — an accelerometer injection in metres per second squared comes back in g",
+      "tests": "`SensorDeviceSmoke.c` forces the supported flag, subscribes, injects a reading and asserts the callback and the current value both receive it **after the canonical unit conversion**, proves the registration detaches, drives the instance-list and explicit dispatch paths, reads the dispatcher's exception counters, restores every process-wide switch it flips, triggers the canonical double-start failure and reads back its error identifier, sees the disposal hook run exactly once, and covers the refused second disposal, the post-disposal refusals and every stale-handle case",
+      "status": "implemented",
+      "task": "CBIND-037D2a",
+      "signature_regex": "(?!\\(bool disposing\\)).*"
+    },
+    {
+      "id": "sensor-device-internals",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::(Detail::SdlSensorSubsystem|(Accelerometer|Gyroscope)::SdlSensorSubsystem< (Accelerometer|Gyroscope) >)$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "No C mapping: the platform subsystem rows are friendship declarations granting the internal SDL sensor subsystem access to private state, and the protected disposal overload exists for the class hierarchy. Neither is a callable public member",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037D2a"
+    },
+    {
+      "id": "sensor-failed-exceptions",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::(Sensor|Accelerometer)FailedException(::((Sensor|Accelerometer)FailedException|getErrorIdProperty))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "a boundary conversion rather than a type: the exception firewall in `CnaCApiDetail.hpp` catches both — the accelerometer's derives from the sensor one — reports `CNA_RESULT_INVALID_STATE` with the message as the diagnostic, and records the **error identifier** the message does not spell out, readable with `cna_sensors_get_last_error_id_ext`. That is the same treatment a network join failure already gets, and for the same reason: the payload is not expressible in the message alone. The three constructors are the canonical ways to raise one, which C never does — it only receives them",
+      "tests": "`SensorDeviceSmoke.c` triggers the canonical double-start failure, asserts the `INVALID_STATE` result and reads the recorded identifier back with its presence flag, and covers the null-output refusal",
+      "status": "implemented",
+      "task": "CBIND-037D2a"
+    },
+    {
+      "id": "sensor-protected-dispose",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::(SensorBase|Accelerometer|Gyroscope)::Dispose$",
+      "signature_regex": "\\(bool disposing\\).*",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: the protected disposal overload is the C++ dispose pattern's derived-class hook, and C cannot derive. The public parameterless disposal is what `cna_<sensor>_dispose` maps",
+      "tests": "Doxygen declaration inventory; the observable disposal behavior is covered in `SensorDeviceSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037D2a"
     }
   ]
 }

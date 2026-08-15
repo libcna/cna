@@ -943,6 +943,24 @@ if(CNA_BUILD_TESTS)
     cna_c_api_enable_strict_warnings(cna_c_api_sensor_values_smoke)
     add_test(NAME CApi_SensorValuesSmoke COMMAND cna_c_api_sensor_values_smoke)
 
+    add_executable(cna_c_api_sensor_device_smoke
+        tests/pure_c/SensorDeviceSmoke.c
+    )
+    set_target_properties(cna_c_api_sensor_device_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_sensor_device_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_sensor_device_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_sensor_device_smoke)
+    add_test(NAME CApi_SensorDeviceSmoke COMMAND cna_c_api_sensor_device_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_SensorDeviceSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_VideoSmoke PROPERTIES
@@ -1051,6 +1069,8 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/content/include
         ${PROJECT_SOURCE_DIR}/modules/net/include
         ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
+        ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/math/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         Threads::Threads
@@ -1074,6 +1094,8 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/content/include
         ${PROJECT_SOURCE_DIR}/modules/net/include
         ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
+        ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/math/include
     )
     # The storage, network-join and CNA core exceptions are the canonical types this test throws whose constructors
     # are not header-only, so proving their conversion needs those modules on the link line.
@@ -1082,6 +1104,7 @@ if(CNA_BUILD_TESTS)
         cna_core
         cna_storage
         CNA_Net
+        cna_devices
     )
     cna_link_sharp_runtime(cna_c_api_boundary_detail_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)

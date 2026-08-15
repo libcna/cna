@@ -63,8 +63,12 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-037C6` adds playback: every `MediaPlayer` static, both of its events and a view of the
 > process-wide media queue, and `CBIND-037C7` closes the whole media module with `Video` and
 > `VideoPlayer`, and `CBIND-037D1` opens the devices module with the sensor state identity, the
-> date-and-offset timestamp and all five sensor reading values. The
-> generated inventory currently records 4,844 implemented, 30 partial, 1,362 planned and 179
+> date-and-offset timestamp and all five sensor reading values, and `CBIND-037D2a` adds the two
+> motion sensors that produce them — owned handles carrying the support probe, state, start/stop,
+> current value, data validity, update interval, reading callback, the sensor error identifier of
+> the last failure, and the canonical test-support surface that lets a machine with no sensors
+> reach the supported path at all. The
+> generated inventory currently records 4,904 implemented, 30 partial, 1,282 planned and 199
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

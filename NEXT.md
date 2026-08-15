@@ -678,7 +678,32 @@
 > six sensor-state identities are exposed, including the two the canonical header records as
 > currently unreachable — an identity is not a claim that something produces it. The inventory is
 > now 4,844 implemented, 30 partial, 1,362 planned and 179 N/A; all four trees green at 59/59.
-> **Next: CBIND-037D2**, the 126-row sensor-device slice.
+>
+> CBIND-037D2a then adds the two motion sensors that produce those readings — `Accelerometer` and
+> `Gyroscope` as owned handles, 80 rows, with `SensorDeviceSmoke.c` alongside the value suite. Three
+> shape decisions: the canonical common base is a **class template**, so C repeats its contract per
+> sensor rather than modeling a base type; the reading-changed event delivers the **reading itself**,
+> because the event-argument wrapper holds nothing else; and the canonical **test-support** surface
+> is mapped deliberately rather than skipped as test scaffolding — no verification machine has motion
+> sensors, so `set_supported_for_tests_ext` plus `inject_synthetic_update_ext` are the only way a C
+> consumer, or this suite, reaches the supported path and the real dispatch chain instead of
+> permanently seeing "not supported". The injector takes **platform units** and the reading comes back
+> canonical: inject 9.80665 m/s² and read 1 g.
+>
+> Three canonical behaviors are reported rather than smoothed. Reading an unsupported sensor's
+> current value **fails** `INVALID_STATE` — the canonical property throws there instead of answering
+> a default. **Disposing twice is refused**, unlike every other disposable in this ABI, because the
+> canonical sensor treats a second disposal as use-after-disposal. And there is **no disposal query
+> route at all**: the canonical flag is protected, so the disposed state is observed through the
+> refusals every other route then returns, and no query was invented to paper over that. The
+> protected interval-changed event and value-publishing setters exist for derived classes, which C
+> cannot write, so they have no routes either. `SensorFailedException`'s error id reaches C exactly
+> as the network join error does — recorded per thread by the barrier, read with
+> `cna_sensors_get_last_error_id_ext`. The inventory is now 4,904 implemented, 30 partial, 1,282
+> planned and 199 N/A; all four trees green at 60/60, ASan+UBSan with leak detection clean.
+> **Next: CBIND-037D2b**, the remaining 46 sensor rows — `Compass`, `Motion`, the reading
+> event-argument types, `CalibrationEventArgs`, and `Accelerometer::ReadingChanged`, the obsolete
+> legacy event deliberately left for the slice that maps the type it delivers.
 >
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /

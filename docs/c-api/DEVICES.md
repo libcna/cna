@@ -42,3 +42,32 @@ Three canonical behaviors are preserved rather than tidied:
 - All six sensor-state identities are exposed, including the two the canonical header records as
   currently unreachable. An identity is not a claim that something produces it, and hiding them
   would renumber the rest.
+
+## Sensor devices
+
+Each concrete sensor is an owned handle. The canonical common base is a **class template**, so C
+does not model it as a type: its contract — current value, data validity, update interval, start,
+stop, dispose and the reading-changed event — appears once per concrete sensor, and the event
+delivers the **reading itself** rather than the event-argument wrapper, which holds nothing else.
+
+Three canonical behaviors are reported rather than smoothed over:
+
+- **Reading the current value of an unsupported sensor fails** with `CNA_RESULT_INVALID_STATE`; the
+  canonical property throws there rather than answering a default. Check the support probe first.
+- **Disposing twice is refused**, unlike most disposables in this ABI: the canonical sensor treats a
+  second disposal as use-after-disposal. Every other route reports the same failure afterwards,
+  which is how a caller observes the disposed state — the canonical flag is protected, so there is
+  no query route for it, and none was invented.
+- The canonical **protected** members — the interval-changed event, the disposal flag, the
+  value-publishing setters and the throttle — exist for derived classes. C cannot derive, so they
+  have no routes at all.
+
+**The test-support surface is mapped, deliberately.** No machine this ABI is verified on has motion
+sensors, so `cna_<sensor>_set_supported_for_tests_ext` and `cna_<sensor>_inject_synthetic_update_ext`
+are what let a C consumer — and this suite — drive the supported path and the real dispatch chain
+instead of only ever seeing "not supported". The injector takes **platform units** and the reading
+comes back in the canonical unit: inject 9.80665 m/s² into an accelerometer and read 1 g.
+
+A sensor failure carries an **error identifier** the message does not spell out. The exception
+firewall records it per thread, readable with `cna_sensors_get_last_error_id_ext` — the same
+treatment a network join failure already gets. Read it immediately after the failing call.
