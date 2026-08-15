@@ -1329,8 +1329,8 @@ written for this document: two descriptions of the same fixture are two things t
 | `uv-out-of-range-wrap` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; REPEAT |
 | `uv-out-of-range-mirror` | textures | L1, L2, L3, L4, L5 | base-colour texture; out-of-range UV; MIRRORED_REPEAT |
 | `sampler-trilinear` | textures | L1, L2, L3, L4, L5 | base-colour texture; LINEAR; LINEAR_MIPMAP_LINEAR; trilinear filtering |
-| `tex-texture-transform` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; offset; rotation; non-square scale; transform baked into UVs |
-| `texture-transform-per-map` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; per-map transforms; base-colour texture; normal texture; reported single-transform limit |
+| `tex-texture-transform` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; offset; rotation; non-square scale; per-map shader transform |
+| `texture-transform-per-map` | textures | L1, L2, L3, L4, L5 | KHR_texture_transform; per-map transforms; base-colour texture; normal texture; shared UV with independent transforms |
 | `texture-shared-two-samplers` | textures | L1, L2, L3, L4, L5 | shared image; two textures; two samplers; per-slot sampler state; independent U/V addressing |
 | `tex-dual-texture-stride` | textures | L1, L2, L3, L4, L5 | base-colour texture; occlusion texture; KHR_materials_unlit; vertex stride 20 |
 | `skin-armature-ancestor` | skinning | L1, L2, L3, L4 | skin.joints; skin.inverseBindMatrices; armature ancestor above the joint set; JOINTS_0 / WEIGHTS_0 |

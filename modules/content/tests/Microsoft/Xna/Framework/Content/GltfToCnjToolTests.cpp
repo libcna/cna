@@ -2322,7 +2322,7 @@ TEST(GltfToCnjToolTest, OfflineAndRuntimePathsHaveIdenticalL6MaterialStateForThe
         }
     }
     std::sort(ids.begin(), ids.end());
-    ASSERT_GE(ids.size(), 12u) << "the material sweep silently lost corpus coverage";
+    ASSERT_GE(ids.size(), 14u) << "the material sweep silently lost corpus coverage";
 
     std::size_t comparedParts = 0;
     for (const std::string& id : ids)

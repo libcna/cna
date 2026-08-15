@@ -1831,10 +1831,9 @@ namespace CNA::Internal::GltfImport
          * `KHR_materials_transmission` is @ref Approximated and **not** claimed: a file that
          * *requires* transmission is asking for refraction CNA cannot deliver, so it is refused
          * rather than loaded with its glass drawn as tinted alpha (`GLTF-339`). Conversely
-         * `KHR_texture_transform` is @ref ImplementedWithNamedLimit and *is* claimed, because the
-         * limit affects a minority of materials and refusing every transformed texture would be
-         * far worse than the residue. Collapsing the two axes into one would force one of those
-         * decisions to be wrong.
+         * `KHR_lights_punctual` is @ref Approximated and *is* claimed, because refusing every lit
+         * file would be worse than its explicit three-directional-light approximation. Collapsing
+         * the two axes into one would force one of those decisions to be wrong.
          */
         bool claimed = false;
         /** @brief One line on what CNA does with it, and why the classification is what it is. */

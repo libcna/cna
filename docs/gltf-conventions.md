@@ -249,29 +249,31 @@ single root name table preserves identity. The reader captures linked records as
 does not expose them as additional `ModelMeshPart`s. Thus direct glTF and offline conversion have
 one selection contract, including mappings that cross PBR and unlit layouts.
 
-## `KHR_texture_transform`: transition to per-map shader state
+## `KHR_texture_transform`: per-map shader state
 
-`plan_gltf.md` `GLTF-186`. The extension gives each texture reference its own offset/rotation/scale
-on the UV set it samples. CNA currently **bakes one reference transform into imported coordinates**.
-That remains compatible for materials whose sampled maps share one transform, but it is no longer
-the final design now that two packed UV channels exist.
+`plan_gltf.md` `GLTF-184`/`GLTF-186`. The extension belongs to a texture reference, not to a vertex
+stream. CNA therefore keeps authored UV bytes unchanged and carries five independent transforms in
+base-colour, normal, metallic-roughness, emissive and occlusion order. Each map first selects one of
+the two packed authored UV channels and then applies its own transform:
 
-**Why baking was chosen.** Before `GLTF-182`/`183`, CNA's PBR effects sampled every map from one
-shared UV channel. A shader-side transform needed both per-map uniforms and a second UV stream;
-the latter did not exist. Baking needed neither and was exactly equivalent for the common case in
-which all sampled maps share one `texCoord` and one transform.
+```
+u' = cos(rotation) * scale.x * u - sin(rotation) * scale.y * v + offset.x
+v' = sin(rotation) * scale.x * u + cos(rotation) * scale.y * v + offset.y
+```
 
-**Current cost.** Baking is destructive. Two maps may select either packed UV channel correctly and
-still require different transforms; without per-map shader matrices, only the reference transform
-can be represented. CNA records every map that wanted a different one in
-`MeshOut::unbakedTextureTransformsEXT`, which both loaders report by name (`GLTF-184`). It is a
-wrong image, but a named one.
+This is scale, then counter-clockwise rotation, then translation, exactly as the extension defines
+it. `PbrEffect` and `SkinnedPbrEffect` retain the authored `TextureTransformEXT` values;
+`FillGpuDrawParams` converts them to two padded affine rows per map. Direct glTF loading and the
+optional 25-number `.cnj` field preserve the same state, with identity defaults for old content.
+All PBR renderers consume the ten rows before applying any renderer-owned render-target V
+orientation correction, which is not part of the asset transform.
 
-**Adopted completion.** `GLTF-182`/`183` added strides 60/76 and five independent map selectors, so
-the missing prerequisite is now present. Per-map transforms belong in PBR shader state; `GLTF-184`
-owns that implementation and its L7 witness. Once every PBR renderer consumes the state, import-time
-baking and `unbakedTextureTransformsEXT` should be retired together rather than kept as competing
-paths.
+The earlier importer baked one reference transform into a shared UV stream. That was the only
+practical representation before the dual-UV strides and five map selectors existed, but it was
+destructive: two maps sharing one authored set can deliberately transform it differently. The bake
+and its `unbakedTextureTransformsEXT` warning were retired together, leaving one sampling path.
+`texture-transform-per-map` locks the result at L6 and L7: at one authored coordinate its base map
+must sample blue while its differently transformed normal map must sample a +Z quadrant.
 
 ## Texture mipmaps are role-aware or absent (`GLTF-206`)
 

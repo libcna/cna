@@ -4063,10 +4063,11 @@ namespace CNA::Internal::GltfImport
     {
         static const std::vector<GltfExtensionRecordEXT> registry = [] {
             std::vector<GltfExtensionRecordEXT> out = {
-                {"KHR_texture_transform", GltfExtensionSupportEXT::ImplementedWithNamedLimit, true,
-                 "Offset/rotation/scale applied with the specification's own formula, baked into "
-                 "the single shared UV channel. A second, different transform on another map "
-                 "cannot be baked and is named rather than dropped.",
+                {"KHR_texture_transform", GltfExtensionSupportEXT::Implemented, true,
+                 "All five PBR maps retain independent offset/rotation/scale and texCoord state "
+                 "through direct and offline loading. Every PBR renderer applies the resulting "
+                 "affine rows, and a discriminating EasyGL L7 fixture proves two maps sharing one "
+                 "authored UV stream can use different transforms.",
                  "GLTF-336"},
                 {"KHR_mesh_quantization", GltfExtensionSupportEXT::Implemented, true,
                  "Integer mesh attributes are decoded through the same normalized-accessor path "
