@@ -909,6 +909,7 @@ namespace CNA::Internal::Renderers::Bgfx
         bgfx::UniformHandle metallicRoughnessFactorUnif_ = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle pbrSrgbUnif_                  = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle dielectricFresnelUnif_        = BGFX_INVALID_HANDLE;
+        bgfx::UniformHandle pbrTextureTransformUnif_      = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle normalMapSampler_            = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle metallicRoughnessSampler_    = BGFX_INVALID_HANDLE;
         bgfx::UniformHandle emissiveMapSampler_          = BGFX_INVALID_HANDLE;

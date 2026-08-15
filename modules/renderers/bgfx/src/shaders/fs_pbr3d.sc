@@ -34,6 +34,8 @@ uniform vec4 u_fogColor;
 uniform vec4 u_srgb;
 // xyz=dielectric F0, w=dielectric F90 (KHR_materials_ior/specular factor endpoints).
 uniform vec4 u_dielectricFresnel;
+// Two affine UV rows per PBR map: base, normal, metallic-roughness, emissive, occlusion.
+uniform vec4 u_pbrTextureTransform[10];
 // REMED-GFX-078: per-slot V-flip for render-target color sources (bottom-up FBO on originBottomLeft
 // renderers -- see REMED-GFX-067). x=base color(0), y=normal(1), z=metallic-roughness(2),
 // w=emissive(3). The occlusion map (slot 4) is intentionally NOT covered -- a live RenderTarget2D as
@@ -42,6 +44,13 @@ uniform vec4 u_dielectricFresnel;
 uniform vec4 u_rtFlipV;
 
 vec2 rtFlipUV(vec2 uv, float flip) { return vec2(uv.x, mix(uv.y, 1.0 - uv.y, flip)); }
+
+vec2 pbrTransformUV(vec2 uv, int slot)
+{
+    vec3 value = vec3(uv, 1.0);
+    return vec2(dot(value, u_pbrTextureTransform[slot * 2].xyz),
+                dot(value, u_pbrTextureTransform[slot * 2 + 1].xyz));
+}
 
 vec3 cnaSrgbToLinear(vec3 c)
 {
@@ -78,7 +87,7 @@ vec3 PbrLight(vec3 N, vec3 V, vec3 L, vec3 lightColor, vec3 albedo, vec3 F0, vec
 
 void main()
 {
-    vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(v_texcoord0, u_rtFlipV.x));
+    vec4 baseColorTex = texture2D(s_texColor, rtFlipUV(pbrTransformUV(v_texcoord0, 0), u_rtFlipV.x));
     vec3 baseColor = mix(baseColorTex.rgb, cnaSrgbToLinear(baseColorTex.rgb), u_srgb.x);
     vec3 albedo = baseColor * u_diffuseColor.rgb;
     float alpha = baseColorTex.a * u_diffuseColor.a;
@@ -87,11 +96,11 @@ void main()
     vec3 T = normalize(v_tangent.xyz - N * dot(N, v_tangent.xyz));
     vec3 B = cross(N, T) * v_tangent.w;
     mat3 TBN = mat3(T, B, N);
-    vec3 sampledNormal = texture2D(s_texNormal, rtFlipUV(v_texcoord0, u_rtFlipV.y)).rgb * 2.0 - 1.0;
+    vec3 sampledNormal = texture2D(s_texNormal, rtFlipUV(pbrTransformUV(v_texcoord0, 1), u_rtFlipV.y)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= u_metallicRoughnessFactor.z;
     vec3 finalNormal = normalize(mul(TBN, sampledNormal));
 
-    vec4 mr = texture2D(s_texMetallicRoughness, rtFlipUV(v_texcoord0, u_rtFlipV.z));
+    vec4 mr = texture2D(s_texMetallicRoughness, rtFlipUV(pbrTransformUV(v_texcoord0, 2), u_rtFlipV.z));
     float roughness = clamp(mr.g * u_metallicRoughnessFactor.y, 0.045, 1.0);
     float metallic  = clamp(mr.b * u_metallicRoughnessFactor.x, 0.0, 1.0);
 
@@ -104,10 +113,10 @@ void main()
     Lo += PbrLight(finalNormal, V, normalize(-u_light1Dir.xyz), u_light1Diffuse.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-u_light2Dir.xyz), u_light2Diffuse.xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = texture2D(s_texOcclusion, v_texcoord0).r;
+    float occlusion = texture2D(s_texOcclusion, pbrTransformUV(v_texcoord0, 4)).r;
     occlusion = 1.0 + u_metallicRoughnessFactor.w * (occlusion - 1.0);
     vec3 ambient = u_ambientColor.xyz * albedo * occlusion;
-    vec3 emissiveSample = texture2D(s_texEmissive, rtFlipUV(v_texcoord0, u_rtFlipV.w)).rgb;
+    vec3 emissiveSample = texture2D(s_texEmissive, rtFlipUV(pbrTransformUV(v_texcoord0, 3), u_rtFlipV.w)).rgb;
     emissiveSample = mix(emissiveSample, cnaSrgbToLinear(emissiveSample), u_srgb.y);
     vec3 emissive = u_emissiveColor.xyz * emissiveSample;
 

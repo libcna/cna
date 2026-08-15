@@ -1835,6 +1835,7 @@ namespace CNA::Internal::Renderers::Bgfx
                 metallicRoughnessFactorUnif_ = bgfx::createUniform("u_metallicRoughnessFactor", bgfx::UniformType::Vec4);
                 pbrSrgbUnif_                  = bgfx::createUniform("u_srgb",                    bgfx::UniformType::Vec4);
                 dielectricFresnelUnif_        = bgfx::createUniform("u_dielectricFresnel",      bgfx::UniformType::Vec4);
+                pbrTextureTransformUnif_      = bgfx::createUniform("u_pbrTextureTransform",    bgfx::UniformType::Vec4, 10);
                 normalMapSampler_            = bgfx::createUniform("s_texNormal",             bgfx::UniformType::Sampler);
                 metallicRoughnessSampler_    = bgfx::createUniform("s_texMetallicRoughness",  bgfx::UniformType::Sampler);
                 emissiveMapSampler_          = bgfx::createUniform("s_texEmissive",           bgfx::UniformType::Sampler);
@@ -1991,6 +1992,7 @@ namespace CNA::Internal::Renderers::Bgfx
         destroyU(metallicRoughnessFactorUnif_);
         destroyU(pbrSrgbUnif_);
         destroyU(dielectricFresnelUnif_);
+        destroyU(pbrTextureTransformUnif_);
         destroyU(normalMapSampler_);
         destroyU(metallicRoughnessSampler_);
         destroyU(emissiveMapSampler_);
@@ -3545,6 +3547,7 @@ namespace CNA::Internal::Renderers::Bgfx
     // make (1,1,1,1) the correct "map absent" value.
     void BgfxRenderer::BindPbrTextures(const GpuDrawParams& params)
     {
+        bgfx::setUniform(pbrTextureTransformUnif_, params.pbrTextureTransformRows, 10);
         // REMED-GFX-078: each slot resolved through IBgfxSamplable (see BindSamplerSlot) so a
         // RenderTarget2D set as any PBR map binds its real handle instead of UB-casting to
         // BgfxTextureRenderer. Slots 1-4 are bound before slot 0 so slot 0 stays active last
