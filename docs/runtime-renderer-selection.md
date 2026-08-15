@@ -206,9 +206,11 @@ configure time, not merely to exist.
 | `HEADLESS;SOFTWARE;STUB` | ✅ builds, full test suite green, all three selectable at runtime, real fallback between them verified |
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
 | `OPENGLES3;OPENGLES1;OPENVG;BLEND2D;SOFTWARE;HEADLESS` | ✅ six renderers; **17/17 dispatch tests** pass. `OPENGLES1` needs an ES 1.1-capable Mesa (`scripts/opengles1-test-env.sh`); without it the suite covers the other five and says so |
-| `OPENGLES3;SKIA;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
+| `OPENGLES3;WICKED;SOFTWARE;HEADLESS` | ✅ all four selectable. `WICKED` needs `SDL_VIDEODRIVER=x11` **and** `libdxcompiler.so` in the working directory — its shader compiler loads that path literally |
+| `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
 | `OPENGLES3;SOKOL;SOFTWARE;HEADLESS;STUB` | ✅ two GL-based abstractions in one binary; all five selectable |
 | `OPENGLES3;MAGNUM;SOFTWARE;HEADLESS` | ✅ all four selectable |
+| `OPENGLES3;SKIA;SOFTWARE;HEADLESS` | ✅ 17/17 dispatch tests. First heavy **external artifact** in a multi build — needs `-DCNA_SKIA_ROOT=` and `-DCNA_SKIA_BUILD_DIR=` |
 | `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ all four selectable (`DILIGENT` needs `SDL_VIDEODRIVER=x11`). **Two-level dispatch verified**: CNA chooses DILIGENT at runtime, then DiligentCore chooses its own device — `CNA_DILIGENT_DEVICE=opengl` is still honoured |
 | `OPENGLES3;LLGL;SOFTWARE;HEADLESS` | ✅ all four selectable (`LLGL` needs `SDL_VIDEODRIVER=x11`; on Wayland it is the real fallback example above) |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
