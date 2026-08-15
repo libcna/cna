@@ -260,8 +260,9 @@ TEST(GltfSamplerMapping, MissingRoleAwareMipChainIsReportedOnlyForAnAffectedSamp
 // becoming baseColorTexture (GLTF-349). The image finder already followed that view, but the
 // sampler finder used to keep reading the now-inapplicable metallic-roughness view. Reshape the
 // real trilinear fixture after parsing so the texture/image/sampler pointers stay parser-owned and
-// prove that both sampler state and GLTF-206's report follow the converted diffuse texture.
-TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureSampler)
+// prove that sampler state, GLTF-206's report and GLTF-184's transform all follow the converted
+// diffuse texture.
+TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureState)
 {
     CnaTest::GltfOracle::LoadedFixture fixture("sampler-trilinear");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
@@ -269,10 +270,16 @@ TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureSample
     cgltf_data& data = const_cast<cgltf_data&>(fixture.Data());
     ASSERT_EQ(1u, data.materials_count);
     cgltf_material& material = data.materials[0];
-    const cgltf_texture_view diffuseView =
+    cgltf_texture_view diffuseView =
         material.pbr_metallic_roughness.base_color_texture;
     ASSERT_NE(nullptr, diffuseView.texture);
     ASSERT_NE(nullptr, diffuseView.texture->sampler);
+    diffuseView.has_transform = 1;
+    diffuseView.transform.offset[0] = 0.125f;
+    diffuseView.transform.offset[1] = 0.375f;
+    diffuseView.transform.scale[0] = 2.0f;
+    diffuseView.transform.scale[1] = 0.5f;
+    diffuseView.transform.rotation = 0.25f;
 
     material.has_pbr_specular_glossiness = 1;
     material.pbr_specular_glossiness.diffuse_texture = diffuseView;
@@ -289,6 +296,13 @@ TEST(GltfSamplerMapping, ConvertedSpecularGlossinessDiffuseKeepsItsTextureSample
     EXPECT_TRUE(sampler.declared);
     EXPECT_TRUE(sampler.minFilterRequiresMipChain);
     EXPECT_EQ(TextureFilter::Linear, sampler.filter);
+    const auto& transform = converted.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    EXPECT_FLOAT_EQ(0.125f, transform.Offset.X);
+    EXPECT_FLOAT_EQ(0.375f, transform.Offset.Y);
+    EXPECT_FLOAT_EQ(2.0f, transform.Scale.X);
+    EXPECT_FLOAT_EQ(0.5f, transform.Scale.Y);
+    EXPECT_FLOAT_EQ(0.25f, transform.Rotation);
     ASSERT_EQ(1u, converted.mipmappedSamplerMapsWithoutMipChainEXT.size());
     EXPECT_EQ("baseColorTexture", converted.mipmappedSamplerMapsWithoutMipChainEXT.front());
 }

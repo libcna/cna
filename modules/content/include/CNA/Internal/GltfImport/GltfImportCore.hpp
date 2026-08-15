@@ -17,6 +17,7 @@
 #include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureAddressMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureFilter.hpp"
+#include "Microsoft/Xna/Framework/Graphics/TextureTransformEXT.hpp"
 #include "Microsoft/Xna/Framework/Quaternion.hpp"
 #include "Microsoft/Xna/Framework/Vector3.hpp"
 #include "Microsoft/Xna/Framework/Vector4.hpp"
@@ -328,6 +329,15 @@ namespace CNA::Internal::GltfImport
          * @ref MeshOut::packedTexcoordSourceSetsEXT preserves that mapping. Absent maps use 0.
          */
         std::array<std::uint8_t, 5> textureCoordinateSetsEXT{};
+        /**
+         * @brief One shader-side UV transform per texture slot, in @ref TextureSlotEXT order.
+         *
+         * Values retain `KHR_texture_transform`'s authored offset/scale/rotation form. Identity is
+         * the default for an absent extension; unlike the former bake, maps sharing one vertex UV
+         * stream may therefore carry different transforms without changing vertex bytes.
+         */
+        std::array<Microsoft::Xna::Framework::Graphics::TextureTransformEXT, 5>
+            textureTransformsEXT{};
 
         /** @brief `pbrMetallicRoughness.baseColorFactor` (glTF default white/opaque). */
         Microsoft::Xna::Framework::Vector4 baseColorFactor{1.0f, 1.0f, 1.0f, 1.0f};
@@ -636,23 +646,6 @@ namespace CNA::Internal::GltfImport
          * explicit. Only maps the selected effect actually samples are named.
          */
         std::vector<std::string> mipmappedSamplerMapsWithoutMipChainEXT;
-        /**
-         * @brief Maps whose `KHR_texture_transform` could not be applied (`GLTF-184`/`GLTF-336`).
-         *
-         * The transform is **baked into UV data** at import. Although PBR layouts can now carry two
-         * sampled coordinate channels, they carry no per-map transform matrices, so only one
-         * reference transform can be honoured. Any other map declaring a *different* transform is
-         * sampled without its own transform, which for a tiled normal map or a rotated emissive
-         * mask is a visible mis-registration.
-         *
-         * Distinct from the now-closed `GLTF-182` dual-channel task: a per-map transform needs
-         * effect/GPU state and shader consumption rather than another vertex attribute. `GLTF-184`
-         * owns that remaining transition and retires this diagnostic once all PBR renderers apply
-         * the state.
-         *
-         * Empty for the ordinary case: no transforms at all, or every map sharing one.
-         */
-        std::vector<std::string> unbakedTextureTransformsEXT;
         /**
          * @brief How many `JOINTS_n`/`WEIGHTS_n` sets beyond set 0 the primitive authored.
          *

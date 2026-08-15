@@ -71,6 +71,7 @@ namespace CNA::Internal::GltfImport
         using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticKindEXT;
         using Microsoft::Xna::Framework::Graphics::GltfImportDiagnosticSeverityEXT;
         using Microsoft::Xna::Framework::Graphics::GltfImportReportEXT;
+        using Microsoft::Xna::Framework::Graphics::TextureTransformEXT;
 
         void AddImportDiagnosticEXT(
             GltfImportReportEXT& report, std::string code,
@@ -1090,16 +1091,6 @@ namespace CNA::Internal::GltfImport
                 "level zero.", mesh.mipmappedSamplerMapsWithoutMipChainEXT.size(), 0.0, subject,
                 mesh.mipmappedSamplerMapsWithoutMipChainEXT);
         }
-        if (!mesh.unbakedTextureTransformsEXT.empty())
-        {
-            AddImportDiagnosticEXT(
-                destination, "texture-transform-unbaked",
-                GltfImportDiagnosticKindEXT::DroppedData,
-                "CNA carries two sampled UV channels but no per-map texture-transform state; "
-                "these maps are sampled without their own transform.",
-                mesh.unbakedTextureTransformsEXT.size(), 0.0, subject,
-                mesh.unbakedTextureTransformsEXT);
-        }
         if (mesh.extraInfluenceSetsEXT > 0)
         {
             AddImportDiagnosticEXT(
@@ -2069,6 +2060,19 @@ namespace CNA::Internal::GltfImport
         return view.texcoord;
     }
 
+    /// Retains KHR_texture_transform in its authored form. The effect converts this to affine rows
+    /// once per draw; keeping it out of vertex bytes lets maps sharing a UV stream transform it
+    /// independently and keeps direct and offline material state structurally identical.
+    TextureTransformEXT TextureTransformForViewEXT(const cgltf_texture_view& view)
+    {
+        TextureTransformEXT result;
+        if (view.has_transform == 0) { return result; }
+        result.Offset = Vector2{view.transform.offset[0], view.transform.offset[1]};
+        result.Scale = Vector2{view.transform.scale[0], view.transform.scale[1]};
+        result.Rotation = view.transform.rotation;
+        return result;
+    }
+
     /// The texture view CNA treats as base colour after the archived specular-glossiness
     /// conversion. Kept beside FindBaseColorImage so image, sampler and UV selection cannot choose
     /// different source views.
@@ -2480,19 +2484,14 @@ namespace CNA::Internal::GltfImport
         if (!posAcc) { throw std::runtime_error("Primitive '" + name + "' has no POSITION attribute."); }
         const cgltf_accessor* normAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_normal, 0);
 
-        // The base-colour view remains the transform-baking policy owner (GLTF-184/186). UV stream
-        // selection itself is finalised after all decoded material images are known, because
-        // GLTF-182 can now carry the first two DISTINCT sets sampled by those maps.
+        // UV stream selection is finalised after all decoded material images are known, because
+        // GLTF-182 can carry the first two DISTINCT sets sampled by those maps. GLTF-184 keeps
+        // texture transforms separately on MaterialOut; vertex coordinates stay authored.
         int texcoordIndex = 0;
-        const cgltf_texture_transform* baseColorTransform = nullptr;
         const cgltf_texture_view* baseColorView = BaseColorTextureViewEXT(prim.material);
         if (baseColorView != nullptr && baseColorView->texture != nullptr)
         {
             texcoordIndex = EffectiveTexcoordSetEXT(*baseColorView);
-            if (baseColorView->has_transform)
-            {
-                baseColorTransform = &baseColorView->transform;
-            }
         }
 
         const cgltf_accessor* colorAcc = cgltf_find_accessor(&prim, cgltf_attribute_type_color, 0);
@@ -2770,6 +2769,28 @@ namespace CNA::Internal::GltfImport
                 SamplerForTextureView(prim.material->emissive_texture);
             out.material.samplers[slot(TextureSlotEXT::Occlusion)] =
                 SamplerForTextureView(prim.material->occlusion_texture);
+
+            // GLTF-184/GLTF-336: transforms follow the same five source views as images, samplers
+            // and texCoord selectors. The archived specular-glossiness conversion uses its
+            // diffuse view as base colour here too, preventing that compatibility path from
+            // choosing one view's image and another view's transform.
+            if (const cgltf_texture_view* baseView = BaseColorTextureViewEXT(prim.material))
+            {
+                out.material.textureTransformsEXT[slot(TextureSlotEXT::BaseColor)] =
+                    TextureTransformForViewEXT(*baseView);
+            }
+            out.material.textureTransformsEXT[slot(TextureSlotEXT::Normal)] =
+                TextureTransformForViewEXT(prim.material->normal_texture);
+            if (prim.material->has_pbr_metallic_roughness)
+            {
+                out.material.textureTransformsEXT[slot(TextureSlotEXT::MetallicRoughness)] =
+                    TextureTransformForViewEXT(
+                        prim.material->pbr_metallic_roughness.metallic_roughness_texture);
+            }
+            out.material.textureTransformsEXT[slot(TextureSlotEXT::Emissive)] =
+                TextureTransformForViewEXT(prim.material->emissive_texture);
+            out.material.textureTransformsEXT[slot(TextureSlotEXT::Occlusion)] =
+                TextureTransformForViewEXT(prim.material->occlusion_texture);
 
             // CNB-97 (Phase 14H): KHR_materials_emissive_strength extends EmissiveFactor's own
             // [0,1] range with a multiplier (real HDR-authored content routinely uses > 1), before
@@ -3182,67 +3203,6 @@ namespace CNA::Internal::GltfImport
             ? unpackSemantic(cgltf_attribute_type_texcoord,
                              out.packedTexcoordSourceSetsEXT[1], uv1Acc, 2, "TEXCOORD")
             : std::vector<float>();
-        // plan_gltf.md GLTF-184/GLTF-336. UV2 removes the attribute shortage, not the per-map
-        // transform shortage: one vertex coordinate cannot simultaneously contain two different
-        // transforms for maps that share it. Until every PBR shader carries per-map transform
-        // uniforms, the base-colour transform remains the one baked policy transform and every
-        // other differing transform is reported.
-        //
-        // Reported rather than fixed, and the reason is worth separating from GLTF-181's. That one
-        // (a real second UV *channel*) needs a vertex attribute, which means a new stride, and the
-        // stride it needs is already taken. This one needs only a per-map uniform in the PBR
-        // programs: the shared UV is transformed in the shader before each sample. That is a
-        // strictly smaller change -- no ABI, no VertexDeclaration -- but it is still a shader and
-        // uniform change in every renderer that has a PBR program, which is not something this
-        // task can land and verify. Naming the maps is what makes it a known limit rather than a
-        // mystery in someone's render comparison.
-        {
-            const auto sameTransform = [](const cgltf_texture_transform& a,
-                                          const cgltf_texture_transform* b) {
-                if (b == nullptr) { return false; }
-                return a.offset[0] == b->offset[0] && a.offset[1] == b->offset[1] &&
-                       a.scale[0] == b->scale[0] && a.scale[1] == b->scale[1] &&
-                       a.rotation == b->rotation;
-            };
-            const auto checkView = [&](const cgltf_texture_view& view, const char* mapName) {
-                if (view.texture == nullptr || view.has_transform == 0) { return; }
-                if (sameTransform(view.transform, baseColorTransform)) { return; }
-                out.unbakedTextureTransformsEXT.emplace_back(mapName);
-            };
-            if (prim.material != nullptr)
-            {
-                if (prim.material->has_pbr_metallic_roughness)
-                {
-                    checkView(prim.material->pbr_metallic_roughness.metallic_roughness_texture,
-                              "metallic-roughness");
-                }
-                checkView(prim.material->normal_texture, "normal");
-                checkView(prim.material->occlusion_texture, "occlusion");
-                checkView(prim.material->emissive_texture, "emissive");
-            }
-        }
-
-        // CNB-97 (Phase 14H): KHR_texture_transform, applied to the packed channel selected by the
-        // base-colour view, using the glTF spec's own reference formula (scale, then rotate, then
-        // translate). Other map transforms remain GLTF-184's separately reported shader-uniform
-        // residue; UV2 does not make two transforms of the same authored set bakeable.
-        if (baseColorTransform)
-        {
-            const float ox = baseColorTransform->offset[0], oy = baseColorTransform->offset[1];
-            const float sx = baseColorTransform->scale[0],  sy = baseColorTransform->scale[1];
-            const float rot = baseColorTransform->rotation;
-            const float cosR = std::cos(rot), sinR = std::sin(rot);
-            std::vector<float>& transformedUvs =
-                out.hasSecondTexcoordEXT &&
-                        out.packedTexcoordSourceSetsEXT[1] == EffectiveTexcoordSetEXT(*baseColorView)
-                    ? uvs1 : uvs;
-            for (std::size_t i = 0; i + 1 < transformedUvs.size(); i += 2)
-            {
-                const float u = transformedUvs[i], v = transformedUvs[i + 1];
-                transformedUvs[i]     = cosR * u * sx - sinR * v * sy + ox;
-                transformedUvs[i + 1] = sinR * u * sx + cosR * v * sy + oy;
-            }
-        }
         std::vector<float> weights = out.skinned
             ? unpackSemantic(cgltf_attribute_type_weights, 0, weightsAcc, 4, "WEIGHTS_0") : std::vector<float>();
 

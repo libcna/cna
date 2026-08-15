@@ -17,7 +17,6 @@ Specification: §3.9 ``materials``, §5.28 ``texture``, §5.29 ``sampler``, §5.
 from __future__ import annotations
 
 import math
-import struct
 
 from ..builder import TRIANGLES, UNSIGNED_SHORT, GltfBuilder
 from ..manifest import Fixture, l3_primitive, world_positions
@@ -340,36 +339,6 @@ _TRANSFORM_SCALE = (2.0, 0.5)
 _TRANSFORM_ROTATION = math.pi / 2.0
 
 
-def _f32(value: float) -> float:
-    """Rounds ``value`` to IEEE-754 binary32, the precision the importer works in."""
-    return struct.unpack("<f", struct.pack("<f", value))[0]
-
-
-def _baked_uv(u: float, v: float) -> tuple[float, float]:
-    """The specification's own KHR_texture_transform composition: scale, then rotate, then offset.
-
-    Stated here from the extension's formula rather than read back from CNA, so a wrong order is a
-    mismatch against the specification rather than against a second reading of the same code. Order
-    is the whole risk: rotate-then-scale is a different matrix, and with a square scale it would be
-    indistinguishable -- which is why the scale here is 2 by 0.5.
-
-    Evaluated in **binary32**, term by term, in the importer's own association order. That is not
-    pedantry: the L5 goldens are byte-exact, and no non-zero rotation has an exactly representable
-    sine and cosine in single precision -- ``cosf(pi/2)`` is about -4.4e-8, not 0. Computing this
-    in Python's doubles and rounding once at the end disagrees with the importer in the last few
-    bits, which a byte comparison reports as a failure of the transform rather than of the oracle.
-    """
-    ox, oy = (_f32(c) for c in _TRANSFORM_OFFSET)
-    sx, sy = (_f32(c) for c in _TRANSFORM_SCALE)
-    cos_r = _f32(math.cos(_f32(_TRANSFORM_ROTATION)))
-    sin_r = _f32(math.sin(_f32(_TRANSFORM_ROTATION)))
-    u, v = _f32(u), _f32(v)
-    # cosR * u * sx - sinR * v * sy + ox, left-associated exactly as the C++ expression is.
-    out_u = _f32(_f32(_f32(_f32(_f32(cos_r * u) * sx) - _f32(_f32(sin_r * v) * sy)) + ox))
-    out_v = _f32(_f32(_f32(_f32(_f32(sin_r * u) * sx) + _f32(_f32(cos_r * v) * sy)) + oy))
-    return (out_u, out_v)
-
-
 def tex_texture_transform() -> Fixture:
     """A base-colour texture carrying `KHR_texture_transform`. Owns the extension's corpus witness.
 
@@ -379,11 +348,9 @@ def tex_texture_transform() -> Fixture:
     and the committed corpus is where such a promise is meant to be kept. `GLTF-335`'s rule now
     fails the build if any claimed extension lacks a fixture, and this is the one that was missing.
 
-    The transform is applied by **baking it into the decoded UVs** at import (`GLTF-336`), because
-    `PbrEffect` has a single shared UV channel and no per-map transform matrix. So the expectation
-    lives at L2/L3 -- the decoded texture coordinates -- rather than in an effect parameter, and
-    the manifest states both the authored UVs and the baked ones so the transform is visible as a
-    difference rather than as a single set of numbers that could be either.
+    `GLTF-184` retains the transform as per-map effect state. L3/L5 therefore keep the authored UVs
+    byte-exact, while L4 states the independently transported offset/rotation/scale and L6/L7 own
+    the GPU affine conversion and visible sample.
     """
     b = GltfBuilder("tex-texture-transform")
     image = b.add_image(reference_texture(), name="Reference")
@@ -405,21 +372,18 @@ def tex_texture_transform() -> Fixture:
     b.add_scene([node], name="Scene")
     b.set_default_scene(0)
 
-    baked = [_baked_uv(u, v) for u, v in _QUAD_TEXCOORDS]
     l4 = world_positions(b, {mesh: list(_QUAD_POSITIONS)})
     l4["textureTransform"] = {
         "offset": list(_TRANSFORM_OFFSET),
         "rotation": _TRANSFORM_ROTATION,
         "scale": list(_TRANSFORM_SCALE),
         "authoredTexcoords": [list(uv) for uv in _QUAD_TEXCOORDS],
-        "bakedTexcoords": [list(uv) for uv in baked],
         "compositionRule": "scale, then rotate, then offset -- the extension's own order. "
                            "Rotate-then-scale is a different matrix, and with a square scale the "
                            "two would be indistinguishable, which is why the scale is 2 by 0.5.",
-        "bakingRule": "Applied by baking into the decoded UVs at import, because PbrEffect has one "
-                      "shared UV channel and no per-map transform matrix (GLTF-336). The "
-                      "expectation therefore lives in the texture coordinates, not in an effect "
-                      "parameter.",
+        "transportRule": "The decoded vertex UV remains authored. PbrEffect carries this map's "
+                         "transform independently and converts it to affine GPU rows, so maps "
+                         "sharing a coordinate stream need not share a transform (GLTF-184).",
         "claimRule": "CNA claims this extension, so a file listing it in extensionsRequired loads. "
                      "Until this fixture existed the claim was tested only on scratch documents -- "
                      "GLTF-335's rule now fails if any claimed extension has no corpus witness.",
@@ -428,16 +392,16 @@ def tex_texture_transform() -> Fixture:
         id="tex-texture-transform", audit_fixture=None, owning_group="textures",
         description="A quad whose base-colour texture declares KHR_texture_transform with a "
                     "non-neutral offset, a quarter-turn rotation and a non-square scale. The "
-                    "corpus witness for an extension CNA claims: the transform is baked into the "
-                    "decoded UVs, and the manifest states both the authored and the baked ones.",
+                    "corpus witness for an extension CNA claims: authored UVs stay byte-exact and "
+                    "the transform travels as independent per-map shader state.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
         features=["KHR_texture_transform", "offset", "rotation", "non-square scale",
-                  "transform baked into UVs"],
+                  "per-map shader transform"],
         spec_anchors=_SPEC + ["texture-transform"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="TransformedQuad", primitive=0, mode=TRIANGLES,
             positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
-            texcoords=baked, indices=_QUAD_INDICES,
+            texcoords=_QUAD_TEXCOORDS, indices=_QUAD_INDICES,
             material=_expected_material(material, "Transformed", base_color=True))]},
         l4=l4,
     )
@@ -446,9 +410,8 @@ def tex_texture_transform() -> Fixture:
 def texture_transform_per_map() -> Fixture:
     """Base colour and normal maps with deliberately different texture transforms.
 
-    CNA bakes the base-colour transform into its one shared UV stream and reports the normal map's
-    different transform as unrepresentable. This fixture makes that documented `GLTF-184` limit a
-    corpus statement instead of leaving it only in an inline probe.
+    The two maps share one authored UV stream but cannot share one transformed stream. This is the
+    discriminating `GLTF-184` witness for independent effect/GPU/shader state.
     """
     b = GltfBuilder("texture-transform-per-map")
     base_image = b.add_image(reference_texture(), name="BaseColor")
@@ -481,34 +444,31 @@ def texture_transform_per_map() -> Fixture:
     b.add_scene([node], name="Scene")
     b.set_default_scene(0)
 
-    baked = [_baked_uv(u, v) for u, v in _QUAD_TEXCOORDS]
     l4 = world_positions(b, {mesh: list(_QUAD_POSITIONS)})
     l4["textureTransforms"] = {
-        "bakedMap": "baseColor",
-        "reportedUnbakedMaps": ["normal"],
+        "transport": "independent shader-side state for each map; authored UVs remain unchanged",
         "baseColor": {
             "offset": list(_TRANSFORM_OFFSET),
             "rotation": _TRANSFORM_ROTATION,
             "scale": list(_TRANSFORM_SCALE),
         },
         "normal": normal_transform,
-        "reason": "CNA has one shared UV stream. The base-colour transform is baked into it; a "
-                  "different per-map transform requires shader uniforms and is reported rather "
-                  "than silently represented as if it matched.",
+        "reason": "One shared UV stream cannot contain two transformed values at once. Each map "
+                  "therefore applies its own affine transform after selecting that stream.",
     }
     return Fixture(
         id="texture-transform-per-map", audit_fixture=None, owning_group="textures",
         description="A base-colour map and normal map selecting the same UV set but declaring "
-                    "different KHR_texture_transform values. The base transform is baked and the "
-                    "normal transform must be named in unbakedTextureTransformsEXT.",
+                    "different KHR_texture_transform values. Both remain independent shader-side "
+                    "state while the shared authored UV bytes remain unchanged.",
         builder=b, validated_layers=["L1", "L2", "L3", "L4", "L5"],
         features=["KHR_texture_transform", "per-map transforms", "base-colour texture",
-                  "normal texture", "reported single-transform limit"],
+                  "normal texture", "shared UV with independent transforms"],
         spec_anchors=_SPEC + ["texture-transform"],
         l3={"primitives": [l3_primitive(
             mesh=mesh, mesh_name="PerMapTransformQuad", primitive=0, mode=TRIANGLES,
             positions=_QUAD_POSITIONS, normals=_QUAD_NORMALS, tangents=_QUAD_TANGENTS,
-            texcoords=baked, indices=_QUAD_INDICES,
+            texcoords=_QUAD_TEXCOORDS, indices=_QUAD_INDICES,
             material=_expected_material(material, "PerMapTransforms", base_color=True,
                                         normal=True))]},
         l4=l4,

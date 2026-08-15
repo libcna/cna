@@ -1,6 +1,6 @@
 {
   "id": "tex-texture-transform",
-  "description": "A quad whose base-colour texture declares KHR_texture_transform with a non-neutral offset, a quarter-turn rotation and a non-square scale. The corpus witness for an extension CNA claims: the transform is baked into the decoded UVs, and the manifest states both the authored and the baked ones.",
+  "description": "A quad whose base-colour texture declares KHR_texture_transform with a non-neutral offset, a quarter-turn rotation and a non-square scale. The corpus witness for an extension CNA claims: authored UVs stay byte-exact and the transform travels as independent per-map shader state.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -36,7 +36,7 @@
       "offset",
       "rotation",
       "non-square scale",
-      "transform baked into UVs"
+      "per-map shader transform"
     ],
     "auditFixture": null
   },
@@ -287,20 +287,20 @@
         ],
         "texcoords": [
           [
-            0.125,
-            0.375
+            0.0,
+            0.0
           ],
           [
-            0.12499991059303284,
-            2.375
+            1.0,
+            0.0
           ],
           [
-            -0.375,
-            0.3749999701976776
+            0.0,
+            1.0
           ],
           [
-            -0.3750000596046448,
-            2.375
+            1.0,
+            1.0
           ]
         ],
         "colors": [],
@@ -458,26 +458,8 @@
           1.0
         ]
       ],
-      "bakedTexcoords": [
-        [
-          0.125,
-          0.375
-        ],
-        [
-          0.12499991059303284,
-          2.375
-        ],
-        [
-          -0.375,
-          0.3749999701976776
-        ],
-        [
-          -0.3750000596046448,
-          2.375
-        ]
-      ],
       "compositionRule": "scale, then rotate, then offset -- the extension's own order. Rotate-then-scale is a different matrix, and with a square scale the two would be indistinguishable, which is why the scale is 2 by 0.5.",
-      "bakingRule": "Applied by baking into the decoded UVs at import, because PbrEffect has one shared UV channel and no per-map transform matrix (GLTF-336). The expectation therefore lives in the texture coordinates, not in an effect parameter.",
+      "transportRule": "The decoded vertex UV remains authored. PbrEffect carries this map's transform independently and converts it to affine GPU rows, so maps sharing a coordinate stream need not share a transform (GLTF-184).",
       "claimRule": "CNA claims this extension, so a file listing it in extensionsRequired loads. Until this fixture existed the claim was tested only on scratch documents -- GLTF-335's rule now fails if any claimed extension has no corpus witness."
     }
   },
@@ -513,7 +495,7 @@
         ],
         "vertexBufferFile": "tex-texture-transform.vb.bin",
         "vertexBufferBytes": 192,
-        "vertexBufferSha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5",
+        "vertexBufferSha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "tex-texture-transform.ib.bin",

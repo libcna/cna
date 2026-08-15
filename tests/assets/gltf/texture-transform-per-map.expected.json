@@ -1,6 +1,6 @@
 {
   "id": "texture-transform-per-map",
-  "description": "A base-colour map and normal map selecting the same UV set but declaring different KHR_texture_transform values. The base transform is baked and the normal transform must be named in unbakedTextureTransformsEXT.",
+  "description": "A base-colour map and normal map selecting the same UV set but declaring different KHR_texture_transform values. Both remain independent shader-side state while the shared authored UV bytes remain unchanged.",
   "generator": {
     "tool": "tools/gltf_fixtures",
     "version": 1,
@@ -36,7 +36,7 @@
       "per-map transforms",
       "base-colour texture",
       "normal texture",
-      "reported single-transform limit"
+      "shared UV with independent transforms"
     ],
     "auditFixture": null
   },
@@ -287,20 +287,20 @@
         ],
         "texcoords": [
           [
-            0.125,
-            0.375
+            0.0,
+            0.0
           ],
           [
-            0.12499991059303284,
-            2.375
+            1.0,
+            0.0
           ],
           [
-            -0.375,
-            0.3749999701976776
+            0.0,
+            1.0
           ],
           [
-            -0.3750000596046448,
-            2.375
+            1.0,
+            1.0
           ]
         ],
         "colors": [],
@@ -431,10 +431,7 @@
       ]
     },
     "textureTransforms": {
-      "bakedMap": "baseColor",
-      "reportedUnbakedMaps": [
-        "normal"
-      ],
+      "transport": "independent shader-side state for each map; authored UVs remain unchanged",
       "baseColor": {
         "offset": [
           0.125,
@@ -457,7 +454,7 @@
           1.5
         ]
       },
-      "reason": "CNA has one shared UV stream. The base-colour transform is baked into it; a different per-map transform requires shader uniforms and is reported rather than silently represented as if it matched."
+      "reason": "One shared UV stream cannot contain two transformed values at once. Each map therefore applies its own affine transform after selecting that stream."
     }
   },
   "l5": {
@@ -492,7 +489,7 @@
         ],
         "vertexBufferFile": "texture-transform-per-map.vb.bin",
         "vertexBufferBytes": 192,
-        "vertexBufferSha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5",
+        "vertexBufferSha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7",
         "indexElementSize": 2,
         "indexCount": 6,
         "indexBufferFile": "texture-transform-per-map.ib.bin",

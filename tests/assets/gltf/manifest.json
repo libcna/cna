@@ -1701,7 +1701,7 @@
         "offset",
         "rotation",
         "non-square scale",
-        "transform baked into UVs"
+        "per-map shader transform"
       ],
       "auditFixture": null
     },
@@ -1721,7 +1721,7 @@
         "per-map transforms",
         "base-colour texture",
         "normal texture",
-        "reported single-transform limit"
+        "shared UV with independent transforms"
       ],
       "auditFixture": null
     },
@@ -5771,8 +5771,8 @@
     },
     {
       "path": "tex-texture-transform.expected.json",
-      "bytes": 11175,
-      "sha256": "45ee0413023d47a990aecfa11e1c8d37ddd6c4e61e6f6cc7d0d6223b5cb67c1a"
+      "bytes": 10791,
+      "sha256": "3d3377ab5c4c3b211c1365b5d6595d48097ab4743f1b26c4e6bf56024bf14764"
     },
     {
       "path": "tex-texture-transform.glb",
@@ -5792,7 +5792,7 @@
     {
       "path": "tex-texture-transform.vb.bin",
       "bytes": 192,
-      "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+      "sha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7"
     },
     {
       "path": "texture-shared-two-samplers.expected.json",
@@ -5821,8 +5821,8 @@
     },
     {
       "path": "texture-transform-per-map.expected.json",
-      "bytes": 10431,
-      "sha256": "8494fecc0ba8cad4cb82d72cb200f6e45c21fa8f1d33b84f946e09442859766f"
+      "bytes": 10336,
+      "sha256": "912391c3cca4fa0fc075ec9d264a953582e7135550c4b3c426c22523e3f3fb09"
     },
     {
       "path": "texture-transform-per-map.glb",
@@ -5842,7 +5842,7 @@
     {
       "path": "texture-transform-per-map.vb.bin",
       "bytes": 192,
-      "sha256": "c662b76ca269f6c9452f44946b8da90f4ab45019018277d3b2cd304d47f45ba5"
+      "sha256": "7f3db77e1a5e5e23bac03018d9e5397b8e7378f31026d1e317a92b9f39f756c7"
     },
     {
       "path": "two-primitives-one-buffer.expected.json",

@@ -622,7 +622,7 @@ TEST(GltfImportCoreTest, ComputeTangentsEXTWorksOnADracoCompressedPbrPrimitiveWi
 }
 #endif
 
-TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
+TEST(GltfImportCoreTest, ExtractMeshCarriesTextureTransformAndEmissiveStrength)
 {
     const MeshOut out = ExtractPrimitive0(kTextureTransformAndEmissiveStrengthGltf);
     ASSERT_TRUE(out.usePbr);
@@ -636,22 +636,24 @@ TEST(GltfImportCoreTest, ExtractMeshAppliesTextureTransformAndEmissiveStrength)
     EXPECT_NEAR(out.material.emissiveFactor.Y, 0.9f, 1e-5f);
     EXPECT_NEAR(out.material.emissiveFactor.Z, 0.3f, 1e-5f);
 
-    // KHR_texture_transform (offset=[0.1,0.2], scale=[2.0,0.5], rotation=0): u'=u*2.0+0.1,
-    // v'=v*0.5+0.2. Stride 48 = Position(12)+Normal(12)+Tangent(16)+UV(8); UV is the last 8 bytes.
+    // GLTF-184: authored UV bytes remain authored; the transform is independent material state so
+    // each of the five maps may transform a shared stream differently in the shader.
     auto readUv = [&](std::size_t vertexIndex) {
         float uv[2];
         std::memcpy(uv, out.vertexBytes.data() + vertexIndex * 48 + 40, sizeof(uv));
         return std::pair<float, float>(uv[0], uv[1]);
     };
-    auto [u0, v0] = readUv(0); // source uv (0,0)
-    EXPECT_NEAR(u0, 0.1f, 1e-5f);
-    EXPECT_NEAR(v0, 0.2f, 1e-5f);
-    auto [u1, v1] = readUv(1); // source uv (1,0)
-    EXPECT_NEAR(u1, 2.1f, 1e-5f);
-    EXPECT_NEAR(v1, 0.2f, 1e-5f);
-    auto [u2, v2] = readUv(2); // source uv (0,1)
-    EXPECT_NEAR(u2, 0.1f, 1e-5f);
-    EXPECT_NEAR(v2, 0.7f, 1e-5f);
+    EXPECT_EQ(readUv(0), (std::pair<float, float>{0.0f, 0.0f}));
+    EXPECT_EQ(readUv(1), (std::pair<float, float>{1.0f, 0.0f}));
+    EXPECT_EQ(readUv(2), (std::pair<float, float>{0.0f, 1.0f}));
+
+    const auto& transform = out.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    EXPECT_FLOAT_EQ(transform.Offset.X, 0.1f);
+    EXPECT_FLOAT_EQ(transform.Offset.Y, 0.2f);
+    EXPECT_FLOAT_EQ(transform.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(transform.Scale.Y, 0.5f);
+    EXPECT_FLOAT_EQ(transform.Rotation, 0.0f);
 }
 
 TEST(GltfImportCoreTest, ExtractPunctualLightsEXTApproximatesDirectionalAndPointLights)

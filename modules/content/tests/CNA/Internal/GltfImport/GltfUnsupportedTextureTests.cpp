@@ -282,13 +282,7 @@ TEST(GltfUnsupportedTexture, RequiringEitherExtensionIsRefusedOutrightRatherThan
     }
 }
 
-// --- plan_gltf.md GLTF-184/GLTF-336: one UV channel, one bakeable transform --------------------
-//
-// KHR_texture_transform is applied by BAKING it into the UV data at import, and there is exactly
-// one UV channel to bake into -- so exactly one transform can be honoured. CNA honours the base
-// colour's, and every other map declaring a different one is sampled with the base colour's
-// coordinates instead of its own. For a tiled normal map or a rotated emissive mask that is a
-// visible mis-registration, and it happened without a word.
+// --- plan_gltf.md GLTF-184/GLTF-336: independent per-map transform state ------------------------
 
 namespace
 {
@@ -333,37 +327,45 @@ namespace
     const char* kScaledFour  = R"(, "extensions": { "KHR_texture_transform": { "scale": [4, 4] } })";
 }
 
-TEST(GltfUnsupportedTexture, AMapWhoseTextureTransformDiffersFromTheBaseColoursIsReported)
+TEST(GltfUnsupportedTexture, DifferentBaseAndNormalTransformsAreBothCarried)
 {
     const MeshOut out = Extract(TransformDocument(kScaledTwice, kScaledFour));
-    ASSERT_EQ(1u, out.unbakedTextureTransformsEXT.size())
-        << "the normal map's own transform was dropped without a word";
-    EXPECT_EQ("normal", out.unbakedTextureTransformsEXT[0]);
+    const auto& base = out.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    const auto& normal = out.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::Normal)];
+    EXPECT_FLOAT_EQ(base.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(base.Scale.Y, 2.0f);
+    EXPECT_FLOAT_EQ(normal.Scale.X, 4.0f);
+    EXPECT_FLOAT_EQ(normal.Scale.Y, 4.0f);
+    EXPECT_NE(base, normal);
 }
 
-TEST(GltfUnsupportedTexture, AMapSharingTheBaseColoursTransformIsNotReported)
+TEST(GltfUnsupportedTexture, MapsMayCarryEqualTransformsIndependently)
 {
-    // The control that keeps the check from degrading into "any transform warns". Sharing one
-    // transform is the common authoring pattern and is honoured exactly, so it must be silent.
     const MeshOut out = Extract(TransformDocument(kScaledTwice, kScaledTwice));
-    EXPECT_TRUE(out.unbakedTextureTransformsEXT.empty())
-        << "an identical transform was reported as unbakeable: "
-        << (out.unbakedTextureTransformsEXT.empty() ? "" : out.unbakedTextureTransformsEXT[0]);
+    EXPECT_EQ(out.material.textureTransformsEXT[
+                  static_cast<std::size_t>(TextureSlotEXT::BaseColor)],
+              out.material.textureTransformsEXT[
+                  static_cast<std::size_t>(TextureSlotEXT::Normal)]);
 }
 
-TEST(GltfUnsupportedTexture, AMapWithATransformWhenTheBaseColourHasNoneIsReported)
+TEST(GltfUnsupportedTexture, ATransformOnOnlyTheNormalMapLeavesBaseColourAtIdentity)
 {
-    // The asymmetric case: nothing was baked at all, so the normal map's transform is not merely
-    // overridden -- it is entirely absent from the UV data.
     const MeshOut out = Extract(TransformDocument("", kScaledFour));
-    ASSERT_EQ(1u, out.unbakedTextureTransformsEXT.size());
-    EXPECT_EQ("normal", out.unbakedTextureTransformsEXT[0]);
+    const Microsoft::Xna::Framework::Graphics::TextureTransformEXT identity;
+    EXPECT_EQ(identity, out.material.textureTransformsEXT[
+                            static_cast<std::size_t>(TextureSlotEXT::BaseColor)]);
+    EXPECT_FLOAT_EQ(4.0f, out.material.textureTransformsEXT[
+                              static_cast<std::size_t>(TextureSlotEXT::Normal)].Scale.X);
 }
 
-TEST(GltfUnsupportedTexture, AMaterialWithNoTextureTransformAtAllReportsNothing)
+TEST(GltfUnsupportedTexture, ATransformlessMaterialKeepsAllFiveIdentityDefaults)
 {
     const MeshOut out = Extract(TransformDocument("", ""));
-    EXPECT_TRUE(out.unbakedTextureTransformsEXT.empty());
+    const Microsoft::Xna::Framework::Graphics::TextureTransformEXT identity;
+    for (const auto& transform : out.material.textureTransformsEXT)
+        EXPECT_EQ(identity, transform);
 }
 
 // --- plan_gltf.md GLTF-339: KHR_materials_transmission -----------------------------------------

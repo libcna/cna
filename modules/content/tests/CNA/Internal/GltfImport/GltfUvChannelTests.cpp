@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 //
 // plan_gltf.md GLTF-087 / GLTF-088 / GLTF-096 / GLTF-182 / GLTF-185 / GLTF-187: which UV
-// channels a primitive packs, and what is baked into them.
+// channels a primitive packs, and which per-map transform travels beside them.
 //
 // CNA carries two UV channels for PBR material maps. A one-set material keeps the compact legacy
 // layout; a two-set material maps its two authored suffixes onto TextureCoordinate0/1. Choosing
@@ -242,9 +242,8 @@ TEST(GltfUvChannel, TwoSampledTexcoordSetsAreBothPackedExactlyAndMappedPerTextur
 TEST(GltfUvChannel, TheTextureTransformsOwnTexCoordOverridesTheTextureViews)
 {
     // KHR_texture_transform may carry its own `texCoord`, and the extension makes it override the
-    // view's. Here they disagree deliberately: the view says set 0 and the transform says set 1, so
-    // an implementation that reads only the view bakes exactly the wrong one -- and the result is a
-    // fully textured mesh, just with the other set's coordinates.
+    // view's. Here they disagree deliberately: the view says set 0 and the transform says set 1,
+    // so an implementation that reads only the view packs exactly the wrong source set.
     const MeshOut mesh = ExtractFirst(TwoUvSetDocument(
         R"(, "texCoord": 0, "extensions": { "KHR_texture_transform": { "texCoord": 1 } })"));
     ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
@@ -264,9 +263,9 @@ TEST(GltfUvChannel, TheTextureTransformScalesThenRotatesThenTranslates)
     // quarter turn, and an offset that is not symmetric.
     //
     // Vertex 0's UV is (0.10, 0.20). Scale by (2, 4) gives (0.20, 0.80). Rotating by -90 degrees
-    // about the origin -- glTF's rotation is clockwise in UV space, hence the sign -- maps (u, v)
-    // to (u*cos + v*sin, -u*sin + v*cos) with cos = 0, sin = 1, giving (0.80, -0.20). Translating
-    // by (0.5, 0.25) gives (1.30, 0.05).
+    // about the origin maps (u, v) to (-v, u), giving (-0.80, 0.20). Translating by (0.5, 0.25)
+    // gives (-0.30, 0.45). The effect tests independently lock the resulting affine rows; this
+    // test locks that the importer retains the authored factors rather than baking them.
     const float pi = 3.14159265358979323846f;
     const MeshOut mesh = ExtractFirst(TwoUvSetDocument(
         R"(, "extensions": { "KHR_texture_transform": {
@@ -275,15 +274,15 @@ TEST(GltfUvChannel, TheTextureTransformScalesThenRotatesThenTranslates)
     ASSERT_EQ(3u, mesh.vertexBytes.size() / static_cast<std::size_t>(mesh.stride));
 
     const std::vector<float> uv = UvOfVertex(mesh, 0);
-    const float c = std::cos(pi / 2.0f);
-    const float sn = std::sin(pi / 2.0f);
-    const float su = kUv0[0] * 2.0f;
-    const float sv = kUv0[1] * 4.0f;
-    const float expectedU = c * su - sn * sv + 0.5f;
-    const float expectedV = sn * su + c * sv + 0.25f;
-    EXPECT_NEAR(expectedU, uv[0], kTolerance)
-        << "the transform was not applied as scale, then rotate, then translate";
-    EXPECT_NEAR(expectedV, uv[1], kTolerance);
+    EXPECT_NEAR(kUv0[0], uv[0], kTolerance);
+    EXPECT_NEAR(kUv0[1], uv[1], kTolerance);
+    const auto& transform = mesh.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    EXPECT_FLOAT_EQ(transform.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(transform.Scale.Y, 4.0f);
+    EXPECT_NEAR(transform.Rotation, pi / 2.0f, kTolerance);
+    EXPECT_FLOAT_EQ(transform.Offset.X, 0.5f);
+    EXPECT_FLOAT_EQ(transform.Offset.Y, 0.25f);
 }
 
 TEST(GltfUvChannel, AnIdentityTextureTransformLeavesTheUvsExactlyAlone)
@@ -298,12 +297,10 @@ TEST(GltfUvChannel, AnIdentityTextureTransformLeavesTheUvsExactlyAlone)
     EXPECT_NEAR(kUv0[1], uv[1], kTolerance);
 }
 
-TEST(GltfUvChannel, CorpusPerMapTransformNamesTheMapThatCannotShareTheBakedTransform)
+TEST(GltfUvChannel, CorpusCarriesDifferentTransformsForMapsSharingOneUvStream)
 {
-    // This is `GLTF-184`'s documented limit in a permanent corpus asset. The base colour and
-    // normal map both use TEXCOORD_0 but author different non-neutral transforms. One shared UV
-    // stream can carry only the base colour's baked result, so the normal map must be named rather
-    // than silently sampled with somebody else's transform.
+    // Both maps use TEXCOORD_0 but author different non-neutral transforms. The raw stream stays
+    // shared and unchanged while each map retains its own shader-side state.
     const CnaTest::GltfOracle::LoadedFixture fixture("texture-transform-per-map");
     ASSERT_TRUE(fixture.Ok()) << fixture.Error();
     ASSERT_GT(fixture.Data().meshes_count, 0u);
@@ -311,8 +308,21 @@ TEST(GltfUvChannel, CorpusPerMapTransformNamesTheMapThatCannotShareTheBakedTrans
 
     const MeshOut mesh = ExtractMesh(&fixture.Data(), fixture.Data().meshes[0].primitives[0],
                                      "probe", nullptr, 1.0f);
-    ASSERT_EQ(1u, mesh.unbakedTextureTransformsEXT.size());
-    EXPECT_EQ("normal", mesh.unbakedTextureTransformsEXT.front());
+    const auto& base = mesh.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::BaseColor)];
+    const auto& normal = mesh.material.textureTransformsEXT[
+        static_cast<std::size_t>(TextureSlotEXT::Normal)];
+    EXPECT_FLOAT_EQ(base.Offset.X, 0.125f);
+    EXPECT_FLOAT_EQ(base.Offset.Y, 0.375f);
+    EXPECT_FLOAT_EQ(base.Scale.X, 2.0f);
+    EXPECT_FLOAT_EQ(base.Scale.Y, 0.5f);
+    EXPECT_NEAR(base.Rotation, 1.5707963267948966f, kTolerance);
+    EXPECT_FLOAT_EQ(normal.Offset.X, 0.625f);
+    EXPECT_FLOAT_EQ(normal.Offset.Y, 0.25f);
+    EXPECT_FLOAT_EQ(normal.Scale.X, 0.75f);
+    EXPECT_FLOAT_EQ(normal.Scale.Y, 1.5f);
+    EXPECT_NEAR(normal.Rotation, -0.7853981633974483f, kTolerance);
+    EXPECT_NE(base, normal);
 }
 
 // --- GLTF-174: tangent generation uses the generated normals ---------------------------------------
