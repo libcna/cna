@@ -296,6 +296,16 @@
       "task": "CBIND-035D1"
     },
     {
+      "id": "effect-annotation-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/EffectAnnotation(?:Collection)?\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "alias"],
+      "mapping": "owned immutable `CNA_EffectAnnotationHandle` values created from copied UTF-8 metadata/raw float storage plus owned mutable `CNA_EffectAnnotationCollectionHandle` snapshots; versioned metadata, exact string count/copy, all typed getters and copied count/index/name collection operations replace native vectors, references and iterators",
+      "tests": "all metadata/string/scalar/vector/matrix getters, empty fallbacks, raw Boolean/Int32 bits, collection add/count/index/name lookup, copy independence, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths in strict-C `EffectAnnotationSmoke.c`, plus C/C++ ABI assertions under HEADLESS and SDL_RENDERER and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035D2"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D1 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035D2 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -246,7 +246,7 @@ mechanical wrapper.
 | CBIND-035A | Establish 3D value and identity ABI | ✅ | `math_values.h` now defines fixed-layout Point, Vector4, Quaternion, Matrix, Plane, Ray and bounding-volume PODs, all 17 public PackedVector raw-storage aliases and stable containment/plane/curve identities. `graphics3d.h` freezes buffer/index/primitive/SetData/vertex identities and the four-field `CNA_VertexElement`. Strict C17 and C++23 assertions cover every represented storage width, representative/full field offsets and identity ordinals under HEADLESS and SDL_RENDERER. Coverage maps only the 169 directly represented type/field/property/identity rows; all constructors, constants and operations remain owned by CBIND-035B. |
 | CBIND-035B | Complete math, geometry and packed-value operations | ✅ | Every public math and PackedVector row is mapped through fixed values, validated handles or C-native scalar/bulk operations. Numeric, IEEE, lifetime, capacity, aliasing and failure behavior is covered in strict C under HEADLESS and SDL_RENDERER plus focused ASan+UBSan runs. Completed as CBIND-035B1–B7. |
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ✅ | `texture.h`, `texture_volume.h`, `vertex_values.h`, `vertex_resources.h`, `index_resources.h` and the common `graphics_resource.h` map all 402 owned rows through fixed values, generation/type/thread-validated handles, caller-window transfers and explicit backend limits. Decomposed into and completed as CBIND-035C1–C7. |
-| CBIND-035D | Add effects, shaders and parameter coverage | 🟨 | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. Decomposed into CBIND-035D1–D9; D1 is complete. |
+| CBIND-035D | Add effects, shaders and parameter coverage | 🟨 | Map Effect/technique/pass/parameter/annotation collections, stock/custom effects and shader/material extensions without exposing bytecode objects, C++ containers or backend pointers. Decomposed into CBIND-035D1–D9; D1–D2 are complete. |
 | CBIND-035E | Add model, mesh and animation coverage | ⬜ | Map model/bone/mesh/part collections, animation and morph/skinning/material extensions through stable handles, count/copy and bulk transforms. |
 | CBIND-035F | Complete graphics-device and draw submission | ⬜ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. |
 | CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
@@ -288,7 +288,7 @@ containers, shader objects or renderer pointers.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-035D1 | 17 | Establish effect-parameter identities | ✅ | `effects.h` defines fixed-width `CNA_EffectParameterClass` and `CNA_EffectParameterType` identities with all five class and ten type constants at their native ordinals. Strict C17 and C++23 assertions cover every value and storage width under HEADLESS and SDL_RENDERER. |
-| CBIND-035D2 | 30 | Complete effect annotations | ⬜ | Map EffectAnnotation values and their collection through copied metadata/value snapshots and count/index/name lookup without exposing native vectors or iterators. |
+| CBIND-035D2 | 30 | Complete effect annotations | ✅ | `effects.h` maps all EffectAnnotation/Collection rows through owned immutable annotation handles created from copied UTF-8/raw-value metadata and owned mutable collection snapshots. Versioned info, exact strings, every scalar/vector/matrix getter and copied count/index/name operations preserve empty/default/native bit-storage behavior without exposing references, vectors or iterators. Strict-C tests cover all operations, collection-copy independence, capacity atomicity and invalid/stale/wrong-kind/wrong-thread paths under both backends plus ASan+UBSan; C/C++ assertions freeze handle and descriptor layouts. |
 | CBIND-035D3 | 84 | Complete effect parameters | ⬜ | Map EffectParameter and its collection through stable handles, typed scalar/vector/matrix/string/texture values, caller arrays and count/index/name lookup with explicit ownership and mutation rules. |
 | CBIND-035D4 | 67 | Complete techniques, passes and collections | ⬜ | Map EffectTechnique/EffectPass and both collections through effect-owned borrowed handles, count/index/name lookup, annotations, current-technique identity and validated Apply dispatch. |
 | CBIND-035D5 | 70 | Complete Effect, ShaderEffect, EffectMaterial and SpriteEffect | ⬜ | Map base lifecycle/clone/current collections plus copied shader-source/uniform operations and the material/sprite specializations; compiled bytecode and backend renderer pointers remain behind explicit callable limitations. |
@@ -403,7 +403,7 @@ Runtime value is never an acceptable substitute for a C mapping.
 ## Current status
 
 `CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035C`, `CBIND-035C1`–`CBIND-035C7`
-and `CBIND-035D1` are ✅; parents `CBIND-035` and `CBIND-035D` remain 🟨, while `CBIND-035D2`
+and `CBIND-035D1`–`CBIND-035D2` are ✅; parents `CBIND-035` and `CBIND-035D` remain 🟨, while `CBIND-035D3`
 through `CBIND-044` remain ⬜. The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
@@ -456,4 +456,6 @@ parent CBIND-035C; the snapshot is now 2,339 implemented, 19 partial, 3,987 plan
 applicable. CBIND-035D is partitioned into nine dependency-ordered slices; CBIND-035D1 maps all 17
 EffectParameterClass/EffectParameterType rows through stable fixed-width identities, bringing the
 snapshot to 2,356 implemented, 19 partial, 3,970 planned and 70 not applicable, with CBIND-035D2
-effect annotations next.
+effect annotations next. CBIND-035D2 maps all 30 annotation/collection rows through owned copied
+handles, typed getters and count/index/name snapshot operations; the snapshot is now 2,386
+implemented, 19 partial, 3,940 planned and 70 not applicable, with CBIND-035D3 parameters next.

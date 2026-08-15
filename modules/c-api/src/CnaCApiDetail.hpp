@@ -48,6 +48,8 @@ enum class ObjectKind : uint32_t {
     VertexBufferEventRegistration = 19,
     IndexBuffer = 20,
     IndexBufferEventRegistration = 21,
+    EffectAnnotation = 22,
+    EffectAnnotationCollection = 23,
     Test = UINT32_MAX
 };
 

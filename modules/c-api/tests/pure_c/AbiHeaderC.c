@@ -49,6 +49,20 @@ _Static_assert(sizeof(CNA_EffectParameterType) == sizeof(uint32_t) &&
                    CNA_EFFECT_PARAMETER_TYPE_TEXTURE3D == UINT32_C(8) &&
                    CNA_EFFECT_PARAMETER_TYPE_TEXTURE_CUBE == UINT32_C(9),
                "CNA effect-parameter type identities must remain stable");
+_Static_assert(sizeof(CNA_EffectAnnotationHandle) == 8U &&
+                   sizeof(CNA_EffectAnnotationCollectionHandle) == 8U,
+               "CNA effect-annotation handles must remain stable");
+_Static_assert(sizeof(CNA_EffectAnnotationCreateInfo) == 88U &&
+                   _Alignof(CNA_EffectAnnotationCreateInfo) == 8U &&
+                   offsetof(CNA_EffectAnnotationCreateInfo, name) == 8U &&
+                   offsetof(CNA_EffectAnnotationCreateInfo, semantic) == 24U &&
+                   offsetof(CNA_EffectAnnotationCreateInfo, row_count) == 40U &&
+                   offsetof(CNA_EffectAnnotationCreateInfo, data) == 56U &&
+                   offsetof(CNA_EffectAnnotationCreateInfo, cached_string) == 72U,
+               "CNA_EffectAnnotationCreateInfo layout must remain stable");
+_Static_assert(sizeof(CNA_EffectAnnotationInfo) == 24U &&
+                   _Alignof(CNA_EffectAnnotationInfo) == 4U,
+               "CNA_EffectAnnotationInfo layout must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&
