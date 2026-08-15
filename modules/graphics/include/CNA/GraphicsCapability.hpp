@@ -15,7 +15,7 @@ namespace CNA
     {
         /**
          * @brief The 3D pipeline as a whole (vertex/index buffers, 3D draw calls, depth/stencil
-         * clears and state). Several renderers, including SDL_Renderer, Canvas, GDI, and the
+         * clears and state). Several renderers, including the native 2D renderer, Canvas, GDI, and the
          * Skia raster renderer, are intentionally 2D-only and lack this entirely. Query the selected
          * renderer rather than inferring support from its name. GDI's separate 2D stencil-mask
          * extension does not imply a 3D pipeline.

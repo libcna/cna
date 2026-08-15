@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MS-PL
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
+#include "CNA/Platform/Detail/Sdl3RendererInterop.hpp"
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dEnumMapping.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dCompiledEffect.hpp"
@@ -53,11 +54,36 @@ namespace CNA::Internal::Renderers::Fna3d
         }
     }
 
+    FNA3D_Device* Fna3dDeviceState::RequireDevice(const char* operation) const
+    {
+        if (device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "resource operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return device;
+    }
+
+    Fna3dRenderer& Fna3dDeviceState::RequireRenderer(const char* operation) const
+    {
+        if (renderer == nullptr || device == nullptr)
+        {
+            throw std::runtime_error(
+                std::string("FNA3D renderer: ") +
+                (operation != nullptr ? operation : "renderer operation") +
+                " was requested after the owning graphics device was destroyed.");
+        }
+        return *renderer;
+    }
+
     namespace Detail
     {
-        std::uint64_t PrepareWindowFlags()
+        bool PrepareWindowNeedsOpenGl()
         {
-            return static_cast<std::uint64_t>(FNA3D_PrepareWindowAttributes());
+            const std::uint32_t flags = FNA3D_PrepareWindowAttributes();
+            return (flags & SDL_WINDOW_OPENGL) != 0;
         }
     }
 
@@ -66,7 +92,7 @@ namespace CNA::Internal::Renderers::Fna3d
     // ---------------------------------------------------------------------------------------
 
     Fna3dRenderer::Fna3dRenderer(const GraphicsRendererCreateArgs& args)
-        : window_(args.window)
+        : window_(CNA::Platform::Detail::ResolveSdl3RendererWindow(args.surface.windowId))
         , presentationMode_(args.presentationMode)
     {
         FNA3D_HookLogFunctions(ForwardInfo, ForwardWarn, ForwardError);
@@ -94,7 +120,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // GraphicsDevice already called FNA3D_PrepareWindowAttributes() before creating the
-        // window (Detail::PrepareWindowFlags), which is also what selected the driver. Calling it
+        // window (Detail::PrepareWindowNeedsOpenGl), which is also what selected the driver. Calling it
         // again here would re-run driver selection after the window's visual is fixed.
         int windowWidth = 0;
         int windowHeight = 0;
@@ -137,6 +163,11 @@ namespace CNA::Internal::Renderers::Fna3d
                 "hint to pin a specific driver.");
         }
 
+        deviceState_->device = device_;
+        deviceState_->renderer = this;
+
+        try
+        {
         RecomputeLayout();
 
         // XNA's device defaults: BlendState.Opaque, DepthStencilState.Default,
@@ -233,7 +264,20 @@ namespace CNA::Internal::Renderers::Fna3d
         QueryDriverLimits();
         ProbeCompressedReadbackSupport();
 
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        IGraphicsRenderer::RegisterForWindow(SDL_GetWindowID(window_), this);
+        }
+        catch (...)
+        {
+            deviceState_->renderer = nullptr;
+            for (Fna3dStockEffect& effect : effects_)
+            {
+                effect.Destroy(device_);
+            }
+            FNA3D_DestroyDevice(device_);
+            device_ = nullptr;
+            deviceState_->device = nullptr;
+            throw;
+        }
     }
 
     void Fna3dRenderer::QueryDriverLimits()
@@ -410,12 +454,17 @@ namespace CNA::Internal::Renderers::Fna3d
 
     Fna3dRenderer::~Fna3dRenderer()
     {
+        // From this point resource and SpriteBatch wrappers must no longer route back into this
+        // object, even though the native device remains alive briefly for orderly internal
+        // teardown below.
+        deviceState_->renderer = nullptr;
         if (window_ != nullptr)
         {
-            IGraphicsRenderer::UnregisterForWindow(window_);
+            IGraphicsRenderer::UnregisterForWindow(SDL_GetWindowID(window_));
         }
         if (device_ == nullptr)
         {
+            deviceState_->device = nullptr;
             return;
         }
 
@@ -427,6 +476,7 @@ namespace CNA::Internal::Renderers::Fna3d
         }
         FNA3D_DestroyDevice(device_);
         device_ = nullptr;
+        deviceState_->device = nullptr;
     }
 
     // ---------------------------------------------------------------------------------------

@@ -1,0 +1,247 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a2c88d0d..925ebf51 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -29,6 +29,7 @@ option(WICKED_TESTS "Build WickedEngine tests" ON)
+ option(WICKED_IMGUI_EXAMPLE "Build WickedEngine imgui example" ON)
+ option(WICKED_ENABLE_IPO "Enable IPO/LTO in non-debug builds" NO)
+ option(WICKED_EMBED_SHADERS "Embed shaders into the library" NO)
++option(WICKED_USE_CNA_PLATFORM "Use CNA's platform-neutral native-window bridge" OFF)
+ option(WICKED_ENABLE_RTTI "Enable RTTI" NO)
+ if(UNIX)
+     option(WICKED_ENABLE_ASAN "Enable AddressSanitizer in debug builds" OFF)
+@@ -114,8 +115,14 @@ if (WIN32)
+     add_compile_definitions(WIN32=1)
+     add_compile_definitions(_HAS_EXCEPTIONS=0)
+ elseif (UNIX)
+-    set(PLATFORM "SDL2")
+-    add_compile_definitions(SDL2=1)
++    if (WICKED_USE_CNA_PLATFORM)
++        set(PLATFORM "CNA")
++        add_compile_definitions(WICKED_CNA_PLATFORM=1)
++        add_compile_definitions(VK_USE_PLATFORM_XLIB_KHR=1)
++    else()
++        set(PLATFORM "SDL2")
++        add_compile_definitions(SDL2=1)
++    endif()
+     add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=1)
+ endif()
+ 
+diff --git a/WickedEngine/CMakeLists.txt b/WickedEngine/CMakeLists.txt
+index 7305dd03..9e4b64a0 100644
+--- a/WickedEngine/CMakeLists.txt
++++ b/WickedEngine/CMakeLists.txt
+@@ -39,7 +39,9 @@ if (WIN32)
+         )
+     endif()
+ else ()
+-    find_package(SDL2 REQUIRED)
++    if (NOT WICKED_USE_CNA_PLATFORM)
++        find_package(SDL2 REQUIRED)
++    endif()
+     find_package(OpenImageDenoise "${MIN_OpenImageDenoise_VERSION}" QUIET)
+     find_package(Threads REQUIRED)
+     if(NOT ${OpenImageDenoise_FOUND})
+@@ -48,7 +50,7 @@ else ()
+         message(STATUS "OpenImageDenoise ${OpenImageDenoise_VERSION} Found.")
+     endif()
+ 
+-    if(NOT TARGET SDL2::SDL2)
++    if(NOT WICKED_USE_CNA_PLATFORM AND NOT TARGET SDL2::SDL2)
+         # using old SDL2 cmake, lets create a SDL2 target ourselves
+         find_library(SDL2_LIBRARY_FILE_LOCATION SDL2 REQUIRED)
+ 
+@@ -63,8 +65,10 @@ else ()
+     endif()
+ 
+     # minimum sdl version is 2.0.14 for controller LED support
+-    if((${SDL_VERSION_MAJOR} GREATER_EQUAL 2) AND (${SDL2_VERSION_MINOR} GREATER_EQUAL 0) AND (${SDL2_VERSION_PATCH} GREATER_EQUAL 14))
+-        add_compile_definitions(SDL2_FEATURE_CONTROLLER_LED=1)
++    if(NOT WICKED_USE_CNA_PLATFORM)
++        if((${SDL_VERSION_MAJOR} GREATER_EQUAL 2) AND (${SDL2_VERSION_MINOR} GREATER_EQUAL 0) AND (${SDL2_VERSION_PATCH} GREATER_EQUAL 14))
++            add_compile_definitions(SDL2_FEATURE_CONTROLLER_LED=1)
++        endif()
+     endif()
+ endif()
+ 
+@@ -242,17 +246,24 @@ else ()
+     # in same cases. Use `robin_hood::unordered_flat_map` instead
+     target_compile_definitions(WickedEngine_common PUBLIC WI_UNORDERED_MAP_TYPE=2)
+ 
+-    target_link_libraries(WickedEngine_common PUBLIC
+-        Threads::Threads
+-        SDL2::SDL2
+-        $<$<BOOL:${OpenImageDenoise_FOUND}>:OpenImageDenoise> # links OpenImageDenoise only if it's found
+-    )
++    if(WICKED_USE_CNA_PLATFORM)
++        target_link_libraries(WickedEngine_common PUBLIC
++            Threads::Threads
++            $<$<BOOL:${OpenImageDenoise_FOUND}>:OpenImageDenoise>
++        )
++    else()
++        target_link_libraries(WickedEngine_common PUBLIC
++            Threads::Threads
++            SDL2::SDL2
++            $<$<BOOL:${OpenImageDenoise_FOUND}>:OpenImageDenoise>
++        )
+ 
+-    set_target_properties(FAudio PROPERTIES
+-        POSITION_INDEPENDENT_CODE ${WICKED_PIC}
+-        UNITY_BUILD NO
+-    )
+-    set(WICKEDENGINE_STATIC_LIBRARIES ${WICKEDENGINE_STATIC_LIBRARIES} FAudio)
++        set_target_properties(FAudio PROPERTIES
++            POSITION_INDEPENDENT_CODE ${WICKED_PIC}
++            UNITY_BUILD NO
++        )
++        set(WICKEDENGINE_STATIC_LIBRARIES ${WICKEDENGINE_STATIC_LIBRARIES} FAudio)
++    endif()
+ 
+     target_link_libraries(WickedEngine_common PUBLIC dl)
+ 
+@@ -263,6 +277,8 @@ target_link_libraries(WickedEngine_common PUBLIC ${WICKEDENGINE_STATIC_LIBRARIES
+ 
+ if (PLATFORM MATCHES "SDL2")
+     target_compile_definitions(WickedEngine_common PUBLIC SDL2=1)
++elseif (PLATFORM MATCHES "CNA")
++    target_compile_definitions(WickedEngine_common PUBLIC WICKED_CNA_PLATFORM=1 VK_USE_PLATFORM_XLIB_KHR=1)
+ endif()
+ 
+ add_library(dxcompiler SHARED IMPORTED)
+diff --git a/WickedEngine/wiGraphicsDevice_Vulkan.cpp b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+index f29a67f4..2d205f6f 100644
+--- a/WickedEngine/wiGraphicsDevice_Vulkan.cpp
++++ b/WickedEngine/wiGraphicsDevice_Vulkan.cpp
+@@ -2057,6 +2057,11 @@ using namespace vulkan_internal;
+ 				instanceExtensions.push_back(x);
+ 			}
+ 		}
++#elif defined(WICKED_CNA_PLATFORM)
++        if (window != nullptr && window->type == wi::platform::NativeWindow::Type::X11)
++        {
++            instanceExtensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
++        }
+ #endif // _WIN32
+ 
+ 		if (validationMode != ValidationMode::Disabled)
+@@ -3454,6 +3459,18 @@ using namespace vulkan_internal;
+ 				wilog_messagebox("Error creating a vulkan surface with SDL_Vulkan_CreateSurface!");
+ 				wi::platform::Exit();
+ 			}
++#elif defined(WICKED_CNA_PLATFORM)
++            if (window == nullptr || window->type != wi::platform::NativeWindow::Type::X11)
++                return false;
++
++            VkXlibSurfaceCreateInfoKHR createInfo = {};
++            createInfo.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
++            createInfo.dpy = static_cast<Display*>(window->display);
++            createInfo.window = static_cast<::Window>(window->window_id);
++            if (vkCreateXlibSurfaceKHR(instance, &createInfo, nullptr, &internal_state->surface) != VK_SUCCESS)
++            {
++                return false;
++            }
+ #elif defined(__APPLE__)
+ 			wilog("Vulkan surface on Apple platform is not yet implemented");
+ #else
+diff --git a/WickedEngine/wiInput.cpp b/WickedEngine/wiInput.cpp
+index 642264a7..604c0147 100644
+--- a/WickedEngine/wiInput.cpp
++++ b/WickedEngine/wiInput.cpp
+@@ -139,6 +139,12 @@ namespace wi::input
+ 	static void* cursor_table[arraysize(cursor_table_original)] = {};
+ #endif // __APPLE__
+ 
++#if !defined(_WIN32) && !defined(SDL2) && !defined(__APPLE__)
++	// The embedding application owns input and cursor state on this platform bridge.
++	static void* cursor_table_original[CURSOR_COUNT] = {};
++	static void* cursor_table[arraysize(cursor_table_original)] = {};
++#endif
++
+ 	const KeyboardState& GetKeyboardState() { return keyboard; }
+ 	const MouseState& GetMouseState() { return mouse; }
+ 
+diff --git a/WickedEngine/wiPlatform.h b/WickedEngine/wiPlatform.h
+index 4fb99fa9..f087b46f 100644
+--- a/WickedEngine/wiPlatform.h
++++ b/WickedEngine/wiPlatform.h
+@@ -41,6 +41,8 @@
+ #include "sdl2.h"
+ #endif
+ 
++#include <cstdint>
++
+ #if defined(PLATFORM_LINUX) || defined(PLATFORM_APPLE)
+ #include <dlfcn.h>
+ #define wiLoadLibrary(name) dlopen(name, RTLD_LAZY)
+@@ -57,6 +59,24 @@ namespace wi::platform
+ #elif defined(SDL2)
+ 	using window_type = SDL_Window*;
+ 	using error_type = int;
++#elif defined(WICKED_CNA_PLATFORM)
++	struct NativeWindow
++	{
++		enum class Type
++		{
++			Unknown,
++			X11,
++		};
++		Type type = Type::Unknown;
++		void* display = nullptr;
++		std::uint64_t window_id = 0;
++		int width = 0;
++		int height = 0;
++		float dpi = 96.0f;
++		bool fullscreen = false;
++	};
++	using window_type = const NativeWindow*;
++	using error_type = int;
+ #elif defined(__APPLE__)
+ 	using window_type = void*;
+ 	using error_type = int;
+@@ -106,12 +126,23 @@ namespace wi::platform
+ 		dest->height = int(rect.bottom - rect.top);
+ #endif // PLATFORM_WINDOWS_DESKTOP || PLATFORM_XBOX
+ 
++#ifdef WICKED_CNA_PLATFORM
++		if (window != nullptr)
++		{
++			dest->width = window->width;
++			dest->height = window->height;
++			dest->dpi = window->dpi;
++		}
++#endif
++
+ #ifdef PLATFORM_LINUX
++#ifndef WICKED_CNA_PLATFORM
+ 		int window_width, window_height;
+ 		SDL_GetWindowSize(window, &window_width, &window_height);
+ 		SDL_Vulkan_GetDrawableSize(window, &dest->width, &dest->height);
+ 		dest->dpi = ((float)dest->width / (float)window_width) * 96.f;
+ #endif // PLATFORM_LINUX
++#endif
+ 		
+ #ifdef PLATFORM_APPLE
+ 		XMUINT2 size = wi::apple::GetWindowSize(window);
+@@ -156,8 +187,12 @@ namespace wi::platform
+ 				SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+ 		}
+ 
+-#elif defined(PLATFORM_LINUX)
++#elif defined(PLATFORM_LINUX) && !defined(WICKED_CNA_PLATFORM)
+ 		SDL_SetWindowFullscreen(window, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
++#elif defined(WICKED_CNA_PLATFORM)
++		// The embedding platform owns window state. Device code only observes the snapshot.
++		(void)window;
++		(void)fullscreen;
+ #elif defined(__APPLE__)
+ 		wi::apple::SetWindowFullScreen(window, fullscreen);
+ #endif // PLATFORM_WINDOWS_DESKTOP
+@@ -167,6 +202,8 @@ namespace wi::platform
+ 	{
+ #if defined(PLATFORM_WINDOWS_DESKTOP)
+ 		return (GetWindowLong(window, GWL_STYLE) & WS_OVERLAPPEDWINDOW) == 0;
++#elif defined(WICKED_CNA_PLATFORM)
++		return window != nullptr && window->fullscreen;
+ #elif defined(PLATFORM_LINUX)
+ 		auto flags = SDL_GetWindowFlags(window);
+ 		if (flags & SDL_WINDOW_FULLSCREEN_DESKTOP)

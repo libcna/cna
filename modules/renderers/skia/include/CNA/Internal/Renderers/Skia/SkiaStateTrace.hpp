@@ -1,8 +1,7 @@
 #pragma once
 
-#include <SDL3/SDL.h>
-
 #include <cstdarg>
+#include <cstdlib>
 #include <cstdio>
 
 namespace CNA::Internal::Renderers::Skia
@@ -11,7 +10,7 @@ namespace CNA::Internal::Renderers::Skia
     /// intentionally environment-driven so normal applications and CTests have no trace output.
     [[nodiscard]] inline bool IsSkiaStateTraceEnabled() noexcept
     {
-        const char* value = SDL_getenv("CNA_SKIA_STATE_TRACE");
+        const char* value = std::getenv("CNA_SKIA_STATE_TRACE");
         return value != nullptr && value[0] != '\0' && !(value[0] == '0' && value[1] == '\0');
     }
 

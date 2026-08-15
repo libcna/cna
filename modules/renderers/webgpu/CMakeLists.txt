@@ -1,5 +1,11 @@
-cna_add_renderer()
-target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3 WebGPU::WebGPU)
+if(APPLE)
+    file(GLOB CNA_WEBGPU_OBJCXX_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.mm")
+endif()
+cna_add_renderer(${CNA_WEBGPU_OBJCXX_SOURCES})
+target_link_libraries(${RENDERER_TARGET} PRIVATE WebGPU::WebGPU)
+if(APPLE)
+    target_link_libraries(${RENDERER_TARGET} PRIVATE "-framework AppKit" "-framework QuartzCore")
+endif()
 if(CNA_WEBGPU_RUNTIME_LIBRARY)
     add_custom_command(TARGET ${RENDERER_TARGET} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

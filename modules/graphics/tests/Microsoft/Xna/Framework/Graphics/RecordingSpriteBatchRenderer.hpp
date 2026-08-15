@@ -31,7 +31,6 @@ namespace CNA::Internal::Renderers
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
     private:
         int width_;

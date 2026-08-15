@@ -17,7 +17,7 @@ namespace CNA::Internal::Renderers::SvgDom
     /**
      * @brief CNAEXT. Encodes tightly packed RGBA8 pixels as an in-memory PNG.
      *
-     * Pure C++ (SDL3 + SDL3_image's `IMG_SavePNG_IO`) -- no DOM/EM_JS access, so this and every
+     * Pure C++ (CNA's shared image encoder) -- no DOM/EM_JS access, so this and every
      * function below it are exercised directly by native GTest coverage without an Emscripten SDK,
      * unlike `HtmlDom`'s own PNG-encode-in-JS-canvas equivalent.
      *
@@ -25,7 +25,7 @@ namespace CNA::Internal::Renderers::SvgDom
      * @param width  Image width in pixels.
      * @param height Image height in pixels.
      * @return The encoded PNG bytes.
-     * @throws std::runtime_error on an SDL/SDL_image failure.
+     * @throws std::runtime_error on an image-encoding failure.
      */
     [[nodiscard]] std::vector<std::uint8_t> EncodePngEXT(
         const std::uint8_t* rgba, int width, int height);
@@ -124,7 +124,7 @@ namespace CNA::Internal::Renderers::SvgDom
      * plan_svg_dom.md design decision 2. An SVG `<image>` element's `href` needs a URL; unlike
      * `HtmlDom` (which derives one from a private JS-side canvas via the async-free
      * `canvas.toDataURL()`), this renderer already owns the RGBA8 bytes in C++ (required for
-     * `GetData`/`UpdatePixels` regardless) and encodes the PNG itself with SDL3_image -- so the
+     * `GetData`/`UpdatePixels` regardless) and encodes the PNG with CNA's shared image backend -- so the
      * data URI is available the instant it is asked for, with no JS canvas round-trip at all. The
      * straight (as-uploaded) and un-premultiplied variants are each encoded at most once per pixel
      * generation and cached until `UpdatePixels` invalidates them. In an Emscripten browser the
@@ -161,9 +161,6 @@ namespace CNA::Internal::Renderers::SvgDom
         /** @brief Returns the texture height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
 
-        /** @brief Always null -- this renderer has no `SDL_Texture` anywhere in it. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole level-0 image and invalidates every cached variant URI.
          *
@@ -176,7 +173,7 @@ namespace CNA::Internal::Renderers::SvgDom
          * @brief Uploads a specific mip level.
          *
          * @throws std::runtime_error for any level above 0 -- no mip chain exists on this renderer,
-         *         the same boundary `CANVAS`/`HTML_DOM`/`SDL_RENDERER` draw.
+         *         the same boundary the other browser 2D renderers draw.
          */
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 

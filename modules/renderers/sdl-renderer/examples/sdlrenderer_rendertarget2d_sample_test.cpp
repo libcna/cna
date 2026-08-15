@@ -10,8 +10,8 @@
 // did `static_cast<const SdlTextureRenderer&>(texture)` unconditionally, assuming every
 // ITextureRenderer passed to Draw() really is an SdlTextureRenderer. Passing an SdlRenderTargetRenderer
 // through that cast is undefined behavior (an unchecked downcast between unrelated sibling
-// classes) -- fixed by switching to the already-existing virtual ITextureRenderer::GetNativeTexture()/
-// GetWidth()/GetHeight() accessors, which are safe for either concrete renderer.
+// classes) -- fixed by switching to a checked SDL-only sibling interface implemented by both
+// concrete texture types, while width/height stay on ITextureRenderer.
 //
 // Draws a distinctive pattern INTO a RenderTarget2D while it's bound (a Blue background with a
 // smaller Red square marker in one corner), unbinds it, then draws the RenderTarget2D itself onto

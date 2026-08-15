@@ -37,9 +37,9 @@ verified empirically under `devices-tsan`, not just reasoned about statically.
   classes. Guarded by `SensorBase<T>::mutex_` (Task P6-3/P8-2).
 - **`Accelerometer`/`Gyroscope` `Start()`/`Stop()`/`Dispose()`** are safe to
   call concurrently with each other, on the same or different instances.
-  Guarded by the shared `Detail::SdlSensorSubsystem<TSensor>::mutex_` (Task
-  P5-4) — one mutex per sensor *type*, not per instance, since the underlying
-  SDL sensor subsystem/event-watch registration is itself process-global.
+  Guarded by the shared `Detail::PlatformSensorSubsystem<TSensor>::mutex_` (Task
+  P5-4) — one mutex per sensor *type*, not per instance. Native process-wide
+  subsystem serialization is independently owned by `IPlatform`.
 - **`Compass`/`Motion` `Start()`/`Stop()`/`getStateProperty()`/
   `SetBackendForTesting()`** are safe to call concurrently with each other, on
   the same instance. Guarded by each instance's own `mutex_` (Task
@@ -79,7 +79,7 @@ own lock, releases the lock, and only then calls `Stop()` (unavoidable, since
 `Start()` runs in that gap, the instance can end up disposed while its
 backend is still logically started. This is pre-existing behavior shared
 identically by `Accelerometer`/`Gyroscope`'s own `Dispose(bool)` (same
-read-then-unlock-then-`Stop()` shape against `SdlSensorSubsystem::mutex_`),
+read-then-unlock-then-`Stop()` shape against `PlatformSensorSubsystem::mutex_`),
 not something introduced or worsened by this task. Calling `Dispose()`
 concurrently with `Start()` on the same instance is not a supported usage
 pattern for any of the four sensor classes; `Dispose()` racing `Stop()` or

@@ -314,6 +314,7 @@ namespace Microsoft::Xna::Framework::Graphics
     {
         using namespace CNA::Internal::Renderers;
 
+        p.alphaTestEffect   = true;
         p.textureEnabled     = (texture_ != nullptr);
         p.vertexColorEnabled = vertexColorEnabled_;
         p.lightingEnabled    = false;

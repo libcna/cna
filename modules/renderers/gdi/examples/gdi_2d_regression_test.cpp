@@ -696,7 +696,7 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.window = window;
+        args.surface.windowId = SDL_GetWindowID(window);
         args.virtualWidth = 32;
         args.virtualHeight = 32;
         args.presentationMode = CnaPresentationMode::Stretch;

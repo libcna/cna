@@ -84,7 +84,7 @@ namespace CNA::Internal::Renderers::OpenVg
 
     void OpenVgSpriteBatchRenderer::SetSamplerFilter(int textureFilter)
     {
-        // Same magnification-dominant reasoning as Canvas/SDL_Renderer's own SetSamplerFilter:
+        // Same magnification-dominant reasoning as the Canvas renderer's SetSamplerFilter:
         // Linear=0, Anisotropic=2, LinearMipPoint=3, MinPointMagLinearMipLinear=7,
         // MinPointMagLinearMipPoint=8 all have mag=Linear.
         switch (textureFilter)

@@ -4,6 +4,7 @@
 // Windows-only (see CMakeLists.txt's FATAL_ERROR guard for non-Windows CNA_GRAPHICS_RENDERER=D3D11).
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 #include "D3D11InputLayoutCache.hpp"
 #include "D3D11SamplerCache.hpp"
 #include "D3D11StateObjectCache.hpp"
@@ -54,9 +55,8 @@ namespace CNA::Internal::Renderers::DirectX11
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
 
-        SDL_Window* GetWindowInternal() const override { return window_; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
 
@@ -197,7 +197,7 @@ namespace CNA::Internal::Renderers::DirectX11
         void CreateWindowSizeDependentViews();
         void ReleaseWindowSizeDependentViews();
         /// DX-29: resize handling -- touches ONLY the window-size group + ResizeBuffers() on the
-        /// existing swap chain. Called lazily from Present() when the SDL window size no longer
+        /// existing swap chain. Called lazily from Present() when the platform surface size no longer
         /// matches the swap chain's own cached size.
         void EnsureSwapChainSize();
         /// DX-27: device-lost/removed detection (not full automatic recovery yet).
@@ -213,7 +213,8 @@ namespace CNA::Internal::Renderers::DirectX11
                                   PrimitiveType primitive, int primitiveCount,
                                   const GpuDrawParams& params);
 
-        SDL_Window* window_ = nullptr;
+        PlatformRendererSurfaceState surface_;
+        HWND hwnd_ = nullptr;
         int width_ = 0;
         int height_ = 0;
 

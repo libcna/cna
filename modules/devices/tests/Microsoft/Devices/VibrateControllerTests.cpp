@@ -256,7 +256,7 @@ TEST(VibrateControllerTests, StartWithIntensityOneDoesNotThrow)
 
 // Task VIB2-002: exercises the *real* SdlHapticVibrateBackend (no fake
 // installed) -- confirms SanitizeSdlHapticInput()/ToSdlHapticMagnitude()
-// prevent undefined behavior in the actual SDL_PlayHapticRumble()/
+// prevent undefined behavior in the actual native rumble/
 // static_cast<Uint16>() call sites, not just VibrateController's own
 // upstream clamp (VibrateControllerTests.StartWith*CanonicalizesToZero...
 // below prove the latter via the fake).
@@ -455,7 +455,7 @@ TEST(VibrateControllerTests, ConcurrentCallsFromMultipleThreadsDoNotCrashOrDeadl
     EXPECT_NO_THROW(controller->Stop());
 }
 
-// Task P5-11: g_subsystemHeld replaced the old SDL_WasInit() guard in
+// Task P5-11: g_subsystemHeld replaced the old native initialized-state guard in
 // EnsureHapticSubsystemInitialized() — confirms many repeated probe calls
 // (which each internally call it) don't corrupt or leak anything
 // observable: the result stays consistent call to call, and device-name
@@ -490,8 +490,7 @@ TEST(VibrateControllerTests, RepeatedStartStopSequencesDoNotDegrade)
     }
 }
 
-// Task VIB2-003: regression coverage for the SDL_PlayHapticRumble()/
-// SDL_StopHapticEffects()/SDL_StopHapticRumble()/SDL_RunHapticEffect() return
+// Task VIB2-003: regression coverage for native play/stop/run haptic return
 // value checks added to Detail::SdlHapticVibrateBackend. In this environment
 // (no haptic device present) every one of those calls is unreachable --
 // StartLeftRight() always returns early at the "no haptic device found"
@@ -584,7 +583,7 @@ TEST(VibrateControllerTests, StartClampsOutOfRangeIntensityBeforeReachingBackend
 // std::clamp(v, 0.0f, 1.0f) alone leaves NaN unchanged -- every comparison
 // against NaN is false, so std::clamp's own `v < lo ? lo : (hi < v ? hi : v)`
 // falls through to returning v itself. A NaN intensity/motor value reaching
-// SdlHapticVibrateBackend's real SDL_PlayHapticRumble() call or its
+// the platform haptic backend's real rumble call or its
 // static_cast<Uint16>(magnitude * 65535.0f) conversion would be undefined
 // behavior. Canonicalized to 0.0f ("no vibration"), matching this API's own
 // established silent-correction policy for out-of-range input.
@@ -730,9 +729,8 @@ TEST(VibrateControllerTests, StartLeftRightWithOutOfRangeDurationThrowsAndNeverR
 // LastStartIntensity is exactly 0.0f) -- **not** silently translated into an implicit Stop()
 // call (StopCallCount stays 0). This is the deliberate policy VibrateController.hpp's own
 // Start(TimeSpan, float) doc comment now states explicitly, backed by SDL's own documented
-// SDL_PlayHapticRumble() contract ("strength of the rumble to play as a 0-1 float value" --
-// third_party/SDL/include/SDL3/SDL_haptic.h -- 0 is explicitly inside that documented valid
-// range, not a special/invalid case SDL itself treats differently).
+// platform rumble contract (strength is a 0-1 float value, where 0 is explicitly inside the
+// documented valid range rather than a special or invalid case).
 TEST(VibrateControllerTests, StartWithIntensityZeroForwardsAsAnActiveZeroStrengthStartNotAnImplicitStop)
 {
     ScopedFakeVibrateBackend fake;
@@ -747,7 +745,7 @@ TEST(VibrateControllerTests, StartWithIntensityZeroForwardsAsAnActiveZeroStrengt
 
 // Task VIB2-006: "Stop when idle" -- Stop() before any Start()/StartLeftRight() call must still
 // forward cleanly to the backend (a real haptic backend's own Stop() is expected to be a safe
-// no-op against a device that was never started -- SDL's own SDL_StopHapticRumble() doc comment
+// no-op against a device that was never started — the native stop contract
 // carries no "must already be playing" precondition), not throw or silently no-op at the
 // VibrateController layer itself.
 TEST(VibrateControllerTests, StopWhenIdleForwardsToBackendWithoutThrowing)
@@ -764,9 +762,9 @@ TEST(VibrateControllerTests, StopWhenIdleForwardsToBackendWithoutThrowing)
 // Task VIB2-006: "Start while active" -- a second Start() call while a first is still nominally
 // active (no Stop()/duration-elapsed between them) must forward as its own independent Start()
 // call, replacing (not queuing behind, not rejecting) the previous one -- matches
-// SdlHapticVibrateBackend::Start()'s own real behavior (SDL_PlayHapticRumble() on an
+// the platform haptic backend's own real behavior (native rumble on an
 // already-playing rumble effect simply restarts it with the new parameters, confirmed by
-// reading third_party/SDL/src/haptic/SDL_haptic.c directly: SDL_PlayHapticRumble() does not
+// reading the native backend implementation directly: its rumble call does not
 // check or reject a still-playing rumble state before calling through to the platform effect
 // API). Verified at the VibrateController layer via the fake backend (the real backend's own
 // exact restart semantics remain hardware-unverified, matching every other VIB2-* real-SDL-call
@@ -826,10 +824,10 @@ TEST(VibrateControllerTests, RepeatedBackendSwapsDoNotLeakOrCrash)
 // time. What "Start() while already vibrating" actually does physically is
 // therefore entirely the active backend's own responsibility. For
 // Detail::SdlHapticVibrateBackend specifically (confirmed by reading
-// third_party/SDL/src/haptic/SDL_haptic.c's SDL_PlayHapticRumble()
+// the native backend's rumble implementation
 // directly): calling it again while a rumble is already playing calls
-// SDL_UpdateHapticEffect() (applies the new strength/length) followed by
-// SDL_RunHapticEffect() again -- i.e. it restarts the effect with the new
+// an effect update (applies the new strength/length) followed by
+// running the effect again — i.e. it restarts the effect with the new
 // parameters from time zero, it does not ignore the new call or queue it
 // behind the still-running one. This isn't independently observable through
 // this fake (the fake has no timing/effect-slot model to restart), so these

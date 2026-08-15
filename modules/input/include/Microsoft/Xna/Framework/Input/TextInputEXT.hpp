@@ -28,13 +28,14 @@ namespace Microsoft::Xna::Framework::Input
      *
      * @note CNAEXT — not part of the XNA 4.0 API. FNA extension (the `EXT` suffix
      *       marks an FNA addition beyond XNA 4.0). XNA 4.0 had no portable text-input
-     *       event; FNA exposes this static class backed by SDL.
+     *       event; FNA exposes the equivalent static extension class.
      *
      * @note Threading (INPUT-TEXT-016): like all CNA input, `TextInput`/`TextEditing` are dispatched on
      *       the event-pump (game-loop) thread during `Game::PollEvents()`; do not subscribe/raise from a
      *       background thread. The `TextEditing` composition is a **UTF-8** `std::string` (multi-byte), and
-     *       its `start`/`length` are passed straight through from SDL's IME model — index the string
-     *       carefully, since a byte offset is not a character/code-point count for multi-byte text.
+     *       its `start`/`length` are passed straight through from the platform IME model — index
+     *       the string carefully, since a byte offset is not a character/code-point count for
+     *       multi-byte text.
      */
     CNAEXT class TextInputEXT
     {
@@ -69,10 +70,10 @@ namespace Microsoft::Xna::Framework::Input
         /**
          * @brief CNAEXT/EXT: raised with the current IME candidate list during composition.
          *
-         * SDL3-new (`SDL_EVENT_TEXT_EDITING_CANDIDATES`); older SDL/XNA had no candidate-list event.
-         * Lets a game render the CJK/IME candidate popup itself. The arguments are the candidate
-         * strings (UTF-8), the index of the pre-selected candidate (or -1 if none), and whether the
-         * list is laid out horizontally (otherwise vertically).
+         * XNA and older FNA implementations had no candidate-list event. Lets a game render the
+         * CJK/IME candidate popup itself. The arguments are the candidate strings (UTF-8), the
+         * index of the pre-selected candidate (or -1 if none), and whether the list is laid out
+         * horizontally (otherwise vertically).
          *
          * Multicast: use `+=` to add subscribers, `=` to set a single handler or `= nullptr` to clear.
          */
@@ -80,15 +81,26 @@ namespace Microsoft::Xna::Framework::Input
 
         /**
          * @brief Returns the native window handle used by the text input APIs.
-         * @return The native window handle (an SDL_Window* stored as an integer), or 0 if unset.
+         * @return The implementation's native window token stored as an integer, or 0 if unset.
          */
         CNAEXT static std::uintptr_t getWindowHandleProperty();
 
         /**
          * @brief Sets the native window handle used by the text input APIs.
-         * @param value The native window handle (an SDL_Window* stored as an integer).
+         * @param value The implementation's native window token stored as an integer.
          */
         CNAEXT static void setWindowHandleProperty(std::uintptr_t value);
+
+        /**
+         * @brief Internal: associates the published native handle with its platform window id.
+         *
+         * GraphicsDevice calls this immediately after publishing a live window. Keeping the id
+         * separate preserves the FNA-compatible native-handle property while lifecycle calls use
+         * CNA's platform-neutral text-input contract.
+         *
+         * @param value The platform window id, or zero when no window is published.
+         */
+        CNAEXT static void INTERNAL_setWindowId(std::uint32_t value);
 
         /**
          * @brief Returns true if text input mode is currently active.
@@ -127,9 +139,8 @@ namespace Microsoft::Xna::Framework::Input
          * @brief CNAEXT/EXT: activates text input mode with an input-type hint for the on-screen
          *        keyboard / IME (e.g. a numeric pad or a hidden-password field).
          *
-         * SDL3-new (`SDL_StartTextInputWithProperties` + `SDL_PROP_TEXTINPUT_TYPE_NUMBER`); XNA 4.0
-         * and older SDL had no input-type hint. Falls back to the plain `StartTextInput` no-op
-         * behavior when no window handle is set.
+         * XNA 4.0 and older FNA implementations had no input-type hint. Falls back to the plain
+         * `StartTextInput` no-op behavior when no window handle is set.
          *
          * @param type The kind of text being entered.
          */
@@ -165,12 +176,14 @@ namespace Microsoft::Xna::Framework::Input
             const std::vector<std::string>& candidates, int selected, bool horizontal);
 
         /**
-         * @brief Test-only: resets TextInputEXT's static state (callbacks, window handle).
+         * @brief Test-only: resets TextInputEXT's static state (callbacks and window identity).
          */
         CNAEXT static void ResetForTests();
 
     private:
         /** @brief Backing store for the window handle property. */
         static std::uintptr_t windowHandle_;
+        /** @brief Platform-neutral identity paired with the published native handle. */
+        static std::uint32_t windowId_;
     };
 }

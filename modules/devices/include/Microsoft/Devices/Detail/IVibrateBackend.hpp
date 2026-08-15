@@ -11,16 +11,10 @@ namespace Microsoft::Devices::Detail
     /**
      * @brief Platform/device vibration-motor backend interface (Task VIB-002).
      *
-     * `VibrateController` selects a concrete implementation
-     * (`SdlHapticVibrateBackend` today) at construction time and calls
-     * through this interface for every operation, instead of calling SDL3's
-     * `SDL_Haptic` functions directly. This exists to separate two distinct
-     * concepts that a single hardcoded SDL-haptic implementation previously
-     * conflated: "the phone/device's own vibration motor" (what the strict
-     * XNA `Start(TimeSpan)` targets) versus "any SDL haptic device"
-     * (a broader `CNAEXT` concept — see `SdlHapticVibrateBackend`'s own doc
-     * comment for why, on desktop, those two currently resolve to the same
-     * underlying SDL API without contradicting this distinction). Making the
+     * `VibrateController` selects `PlatformVibrateBackend` at construction time and calls
+     * through this interface for every operation. Device selection and native details belong to
+     * `IPlatformHaptics`; this seam keeps the controller testable and separates the strict
+     * phone/device vibration target from richer platform haptic devices. Making the
      * backend swappable also lets tests inject a fake implementation
      * (`VibrateController::SetBackendForTesting()`) instead of depending on
      * whatever haptic hardware (or lack of it) happens to be present.

@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include <cstdint>
@@ -6,7 +7,7 @@
 #include <iostream>
 #include <span>
 
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -35,7 +36,6 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
-#include <SDL3/SDL.h>
 #include <string>
 #include <sstream>
 #include <set>
@@ -112,6 +112,210 @@ namespace CNA::Internal::Renderers::EasyGL
     using namespace Microsoft::Xna::Framework;
     using namespace Microsoft::Xna::Framework::Graphics;
     using namespace CNA::Internal::Renderers;
+
+    namespace
+    {
+        CNA::Platform::GlContextDescription RequestedGlContext()
+        {
+            CNA::Platform::GlContextDescription description;
+#if defined(CNA_GL_PROFILE_OPENGL33)
+            description.majorVersion = 3;
+            description.minorVersion = 3;
+            description.profile = CNA::Platform::GlProfile::Core;
+#elif defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
+            description.majorVersion = 2;
+            description.minorVersion = 0;
+            description.profile = CNA::Platform::GlProfile::Es;
+#else
+            description.majorVersion = 3;
+            description.minorVersion = 0;
+            description.profile = CNA::Platform::GlProfile::Es;
+#endif
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            return description;
+        }
+
+        CNA::Platform::WindowId RequireEasyGlWindowId(const RendererSurfaceInfo& surface)
+        {
+            if (surface.windowId == 0)
+            {
+                throw CNA::Platform::PlatformException(
+                    "EasyGLRenderer::CreateContext", "surface has no platform window id");
+            }
+            return surface.windowId;
+        }
+
+        CNA::Platform::GlProcAddressLoader glProcAddressLoader = nullptr;
+
+        void* LoadEasyGlProcAddress(const char* name)
+        {
+            return glProcAddressLoader != nullptr ? glProcAddressLoader(name) : nullptr;
+        }
+    }
+
+    class EasyGLPlatformContext
+    {
+    public:
+        EasyGLPlatformContext(CNA::Platform::IPlatformGlContext& service,
+                              const CNA::Platform::WindowId window,
+                              CNA::Platform::GlContextDescription description)
+            : service_(service), window_(window), description_(std::move(description))
+        {
+            context_ = service_.CreateContext(window_, description_);
+            try
+            {
+                service_.MakeCurrent(window_, context_);
+            }
+            catch (...)
+            {
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+                throw;
+            }
+        }
+
+        ~EasyGLPlatformContext()
+        {
+            service_.DestroyContext(context_);
+        }
+
+        EasyGLPlatformContext(const EasyGLPlatformContext&) = delete;
+        EasyGLPlatformContext& operator=(const EasyGLPlatformContext&) = delete;
+
+        void Recreate()
+        {
+            if (context_ != nullptr)
+            {
+                service_.MakeCurrent(window_, nullptr);
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+            }
+
+            context_ = service_.CreateContext(window_, description_);
+            try
+            {
+                service_.MakeCurrent(window_, context_);
+            }
+            catch (...)
+            {
+                service_.DestroyContext(context_);
+                context_ = nullptr;
+                throw;
+            }
+        }
+
+        void SwapBuffers() { service_.SwapBuffers(window_); }
+        bool SetSwapInterval(const int interval) { return service_.SetSwapInterval(interval); }
+        [[nodiscard]] CNA::Platform::GlProcAddressLoader GetLoader() const
+        {
+            return service_.GetProcAddressLoader();
+        }
+
+    private:
+        CNA::Platform::IPlatformGlContext& service_;
+        CNA::Platform::WindowId window_ = 0;
+        CNA::Platform::GlContextDescription description_;
+        CNA::Platform::GlContextHandle context_ = nullptr;
+    };
+
+    EasyGLSurfaceState::EasyGLSurfaceState(
+        const RendererSurfaceInfo& surface, const int virtualWidth, const int virtualHeight,
+        const CnaPresentationMode presentationMode)
+        : surface_(surface), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight),
+          presentationMode_(presentationMode)
+    {
+        Update(surface);
+    }
+
+    void EasyGLSurfaceState::Update(const RendererSurfaceInfo& surface)
+    {
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f))
+        {
+            surface_.displayScale = 1.0f;
+        }
+    }
+
+    void EasyGLSurfaceState::SetVirtualResolution(const int width, const int height)
+    {
+        virtualWidth_ = width;
+        virtualHeight_ = height;
+    }
+
+    void EasyGLSurfaceState::SetPresentationMode(const CnaPresentationMode mode)
+    {
+        presentationMode_ = mode;
+    }
+
+    void EasyGLSurfaceState::GetDrawableSize(int& width, int& height) const
+    {
+        width = surface_.drawableSize.width;
+        height = surface_.drawableSize.height;
+    }
+
+    void EasyGLSurfaceState::GetClientSize(int& width, int& height) const
+    {
+        width = static_cast<int>(std::lround(
+            static_cast<double>(surface_.drawableSize.width) / surface_.displayScale));
+        height = static_cast<int>(std::lround(
+            static_cast<double>(surface_.drawableSize.height) / surface_.displayScale));
+    }
+
+    void EasyGLSurfaceState::GetLogicalSize(int& width, int& height) const
+    {
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (virtualHeight_ <= 0)
+        {
+            width = clientWidth;
+            height = clientHeight;
+            return;
+        }
+
+        height = virtualHeight_;
+        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && clientHeight > 0)
+        {
+            width = static_cast<int>(
+                static_cast<double>(clientWidth) * virtualHeight_ / clientHeight + 0.5);
+        }
+        else
+        {
+            width = virtualWidth_ > 0 ? virtualWidth_ : clientWidth;
+        }
+    }
+
+    bool EasyGLSurfaceState::WindowToLogical(const float windowX, const float windowY,
+                                             float& logicalX, float& logicalY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (clientHeight <= 0) return false;
+        const float scale = static_cast<float>(virtualHeight_) /
+                            static_cast<float>(clientHeight);
+        logicalX = windowX * scale;
+        logicalY = windowY * scale;
+        return true;
+    }
+
+    bool EasyGLSurfaceState::LogicalToWindow(const float logicalX, const float logicalY,
+                                             float& windowX, float& windowY) const
+    {
+        if (virtualHeight_ <= 0) return false;
+        int clientWidth = 0;
+        int clientHeight = 0;
+        GetClientSize(clientWidth, clientHeight);
+        if (clientHeight <= 0) return false;
+        const float scale = static_cast<float>(clientHeight) /
+                            static_cast<float>(virtualHeight_);
+        windowX = logicalX * scale;
+        windowY = logicalY * scale;
+        return true;
+    }
 
     // REMED-GFX-147. See the declaration in EasyGLRenderer.hpp.
     bool SampledRowOrderIsBottomUp(const ITextureRenderer* texture)
@@ -603,7 +807,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             using GlEnableFn = void (*)(unsigned int);
             static const auto glEnableFn =
-                reinterpret_cast<GlEnableFn>(SDL_GL_GetProcAddress("glEnable"));
+                reinterpret_cast<GlEnableFn>(LoadEasyGlProcAddress("glEnable"));
             constexpr unsigned int kGlVertexProgramPointSize = 0x8642;
             if (glEnableFn) glEnableFn(kGlVertexProgramPointSize);
         }
@@ -747,7 +951,7 @@ namespace CNA::Internal::Renderers::EasyGL
         {
             using GlTexParameterfFn = void (*)(unsigned int, unsigned int, float);
             static const auto glTexParameterfFn =
-                reinterpret_cast<GlTexParameterfFn>(SDL_GL_GetProcAddress("glTexParameterf"));
+                reinterpret_cast<GlTexParameterfFn>(LoadEasyGlProcAddress("glTexParameterf"));
             constexpr unsigned int kGlTextureMaxAnisotropyExt = 0x84FE;  // GL_TEXTURE_MAX_ANISOTROPY_EXT
             if (glTexParameterfFn)
                 glTexParameterfFn(static_cast<unsigned int>(target), kGlTextureMaxAnisotropyExt, value);
@@ -2517,8 +2721,8 @@ void main()
         // requested) and left the real GL blend state permanently stuck at that hardcoded value
         // after End() -- any 3D draw issued afterward without the game explicitly reassigning
         // BlendState inherited SpriteBatch's leftover raw GL state instead of whatever
-        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape SDL_Renderer
-        // already fixed (Task 695) -- see docs/sdl-renderer-2d-completeness.md.
+        // GraphicsDevice.BlendState still claimed was active. Matches the same bug shape the
+        // toolkit-backed 2D renderer already fixed (Task 695).
         begun = true;
     }
 
@@ -2795,19 +2999,16 @@ void main()
 
     // --- EasyGLRenderer ---
 
-    EasyGLRenderer::EasyGLRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                  CnaPresentationMode mode, bool contextRecoveryEnabled,
-                                                  int multiSampleCount, int swapInterval)
-        : window(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    EasyGLRenderer::EasyGLRenderer(
+        const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
+        const int virtualWidth, const int virtualHeight, const CnaPresentationMode mode,
+        const bool contextRecoveryEnabled, const int multiSampleCount, const int swapInterval)
+        : platformContext_(std::make_unique<EasyGLPlatformContext>(
+              glContext, RequireEasyGlWindowId(surface), RequestedGlContext()))
+        , surfaceState_(surface, virtualWidth, virtualHeight, mode)
         , contextRecoveryEnabled_(contextRecoveryEnabled)
         , sampleCount_(multiSampleCount > 1 ? multiSampleCount : 1)
-        , swapInterval_(swapInterval)
     {
-        if (!window) throw std::runtime_error("EasyGLRenderer initialized with null window.");
-
 #if defined(CNA_GL_PROFILE_OPENGLES2)
         // GLES 2.0 has no multisample renderbuffers and no blit to resolve them
         // (glRenderbufferStorageMultisample/glBlitFramebuffer are ES 3.0), so the requested
@@ -2815,9 +3016,6 @@ void main()
         // ceiling. GetMultiSampleCount() then reports 0, keeping the applied count truthful.
         sampleCount_ = 1;
 #endif
-
-        // NOTE: SDL_Window is NOT owned by EasyGL renderer.
-        // It is owned by GraphicsDevice or higher level platform layer.
 
         // plan_glbackends.md GLB-8: context attributes depend on which of the 5 public GL
         // profiles this translation unit was compiled for (see cmake/RendererSelection.cmake).
@@ -2827,31 +3025,16 @@ void main()
         // legally return any ES context backward-compatible with 2.0, which is the same
         // version-floor semantic every other profile's request already has; OPENGL33 requests a
         // desktop GL 3.3 core profile context instead of an ES profile.
-#if defined(CNA_GL_PROFILE_OPENGL33)
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-#elif defined(CNA_GL_PROFILE_WEBGL1) || defined(CNA_GL_PROFILE_OPENGLES2)
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#else // CNA_GL_PROFILE_OPENGLES3 or CNA_GL_PROFILE_WEBGL2
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-#endif
-        // Without this, no window ever gets stencil bits (SDL defaults to 0), making
-        // DepthStencilState.StencilEnable a permanent no-op regardless of what's requested.
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-        // NOTE: GL context IS owned by EasyGL renderer.
-        gl_context = SDL_GL_CreateContext(window);
-        if (!gl_context)
+        // RequestedGlContext() carries those version/profile requirements together with the
+        // depth/stencil/double-buffer attributes to the platform before context creation.
+        glProcAddressLoader = platformContext_->GetLoader();
+        if (glProcAddressLoader == nullptr)
         {
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed: ") + SDL_GetError());
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::LoadGl", "platform returned a null GL loader");
         }
 
-        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+        device.initialize(glProcAddressLoader);
 #if defined(CNA_GL_PROFILE_OPENGL33)
         EnableVertexProgramPointSize();
 #endif
@@ -2919,14 +3102,14 @@ void main()
                       << "; SurfaceFormat: Color only (Task 176)" << std::endl;
         }
 
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval);
 
         registry_.register_with_meta_gl();
 
         if (sampleCount_ > 1)
         {
             int physW, physH;
-            SDL_GetWindowSize(window, &physW, &physH);
+            surfaceState_.GetDrawableSize(physW, physH);
             CreateMsaaBuffers(physW, physH);
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
         }
@@ -2939,7 +3122,7 @@ void main()
         // WebGPU/Canvas/SdlGpu) -- a constructor that throws never runs its destructor, so
         // registering earlier would leave a dangling entry in IGraphicsRenderer's static window
         // registry, later dereferenced unconditionally by SdlInputBridge.cpp/Mouse.cpp.
-        IGraphicsRenderer::RegisterForWindow(window, this);
+        IGraphicsRenderer::RegisterForWindow(surfaceState_.GetWindowId(), this);
     }
 
     void EasyGLRenderer::CreateMsaaBuffers(int w, int h)
@@ -2977,7 +3160,7 @@ void main()
         {
             // Recreate MSAA FBO if the window was resized.
             int physW, physH;
-            SDL_GetWindowSize(window, &physW, &physH);
+            surfaceState_.GetDrawableSize(physW, physH);
             if (physW != msaaW_ || physH != msaaH_)
                 CreateMsaaBuffers(physW, physH);
 
@@ -3011,10 +3194,9 @@ void main()
         // detach path. (Neither order is reachable through CNA's own Game harness, where
         // GraphicsDevice_ is a Game base member destroyed after every subclass member; a globally
         // held render target reaches the first one, which is why the ownership is weak at all.)
-        if (window) IGraphicsRenderer::UnregisterForWindow(window);
-        if (gl_context) SDL_GL_DestroyContext(gl_context);
-        // window is NOT owned by the renderer.
-        // No SDL_Quit or subsystem shutdown here - managed centrally.
+        IGraphicsRenderer::UnregisterForWindow(surfaceState_.GetWindowId());
+        // platformContext_ is the first-declared member and therefore dies last, after every GL
+        // resource member has released while the context is still current.
     }
 
     bool EasyGLRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
@@ -3132,20 +3314,17 @@ void main()
         default_white_texture_.reset_handle_no_gl();
         default_white_texture_ready_ = false;
 
-        // 2. Destroy and recreate the SDL GL context.
-        if (gl_context)
-        {
-            SDL_GL_MakeCurrent(window, nullptr);
-            SDL_GL_DestroyContext(gl_context);
-            gl_context = nullptr;
-        }
-        gl_context = SDL_GL_CreateContext(window);
-        if (!gl_context)
-            throw std::runtime_error(std::string("SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
-        SDL_GL_MakeCurrent(window, gl_context);
+        // 2. Recreate the native context through the platform-owned transaction.
+        platformContext_->Recreate();
 
         // 3. Reload GL function pointers and increment context generation.
-        device.initialize(reinterpret_cast<::easygl::GLGetProcAddressFn>(SDL_GL_GetProcAddress));
+        glProcAddressLoader = platformContext_->GetLoader();
+        if (glProcAddressLoader == nullptr)
+        {
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::LoadGl", "platform returned a null GL loader");
+        }
+        device.initialize(glProcAddressLoader);
 #if defined(CNA_GL_PROFILE_OPENGL33)
         EnableVertexProgramPointSize();
 #endif
@@ -3259,47 +3438,45 @@ void main()
         if (metagl::IsContextLost()) return;
         if (sampleCount_ > 1)
             ResolveMsaa();
-        SDL_GL_SwapWindow(window);
+        platformContext_->SwapBuffers();
         if (sampleCount_ > 1)
             msaaFbo_.bind(::easygl::FramebufferTarget::Framebuffer);
     }
 
     void EasyGLRenderer::SetVirtualResolution(int width, int height)
     {
-        virtualWidth_ = width;
-        virtualHeight_ = height;
+        surfaceState_.SetVirtualResolution(width, height);
     }
 
     void EasyGLRenderer::SetPresentationMode(int mode)
     {
-        presentationMode_ = static_cast<CnaPresentationMode>(mode);
+        surfaceState_.SetPresentationMode(static_cast<CnaPresentationMode>(mode));
     }
 
     void EasyGLRenderer::SetSwapInterval(int interval)
     {
-        swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
+    }
+
+    void EasyGLRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surfaceState_.GetWindowId())
+        {
+            throw CNA::Platform::PlatformException(
+                "EasyGLRenderer::OnSurfaceChanged",
+                "a renderer's platform window identity cannot change");
+        }
+        surfaceState_.Update(surface);
     }
 
     void EasyGLRenderer::getLogicalSize(int& width, int& height) const
     {
-        if (virtualHeight_ <= 0)
-        {
-            SDL_GetWindowSize(window, &width, &height);
-            return;
-        }
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        height = virtualHeight_;
-        if (presentationMode_ == CnaPresentationMode::FixedHeightDynamicWidth && physH > 0)
-            width = static_cast<int>((double)physW * virtualHeight_ / physH + 0.5);
-        else
-            width = virtualWidth_ > 0 ? virtualWidth_ : physW;
+        surfaceState_.GetLogicalSize(width, height);
     }
 
     void EasyGLRenderer::getPhysicalSize(int& width, int& height) const
     {
-        SDL_GetWindowSize(window, &width, &height);
+        surfaceState_.GetDrawableSize(width, height);
     }
 
     bool EasyGLRenderer::GetCurrentRenderTarget2DSize(int& width, int& height) const
@@ -3313,36 +3490,13 @@ void main()
     bool EasyGLRenderer::TransformWindowToLogical(float windowX, float windowY,
                                                           float& logX, float& logY) const
     {
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        if (physH <= 0) return false;
-        const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
-        return true;
+        return surfaceState_.WindowToLogical(windowX, windowY, logX, logY);
     }
 
     bool EasyGLRenderer::TransformLogicalToWindow(float logX, float logY,
                                                          float& windowX, float& windowY) const
     {
-        // Inverse of TransformWindowToLogical: logical = window * (virtualHeight_ / physH), so
-        // window = logical * (physH / virtualHeight_). This is a pure uniform scale with NO offset,
-        // which is exact for EasyGL's default FixedHeightDynamicWidth presentation: the logical
-        // height is fixed and the logical *width* is derived from the window aspect
-        // (getLogicalSize), so the logical viewport fills the whole window — there are no letterbox
-        // bars and hence no offset to apply (unlike the SDL_Renderer renderer's true-letterbox
-        // modes, whose offset is handled by SDL_RenderCoordinates{From,To}Window). EasyGL does not
-        // implement per-mode offset transforms for its non-default modes; that is a pre-existing
-        // graphics-presentation concern, not an input-layer one, and the default mode is exact.
-        if (virtualHeight_ <= 0) return false;
-        int physW, physH;
-        SDL_GetWindowSize(window, &physW, &physH);
-        if (physH <= 0) return false;
-        const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
-        return true;
+        return surfaceState_.LogicalToWindow(logX, logY, windowX, windowY);
     }
 
     void EasyGLRenderer::GetViewportSize(int& width, int& height)
@@ -7263,8 +7417,14 @@ namespace CNA::Internal::Renderers
 #ifdef CNA_RENDERER_EASYGL
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
+        if (args.glContext == nullptr)
+        {
+            throw CNA::Platform::PlatformNotSupportedException(
+                CNA::Platform::PlatformCapability::OpenGlContext, "EasyGL renderer");
+        }
         return std::make_unique<EasyGL::EasyGLRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight,
+            args.surface, *args.glContext,
+            args.virtualWidth, args.virtualHeight,
             args.presentationMode, args.contextRecoveryEnabled,
             args.multiSampleCount, args.swapInterval);
     }

@@ -3,159 +3,206 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
-
 #include "CNA/Devices/Camera.hpp"
-#include "CNA/Devices/Detail/ICameraBackend.hpp"
+#include "CNA/Platform/CannedCamera.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
-using CNA::Devices::Camera;
-using CNA::Devices::CameraState;
-using CNA::Devices::Detail::CameraFrame;
-using CNA::Devices::Detail::ICameraBackend;
-using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
-using Microsoft::Xna::Framework::Graphics::Texture2D;
+#include <memory>
+#include <vector>
 
-namespace
-{
-    // Task DEVICES-CNA-012: the real backend (Detail::SdlCameraBackend) opens a
-    // genuine camera device the instant it's constructed -- on most machines this
-    // either fails loudly (no camera hardware in a CI container) or, worse, actually
-    // requests OS camera permission and opens a real device if one happens to be
-    // present. Every test below uses this fake instead, injected via Camera's
-    // constructor (mirroring SystemTrayTests.cpp's own FakeTrayBackend pattern) --
-    // never the real backend.
-    class FakeCameraBackend final : public ICameraBackend
-    {
-    public:
-        CameraState State = CameraState::Ready;
-        int FrameWidth = 4;
-        int FrameHeight = 2;
+namespace {
 
-        int TryAcquireFrameCallCount = 0;
-        bool NextFrameAvailable = true;
-        std::vector<std::uint8_t> NextFramePixels;
+    using CNA::Devices::Camera;
+    using CNA::Devices::CameraPosition;
+    using CNA::Devices::CameraState;
+    using CNA::Platform::IPlatform;
+    using CNA::Platform::PlatformCameraInfo;
+    using CNA::Platform::PlatformCameraPosition;
+    using CNA::Platform::PlatformCameraState;
+    using CNA::Platform::PlatformFactory;
+    using CNA::Platform::Testing::CannedCameraPlatform;
+    using CNA::Platform::Testing::ScopedCurrentPlatform;
+    using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+    using Microsoft::Xna::Framework::Graphics::Texture2D;
 
-        [[nodiscard]] CameraState GetState() override
-        {
-            return State;
-        }
-
-        [[nodiscard]] int GetFrameWidth() const override
-        {
-            return FrameWidth;
-        }
-
-        [[nodiscard]] int GetFrameHeight() const override
-        {
-            return FrameHeight;
-        }
-
-        bool TryAcquireFrame(CameraFrame& outFrame) override
-        {
-            ++TryAcquireFrameCallCount;
-            if (State != CameraState::Ready || !NextFrameAvailable)
-            {
-                return false;
-            }
-
-            outFrame.Width = FrameWidth;
-            outFrame.Height = FrameHeight;
-            if (NextFramePixels.empty())
-            {
-                outFrame.RgbaPixels.assign(static_cast<std::size_t>(FrameWidth) * FrameHeight * 4, 0x7F);
-            }
-            else
-            {
-                outFrame.RgbaPixels = NextFramePixels;
-            }
-            return true;
-        }
-    };
 } // namespace
 
-TEST(CameraTests, GetIsSupportedPropertyDoesNotCrash)
+TEST(CameraTests, IsSupportedReflectsTheSelectedPlatformCapability)
 {
-    EXPECT_NO_THROW({ (void)Camera::getIsSupportedProperty(); });
+    {
+        CannedCameraPlatform platform;
+        ScopedCurrentPlatform current(platform);
+        EXPECT_TRUE(Camera::getIsSupportedProperty());
+    }
+    {
+        std::unique_ptr<IPlatform> platform = PlatformFactory::Create("Headless");
+        ScopedCurrentPlatform current(*platform);
+        EXPECT_FALSE(Camera::getIsSupportedProperty());
+    }
 }
 
-TEST(CameraTests, GetAvailableCamerasPropertyDoesNotCrash)
+TEST(CameraTests, EnumerationMapsNamesAndPositionsWithoutOpeningADevice)
 {
-    EXPECT_NO_THROW({ (void)Camera::getAvailableCamerasProperty(); });
+    CannedCameraPlatform platform;
+    platform.Canned().cameras = {
+        PlatformCameraInfo{11, "Front", PlatformCameraPosition::FrontFacing},
+        PlatformCameraInfo{12, "Back", PlatformCameraPosition::BackFacing},
+        PlatformCameraInfo{13, "Mystery", PlatformCameraPosition::Unknown}};
+    ScopedCurrentPlatform current(platform);
+
+    const std::vector<CNA::Devices::CameraDeviceInfo> cameras =
+        Camera::getAvailableCamerasProperty();
+
+    ASSERT_EQ(cameras.size(), 3u);
+    EXPECT_EQ(cameras[0].Name, "Front");
+    EXPECT_EQ(cameras[0].Position, CameraPosition::FrontFacing);
+    EXPECT_EQ(cameras[1].Position, CameraPosition::BackFacing);
+    EXPECT_EQ(cameras[2].Position, CameraPosition::Unknown);
+    EXPECT_EQ(platform.Canned().state->lastOpenedId, 0u);
 }
 
-TEST(CameraTests, GetStatePropertyForwardsToInjectedFakeBackend)
+TEST(CameraTests, UnsupportedPlatformEnumeratesNothingAndConstructsAnInertCamera)
 {
-    auto fake = std::make_unique<FakeCameraBackend>();
-    fake->State = CameraState::Opening;
-    Camera camera(std::move(fake));
+    std::unique_ptr<IPlatform> platform = PlatformFactory::Create("Headless");
+    ScopedCurrentPlatform current(*platform);
 
+    EXPECT_TRUE(Camera::getAvailableCamerasProperty().empty());
+    Camera camera;
+    EXPECT_EQ(camera.getStateProperty(), CameraState::NotSupported);
+    EXPECT_EQ(camera.getFrameWidthProperty(), 0);
+    EXPECT_EQ(camera.getFrameHeightProperty(), 0);
+}
+
+TEST(CameraTests, ConstructorOpensTheFirstEnumeratedCamera)
+{
+    CannedCameraPlatform platform;
+    platform.Canned().cameras = {
+        PlatformCameraInfo{41, "First", PlatformCameraPosition::Unknown},
+        PlatformCameraInfo{42, "Second", PlatformCameraPosition::Unknown}};
+    ScopedCurrentPlatform current(platform);
+
+    Camera camera;
+
+    EXPECT_EQ(platform.Canned().state->lastOpenedId, 41u);
+}
+
+TEST(CameraTests, NoDeviceOrOpenFailureReportsNotSupported)
+{
+    CannedCameraPlatform platform;
+    platform.Canned().cameras.clear();
+    ScopedCurrentPlatform current(platform);
+
+    Camera noDevice;
+    EXPECT_EQ(noDevice.getStateProperty(), CameraState::NotSupported);
+
+    platform.Canned().cameras = {
+        PlatformCameraInfo{7, "Unavailable", PlatformCameraPosition::Unknown}};
+    platform.Canned().openSucceeds = false;
+    Camera failedOpen;
+    EXPECT_EQ(failedOpen.getStateProperty(), CameraState::NotSupported);
+}
+
+TEST(CameraTests, PlatformSessionStatesMapToThePublicVocabulary)
+{
+    CannedCameraPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
+
+    platform.Canned().state->state = PlatformCameraState::Opening;
     EXPECT_EQ(camera.getStateProperty(), CameraState::Opening);
+    platform.Canned().state->state = PlatformCameraState::Denied;
+    EXPECT_EQ(camera.getStateProperty(), CameraState::Denied);
+    platform.Canned().state->state = PlatformCameraState::Ready;
+    EXPECT_EQ(camera.getStateProperty(), CameraState::Ready);
+    platform.Canned().state->state = PlatformCameraState::Lost;
+    EXPECT_EQ(camera.getStateProperty(), CameraState::Lost);
 }
 
-TEST(CameraTests, GetFrameWidthAndHeightPropertiesForwardToInjectedFakeBackend)
+TEST(CameraTests, FrameDimensionsComeFromThePlatformSession)
 {
-    auto fake = std::make_unique<FakeCameraBackend>();
-    fake->FrameWidth = 640;
-    fake->FrameHeight = 480;
-    Camera camera(std::move(fake));
+    CannedCameraPlatform platform;
+    platform.Canned().state->frameWidth = 640;
+    platform.Canned().state->frameHeight = 480;
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
 
     EXPECT_EQ(camera.getFrameWidthProperty(), 640);
     EXPECT_EQ(camera.getFrameHeightProperty(), 480);
 }
 
-TEST(CameraTests, TryAcquireFrameReturnsFalseWhenBackendHasNoFrame)
+TEST(CameraTests, DestructorClosesTheOwnedSession)
 {
-    auto fakeOwned = std::make_unique<FakeCameraBackend>();
-    fakeOwned->NextFrameAvailable = false;
-    Camera camera(std::move(fakeOwned));
+    CannedCameraPlatform platform;
+    ScopedCurrentPlatform current(platform);
 
+    {
+        Camera camera;
+        EXPECT_FALSE(platform.Canned().state->sessionDestroyed);
+    }
+    EXPECT_TRUE(platform.Canned().state->sessionDestroyed);
+}
+
+TEST(CameraTests, TryAcquireFrameReturnsFalseWhenNoFrameIsReady)
+{
+    CannedCameraPlatform platform;
+    platform.Canned().state->frameAvailable = false;
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
+    GraphicsDevice device;
+    Texture2D texture(device, 4, 2);
+
+    EXPECT_FALSE(camera.TryAcquireFrame(texture));
+    EXPECT_EQ(platform.Canned().state->acquireCallCount, 1);
+}
+
+TEST(CameraTests, TryAcquireFrameReturnsFalseWhenTheSessionIsNotReady)
+{
+    CannedCameraPlatform platform;
+    platform.Canned().state->state = PlatformCameraState::Denied;
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
     GraphicsDevice device;
     Texture2D texture(device, 4, 2);
 
     EXPECT_FALSE(camera.TryAcquireFrame(texture));
 }
 
-TEST(CameraTests, TryAcquireFrameReturnsFalseWhenNotReady)
+TEST(CameraTests, TryAcquireFrameRejectsTextureDimensionMismatch)
 {
-    auto fakeOwned = std::make_unique<FakeCameraBackend>();
-    fakeOwned->State = CameraState::Denied;
-    Camera camera(std::move(fakeOwned));
+    CannedCameraPlatform platform;
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
+    GraphicsDevice device;
+    Texture2D texture(device, 8, 8);
 
+    EXPECT_FALSE(camera.TryAcquireFrame(texture));
+}
+
+TEST(CameraTests, TryAcquireFrameRejectsMalformedPlatformPixelCount)
+{
+    CannedCameraPlatform platform;
+    platform.Canned().state->nextPixels.assign(7, 0x42);
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
     GraphicsDevice device;
     Texture2D texture(device, 4, 2);
 
     EXPECT_FALSE(camera.TryAcquireFrame(texture));
 }
 
-TEST(CameraTests, TryAcquireFrameReturnsFalseWhenTextureDimensionsDoNotMatch)
+TEST(CameraTests, TryAcquireFrameUploadsValidRgbaPixels)
 {
-    auto fakeOwned = std::make_unique<FakeCameraBackend>();
-    fakeOwned->FrameWidth = 4;
-    fakeOwned->FrameHeight = 2;
-    Camera camera(std::move(fakeOwned));
-
-    GraphicsDevice device;
-    Texture2D mismatched(device, 8, 8);
-
-    EXPECT_FALSE(camera.TryAcquireFrame(mismatched));
-}
-
-TEST(CameraTests, TryAcquireFrameUploadsPixelsWhenReadyAndDimensionsMatch)
-{
-    auto fakeOwned = std::make_unique<FakeCameraBackend>();
-    fakeOwned->FrameWidth = 4;
-    fakeOwned->FrameHeight = 2;
-    fakeOwned->NextFramePixels.assign(4u * 2u * 4u, 0x42);
-    FakeCameraBackend* fake = fakeOwned.get();
-    Camera camera(std::move(fakeOwned));
-
+    CannedCameraPlatform platform;
+    platform.Canned().state->nextPixels.assign(4u * 2u * 4u, 0x42);
+    ScopedCurrentPlatform current(platform);
+    Camera camera;
     GraphicsDevice device;
     Texture2D texture(device, 4, 2);
 
     EXPECT_TRUE(camera.TryAcquireFrame(texture));
-    EXPECT_EQ(fake->TryAcquireFrameCallCount, 1);
+    EXPECT_EQ(platform.Canned().state->acquireCallCount, 1);
 }
 
 #endif // CNA_DEVICES

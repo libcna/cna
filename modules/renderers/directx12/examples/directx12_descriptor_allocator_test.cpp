@@ -17,7 +17,7 @@
 //   * no heap object is created per draw, and no wait, idle or extra submit was added to make any
 //     of the above true.
 //
-// This is deliberately an off-screen renderer fixture (args.window == nullptr), for the reason
+// This is deliberately an off-screen renderer fixture (args.surface.windowId == 0), for the reason
 // examples/directx12_smoke_test.cpp's own header records: GraphicsDevice's constructor creates a real
 // window for any non-Headless renderer, and this dev loop's Wine dxgi.dll crashes in
 // d3d12_swapchain_init. Everything measured here is device-level, so no swap chain is involved.
@@ -90,7 +90,7 @@ namespace
 int main()
 {
     GraphicsRendererCreateArgs args;
-    args.window = nullptr; // off-screen, deliberately -- see file header comment.
+    // surface stays windowless deliberately -- see file header comment.
     args.virtualWidth = 64;
     args.virtualHeight = 64;
 

@@ -6,7 +6,7 @@
 // path (setPreferredBackBufferWidth/Height + ApplyChanges(), which calls EndScreenDeviceChange
 // synchronously). Nobody had verified the OTHER path: an actual window resize coming from outside
 // the game (a user dragging the window edge) — SDL_EVENT_WINDOW_RESIZED -> Game's event loop ->
-// GameWindow::updateFromSDL() -> GameWindow.ClientSizeChanged.
+// GameWindow::updateFromPlatform() -> GameWindow.ClientSizeChanged.
 //
 // IMPORTANT DISCOVERY made while verifying this test's discriminating power (temporarily
 // disabling GraphicsDeviceManager's ClientSizeChanged subscription and re-running): CNA's Viewport

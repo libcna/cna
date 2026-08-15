@@ -36,8 +36,8 @@ endif()
 
 # --- Task P9-HARDWARE-005: standalone no-audio-hardware harness ---
 # A tiny standalone (non-GTest) executable that forces SDL_AUDIODRIVER to a nonexistent driver
-# name before any SDL audio call in this fresh process, then proves NoAudioHardwareException is
-# genuinely thrown. Spawned by tests/CNA/Internal/Audio/AudioMixerTests.cpp -- see that file /
+# name before any audio call in this fresh process, then proves SDL3 reports no hardware while
+# NULL succeeds without consulting it. Spawned by AudioMixerTests.cpp -- see that file and
 # tools/audio/audio_no_hardware_harness.cpp for why this needs its own process (AudioMixer.cpp's
 # g_mixer is a process-wide, once-ever-initialized cache).
 if(CNA_BUILD_TESTS)
@@ -352,4 +352,43 @@ endif()
 if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_mojoshader_sdlgpu_probe tools/graphics/mojoshader_sdlgpu_probe.cpp)
     target_link_libraries(cna_mojoshader_sdlgpu_probe PRIVATE cna_mojoshader SDL3::SDL3)
+endif()
+
+# --- plan_platform.md PLAT-131: terminal restoration harness ---
+# A tiny standalone (non-GTest) executable that takes the terminal over with a TerminalSession and
+# then dies in a chosen way: normally, by SIGINT/SIGTERM/SIGHUP, by abort(), or by letting an
+# exception escape main. Four of those five destroy the process, so none can be asserted inside
+# the shared CnaTests binary -- the assertion would die with it. TerminalRestorationTests.cpp
+# spawns this under a pseudo-terminal it owns and checks the terminal came back afterwards. Same
+# "needs its own process" precedent as cna_net_two_process_harness and
+# cna_devices_shutdown_ordering_harness above.
+#
+# POSIX-only, for the same reason TerminalSession itself is: it is built on termios.
+if(CNA_BUILD_TESTS AND NOT WIN32)
+    add_executable(cna_platform_terminal_restoration_harness
+        tools/platform/terminal_restoration_harness.cpp
+    )
+    # Links the platform module rather than all of CNA: TerminalSession has no dependency beyond
+    # libc and the platform module's own exception type, and keeping the harness's link closure
+    # small keeps a failure in it attributable to what it is testing.
+    target_link_libraries(cna_platform_terminal_restoration_harness
+        PRIVATE
+        cna_platform
+    )
+endif()
+
+# --- plan_platform.md PLAT-136: terminal resize harness ---
+# TerminalPlatform installs its SIGWINCH watcher only when attached to a terminal and reads the new
+# size from its own stdout -- neither of which holds inside CnaTests, where CI redirects output. So
+# the resize assertions run here, in a process whose standard descriptors really are a
+# pseudo-terminal, spawned by TerminalResizeTests.cpp. Without it the two tests that matter most in
+# that file would skip in CI, and a test that always skips proves nothing.
+if(CNA_BUILD_TESTS AND NOT WIN32)
+    add_executable(cna_platform_terminal_resize_harness
+        tools/platform/terminal_resize_harness.cpp
+    )
+    target_link_libraries(cna_platform_terminal_resize_harness
+        PRIVATE
+        cna_platform
+    )
 endif()

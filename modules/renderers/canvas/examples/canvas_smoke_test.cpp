@@ -98,8 +98,8 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr, "GraphicsDevice has a real SDL_Window under the Canvas renderer");
-            check(renderer.GetRendererInternal() == nullptr, "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr, "GraphicsDevice has a real SDL_Window under the Canvas renderer");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr, "SDL_GetRenderer(window) is null -- no SDL_Renderer exists on this renderer");
 
             int w = 0, h = 0;
             renderer.GetViewportSize(w, h);

@@ -126,6 +126,34 @@ cna_detect_sharp_runtime_shape()
 
 include(cmake/RendererSelection.cmake)
 
+# Platform implementation selection (plan_platform.md PLAT-11). A separate axis from
+# CNA_GRAPHICS_RENDERER: the renderer decides how pixels are produced, the platform decides
+# where the window, events and input come from.
+include(cmake/PlatformSelection.cmake)
+
+# SDL2 is an independent platform edge, not an SDL3 compatibility layer. Configure it only after
+# selection, so a default build never downloads or compiles a second native toolkit.
+if(CNA_PLATFORM STREQUAL "SDL2")
+    include(cmake/ThirdPartySDL2.cmake)
+    cna_configure_sdl2()
+endif()
+
+# Playback/capture implementation selection (plan_platform.md PLAT-93). This is intentionally
+# independent from CNA_PLATFORM: window/input and audio backends are orthogonal choices.
+include(cmake/AudioPlatformSelection.cmake)
+include(cmake/Sdl2OnlyConfiguration.cmake)
+
+# Platform ratchet (plan_platform.md PLAT-8): reports how much of CNA still calls SDL
+# directly outside the PLAT-3 allowlist, and warns when that count has gone up. Warning
+# only until PLAT-121 flips it strict; skips itself cleanly with no Python 3 present.
+include(cmake/PlatformRatchet.cmake)
+
+# Hot-path lint (plan_platform.md PLAT-9): rejects platform calls inside per-pixel,
+# per-vertex, per-fragment, per-sample and per-event loops, per design decision 4. A hard
+# error rather than a warning like the ratchet above: this one starts at zero violations
+# and every regression is a single deliberate line with an obvious fix or an annotation.
+include(cmake/PlatformHotPathLint.cmake)
+
 # Example and test registrations live inside the module tree (modules/<name>/examples/,
 # modules/renderers/<family>/examples/): testing must be enabled before the modules are
 # composed so their subdirectory add_test() registrations take effect.

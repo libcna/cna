@@ -12,7 +12,6 @@ endif()
 cna_add_module(cna_content Content ${CNA_CONTENT_SOURCES})
 target_link_libraries(cna_content PUBLIC cna_graphics_core cna_audio cna_media cna_math cna_core)
 cna_link_sharp_runtime(cna_content PUBLIC Core.Base IO)
-target_link_libraries(cna_content PRIVATE SDL3::SDL3 SDL3_mixer::SDL3_mixer)
 # plan_cnj.md CNB-70 (Phase 13D): CNA::Internal::GltfImport::GltfImportCore (used by both
 # ContentManager.cpp's GltfModelTypeReader and tools/gltf_to_cnj) needs cgltf.h.
 # plan_cnj.md CNB-88 (Phase 14E): RemapOcclusionImageForDualTextureEXT needs

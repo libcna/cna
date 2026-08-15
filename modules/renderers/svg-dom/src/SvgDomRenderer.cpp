@@ -8,8 +8,6 @@
 #include "System/ArgumentNullException.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -18,12 +16,14 @@
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 
-// plan_svg_dom.md design decision 1/6 and SVGDOM-5/7: creates the SVG surface over the <canvas>
-// SDL3's Emscripten video driver owns. The canvas remains in layout AND in pointer hit testing
-// (opacity:0, not visibility:hidden), because SDL registered its mouse/touch handlers on that exact
-// element. The visible SVG surface is pointer-transparent, so events fall through to the canvas.
-// A shrink-wrapped, in-flow viewport owns both elements: the SVG can therefore use renderer-local
-// coordinates without querying layout after every frame's sprite mutations (SVGDOM-7).
+// plan_svg_dom.md design decision 1/6 and SVGDOM-5/7: creates the SVG surface over the
+// platform-owned <canvas> -- the same host-integration shape as HtmlDom's own root (canvas stays in
+// layout AND in pointer hit testing, via opacity:0 not visibility:hidden, because the platform
+// registered its mouse/touch handlers on that exact element), but the surface itself is a real <svg>
+// element (SVG namespace), not a CSS-styled <div>. The visible SVG surface is pointer-transparent, so
+// events fall through to the canvas. A shrink-wrapped, in-flow viewport owns both elements: the SVG
+// can therefore use renderer-local coordinates without querying layout after every frame's sprite
+// mutations (SVGDOM-7).
 EM_JS(void, CNA_SvgDom_EnsureRoot, (), {
     if (typeof document === 'undefined') return;
     if (Module['cnaSvgDomRoot']) {
@@ -377,7 +377,7 @@ EM_JS(void, CNA_SvgDom_ApplySurfaceGeometry, (int logicalW, int logicalH,
     }
     // cnaSvgDomClaimFlushSlot's own "does this rect already cover the whole surface"
     // collapse-to-'full' check (SVGDOM-A/F) needs the CURRENT logical size -- stashed here rather
-    // than re-queried from the SDL window, mirroring HtmlDom's own cnaDomLogicalW/H.
+    // than re-queried from the platform window, mirroring HtmlDom's own cnaDomLogicalW/H.
     Module['cnaSvgDomLogicalW'] = logicalW;
     Module['cnaSvgDomLogicalH'] = logicalH;
 });
@@ -410,15 +410,17 @@ namespace CNA::Internal::Renderers::SvgDom
         }
     }
 
-    SvgDomRenderer::SvgDomRenderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                  CnaPresentationMode mode)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
+    SvgDomRenderer::SvgDomRenderer(const GraphicsRendererCreateArgs& args)
+        : surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
     {
-        if (!window_) throw std::runtime_error("SvgDomRenderer initialized with null window.");
-        IGraphicsRenderer::RegisterForWindow(window_, this);
+        if (surface_.windowId == 0)
+            throw std::runtime_error("SvgDomRenderer initialized without a platform window.");
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        IGraphicsRenderer::RegisterForWindow(surface_.windowId, this);
         SetBoundRenderTargetIdEXT(0);
         SetCurrentCompositeOpEXT(DomCompositeOp::NonPremultiplied);
         SetCurrentScissorEnableEXT(false);
@@ -438,7 +440,7 @@ namespace CNA::Internal::Renderers::SvgDom
 
     SvgDomRenderer::~SvgDomRenderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.windowId);
 #if defined(__EMSCRIPTEN__)
         CNA_SvgDom_DestroyRoot();
 #endif
@@ -484,10 +486,12 @@ namespace CNA::Internal::Renderers::SvgDom
     SvgDomRenderer::LogicalViewport SvgDomRenderer::ComputeLogicalViewport() const
     {
         // Same per-CnaPresentationMode geometry every CNA 2D-DOM/CSS renderer implements
-        // (SdlGpuRenderer's own reference shape) -- independently computed here.
+        // (the established GPU reference shape) -- independently computed here.
         LogicalViewport viewport{};
-        int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        const int physW = static_cast<int>(std::lround(
+            surface_.drawableSize.width / surface_.displayScale));
+        const int physH = static_cast<int>(std::lround(
+            surface_.drawableSize.height / surface_.displayScale));
         viewport.width = viewport.logicalWidth = static_cast<float>(std::max(0, physW));
         viewport.height = viewport.logicalHeight = static_cast<float>(std::max(0, physH));
         if (physW <= 0 || physH <= 0) return viewport;
@@ -553,6 +557,16 @@ namespace CNA::Internal::Renderers::SvgDom
                 "SVG_DOM renderer: invalid CnaPresentationMode ordinal " + std::to_string(mode));
         presentationMode_ = static_cast<CnaPresentationMode>(mode);
         ApplySurfaceGeometryEXT(); // SVGDOM-C: same reasoning as SetVirtualResolution above.
+    }
+
+    void SvgDomRenderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        if (surface.windowId != surface_.windowId)
+            throw std::runtime_error("SvgDomRenderer surface window id changed.");
+        surface_ = surface;
+        if (!(surface_.displayScale > 0.0f) || !std::isfinite(surface_.displayScale))
+            surface_.displayScale = 1.0f;
+        ApplySurfaceGeometryEXT();
     }
 
     bool SvgDomRenderer::TransformWindowToLogical(float windowX, float windowY,
@@ -813,7 +827,6 @@ namespace CNA::Internal::Renderers
 {
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<SvgDom::SvgDomRenderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode);
+        return std::make_unique<SvgDom::SvgDomRenderer>(args);
     }
 }

@@ -21,6 +21,7 @@
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchPanel.hpp"
 #include "CNA/CNAHelper.hpp"
+#include "CNA/Platform/PlatformCapabilities.hpp"
 
 #include <string>
 
@@ -92,4 +93,8 @@ private:
     bool haveGyro_  = false;
     bool haveAccel_ = false;
     Microsoft::Xna::Framework::Color lightBar_{0, 0, 0, 255}; // color currently driven to the LED
+
+    // Read once during startup. The demo must not turn an unavailable host service into an
+    // exception merely because it illustrates every input family.
+    CNA::Platform::PlatformCapabilities platformCapabilities_{};
 };

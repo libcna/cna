@@ -55,10 +55,10 @@ namespace Microsoft::Xna::Framework::Graphics
         /** @brief Returns the native monitor handle for this adapter. */
         [[nodiscard]] IntPtr getMonitorHandleProperty() const;
 
-        /** @brief Returns the adapter revision number. Always 0; not queryable via SDL. */
+        /** @brief Returns the adapter revision number. Always 0; not exposed by the platform. */
         [[nodiscard]] SharpRuntime::intcs getRevisionProperty() const;
 
-        /** @brief Returns the subsystem identifier. Always 0; not queryable via SDL. */
+        /** @brief Returns the subsystem identifier. Always 0; not exposed by the platform. */
         [[nodiscard]] SharpRuntime::intcs getSubSystemIdProperty() const;
 
         /** @brief Returns true if a null device should be used instead of hardware. */
@@ -156,11 +156,11 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT [[nodiscard]] const std::string& GetTypeName() const override;
 
     private:
-        GraphicsAdapter(SharpRuntime::intcs displayIndex, DisplayModeCollection modes, std::string name,
+        GraphicsAdapter(std::uint32_t displayId, DisplayModeCollection modes, std::string name,
                         std::string description,
                         SharpRuntime::intcs vendorId = 0, SharpRuntime::intcs deviceId = 0);
 
-        SharpRuntime::intcs displayIndex_;
+        std::uint32_t displayId_;
         DisplayModeCollection supportedDisplayModes_;
         std::string description_;
         std::string deviceName_;
@@ -173,7 +173,7 @@ namespace Microsoft::Xna::Framework::Graphics
 
         static std::vector<std::unique_ptr<GraphicsAdapter>> adapters_;
 
-        [[nodiscard]] static std::vector<DisplayMode> queryDisplayModes(SharpRuntime::intcs displayIndex);
-        [[nodiscard]] static DisplayMode queryCurrentDisplayMode(SharpRuntime::intcs displayIndex);
+        [[nodiscard]] static std::vector<DisplayMode> queryDisplayModes(std::uint32_t displayId);
+        [[nodiscard]] static DisplayMode queryCurrentDisplayMode(std::uint32_t displayId);
     };
 }

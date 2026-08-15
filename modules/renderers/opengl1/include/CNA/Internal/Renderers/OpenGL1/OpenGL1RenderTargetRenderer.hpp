@@ -8,7 +8,7 @@ namespace CNA::Internal::Renderers::OpenGL1
      * @brief FBO-backed 2D render target for the OPENGL1 renderer (plan_opengl1.md phase 2).
      *
      * Requires the ARB_framebuffer_object/core (>=3.0) entry points to be loadable via
-     * SDL_GL_GetProcAddress -- see TryLoadOpenGL1FramebufferObjectFunctions() below and
+     * the platform GL resolver -- see TryLoadOpenGL1FramebufferObjectFunctions() below and
      * OpenGL1Renderer::CreateRenderTarget2D(), which returns nullptr (the documented
      * IGraphicsRenderer contract) when they cannot be loaded, preserving a strict capability
      * fallback rather than silently doing nothing. EXT_framebuffer_object (the older, narrower
@@ -75,7 +75,7 @@ namespace CNA::Internal::Renderers::OpenGL1
 
         int GetWidth() const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int /*unit*/) const override;
         [[nodiscard]] bool GetData(int level, int x, int y, int w, int h, void* data, int dataLength) const override;
 
@@ -125,7 +125,7 @@ namespace CNA::Internal::Renderers::OpenGL1
 
     /**
      * @brief Loads the ARB_framebuffer_object/core-3.0 entry points OPENGL1's RenderTarget2D
-     * support needs via SDL_GL_GetProcAddress.
+     * support needs via the platform GL resolver.
      *
      * Must be called once after a GL context is current (OpenGL1Renderer's constructor,
      * gated on OpenGL1Capabilities::framebufferObject). Idempotent -- safe to call more than

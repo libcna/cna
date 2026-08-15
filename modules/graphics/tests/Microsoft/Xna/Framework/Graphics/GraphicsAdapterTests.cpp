@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: MS-PL
 // Task 345: audit GraphicsAdapter API against FNA.
 //
-// GraphicsAdapter::DefaultAdapter is initialized at static-init time (before main()) via
-// getDefaultAdapterProperty(), which populates the adapter list lazily. That first population
-// runs before any test gets a chance to call SDL_InitSubSystem(SDL_INIT_VIDEO), so if SDL wasn't
-// already initialized, the adapter list falls back to a single synthetic "Default Display"
-// adapter (see GraphicsAdapter::AdaptersChanged()'s no-displays branch). Tests that don't care
-// whether the adapter is real or synthetic run unconditionally; tests that need to verify
-// real-display-derived state (DeviceName format, display mode dedup) explicitly initialize SDL
-// video and force a refresh via AdaptersChanged(), skipping under GTEST_SKIP() if unavailable.
+// PLAT-63: adapter enumeration is tested through a deterministic IPlatformDisplays. The test
+// fixture installs that service as the current platform, refreshes the process-wide adapter cache,
+// and restores both the platform and cache after every test.
 
 #include <gtest/gtest.h>
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DisplayMode.hpp"
@@ -21,6 +16,18 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
+using CNA::Platform::DisplayInfo;
+using CNA::Platform::IPlatformDisplays;
+using CNA::Platform::IPlatformWindow;
+using CNA::Platform::ResetCurrentPlatform;
+using CNA::Platform::WindowBounds;
+using CNA::Platform::Testing::PlatformTestDecorator;
+using CNA::Platform::Testing::ScopedCurrentPlatform;
+
 using Microsoft::Xna::Framework::Graphics::DepthFormat;
 using Microsoft::Xna::Framework::Graphics::DisplayMode;
 using Microsoft::Xna::Framework::Graphics::DisplayModeCollection;
@@ -28,28 +35,158 @@ using Microsoft::Xna::Framework::Graphics::GraphicsAdapter;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
+namespace {
+
+class CannedDisplays final : public IPlatformDisplays
+{
+public:
+    std::vector<DisplayInfo> displays;
+    std::vector<CNA::Platform::DisplayMode> primaryModes;
+    CNA::Platform::DisplayMode primaryCurrent;
+    CNA::Platform::DisplayMode secondaryCurrent;
+    bool currentModesAvailable = true;
+
+    [[nodiscard]] std::vector<DisplayInfo> GetDisplays() const override { return displays; }
+
+    [[nodiscard]] bool TryGetDisplayForWindow(
+        const IPlatformWindow&, DisplayInfo&) const override
+    {
+        return false;
+    }
+
+    [[nodiscard]] bool TryGetSafeAreaForWindow(
+        const IPlatformWindow&, WindowBounds&) const override
+    {
+        return false;
+    }
+
+    [[nodiscard]] std::vector<CNA::Platform::DisplayMode> GetDisplayModes(
+        const std::uint32_t displayId) const override
+    {
+        return displayId == 0xA1u ? primaryModes : std::vector<CNA::Platform::DisplayMode>{};
+    }
+
+    [[nodiscard]] bool TryGetCurrentDisplayMode(
+        const std::uint32_t displayId, CNA::Platform::DisplayMode& mode) const override
+    {
+        if (!currentModesAvailable)
+        {
+            return false;
+        }
+        if (displayId == 0xA1u)
+        {
+            mode = primaryCurrent;
+            return true;
+        }
+        if (displayId == 0xB2u)
+        {
+            mode = secondaryCurrent;
+            return true;
+        }
+        return false;
+    }
+};
+
+class CannedDisplayPlatform final : public PlatformTestDecorator
+{
+public:
+    explicit CannedDisplayPlatform(CannedDisplays& displays) : displays_(displays) {}
+
+    bool exposeDisplays = true;
+
+    [[nodiscard]] IPlatformDisplays* GetDisplays() override
+    {
+        return exposeDisplays ? &displays_ : nullptr;
+    }
+
+private:
+    CannedDisplays& displays_;
+};
+
+class GraphicsAdapterTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        ResetCurrentPlatform();
+        GraphicsAdapter::AdaptersChanged();
+    }
+
+    void TearDown() override
+    {
+        ResetCurrentPlatform();
+    }
+};
+
+class GraphicsAdapterPlatformTest : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        ResetCurrentPlatform();
+
+        DisplayInfo primary;
+        primary.id = 0xA1u;
+        primary.name = "Primary Panel";
+        primary.width = 1920;
+        primary.height = 1080;
+        primary.desktopMode = {1920, 1080, 60.0f};
+
+        DisplayInfo secondary;
+        secondary.id = 0xB2u;
+        secondary.width = 1024;
+        secondary.height = 768;
+        secondary.desktopMode = {1024, 768, 60.0f};
+
+        displays_.displays = {primary, secondary};
+        displays_.primaryModes = {
+            {1920, 1080, 60.0f},
+            {1280, 720, 60.0f},
+            {1920, 1080, 144.0f},
+            {800, 600, 60.0f}};
+        displays_.primaryCurrent = {1600, 900, 75.0f};
+        displays_.secondaryCurrent = {1024, 768, 60.0f};
+
+        installed_ = std::make_unique<ScopedCurrentPlatform>(platform_);
+        GraphicsAdapter::AdaptersChanged();
+    }
+
+    void TearDown() override
+    {
+        installed_.reset();
+        GraphicsAdapter::AdaptersChanged();
+        ResetCurrentPlatform();
+    }
+
+    CannedDisplays displays_;
+    CannedDisplayPlatform platform_{displays_};
+    std::unique_ptr<ScopedCurrentPlatform> installed_;
+};
+
+} // namespace
+
 // --- Adapters / DefaultAdapter ---
 
-TEST(GraphicsAdapterTest, AdaptersIsNonEmpty)
+TEST_F(GraphicsAdapterTest, AdaptersIsNonEmpty)
 {
     const auto& adapters = GraphicsAdapter::getAdaptersProperty();
     EXPECT_FALSE(adapters.empty());
 }
 
-TEST(GraphicsAdapterTest, DefaultAdapterIsAdaptersFirstEntry)
+TEST_F(GraphicsAdapterTest, DefaultAdapterIsAdaptersFirstEntry)
 {
     const auto& adapters = GraphicsAdapter::getAdaptersProperty();
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_EQ(&def, adapters[0].get());
 }
 
-TEST(GraphicsAdapterTest, DefaultAdapterIsDefaultAdapterPropertyTrue)
+TEST_F(GraphicsAdapterTest, DefaultAdapterIsDefaultAdapterPropertyTrue)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_TRUE(def.getIsDefaultAdapterProperty());
 }
 
-TEST(GraphicsAdapterTest, DefaultAdapterRemainsValidAcrossAdaptersChanged)
+TEST_F(GraphicsAdapterTest, DefaultAdapterRemainsValidAcrossAdaptersChanged)
 {
     // Regression test: GraphicsAdapter::AdaptersChanged() destroys and recreates every
     // GraphicsAdapter instance. getDefaultAdapterProperty() must be re-evaluated fresh on every
@@ -67,55 +204,54 @@ TEST(GraphicsAdapterTest, DefaultAdapterRemainsValidAcrossAdaptersChanged)
 
 // --- Description / DeviceName ---
 
-TEST(GraphicsAdapterTest, DescriptionAndDeviceNameAreNonEmpty)
+TEST_F(GraphicsAdapterTest, DescriptionAndDeviceNameAreNonEmpty)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_FALSE(def.getDescriptionProperty().empty());
     EXPECT_FALSE(def.getDeviceNameProperty().empty());
 }
 
-TEST(GraphicsAdapterTest, RealDisplay_DeviceNameFollowsWindowsStylePathConvention)
+TEST_F(GraphicsAdapterPlatformTest, PlatformDisplaysDriveNamesIdsAndCurrentModes)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    GraphicsAdapter::AdaptersChanged();
     const auto& adapters = GraphicsAdapter::getAdaptersProperty();
-    ASSERT_FALSE(adapters.empty());
+    ASSERT_EQ(adapters.size(), 2u);
 
-    // Matches FNA's SDL3_FNAPlatform.GetGraphicsAdapters(): DeviceName is a synthetic
-    // "\\.\DISPLAYn" path, distinct from Description (the real display name).
-    const std::string& deviceName = adapters[0]->getDeviceNameProperty();
-    EXPECT_EQ(deviceName.rfind("\\\\.\\DISPLAY", 0), 0u);
+    EXPECT_EQ(adapters[0]->getDeviceNameProperty(), "\\\\.\\DISPLAY1");
+    EXPECT_EQ(adapters[0]->getDescriptionProperty(), "Primary Panel");
+    EXPECT_EQ(adapters[0]->getMonitorHandleProperty(), 0xA1u);
+    EXPECT_TRUE(adapters[0]->getIsDefaultAdapterProperty());
 
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    const DisplayMode current = adapters[0]->getCurrentDisplayModeProperty();
+    EXPECT_EQ(current.getWidthProperty(), 1600);
+    EXPECT_EQ(current.getHeightProperty(), 900);
+
+    EXPECT_EQ(adapters[1]->getDeviceNameProperty(), "\\\\.\\DISPLAY2");
+    EXPECT_EQ(adapters[1]->getDescriptionProperty(), "Display 1");
+    EXPECT_EQ(adapters[1]->getMonitorHandleProperty(), 0xB2u);
 }
 
 // --- SupportedDisplayModes / CurrentDisplayMode ---
 
-TEST(GraphicsAdapterTest, SupportedDisplayModesIsNonEmpty)
+TEST_F(GraphicsAdapterTest, SupportedDisplayModesIsNonEmpty)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     const DisplayModeCollection& modes = def.getSupportedDisplayModesProperty();
     EXPECT_GT(modes.getCountProperty(), 0);
 }
 
-TEST(GraphicsAdapterTest, RealDisplay_SupportedDisplayModesHasNoWidthHeightDuplicates)
+TEST_F(GraphicsAdapterPlatformTest, ModesKeepReverseOrderAndDeduplicateRefreshRates)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    GraphicsAdapter::AdaptersChanged();
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     const DisplayModeCollection& modes = def.getSupportedDisplayModesProperty();
 
-    // Matches FNA's SDL3_FNAPlatform.GetGraphicsAdapters(): modes that only differ by refresh
-    // rate must be deduplicated by (width, height) — a display supporting several refresh rates
-    // at the same resolution must not report that resolution more than once.
+    ASSERT_EQ(modes.getCountProperty(), 3);
+    EXPECT_EQ(modes[0].getWidthProperty(), 800);
+    EXPECT_EQ(modes[0].getHeightProperty(), 600);
+    EXPECT_EQ(modes[1].getWidthProperty(), 1920);
+    EXPECT_EQ(modes[1].getHeightProperty(), 1080);
+    EXPECT_EQ(modes[2].getWidthProperty(), 1280);
+    EXPECT_EQ(modes[2].getHeightProperty(), 720);
+
     for (SharpRuntime::intcs i = 0; i < modes.getCountProperty(); ++i)
     {
         for (SharpRuntime::intcs j = i + 1; j < modes.getCountProperty(); ++j)
@@ -125,11 +261,29 @@ TEST(GraphicsAdapterTest, RealDisplay_SupportedDisplayModesHasNoWidthHeightDupli
             EXPECT_FALSE(sameSize) << "duplicate mode at indices " << i << " and " << j;
         }
     }
-
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
-TEST(GraphicsAdapterTest, CurrentDisplayModeHasPositiveDimensions)
+TEST_F(GraphicsAdapterPlatformTest, ADisplayWithNoModeListUsesItsCurrentMode)
+{
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    ASSERT_EQ(adapters.size(), 2u);
+
+    const DisplayModeCollection& modes = adapters[1]->getSupportedDisplayModesProperty();
+    ASSERT_EQ(modes.getCountProperty(), 1);
+    EXPECT_EQ(modes[0].getWidthProperty(), 1024);
+    EXPECT_EQ(modes[0].getHeightProperty(), 768);
+}
+
+TEST_F(GraphicsAdapterPlatformTest, AnUnavailableCurrentModeUsesTheHistoricalFallback)
+{
+    displays_.currentModesAvailable = false;
+
+    const DisplayMode mode = GraphicsAdapter::getDefaultAdapterProperty().getCurrentDisplayModeProperty();
+    EXPECT_EQ(mode.getWidthProperty(), 800);
+    EXPECT_EQ(mode.getHeightProperty(), 480);
+}
+
+TEST_F(GraphicsAdapterTest, CurrentDisplayModeHasPositiveDimensions)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     DisplayMode mode = def.getCurrentDisplayModeProperty();
@@ -139,13 +293,13 @@ TEST(GraphicsAdapterTest, CurrentDisplayModeHasPositiveDimensions)
 
 // --- IsWideScreen / MonitorHandle ---
 
-TEST(GraphicsAdapterTest, IsWideScreenDoesNotThrow)
+TEST_F(GraphicsAdapterTest, IsWideScreenDoesNotThrow)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_NO_THROW({ (void)def.getIsWideScreenProperty(); });
 }
 
-TEST(GraphicsAdapterTest, MonitorHandleDoesNotThrow)
+TEST_F(GraphicsAdapterTest, MonitorHandleDoesNotThrow)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_NO_THROW({ (void)def.getMonitorHandleProperty(); });
@@ -155,22 +309,22 @@ TEST(GraphicsAdapterTest, MonitorHandleDoesNotThrow)
 //
 // FNA always throws NotImplementedException for all 4. CNA deliberately deviates: DeviceId and
 // VendorId query the real PCI ID via sysfs on Linux (returning 0 elsewhere/on failure); Revision
-// and SubSystemId are not queryable via SDL at all and always return 0. None of the 4 throw.
+// and SubSystemId are not exposed by the platform at all and always return 0. None throw.
 
-TEST(GraphicsAdapterTest, DeviceIdAndVendorIdDoNotThrow)
+TEST_F(GraphicsAdapterTest, DeviceIdAndVendorIdDoNotThrow)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_NO_THROW({ (void)def.getDeviceIdProperty(); });
     EXPECT_NO_THROW({ (void)def.getVendorIdProperty(); });
 }
 
-TEST(GraphicsAdapterTest, RevisionIsAlwaysZero)
+TEST_F(GraphicsAdapterTest, RevisionIsAlwaysZero)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_EQ(def.getRevisionProperty(), 0);
 }
 
-TEST(GraphicsAdapterTest, SubSystemIdIsAlwaysZero)
+TEST_F(GraphicsAdapterTest, SubSystemIdIsAlwaysZero)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_EQ(def.getSubSystemIdProperty(), 0);
@@ -178,7 +332,7 @@ TEST(GraphicsAdapterTest, SubSystemIdIsAlwaysZero)
 
 // --- UseNullDevice / UseReferenceDevice ---
 
-TEST(GraphicsAdapterTest, UseNullDeviceRoundTrip)
+TEST_F(GraphicsAdapterTest, UseNullDeviceRoundTrip)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     const bool original = def.getUseNullDeviceProperty();
@@ -191,7 +345,7 @@ TEST(GraphicsAdapterTest, UseNullDeviceRoundTrip)
     def.setUseNullDeviceProperty(original);
 }
 
-TEST(GraphicsAdapterTest, UseReferenceDeviceRoundTrip)
+TEST_F(GraphicsAdapterTest, UseReferenceDeviceRoundTrip)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     const bool original = def.getUseReferenceDeviceProperty();
@@ -206,13 +360,13 @@ TEST(GraphicsAdapterTest, UseReferenceDeviceRoundTrip)
 
 // --- IsProfileSupported ---
 
-TEST(GraphicsAdapterTest, IsProfileSupportedReachIsTrue)
+TEST_F(GraphicsAdapterTest, IsProfileSupportedReachIsTrue)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_TRUE(def.IsProfileSupported(GraphicsProfile::Reach));
 }
 
-TEST(GraphicsAdapterTest, IsProfileSupportedHiDefIsTrue)
+TEST_F(GraphicsAdapterTest, IsProfileSupportedHiDefIsTrue)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_TRUE(def.IsProfileSupported(GraphicsProfile::HiDef));
@@ -220,7 +374,7 @@ TEST(GraphicsAdapterTest, IsProfileSupportedHiDefIsTrue)
 
 // --- QueryRenderTargetFormat ---
 
-TEST(GraphicsAdapterTest, QueryRenderTargetFormatAcceptsSupportedFormat)
+TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatAcceptsSupportedFormat)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
@@ -237,7 +391,7 @@ TEST(GraphicsAdapterTest, QueryRenderTargetFormatAcceptsSupportedFormat)
     EXPECT_EQ(selectedMultiSampleCount, 0);
 }
 
-TEST(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesUnsupportedFormat)
+TEST_F(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesUnsupportedFormat)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
@@ -254,7 +408,7 @@ TEST(GraphicsAdapterTest, QueryRenderTargetFormatSubstitutesUnsupportedFormat)
 
 // --- QueryBackBufferFormat ---
 
-TEST(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
+TEST_F(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
@@ -269,7 +423,7 @@ TEST(GraphicsAdapterTest, QueryBackBufferFormatAcceptsColor)
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
 }
 
-TEST(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
+TEST_F(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     SurfaceFormat selectedFormat;
@@ -284,29 +438,11 @@ TEST(GraphicsAdapterTest, QueryBackBufferFormatSubstitutesNonColorFormat)
     EXPECT_EQ(selectedFormat, SurfaceFormat::Color);
 }
 
-// --- Headless fallback (Task 346) ---
-//
-// GraphicsAdapter::AdaptersChanged() falls back to a single synthetic 800x480 "Default Display"
-// adapter when SDL_GetDisplays() fails. This is a genuinely reachable, not fabricated, scenario:
-// confirmed via a standalone probe that SDL_GetDisplays() returns nullptr/count=0 with error
-// "Video subsystem has not been initialized" whenever SDL_INIT_VIDEO hasn't been initialized yet
-// - exactly the case a headless CI runner with no display server hits. Every other test in this
-// file that needs SDL video explicitly balances SDL_InitSubSystem/SDL_QuitSubSystem within itself
-// (see the RealDisplay_* tests above), so by gtest's sequential execution the video subsystem's
-// refcount should reliably be 0 by the time this test runs, regardless of test order - if it
-// isn't (something else left it initialized), this test skips rather than producing a misleading
-// pass/fail. GraphicsAdapter::adapters_ is a process-wide cache, so this test restores a real
-// enumeration afterward (deliberately without a matching SDL_QuitSubSystem) so later tests in
-// this binary aren't left with the single synthetic adapter.
+// --- Display-less fallback (Task 346 / PLAT-63) ---
 
-TEST(GraphicsAdapterTest, HeadlessFallback_NoVideoSubsystemProducesSingleSyntheticAdapter)
+TEST_F(GraphicsAdapterPlatformTest, EmptyEnumerationProducesSingleSyntheticAdapter)
 {
-    if (SDL_WasInit(SDL_INIT_VIDEO) != 0)
-    {
-        GTEST_SKIP() << "SDL video subsystem is already initialized by something else in this "
-                         "process - can't reliably exercise the enumeration-unavailable path.";
-    }
-
+    displays_.displays.clear();
     GraphicsAdapter::AdaptersChanged();
 
     const auto& adapters = GraphicsAdapter::getAdaptersProperty();
@@ -330,15 +466,23 @@ TEST(GraphicsAdapterTest, HeadlessFallback_NoVideoSubsystemProducesSingleSynthet
     EXPECT_NO_THROW({ (void)fallback.getMonitorHandleProperty(); });
     EXPECT_NO_THROW({ (void)fallback.getIsWideScreenProperty(); });
 
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GraphicsAdapter::AdaptersChanged();
-    }
+}
+
+TEST_F(GraphicsAdapterPlatformTest, MissingDisplayServiceProducesSingleSyntheticAdapter)
+{
+    platform_.exposeDisplays = false;
+    GraphicsAdapter::AdaptersChanged();
+
+    const auto& adapters = GraphicsAdapter::getAdaptersProperty();
+    ASSERT_EQ(adapters.size(), 1u);
+    EXPECT_EQ(adapters[0]->getDeviceNameProperty(), "\\\\.\\DISPLAY1");
+    EXPECT_EQ(adapters[0]->getDescriptionProperty(), "Default Display");
+    EXPECT_EQ(adapters[0]->getMonitorHandleProperty(), 0u);
 }
 
 // --- GetTypeName ---
 
-TEST(GraphicsAdapterTest, GetTypeNameReturnsExpectedString)
+TEST_F(GraphicsAdapterTest, GetTypeNameReturnsExpectedString)
 {
     GraphicsAdapter& def = GraphicsAdapter::getDefaultAdapterProperty();
     EXPECT_EQ(def.GetTypeName(), "Microsoft.Xna.Framework.Graphics.GraphicsAdapter");

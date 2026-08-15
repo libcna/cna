@@ -3,30 +3,20 @@
 // Tasks 811-813, 815: gamepad connection/hotplug, button-flag mapping, axis normalization, and
 // partial-capabilities tests.
 //
-// These drive the InputManager state-translation layer directly
-// (InputManager::SetGamePad{Connection,ButtonState,AxisValue} + GamePad::GetState) — which is how
-// CNA isolates gamepad state translation for headless testing without real SDL hardware (task
-// 810). The SDL-device-bound paths (SDL_OpenGamepad slot assignment during hotplug, GUID / caps /
-// sensor reads) return the disconnected fallback in this headless binary — covered by
-// GamePadTests.cpp — and are otherwise hardware/manual-verified (plan_input.md tasks 810/811/816
-// and the demo checklist, task 836).
-//
-// Not unit-testable headless: the SDL raw-int16 -> normalized-float axis conversion and the stick
-// Y-axis negation both live in SdlInputBridge's SDL_EVENT_GAMEPAD_AXIS_MOTION handler, which only
-// runs for an opened SDL_Gamepad. The axis tests below exercise the InputManager storage/clamp
-// stage that the bridge feeds.
+// These publish whole snapshots through a canned IPlatformGamepad. That is the production seam
+// GamePad reads, so the tests cover slot isolation and the platform->XNA mapping without native
+// hardware or the legacy SDL event accumulator.
 
 #include <gtest/gtest.h>
 
-#include "CNA/Internal/Input/InputManager.hpp"
+#include "CNA/Platform/CannedGamepad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
 
-using CNA::Internal::Input::GamePadAxis;
-using CNA::Internal::Input::GamePadButton;
-using CNA::Internal::Input::InputManager;
+#include <memory>
+
 using namespace Microsoft::Xna::Framework;
 using namespace Microsoft::Xna::Framework::Input;
 
@@ -35,16 +25,29 @@ namespace
     class GamePadMappingTest : public ::testing::Test
     {
     protected:
-        void SetUp() override { InputManager::ResetForTests(); }
-        void TearDown() override { InputManager::ResetForTests(); }
+        CNA::Platform::Testing::CannedGamepadPlatform platform;
+        std::unique_ptr<CNA::Platform::Testing::ScopedCurrentPlatform> installed;
+
+        void SetUp() override
+        {
+            installed = std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(platform);
+        }
+
+        void Publish(const PlayerIndex player, const CNA::Platform::GamepadSnapshot& snapshot)
+        {
+            platform.Canned().SetPendingSnapshot(static_cast<int>(player), snapshot);
+            platform.Canned().Update();
+        }
     };
 }
 
-// --- Task 811: connection / hotplug (InputManager slot layer) ---
+// --- Task 811: connection / hotplug (platform slot layer) ---
 
 TEST_F(GamePadMappingTest, ConnectionAffectsOnlyTheNamedSlot)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::Two, true);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    Publish(PlayerIndex::Two, snapshot);
 
     EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
     EXPECT_TRUE(GamePad::GetState(PlayerIndex::Two).getIsConnectedProperty());
@@ -54,8 +57,11 @@ TEST_F(GamePadMappingTest, ConnectionAffectsOnlyTheNamedSlot)
 
 TEST_F(GamePadMappingTest, AllFourSlotsConnectIndependently)
 {
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
     for (const PlayerIndex p : {PlayerIndex::One, PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four})
-        InputManager::SetGamePadConnection(p, true);
+        platform.Canned().SetPendingSnapshot(static_cast<int>(p), snapshot);
+    platform.Canned().Update();
 
     for (const PlayerIndex p : {PlayerIndex::One, PlayerIndex::Two, PlayerIndex::Three, PlayerIndex::Four})
         EXPECT_TRUE(GamePad::GetState(p).getIsConnectedProperty());
@@ -63,22 +69,28 @@ TEST_F(GamePadMappingTest, AllFourSlotsConnectIndependently)
 
 TEST_F(GamePadMappingTest, DisconnectThenReconnectRoundTrips)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    Publish(PlayerIndex::One, snapshot);
     EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
 
-    InputManager::SetGamePadConnection(PlayerIndex::One, false);
+    snapshot.connected = false;
+    Publish(PlayerIndex::One, snapshot);
     EXPECT_FALSE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
 
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    snapshot.connected = true;
+    Publish(PlayerIndex::One, snapshot);
     EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).getIsConnectedProperty());
 }
 
 TEST_F(GamePadMappingTest, ConnectingBumpsPacketNumber)
 {
-    // (PacketNumber's change-only semantics across button/axis are covered separately by
-    // InputManagerTests' PacketNumberBumpsOnConnectButtonAndAxisChangesOnly, task 729.)
+    // Sdl3Gamepad owns change-only packet increments; this pins their public propagation.
     const int before = GamePad::GetState(PlayerIndex::One).getPacketNumberProperty();
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.packetNumber = 1;
+    Publish(PlayerIndex::One, snapshot);
     EXPECT_GT(GamePad::GetState(PlayerIndex::One).getPacketNumberProperty(), before);
 }
 
@@ -86,48 +98,53 @@ TEST_F(GamePadMappingTest, ConnectingBumpsPacketNumber)
 
 TEST_F(GamePadMappingTest, EveryButtonMapsToItsXnaFlag)
 {
-    struct Case { GamePadButton in; Buttons out; const char* name; };
+    struct Case { CNA::Platform::GamepadButton in; Buttons out; const char* name; };
     const Case cases[] = {
-        {GamePadButton::A,             Buttons::A,             "A"},
-        {GamePadButton::B,             Buttons::B,             "B"},
-        {GamePadButton::X,             Buttons::X,             "X"},
-        {GamePadButton::Y,             Buttons::Y,             "Y"},
-        {GamePadButton::Back,          Buttons::Back,          "Back"},
-        {GamePadButton::Start,         Buttons::Start,         "Start"},
-        {GamePadButton::BigButton,     Buttons::BigButton,     "BigButton/Guide"},
-        {GamePadButton::LeftShoulder,  Buttons::LeftShoulder,  "LeftShoulder"},
-        {GamePadButton::RightShoulder, Buttons::RightShoulder, "RightShoulder"},
-        {GamePadButton::LeftStick,     Buttons::LeftStick,     "LeftStick"},
-        {GamePadButton::RightStick,    Buttons::RightStick,    "RightStick"},
-        {GamePadButton::DPadUp,        Buttons::DPadUp,        "DPadUp"},
-        {GamePadButton::DPadDown,      Buttons::DPadDown,      "DPadDown"},
-        {GamePadButton::DPadLeft,      Buttons::DPadLeft,      "DPadLeft"},
-        {GamePadButton::DPadRight,     Buttons::DPadRight,     "DPadRight"},
-        {GamePadButton::Misc1EXT,      Buttons::Misc1EXT,      "Misc1EXT"},
-        {GamePadButton::Paddle1EXT,    Buttons::Paddle1EXT,    "Paddle1EXT"},
-        {GamePadButton::Paddle2EXT,    Buttons::Paddle2EXT,    "Paddle2EXT"},
-        {GamePadButton::Paddle3EXT,    Buttons::Paddle3EXT,    "Paddle3EXT"},
-        {GamePadButton::Paddle4EXT,    Buttons::Paddle4EXT,    "Paddle4EXT"},
-        {GamePadButton::TouchPadEXT,   Buttons::TouchPadEXT,   "TouchPadEXT"},
+        {CNA::Platform::GamepadButton::A,             Buttons::A,             "A"},
+        {CNA::Platform::GamepadButton::B,             Buttons::B,             "B"},
+        {CNA::Platform::GamepadButton::X,             Buttons::X,             "X"},
+        {CNA::Platform::GamepadButton::Y,             Buttons::Y,             "Y"},
+        {CNA::Platform::GamepadButton::Back,          Buttons::Back,          "Back"},
+        {CNA::Platform::GamepadButton::Start,         Buttons::Start,         "Start"},
+        {CNA::Platform::GamepadButton::BigButton,     Buttons::BigButton,     "BigButton/Guide"},
+        {CNA::Platform::GamepadButton::LeftShoulder,  Buttons::LeftShoulder,  "LeftShoulder"},
+        {CNA::Platform::GamepadButton::RightShoulder, Buttons::RightShoulder, "RightShoulder"},
+        {CNA::Platform::GamepadButton::LeftStick,     Buttons::LeftStick,     "LeftStick"},
+        {CNA::Platform::GamepadButton::RightStick,    Buttons::RightStick,    "RightStick"},
+        {CNA::Platform::GamepadButton::DPadUp,        Buttons::DPadUp,        "DPadUp"},
+        {CNA::Platform::GamepadButton::DPadDown,      Buttons::DPadDown,      "DPadDown"},
+        {CNA::Platform::GamepadButton::DPadLeft,      Buttons::DPadLeft,      "DPadLeft"},
+        {CNA::Platform::GamepadButton::DPadRight,     Buttons::DPadRight,     "DPadRight"},
+        {CNA::Platform::GamepadButton::Misc1,         Buttons::Misc1EXT,      "Misc1EXT"},
+        {CNA::Platform::GamepadButton::Paddle1,       Buttons::Paddle1EXT,    "Paddle1EXT"},
+        {CNA::Platform::GamepadButton::Paddle2,       Buttons::Paddle2EXT,    "Paddle2EXT"},
+        {CNA::Platform::GamepadButton::Paddle3,       Buttons::Paddle3EXT,    "Paddle3EXT"},
+        {CNA::Platform::GamepadButton::Paddle4,       Buttons::Paddle4EXT,    "Paddle4EXT"},
+        {CNA::Platform::GamepadButton::TouchPad,      Buttons::TouchPadEXT,   "TouchPadEXT"},
     };
 
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
 
     for (const Case& c : cases)
     {
-        InputManager::SetGamePadButtonState(PlayerIndex::One, c.in, ButtonState::Pressed);
+        snapshot.buttons = static_cast<std::uint32_t>(c.in);
+        Publish(PlayerIndex::One, snapshot);
         EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).IsButtonDown(c.out)) << c.name;
 
-        InputManager::SetGamePadButtonState(PlayerIndex::One, c.in, ButtonState::Released);
+        snapshot.buttons = 0;
+        Publish(PlayerIndex::One, snapshot);
         EXPECT_TRUE(GamePad::GetState(PlayerIndex::One).IsButtonUp(c.out)) << c.name;
     }
 }
 
 TEST_F(GamePadMappingTest, TwoButtonsPressedTogetherBothRegister)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    InputManager::SetGamePadButtonState(PlayerIndex::One, GamePadButton::A, ButtonState::Pressed);
-    InputManager::SetGamePadButtonState(PlayerIndex::One, GamePadButton::Start, ButtonState::Pressed);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.buttons = static_cast<std::uint32_t>(CNA::Platform::GamepadButton::A)
+        | static_cast<std::uint32_t>(CNA::Platform::GamepadButton::Start);
+    Publish(PlayerIndex::One, snapshot);
 
     const GamePadState state = GamePad::GetState(PlayerIndex::One);
     EXPECT_TRUE(state.IsButtonDown(Buttons::A));
@@ -135,13 +152,15 @@ TEST_F(GamePadMappingTest, TwoButtonsPressedTogetherBothRegister)
     EXPECT_TRUE(state.IsButtonUp(Buttons::B));
 }
 
-// --- Task 813: axis normalization / clamp (InputManager storage stage) ---
+// --- Task 813: axis normalization / public-state clamp ---
 
 TEST_F(GamePadMappingTest, ThumbstickAxesClampToSignedUnitRange)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickX, 2.0f);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftThumbstickY, -2.0f);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftThumbstickX)] = 2.0f;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftThumbstickY)] = -2.0f;
+    Publish(PlayerIndex::One, snapshot);
 
     const auto sticks = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None).getThumbSticksProperty();
     EXPECT_FLOAT_EQ(sticks.getLeftProperty().X, 1.0f);
@@ -150,9 +169,11 @@ TEST_F(GamePadMappingTest, ThumbstickAxesClampToSignedUnitRange)
 
 TEST_F(GamePadMappingTest, RightThumbstickStoresMidAndZeroValues)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::RightThumbstickX, 0.5f);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::RightThumbstickY, 0.0f);
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::RightThumbstickX)] = 0.5f;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::RightThumbstickY)] = 0.0f;
+    Publish(PlayerIndex::One, snapshot);
 
     const auto sticks = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None).getThumbSticksProperty();
     EXPECT_FLOAT_EQ(sticks.getRightProperty().X, 0.5f);
@@ -161,9 +182,11 @@ TEST_F(GamePadMappingTest, RightThumbstickStoresMidAndZeroValues)
 
 TEST_F(GamePadMappingTest, TriggerAxesClampToPositiveUnitRange)
 {
-    InputManager::SetGamePadConnection(PlayerIndex::One, true);
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::LeftTrigger, 1.5f);   // over max
-    InputManager::SetGamePadAxisValue(PlayerIndex::One, GamePadAxis::RightTrigger, -0.5f); // below min
+    CNA::Platform::GamepadSnapshot snapshot;
+    snapshot.connected = true;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::LeftTrigger)] = 1.5f;
+    snapshot.axes[static_cast<std::size_t>(CNA::Platform::GamepadAxis::RightTrigger)] = -0.5f;
+    Publish(PlayerIndex::One, snapshot);
 
     const auto triggers = GamePad::GetState(PlayerIndex::One, GamePadDeadZone::None).getTriggersProperty();
     EXPECT_FLOAT_EQ(triggers.getLeftProperty(), 1.0f);

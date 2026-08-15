@@ -14,12 +14,12 @@ namespace CNA::Input
 {
     /**
      * @brief CNAEXT — raw joystick access (flight sticks, wheels, throttles, arbitrary HID
-     *        controllers), backed by SDL3's joystick API.
+     *        controllers), backed by the selected platform's raw-joystick service.
      *
      * XNA 4.0 only ever modeled Xbox-style mapped gamepads (`Microsoft::Xna::Framework::Input::
-     * GamePad`). SDL3's raw joystick API exposes arbitrary axes/buttons/hats/trackballs with no
+     * GamePad`). The raw joystick service exposes arbitrary axes/buttons/hats/trackballs with no
      * semantic mapping — essential for flight sims, racing wheels, and HOTAS setups that `GamePad`
-     * cannot represent. A device SDL also maps as a gamepad is visible here too (as
+     * cannot represent. A device the platform also maps as a gamepad is visible here too (as
      * `JoystickTypeEXT::Gamepad`); this is an independent, unmapped view of the same hardware.
      */
     CNAEXT class Joysticks
@@ -36,22 +36,22 @@ namespace CNA::Input
 
         /**
          * @brief Returns the static hardware shape and identity of a joystick.
-         * @param id The SDL joystick instance id.
+         * @param id The platform joystick id reported by enumeration or a hotplug event.
          * @return The device's capabilities, or a default (disconnected) value if `id` is not connected.
          */
         CNAEXT [[nodiscard]] static JoystickCapabilitiesEXT GetCapabilitiesEXT(std::uint32_t id);
 
         /**
          * @brief Returns the current axis/button/hat/trackball state of a joystick.
-         * @param id The SDL joystick instance id.
+         * @param id The platform joystick id reported by enumeration or a hotplug event.
          * @return The device's current state, or all-empty if `id` is not connected.
          */
         CNAEXT [[nodiscard]] static JoystickStateEXT GetStateEXT(std::uint32_t id);
 
-        /** @brief CNAEXT/EXT: fires with the SDL joystick instance id when a joystick is connected. */
+        /** @brief CNAEXT/EXT: fires with the platform device id when a joystick is connected. */
         CNAEXT static System::MulticastAction<std::uint32_t> ConnectedEXT;
 
-        /** @brief CNAEXT/EXT: fires with the SDL joystick instance id when a joystick is disconnected. */
+        /** @brief CNAEXT/EXT: fires with the platform device id when a joystick is disconnected. */
         CNAEXT static System::MulticastAction<std::uint32_t> DisconnectedEXT;
 
         /**

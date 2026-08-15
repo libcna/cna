@@ -7,13 +7,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — host system battery / charge information, backed by SDL3.
+     * @brief CNAEXT — host system battery / charge information.
      *
      * XNA 4.0 has no power API; this is a CNA extension (whole class `CNAEXT`). It reports whether the
      * machine is on battery and how much charge/runtime remains, so a game can, for example, pause or
-     * dim when the battery runs low. It mirrors SDL3's `SDL_GetPowerInfo`. Platform notes: desktop
-     * (Windows/Linux/macOS) and Android report battery state; on the web it is best-effort (the
-     * Battery Status API is deprecated in some browsers) and typically reports Unknown.
+     * dim when the battery runs low. Platform notes: desktop (Windows/Linux/macOS) and Android report
+     * battery state; on the web it is best-effort (the Battery Status API is deprecated in some
+     * browsers) and typically reports Unknown.
      */
     CNAEXT class Power
     {

@@ -1,11 +1,10 @@
 #pragma once
 
-#include <SDL3/SDL.h>
+#include "CNA/Internal/Renderers/Common/PlatformGlRendererState.hpp"
 
 #include <memory>
 #include <string>
 
-struct SDL_Window;
 class GrDirectContext;
 
 namespace CNA::Internal::Renderers::Skia
@@ -20,21 +19,22 @@ namespace CNA::Internal::Renderers::Skia
     /// Whether this class can succeed is fixed at CMake configure time by `CNA_SKIA_MODE`
     /// (`RASTER`, the default, or `GANESH`), which selects which of the two mutually exclusive
     /// pinned Skia artifacts (`CNA::Skia` vs `CNA::SkiaGanesh`) this build links. In a `RASTER`
-    /// build the constructor always throws immediately, without touching SDL or GL at all --
+    /// build the constructor always throws immediately, without touching the platform or GL --
     /// requesting Ganesh mode in a build that was not configured for it is a deterministic,
     /// display-independent refusal, not a silent no-op. In a `GANESH` build the constructor
-    /// performs the real sequence SKIA-159's probe already proved works (a real SDL
-    /// `SDL_GLContext`, made current, handed to `GrDirectContexts::MakeGL()`) and throws
+    /// performs the real sequence SKIA-159's probe already proved works (a platform GL context,
+    /// made current, handed to `GrDirectContexts::MakeGL()`) and throws
     /// `std::runtime_error` if any step fails, leaving no partially constructed object and no
-    /// leaked SDL/GL resource.
+    /// leaked native GL resource.
     class SkiaGaneshContext final
     {
     public:
-        /// @brief Attempts to construct a real Ganesh context on the given caller-owned window.
+        /// @brief Attempts to construct a real Ganesh context on the given platform window.
         /// Throws std::runtime_error transactionally (no partial object, no leaked resource) if
-        /// this build was not configured with -DCNA_SKIA_MODE=GANESH, or if SDL/GL/Ganesh
+        /// this build was not configured with -DCNA_SKIA_MODE=GANESH, or if platform/GL/Ganesh
         /// initialization fails for any reason on this machine.
-        explicit SkiaGaneshContext(SDL_Window* window);
+        SkiaGaneshContext(CNA::Platform::IPlatformGlContext* service,
+                          CNA::Platform::WindowId window);
 
         /// @brief Releases the owned GL context. The caller-owned window itself is untouched,
         /// matching SkiaRenderer's own window-ownership convention.
@@ -60,6 +60,8 @@ namespace CNA::Internal::Renderers::Skia
         /// constructed instance (construction throws otherwise); the type is only forward-
         /// declared here, matching this header's mode-agnostic, Ganesh-include-free design.
         [[nodiscard]] GrDirectContext* NativeContextEXT() const noexcept;
+        /** @brief Presents the platform window associated with this Ganesh context. */
+        void SwapBuffers();
 
     private:
         // The real sk_sp<GrDirectContext> lives behind this Pimpl (defined only in the .cpp) so
@@ -67,8 +69,7 @@ namespace CNA::Internal::Renderers::Skia
         // Skia include.
         struct Impl;
 
-        SDL_Window* window_ = nullptr;
-        SDL_GLContext glContext_ = nullptr;
+        std::unique_ptr<PlatformGlContextOwner> platformContext_;
         std::unique_ptr<Impl> impl_;
         int maxTextureSize_ = 0;
         std::string startupDiagnostic_;

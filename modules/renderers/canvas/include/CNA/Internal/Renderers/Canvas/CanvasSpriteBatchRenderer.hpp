@@ -54,16 +54,16 @@ namespace CNA::Internal::Renderers::Canvas
          */
         void SetImmediateMode(bool immediate) override;
         /// CANVAS-36: `ctx.setTransform(a,b,c,d,e,f)` directly supports a full 2D affine matrix --
-        /// called unconditionally per `Begin()` (Identity included), unlike SDL_RENDERER's own fix
+        /// called unconditionally per `Begin()` (Identity included), unlike the native renderer's own fix
         /// which needed a separate non-Identity-only code path.
         void SetTransformMatrix(const Matrix& m) override;
         /// CANVAS-38: throws for a non-null custom Effect (Design decision 10) -- no programmable
-        /// shader stage exists on this renderer, same conclusion SDL_RENDERER reached (Task 676).
+        /// shader stage exists on this renderer, same conclusion the native renderer reached (Task 676).
         void SetCustomEffect(Effect* effect) override;
         /// CANVAS-42: maps the "expand"/magnification component of TextureFilter to
         /// ctx.imageSmoothingEnabled -- Canvas2D only has a binary smoothing toggle, same
-        /// magnification-dominant reasoning SDL_RENDERER's Task 701 fix used for its own coarser
-        /// single-SDL_ScaleMode primitive.
+        /// magnification-dominant reasoning the native renderer's Task 701 fix used for its own
+        /// coarser single-filter primitive.
         void SetSamplerFilter(int textureFilter) override;
         /// CANVAS-43/44: stores the raw TextureAddressMode ints (0=Wrap, 1=Clamp, 2=Mirror) --
         /// Draw() only branches on these when a sourceRectangle actually exceeds the texture's own

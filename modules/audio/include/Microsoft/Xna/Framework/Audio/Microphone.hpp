@@ -2,6 +2,7 @@
 #pragma once
 #include "CNA/CNAHelper.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,7 +15,10 @@
 #include "System/TimeSpan.hpp"
 #include "SharpRuntime/SharpRuntimeHelper.hpp"
 
-struct SDL_AudioStream;
+namespace CNA::Audio::Platform
+{
+    class IAudioRecordingDevice;
+}
 
 namespace Microsoft::Xna::Framework::Audio
 {
@@ -144,20 +148,21 @@ namespace Microsoft::Xna::Framework::Audio
         CNAEXT void CheckBuffer();
 
         // Production Microphone instances are constructed directly by getAllProperty() from
-        // the enumerated SDL3 capture devices; tests need a way to construct an isolated
+        // the selected recording provider; tests need a way to construct an isolated
         // instance directly, independent of whatever the current machine/driver enumerates.
         CNAEXT friend struct MicrophoneTestAccess;
 
-        Microphone(SharpRuntime::uintcs id, std::string name);
+        Microphone(std::uint64_t id, std::string name);
 
         System::TimeSpan bufferDuration_;
-        SharpRuntime::uintcs handle_;
+        std::uint64_t recordingDeviceId_;
         MicrophoneState state_;
-        SDL_AudioStream* captureStream_ = nullptr;
+        std::unique_ptr<CNA::Audio::Platform::IAudioRecordingDevice> captureDevice_;
 
         // FNA internals (Microphone.cs: micList, SAMPLERATE are both `internal`), not CNA additions.
         static std::vector<Microphone*>* micList;
         static constexpr SharpRuntime::intcs SAMPLERATE = 44100;
+        SharpRuntime::intcs sampleRate_ = SAMPLERATE;
 
         static std::vector<std::unique_ptr<Microphone>> microphoneStorage_;
 

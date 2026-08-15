@@ -114,8 +114,8 @@ public:
             try
             {
                 GpuDrawParams params{};
-                Fna3dVertexBufferRenderer vertexBuffer(fna3d->GetDeviceEXT(), 3, 16);
-                Fna3dIndexBufferRenderer indexBuffer(fna3d->GetDeviceEXT(), 3, false);
+                Fna3dVertexBufferRenderer vertexBuffer(fna3d->GetDeviceStateEXT(), 3, 16);
+                Fna3dIndexBufferRenderer indexBuffer(fna3d->GetDeviceStateEXT(), 3, false);
                 renderer.DrawInstancedPrimitivesEx(
                     vertexBuffer, indexBuffer, Matrix::getIdentityProperty(),
                     Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),

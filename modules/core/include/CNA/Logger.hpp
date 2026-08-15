@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string_view>
 
 #include "CNA/LogLevel.hpp"
@@ -8,7 +9,7 @@
 namespace CNA
 {
     /**
-     * @brief Simple logging utility built on top of SDL logging.
+     * @brief Simple logging utility owning its own output sink.
      *
      * Provides convenience methods for logging messages with severity
      * and category metadata.
@@ -198,9 +199,33 @@ namespace CNA
          */
         [[nodiscard]] static LogLevel GetMinimumLevel();
 
+        /**
+         * @brief The signature of a log sink.
+         *
+         * @param level The severity of the message.
+         * @param category The category the message was logged under.
+         * @param formattedMessage The fully formatted line, without a trailing newline.
+         */
+        using Sink = std::function<void(LogLevel level, LogCategory category,
+                                        std::string_view formattedMessage)>;
+
+        /**
+         * @brief Replaces the destination log messages are written to.
+         *
+         * The default sink writes to **stderr**, deliberately never stdout: a terminal-hosted
+         * game draws its frame on stdout, and a log line there would corrupt it. That makes the
+         * destination a correctness matter rather than a preference.
+         *
+         * @param sink The new sink. Passing an empty function restores the default.
+         */
+        static void SetSink(Sink sink);
+
+        /**
+         * @brief Restores the default stderr sink.
+         */
+        static void ResetSink();
+
     private:
-        [[nodiscard]] static int ToSDLPriority(LogLevel level);
-        [[nodiscard]] static int ToSDLCategory(LogCategory category);
         [[nodiscard]] static bool IsEnabled(LogLevel level);
         [[nodiscard]] static const char* ToString(LogLevel level);
         [[nodiscard]] static const char* ToString(LogCategory category);

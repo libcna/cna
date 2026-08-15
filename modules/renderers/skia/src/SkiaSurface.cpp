@@ -108,7 +108,7 @@ namespace CNA::Internal::Renderers::Skia
     void SkiaSurface::Flush()
     {
         // Raster Skia writes synchronously into CPU memory. Unlike a Ganesh/Graphite surface,
-        // there is no deferred command queue to submit before readback or SDL upload.
+        // there is no deferred command queue to submit before readback or platform presentation.
     }
 
     SkCanvas* SkiaSurface::Canvas() const noexcept

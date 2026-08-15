@@ -3,6 +3,7 @@
 
 #include "CNA/Internal/Renderers/Gdi/GdiConfiguration.hpp"
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -159,10 +160,10 @@ int main(int argc, char** argv)
     try
     {
         {
-            GdiRenderer renderer(
-                window, logicalWidth, logicalHeight,
+            GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+                window, nullptr, nullptr, logicalWidth, logicalHeight,
                 halftoneVariant ? CnaPresentationMode::Stretch
-                                : CnaPresentationMode::NativeBackBuffer);
+                                : CnaPresentationMode::NativeBackBuffer));
             const GdiConfiguration expectedConfiguration{
                 expectHalftone ? GdiPresentationFilter::Halftone
                                : GdiPresentationFilter::Nearest,
@@ -228,9 +229,11 @@ int main(int argc, char** argv)
 
             const GdiConfiguration overrideConfiguration{
                 GdiPresentationFilter::Halftone, true, false};
-            GdiRenderer renderer(window, clientWidth, clientHeight,
-                                       CnaPresentationMode::NativeBackBuffer,
-                                       overrideConfiguration);
+            GdiRenderer renderer(
+                CNA::Examples::SdlTestRendererArgs(
+                    window, nullptr, nullptr, clientWidth, clientHeight,
+                    CnaPresentationMode::NativeBackBuffer),
+                overrideConfiguration);
             ok &= Expect(renderer.DebugGetConfiguration() == overrideConfiguration,
                          "typed test override bypasses every process setting");
             renderer.Clear(0.2f, 0.3f, 0.4f, 1.0f);

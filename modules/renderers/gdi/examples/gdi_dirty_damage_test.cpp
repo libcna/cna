@@ -2,6 +2,7 @@
 // GDI-051: deterministic damage tracking from the Software rasterizer's final SpriteBatch quad.
 
 #include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
+#include "common/SdlTestGraphicsServices.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -102,7 +103,8 @@ int main()
     int result = 0;
     try
     {
-        GdiRenderer renderer(window, kWidth, kHeight, CnaPresentationMode::Stretch);
+        GdiRenderer renderer(CNA::Examples::SdlTestRendererArgs(
+            window, nullptr, nullptr, kWidth, kHeight, CnaPresentationMode::Stretch));
         const ImageData image{1, 1, std::vector<std::uint8_t>{255, 0, 0, 255}};
         std::unique_ptr<ITextureRenderer> texture = renderer.CreateTexture(image);
         std::unique_ptr<ISpriteBatchRenderer> sprites = renderer.CreateSpriteBatch();

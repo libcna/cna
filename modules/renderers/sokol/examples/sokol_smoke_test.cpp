@@ -3,8 +3,8 @@
 // SDL window, a real GPU context, a real sg_setup(), and a 60-frame Clear()+Present() loop, with
 // the cleared colour read back off the real back buffer rather than merely "did not throw".
 //
-// Check A -- GetWindowInternal() returns a real, non-null SDL_Window.
-// Check B -- GetRendererInternal() is null (this renderer does not use SDL_Renderer).
+// Check A -- GameWindow handle returns a real, non-null SDL_Window.
+// Check B -- SDL_GetRenderer(window) is null (this renderer does not use SDL_Renderer).
 // Check C -- GetViewportSize() reports the requested logical size.
 // Check D -- GetApiEXT() reports the API CNA_SOKOL_API selected at configure time.
 // Check E -- a real vertex/index buffer round-trip: SetData() then GetVertexCount()/
@@ -150,10 +150,10 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr,
-                  "GetWindowInternal() returns a real window");
-            check(renderer.GetRendererInternal() == nullptr,
-                  "GetRendererInternal() is null (no SDL_Renderer)");
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr,
+                  "GameWindow handle returns a real window");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr,
+                  "SDL_GetRenderer(window) is null (no SDL_Renderer)");
 
             int width = 0;
             int height = 0;

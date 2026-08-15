@@ -1,6 +1,6 @@
-**Je to technicky možné**, ale SDL2 bude výrazně jednodušší než skutečné SDL 1.2.
+**It is technically possible**, but SDL2 will be significantly easier than real SDL 1.2.
 
-Nejdůležitější je, aby ses nepokoušel vytvořit „společný SDL wrapper“ napodobující průnik všech tří API. Lepší architektura je:
+The most important thing is that you do not try to create a "common SDL wrapper" imitating the intersection of all three APIs. A better architecture is:
 
 ```text
 CNA Core
@@ -21,66 +21,66 @@ CNA Core
    └── CNA Input API
 ```
 
-Platform API má popisovat **to, co potřebuje CNA**, nikoliv funkce SDL.
+The Platform API must describe **what CNA needs**, not SDL's functions.
 
-## SDL2: velmi realistické
+## SDL2: very realistic
 
-SDL2 a SDL3 nejsou zdrojově totožné; SDL má samostatný rozsáhlý migrační návod a měnila se návratová pravidla, názvy funkcí, eventy i další části API. To ale nebrání tomu, aby obě implementovaly stejnou interní CNA platformní abstrakci. ([SDL Wiki][1])
+SDL2 and SDL3 are not source-identical; SDL has a separate, extensive migration guide, and return conventions, function names, events and other parts of the API changed. That, however, does not prevent both from implementing the same internal CNA platform abstraction. ([SDL Wiki][1])
 
-SDL2 je vhodné zejména pro:
+SDL2 is suitable especially for:
 
-* starší Windows;
-* starší Linuxové distribuce;
-* platformy, kde SDL3 není praktické;
-* hry, které nepotřebují SDL3 GPU API;
-* dlouhodobou záložní platformní cestu.
+* older Windows;
+* older Linux distributions;
+* platforms where SDL3 is not practical;
+* games that do not need the SDL3 GPU API;
+* a long-term fallback platform path.
 
-Oficiální dokumentace SDL2 uvádí podporu Windows zpět až k Windows XP. ([SDL Wiki][2])
+The official SDL2 documentation states Windows support going back as far as Windows XP. ([SDL Wiki][2])
 
-Odhadem by šla SDL2 implementace vytvořit bez zásadního zásahu do herního API, pokud nejprve odstraníš přímé volání SDL3 z core, inputu, audia a jednotlivých backendů.
+As a rough estimate, an SDL2 implementation could be created without a fundamental change to the game API, provided you first remove the direct SDL3 calls from core, input, audio and the individual backends.
 
-## SDL 1.2: možné, ale jako omezený legacy profil
+## SDL 1.2: possible, but as a limited legacy profile
 
-Klasické SDL 1.2 je oficiálně zastaralé a SDL tým upozorňuje, že už se aktivně nevyvíjí a bude postupně degradovat. Poslední oficiální vydání je 1.2.15. ([libsdl.org][3])
+Classic SDL 1.2 is officially deprecated, and the SDL team warns that it is no longer actively developed and will gradually degrade. The last official release is 1.2.15. ([libsdl.org][3])
 
-To ale neznamená, že jej CNA nemůže použít. Znamená to, že implementaci budeš dlouhodobě vlastnit ty.
+That does not mean CNA cannot use it. It means you will own that implementation for the long term.
 
-SDL 1.2 platforma by pravděpodobně nabízela jen omezený profil:
+An SDL 1.2 platform would probably offer only a limited profile:
 
-* základní okno;
-* klávesnice a myš;
-* starší joystickové API;
-* časování;
-* základní audio;
-* OpenGL nebo software surface;
-* základní fullscreen režimy;
-* omezený clipboard, text input, gamepad a HiDPI kontrakt.
+* a basic window;
+* keyboard and mouse;
+* the older joystick API;
+* timing;
+* basic audio;
+* OpenGL or a software surface;
+* basic fullscreen modes;
+* limited clipboard, text input, gamepad and HiDPI contract.
 
-Moderní funkce se musí deklarovat jako nepodporované, ne emulovat nebezpečnými hacky.
+Modern features must be declared unsupported, not emulated with dangerous hacks.
 
-## Pozor na compatibility projekty
+## Watch out for compatibility projects
 
-Existují oficiální projekty:
+There are official projects:
 
-* `sdl2-compat`: poskytuje SDL2 API nad SDL3;
-* `sdl12-compat`: poskytuje SDL 1.2 API nad SDL2;
-* lze je dokonce řetězit až k SDL3. ([GitHub][4])
+* `sdl2-compat`: provides the SDL2 API on top of SDL3;
+* `sdl12-compat`: provides the SDL 1.2 API on top of SDL2;
+* they can even be chained all the way to SDL3. ([GitHub][4])
 
-Ty jsou užitečné pro kompatibilitu aplikací, ale **neřeší tvůj cíl podporovat skutečně staré platformy**. Pokud `sdl12-compat` nakonec běží nad SDL2 nebo SDL3, nezískáš tím operační systém, na kterém spodní SDL neběží.
+These are useful for application compatibility, but **they do not solve your goal of supporting genuinely old platforms**. If `sdl12-compat` ultimately runs on top of SDL2 or SDL3, you do not gain an operating system on which the underlying SDL does not run.
 
-Pro CNA proto dávají smysl tři odlišné možnosti:
+For CNA, therefore, three distinct options make sense:
 
 ```text
-CNA + skutečné SDL3
-CNA + skutečné SDL2 Classic
-CNA + skutečné SDL 1.2 Classic
+CNA + real SDL3
+CNA + real SDL2 Classic
+CNA + real SDL 1.2 Classic
 ```
 
-Compatibility vrstvy mohou být navíc testovací konfigurace, nikoliv náhrada skutečných implementací.
+The compatibility layers can additionally be test configurations, not a replacement for the real implementations.
 
-## Co musí obsahovat CNA Platform API
+## What the CNA Platform API must contain
 
-Doporučil bych minimálně tyto části:
+I would recommend at least these parts:
 
 ```cpp
 namespace CNA::Platform {
@@ -103,7 +103,7 @@ class NativeWindowHandle;
 }
 ```
 
-Audio bych zvažoval oddělit:
+I would consider separating audio:
 
 ```text
 CNA.Audio.Platform
@@ -111,14 +111,14 @@ CNA.Audio.Platform
 ├── SDL2 Audio
 ├── SDL 1.2 Audio
 ├── OpenAL
-└── další budoucí implementace
+└── other future implementations
 ```
 
-Stejně tak gamepad může být vlastní modul, protože SDL1 joystick, SDL2 GameController a SDL3 Gamepad mají výrazně odlišné možnosti.
+Likewise, the gamepad can be its own module, because the SDL1 joystick, SDL2 GameController and SDL3 Gamepad have significantly different capabilities.
 
-## Grafické backendy nesmějí automaticky záviset na SDL3
+## Graphics backends must not automatically depend on SDL3
 
-Dnes může backend sahat přímo na:
+Today a backend may reach directly for:
 
 ```cpp
 SDL_Window*
@@ -126,7 +126,7 @@ SDL_PropertiesID
 SDL_GetWindowProperties(...)
 ```
 
-Po oddělení by měl dostat něco jako:
+After the separation it should receive something like:
 
 ```cpp
 struct NativeWindowHandle {
@@ -137,7 +137,7 @@ struct NativeWindowHandle {
 };
 ```
 
-Nebo typově bezpečnější varianty pro:
+Or more type-safe variants for:
 
 * Win32 `HWND`;
 * X11 `Display*` + `Window`;
@@ -146,21 +146,21 @@ Nebo typově bezpečnější varianty pro:
 * Android native window;
 * web canvas.
 
-Potom Vulkan, OpenGL, DirectX, GDI nebo Glide nebudou vědět, zda okno vytvořilo SDL3, SDL2, SDL1 nebo budoucí nativní platformní backend.
+Then Vulkan, OpenGL, DirectX, GDI or Glide will not know whether the window was created by SDL3, SDL2, SDL1 or a future native platform backend.
 
-Výjimkou budou záměrně SDL-specifické grafické backendy:
+The exceptions will be the deliberately SDL-specific graphics backends:
 
 ```text
-SDL GPU       → vyžaduje SDL3
-SDL Renderer  → varianta podle SDL3/SDL2
-SDL 1.2 Surface Renderer → pouze legacy cesta
+SDL GPU       → requires SDL3
+SDL Renderer  → variant depending on SDL3/SDL2
+SDL 1.2 Surface Renderer → legacy path only
 ```
 
-SDL GPU je moderní API dostupné v SDL3, takže pro SDL2 nebo SDL1 jej nelze jednoduše zachovat jako stejnou cestu. ([SDL Wiki][5])
+SDL GPU is a modern API available in SDL3, so it cannot simply be preserved as the same path for SDL2 or SDL1. ([SDL Wiki][5])
 
-## Capability model platformy
+## Platform capability model
 
-Stejně jako u grafiky potřebuješ capability dotazy:
+Just as with graphics, you need capability queries:
 
 ```cpp
 struct PlatformCapabilities {
@@ -177,53 +177,53 @@ struct PlatformCapabilities {
 };
 ```
 
-Hra nebo CNA vrstva pak nebude předpokládat, že každá platformní implementace umí vše.
+The game or the CNA layer will then not assume that every platform implementation can do everything.
 
-## C++23 zůstává samostatný problém
+## C++23 remains a separate problem
 
-Oddělení SDL3 je nutná podmínka pro staré systémy, ale **samo nestačí**.
+Separating SDL3 is a necessary condition for old systems, but **it is not sufficient on its own**.
 
-Pro opravdu staré Windows budeš pravděpodobně potřebovat také:
+For truly old Windows you will probably also need:
 
-* starší kompatibilní compiler/toolchain;
-* nižší jazykový profil než plné C++23;
-* omezení moderní standardní knihovny;
-* odstranění závislostí na nových systémových API;
-* případně C ABI mezi moderním CNA core a legacy hostem.
+* an older compatible compiler/toolchain;
+* a lower language profile than full C++23;
+* restrictions on the modern standard library;
+* removal of dependencies on new system APIs;
+* possibly a C ABI between the modern CNA core and the legacy host.
 
-Praktický model může být:
+A practical model may be:
 
 ```text
 CNA Modern
     C++23
     SDL3 / SDL2
-    všechny moderní funkce
+    all modern features
 
 CNA Legacy
-    omezená kompatibilní podmnožina
-    SDL2 nebo SDL 1.2
-    vybrané grafické/audio backendy
-    bez některých NoXNA rozšíření
+    a limited compatible subset
+    SDL2 or SDL 1.2
+    selected graphics/audio backends
+    without some NoXNA extensions
 ```
 
-Nemusíš nutně překládat všech 40 grafických backendů pro každý legacy profil.
+You do not necessarily have to compile all 40 graphics backends for every legacy profile.
 
-## Nejbezpečnější implementační pořadí
+## The safest implementation order
 
-1. **Inventář všech přímých použití SDL3.**
-2. Definovat platformní API podle skutečných potřeb CNA.
-3. Přesunout současné SDL3 chování za `Sdl3Platform`.
-4. Dokázat behaviorální shodu bez přidávání SDL2.
-5. Přidat `Sdl2Platform`.
-6. Vytvořit platformní conformance suite.
-7. Teprve potom navrhnout omezený `Sdl12Platform`.
-8. Nakonec řešit legacy C++/toolchain profil.
+1. **An inventory of all direct uses of SDL3.**
+2. Define the platform API according to CNA's real needs.
+3. Move the current SDL3 behavior behind `Sdl3Platform`.
+4. Prove behavioral equivalence without adding SDL2.
+5. Add `Sdl2Platform`.
+6. Create a platform conformance suite.
+7. Only then design a limited `Sdl12Platform`.
+8. Finally, address the legacy C++/toolchain profile.
 
-Důležitá zásada:
+An important principle:
 
-> Nezačínat abstrakcí podle toho, co mají společného SDL1, SDL2 a SDL3. Začít kontraktem, který potřebuje CNA, a každé SDL nechat tento kontrakt implementovat podle svých možností.
+> Do not start from an abstraction based on what SDL1, SDL2 and SDL3 have in common. Start from the contract CNA needs, and let each SDL implement that contract to the best of its ability.
 
-Takže ano: **SDL3 + SDL2 je velmi realistický cíl. Skutečné SDL 1.2 je také možné, ale spíš jako historická a omezená platformní implementace, nikoliv plnohodnotná náhrada SDL3 pro všechny moderní funkce CNA.**
+So yes: **SDL3 + SDL2 is a very realistic goal. Real SDL 1.2 is also possible, but rather as a historical and limited platform implementation, not a full-featured replacement for SDL3 for all modern CNA features.**
 
 [1]: https://wiki.libsdl.org/SDL3/README-migration?utm_source=chatgpt.com "SDL3/README-migration"
 [2]: https://wiki.libsdl.org/SDL2/Installation?utm_source=chatgpt.com "SDL2/Installation"
@@ -257,52 +257,52 @@ Takže ano: **SDL3 + SDL2 je velmi realistický cíl. Skutečné SDL 1.2 je tak�
 
 
 
-Při správném návrhu půjde výkon dolů **prakticky neměřitelně**. U běžné CNA hry bych očekával přibližně:
+With a correct design, performance will go down **practically immeasurably**. For an ordinary CNA game I would expect roughly:
 
-| Návrh platformní abstrakce                                 | Odhad dopadu na výkon celé hry |
-| ---------------------------------------------------------- | -----------------------------: |
-| Dobře navržená, hrubozrnná abstrakce                       |                    **0–0,3 %** |
-| Více virtuálních volání, ale jen pro okna a eventy         |                      **0–1 %** |
-| Špatně navržená abstrakce v často volaných cestách         |                      **1–5 %** |
-| Abstrakce volaná pro každý pixel, audio sample nebo vertex |     potenciálně výrazný propad |
+| Platform abstraction design                                 | Estimated impact on whole-game performance |
+| ----------------------------------------------------------- | -----------------------------------------: |
+| A well-designed, coarse-grained abstraction                  |                             **0–0.3 %** |
+| More virtual calls, but only for windows and events          |                               **0–1 %** |
+| A badly designed abstraction on frequently called paths      |                               **1–5 %** |
+| An abstraction called for every pixel, audio sample or vertex |             potentially a significant drop |
 
-Pro CNA bude pravděpodobně důležitější dopad na **složitost kódu, buildy a testování** než na runtime výkon.
+For CNA, the impact on **code complexity, builds and testing** will probably matter more than the runtime performance.
 
-## Proč bude dopad malý
+## Why the impact will be small
 
-Platformní vrstva typicky obsluhuje:
+The platform layer typically handles:
 
-* vytvoření a zrušení okna;
-* zpracování eventů;
-* klávesnici, myš a gamepady;
+* creating and destroying a window;
+* processing events;
+* keyboard, mouse and gamepads;
 * clipboard;
-* kurzor;
-* časování;
-* fullscreen a změny rozlišení;
-* získání nativního window handle;
-* případně audio zařízení.
+* cursor;
+* timing;
+* fullscreen and resolution changes;
+* obtaining the native window handle;
+* possibly audio devices.
 
-Většina těchto operací proběhne jednou za frame nebo ještě méně často. I kdyby každá vedla přes virtuální funkci nebo function pointer, proti renderování, fyzice, audio mixingu a herní logice je cena zanedbatelná.
+Most of these operations happen once per frame or even less often. Even if each one went through a virtual function or a function pointer, the cost is negligible compared to rendering, physics, audio mixing and game logic.
 
-Například místo přímého:
+For example, instead of directly:
 
 ```cpp
 SDL_PollEvent(&event);
 ```
 
-může CNA dělat:
+CNA can do:
 
 ```cpp
 platform->PollEvents(eventQueue);
 ```
 
-Jedno nepřímé volání za frame nebude mít prakticky žádný dopad. Samotné systémové zpracování eventů je mnohem dražší než výběr implementace přes vtable.
+One indirect call per frame will have practically no impact. The system's own event processing is much more expensive than selecting an implementation through a vtable.
 
-## Kde by se výkon opravdu mohl zhoršit
+## Where performance really could get worse
 
-### Volání platformní vrstvy pro každý jednotlivý event
+### Calling the platform layer for every single event
 
-Horší návrh:
+A worse design:
 
 ```cpp
 while (platform->PollSingleEvent(event))
@@ -311,7 +311,7 @@ while (platform->PollSingleEvent(event))
 }
 ```
 
-Lepší návrh:
+A better design:
 
 ```cpp
 platform->PollEvents(eventBatch);
@@ -322,11 +322,11 @@ for (const auto& event : eventBatch)
 }
 ```
 
-Rozdíl bude i tak obvykle malý, ale batch rozhraní snižuje počet nepřímých volání a lépe odděluje SDL datové struktury od CNA.
+The difference will usually be small anyway, but a batch interface reduces the number of indirect calls and better separates SDL data structures from CNA.
 
-### Audio po jednotlivých samplech
+### Audio sample by sample
 
-Tohle by bylo špatně:
+This would be wrong:
 
 ```cpp
 for (std::size_t i = 0; i < sampleCount; ++i)
@@ -335,31 +335,31 @@ for (std::size_t i = 0; i < sampleCount; ++i)
 }
 ```
 
-Správně:
+Correct:
 
 ```cpp
 audioPlatform->FillBuffer(output, sampleCount);
 ```
 
-Platformní dispatch jednou na celý audio buffer je zanedbatelný. Dispatch jednou na sample už může být výrazný.
+A platform dispatch once per whole audio buffer is negligible. A dispatch once per sample can already be significant.
 
-### Přesměrování každého grafického draw callu přes platformní API
+### Routing every graphics draw call through the platform API
 
-Grafický backend nesmí dělat něco jako:
+The graphics backend must not do something like:
 
 ```cpp
 platform->GraphicsDraw(...);
 ```
 
-Platformní API má grafice pouze předat:
+The platform API should only hand the graphics layer:
 
-* velikost okna;
-* native handle;
-* surface informace;
+* the window size;
+* the native handle;
+* surface information;
 * DPI;
-* lifecycle eventy.
+* lifecycle events.
 
-Samotné draw cally patří přímo do zvoleného grafického backendu:
+The draw calls themselves belong directly in the chosen graphics backend:
 
 ```text
 Game
@@ -369,7 +369,7 @@ GraphicsDevice
 Vulkan / Bgfx / OpenGL / GDI / Glide
 ```
 
-Ne:
+Not:
 
 ```text
 Game
@@ -383,9 +383,9 @@ SDL implementation
 Graphics backend
 ```
 
-Tím se vyhneš další vrstvě v nejčastěji volané cestě.
+This avoids another layer on the most frequently called path.
 
-## Doporučená struktura
+## Recommended structure
 
 ```cpp
 class IPlatform {
@@ -407,7 +407,7 @@ public:
 };
 ```
 
-Implementace:
+Implementations:
 
 ```cpp
 class Sdl3Platform final : public IPlatform {};
@@ -415,24 +415,24 @@ class Sdl2Platform final : public IPlatform {};
 class Sdl12Platform final : public IPlatform {};
 ```
 
-Platforma se vybere jednou při spuštění:
+The platform is chosen once at startup:
 
 ```cpp
 std::unique_ptr<IPlatform> platform =
     PlatformFactory::Create(configuration.platformBackend);
 ```
 
-Pak už se pointer nemění. CPU branch predictor si nepřímý cíl obvykle dobře zapamatuje.
+After that the pointer does not change. The CPU branch predictor usually remembers the indirect target well.
 
-## Ještě rychlejší varianta
+## An even faster variant
 
-Pokud bude platforma zvolená při kompilaci, lze se virtuálním voláním úplně vyhnout:
+If the platform is chosen at compile time, virtual calls can be avoided entirely:
 
 ```cpp
 using ActivePlatform = Sdl3Platform;
 ```
 
-nebo pomocí CMake:
+or via CMake:
 
 ```text
 CNA_PLATFORM=SDL3
@@ -440,13 +440,13 @@ CNA_PLATFORM=SDL2
 CNA_PLATFORM=SDL12
 ```
 
-Výsledná binárka bude obsahovat jen jednu implementaci. Kompilátor může část volání inlineovat a runtime overhead bude prakticky nulový.
+The resulting binary will contain only one implementation. The compiler can inline part of the calls and the runtime overhead will be practically zero.
 
-Dynamický výběr ale může být užitečný například pro jednu binárku podporující více platformních vrstev. Ani tehdy nebude režie významná, pokud se dispatch nedostane do vnitřních smyček.
+Dynamic selection can, however, be useful for example for a single binary supporting multiple platform layers. Even then the overhead will not be significant, as long as the dispatch does not get into inner loops.
 
-## Native window handle bez dlouhého řetězce volání
+## The native window handle without a long call chain
 
-Grafickému backendu bych nepředával celé `IPlatform`. Předal bych mu při inicializaci hotový popis nativního okna:
+I would not pass the whole `IPlatform` to the graphics backend. I would pass it a ready-made description of the native window at initialization:
 
 ```cpp
 struct NativeWindowHandle {
@@ -458,17 +458,17 @@ struct NativeWindowHandle {
 };
 ```
 
-Backend pak handle uloží:
+The backend then stores the handle:
 
 ```cpp
 vulkanBackend.Initialize(platformWindow.GetNativeHandle());
 ```
 
-Nebude při každém frame znovu volat několik vrstev platformního API.
+It will not call several layers of the platform API again every frame.
 
 ## Input snapshots
 
-Místo tisíců platformních dotazů:
+Instead of thousands of platform queries:
 
 ```cpp
 platform->IsKeyDown(Key::A);
@@ -476,7 +476,7 @@ platform->IsKeyDown(Key::B);
 platform->IsKeyDown(Key::C);
 ```
 
-je lepší jednou za frame vytvořit snapshot:
+it is better to create a snapshot once per frame:
 
 ```cpp
 platform->UpdateInput();
@@ -484,41 +484,41 @@ platform->UpdateInput();
 const KeyboardState keyboard = platform->GetKeyboardState();
 ```
 
-A hra pak čte lokální bitovou sadu. To může být dokonce rychlejší než současná přímá SDL cesta, pokud nynější implementace provádí opakované konverze.
+And the game then reads a local bit set. This can even be faster than the current direct SDL path, if the present implementation performs repeated conversions.
 
-## Capabilities necpat do hot path
+## Do not push capabilities into the hot path
 
-Nevolat opakovaně:
+Do not repeatedly call:
 
 ```cpp
 if (platform->GetCapabilities().supportsHighDpi)
 ```
 
-Capability strukturu načíst jednou:
+Read the capability structure once:
 
 ```cpp
 const PlatformCapabilities capabilities = platform->GetCapabilities();
 ```
 
-A pak ji držet v `GraphicsDeviceManager`, `GameWindow` nebo odpovídajícím subsystému.
+And then keep it in `GraphicsDeviceManager`, `GameWindow` or the corresponding subsystem.
 
-## Největší náklady budou jinde
+## The biggest costs will be elsewhere
 
-Přidání SDL3/SDL2/SDL1 implementací pravděpodobně zvýší:
+Adding SDL3/SDL2/SDL1 implementations will probably increase:
 
-* počet build konfigurací;
-* velikost zdrojového stromu;
-* počet CI kombinací;
-* počet platformních fixtures;
-* složitost native handle interop;
-* množství conditional capabilities;
-* údržbu input a audio rozdílů.
+* the number of build configurations;
+* the size of the source tree;
+* the number of CI combinations;
+* the number of platform fixtures;
+* the complexity of native handle interop;
+* the amount of conditional capabilities;
+* the maintenance of input and audio differences.
 
-Runtime výkon se téměř nezmění. Mnohem větším rizikem je, že jedna implementace bude mít jiné event semantics, DPI, fullscreen, gamepad nebo timing chování než ostatní.
+Runtime performance will hardly change. A much greater risk is that one implementation will have different event semantics, DPI, fullscreen, gamepad or timing behavior than the others.
 
-## Audio oddělit zvlášť
+## Separate audio out on its own
 
-Platformní abstrakce a audio backend by neměly být nutně jedna věc:
+The platform abstraction and the audio backend should not necessarily be one thing:
 
 ```text
 Platform:
@@ -538,23 +538,20 @@ Audio:
   Null Audio
 ```
 
-Audio callback pak dostane celý buffer. Nebude pro každý sample procházet obecným platformním rozhraním.
+The audio callback then receives a whole buffer. It will not go through a generic platform interface for every sample.
 
-## Doporučený výkonový kontrakt
+## Recommended performance contract
 
-Při modularizaci bych stanovil jednoduché pravidlo:
+When modularizing, I would set a simple rule:
 
-> Platformní abstrakce nesmí být volána uvnitř per-pixel, per-vertex, per-fragment, per-audio-sample ani jiné elementární smyčky.
+> The platform abstraction must not be called inside a per-pixel, per-vertex, per-fragment, per-audio-sample or any other elementary loop.
 
-Povolené jsou hlavně:
+What is mainly allowed is:
 
-* jednou při inicializaci;
-* jednou nebo několikrát za frame;
-* jednou na celý event batch;
-* jednou na celý audio buffer;
-* při skutečné změně okna nebo zařízení.
+* once at initialization;
+* once or a few times per frame;
+* once per whole event batch;
+* once per whole audio buffer;
+* on an actual window or device change.
 
-Při dodržení tohoto pravidla čekám u CNA pokles výkonu **typicky pod 0,5 % a pravděpodobně pod hranicí stabilně měřitelného rozdílu**. Některé cesty se mohou po centralizaci eventů a input snapshots dokonce mírně zrychlit.
-
-
-
+If this rule is followed, I expect a performance drop for CNA of **typically under 0.5 %, and probably below the threshold of a consistently measurable difference**. Some paths may even get slightly faster after centralizing events and input snapshots.

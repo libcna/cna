@@ -3,9 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
-
-#include <SDL3/SDL.h>
-#include <SDL3_image/SDL_image.h>
+#include <exception>
 
 #include "CNA/Internal/Graphics/ImageLoader.hpp"
 
@@ -106,37 +104,19 @@ namespace CNA::Internal::Media
 
         const ImageData scaled = Downscale(source);
 
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            scaled.width, scaled.height, SDL_PIXELFORMAT_RGBA32,
-            const_cast<uint8_t*>(scaled.pixels.data()), scaled.width * 4);
-        if (surface == nullptr)
-        {
-            return false;
-        }
-
         // Encode straight into memory rather than a temp file, so GetThumbnail() has no filesystem
         // side effects.
-        SDL_IOStream* io = SDL_IOFromDynamicMem();
-        if (io == nullptr)
+        try
         {
-            SDL_DestroySurface(surface);
+            outPng = Graphics::ImageLoader::EncodePng(
+                scaled.pixels.data(), scaled.width, scaled.height,
+                scaled.width, scaled.height);
+        }
+        catch (const std::exception&)
+        {
+            outPng.clear();
             return false;
         }
-
-        const bool saved = IMG_SavePNG_IO(surface, io, false);
-        if (saved)
-        {
-            const Sint64 size = SDL_GetIOSize(io);
-            if (size > 0)
-            {
-                SDL_SeekIO(io, 0, SDL_IO_SEEK_SET);
-                outPng.resize(static_cast<std::size_t>(size));
-                SDL_ReadIO(io, outPng.data(), outPng.size());
-            }
-        }
-
-        SDL_CloseIO(io);
-        SDL_DestroySurface(surface);
-        return saved && !outPng.empty();
+        return !outPng.empty();
     }
 }

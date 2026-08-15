@@ -3,11 +3,12 @@
 #include "CNA/Internal/Renderers/Fna3d/Fna3dRenderer.hpp"
 #include "CNA/Internal/Renderers/Fna3d/Fna3dVertexLayouts.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstring>
+#include <span>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace CNA::Internal::Renderers::Fna3d
 {
@@ -85,12 +86,17 @@ namespace CNA::Internal::Renderers::Fna3d
                                                 const Matrix& projection, PrimitiveType primitive,
                                                 int primitiveCount, const GpuDrawParams& params)
     {
-        const auto& indexBuffer = static_cast<const Fna3dIndexBufferRenderer&>(ib);
+        const auto* indexBuffer = dynamic_cast<const Fna3dIndexBufferRenderer*>(&ib);
+        if (indexBuffer == nullptr || indexBuffer->GetFna3dDeviceStateEXT() != deviceState_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: the index buffer was not created by this graphics device.");
+        }
         PrepareDrawEXT(vb, world, view, projection, params, params.baseVertex);
         FNA3D_DrawIndexedPrimitives(
             device_, ToFna3dPrimitiveType(primitive), params.baseVertex, params.minVertexIndex,
             params.numVertices > 0 ? params.numVertices : vb.GetVertexCount(), params.startIndex,
-            primitiveCount, indexBuffer.GetFna3dBufferEXT(), indexBuffer.GetElementSizeEXT());
+            primitiveCount, indexBuffer->GetFna3dBufferEXT(), indexBuffer->GetElementSizeEXT());
     }
 
     void Fna3dRenderer::DrawInstancedPrimitivesEx(const IVertexBufferRenderer& vb,
@@ -130,73 +136,96 @@ namespace CNA::Internal::Renderers::Fna3d
     void Fna3dRenderer::ApplyVertexBindingsEXT(const IVertexBufferRenderer& vb,
                                                const GpuDrawParams& params, int baseVertex)
     {
-        const auto& primaryBuffer = static_cast<const Fna3dVertexBufferRenderer&>(vb);
+        constexpr int kMaxElementsPerDeclaration = 16;
+        if (params.vertexStreamCount < 0 || params.vertexStreamCount > kMaxVertexStreams)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: a draw declared " +
+                std::to_string(params.vertexStreamCount) +
+                " vertex streams, but XNA and CNA permit at most " +
+                std::to_string(kMaxVertexStreams) + ".");
+        }
 
-        std::vector<FNA3D_VertexBufferBinding> bindings;
-        // Element storage must outlive the FNA3D_ApplyVertexBufferBindings call: the declarations
-        // inside the bindings point into it.
-        std::vector<std::vector<FNA3D_VertexElement>> elementStorage;
+        const auto* primaryBuffer = dynamic_cast<const Fna3dVertexBufferRenderer*>(&vb);
+        if (primaryBuffer == nullptr || primaryBuffer->GetFna3dDeviceStateEXT() != deviceState_)
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: the primary vertex buffer was not created by this graphics "
+                "device.");
+        }
+
+        // FNA3D requires the elements to live through ApplyVertexBufferBindings. CNA's public
+        // contract caps a draw at 16 streams; XNA's vertex declaration cap is 16 elements. Keep
+        // the complete native payload on the stack, so an ordinary draw does not allocate merely
+        // to translate declarations it already owns.
+        std::array<FNA3D_VertexBufferBinding, kMaxVertexStreams> bindings{};
+        std::array<std::array<FNA3D_VertexElement, kMaxElementsPerDeclaration>,
+                   kMaxVertexStreams> elementStorage{};
 
         const auto describe = [&](const Fna3dVertexBufferRenderer& buffer, int declaredStride,
-                                  FNA3D_VertexDeclaration& declaration) {
+                                  int bindingIndex, FNA3D_VertexDeclaration& declaration) {
+            std::span<const FNA3D_VertexElement> source;
             if (buffer.HasDeclarationEXT())
             {
-                elementStorage.push_back(buffer.GetDeclarationElementsEXT());
+                const auto& declaredElements = buffer.GetDeclarationElementsEXT();
+                source = { declaredElements.data(), declaredElements.size() };
                 declaration.vertexStride = buffer.GetDeclarationStrideEXT();
-                declaration.elementCount =
-                    static_cast<int32_t>(elementStorage.back().size());
-                declaration.elements = elementStorage.back().data();
-                return;
+            }
+            else
+            {
+                // Internal staged routes bind no public VertexDeclaration, so their known typed
+                // stride selects the canonical static layout table.
+                const int stride = declaredStride > 0 ? declaredStride : buffer.GetStrideEXT();
+                source = ElementsForStride(stride);
+                declaration.vertexStride = stride;
             }
 
-            // The internal routes (SpriteBatch, DrawUser*, DrawColoredPrimitives) and
-            // REMED-GFX-233's legacy empty-declaration buffer bind no public VertexDeclaration at
-            // all, so the canonical stride-keyed layout stands in -- the same table every other
-            // CNA renderer dispatches on.
-            const int stride = declaredStride > 0 ? declaredStride : buffer.GetStrideEXT();
-            elementStorage.push_back(ElementsForStride(stride));
-            declaration.vertexStride = stride;
-            declaration.elementCount = static_cast<int32_t>(elementStorage.back().size());
-            declaration.elements = elementStorage.back().data();
+            if (source.empty() || source.size() > kMaxElementsPerDeclaration)
+            {
+                throw std::runtime_error(
+                    "FNA3D renderer: a vertex declaration has " +
+                    std::to_string(source.size()) +
+                    " elements; this renderer accepts 1 through " +
+                    std::to_string(kMaxElementsPerDeclaration) + ".");
+            }
+
+            std::copy(source.begin(), source.end(), elementStorage[bindingIndex].begin());
+            declaration.elementCount = static_cast<int32_t>(source.size());
+            declaration.elements = elementStorage[bindingIndex].data();
         };
 
+        const int bindingCount = params.vertexStreamCount > 0 ? params.vertexStreamCount : 1;
         if (params.vertexStreamCount > 0)
         {
-            bindings.resize(static_cast<std::size_t>(params.vertexStreamCount));
-            elementStorage.reserve(static_cast<std::size_t>(params.vertexStreamCount));
-            for (int i = 0; i < params.vertexStreamCount; ++i)
+            for (int i = 0; i < bindingCount; ++i)
             {
                 const GpuVertexStreamBinding& stream = params.vertexStreams[i];
                 const auto* streamBuffer =
-                    static_cast<const Fna3dVertexBufferRenderer*>(stream.buffer);
-                if (streamBuffer == nullptr)
+                    dynamic_cast<const Fna3dVertexBufferRenderer*>(stream.buffer);
+                if (streamBuffer == nullptr ||
+                    streamBuffer->GetFna3dDeviceStateEXT() != deviceState_)
                 {
                     throw std::runtime_error(
-                        "FNA3D renderer: a declared vertex stream carried no buffer; the binding "
-                        "list is never silently truncated.");
+                        "FNA3D renderer: a declared vertex stream was not created by this "
+                        "graphics device; the binding list is never silently truncated.");
                 }
                 FNA3D_VertexBufferBinding& binding = bindings[static_cast<std::size_t>(i)];
-                std::memset(&binding, 0, sizeof(binding));
                 binding.vertexBuffer = streamBuffer->GetFna3dBufferEXT();
                 binding.vertexOffset = stream.vertexOffset;
                 binding.instanceFrequency = stream.instanceFrequency;
-                describe(*streamBuffer, stream.strideInBytes, binding.vertexDeclaration);
+                describe(*streamBuffer, stream.strideInBytes, i, binding.vertexDeclaration);
             }
         }
         else
         {
-            bindings.resize(1);
-            elementStorage.reserve(1);
             FNA3D_VertexBufferBinding& binding = bindings[0];
-            std::memset(&binding, 0, sizeof(binding));
-            binding.vertexBuffer = primaryBuffer.GetFna3dBufferEXT();
+            binding.vertexBuffer = primaryBuffer->GetFna3dBufferEXT();
             binding.vertexOffset = 0;
             binding.instanceFrequency = 0;
-            describe(primaryBuffer, 0, binding.vertexDeclaration);
+            describe(*primaryBuffer, 0, 0, binding.vertexDeclaration);
         }
 
-        FNA3D_ApplyVertexBufferBindings(device_, bindings.data(),
-                                        static_cast<int32_t>(bindings.size()), 1, baseVertex);
+        FNA3D_ApplyVertexBufferBindings(device_, bindings.data(), bindingCount, 1, baseVertex);
     }
 
     void Fna3dRenderer::BindEffectTextureEXT(int slot, const ITextureRenderer* texture)
@@ -223,8 +252,15 @@ namespace CNA::Internal::Renderers::Fna3d
         }
 
         // A render target bound as an effect texture is an IRenderTargetRenderer, not an
-        // Fna3dTextureRenderer, so the sampled-texture mix-in is what both have in common.
+        // Fna3dTextureRenderer, so the sampled-texture mix-in is what both have in common. A
+        // type match alone is insufficient: two live FNA3D renderers own different devices.
         const auto* sampled = dynamic_cast<const Fna3dSampledTexture*>(texture);
+        if (texture != nullptr &&
+            (sampled == nullptr || sampled->GetFna3dDeviceStateEXT() != deviceState_))
+        {
+            throw std::runtime_error(
+                "FNA3D renderer: an effect texture was not created by this graphics device.");
+        }
         FNA3D_Texture* native = sampled != nullptr ? sampled->GetFna3dTextureEXT() : nullptr;
         FNA3D_VerifySampler(device_, slot, native,
                             &samplerStates_[static_cast<std::size_t>(slot)]);
@@ -307,13 +343,18 @@ namespace CNA::Internal::Renderers::Fna3d
                                                                params.specularEnabled, oneLight));
                 effect.Apply(device_);
                 BindEffectTextureEXT(0, params.texture0);
-                if (const auto* cube =
-                        dynamic_cast<const Fna3dSampledTexture*>(params.envMap))
+                const auto* cube = dynamic_cast<const Fna3dSampledTexture*>(params.envMap);
+                if (params.envMap != nullptr &&
+                    (cube == nullptr || cube->GetFna3dDeviceStateEXT() != deviceState_))
                 {
-                    FNA3D_VerifySampler(device_, 1, cube->GetFna3dTextureEXT(),
-                                        &samplerStates_[1]);
-                    boundPixelTextures_[1] = cube->GetFna3dTextureEXT();
+                    throw std::runtime_error(
+                        "FNA3D renderer: the environment map was not created by this graphics "
+                        "device.");
                 }
+                FNA3D_Texture* cubeNative =
+                    cube != nullptr ? cube->GetFna3dTextureEXT() : nullptr;
+                FNA3D_VerifySampler(device_, 1, cubeNative, &samplerStates_[1]);
+                boundPixelTextures_[1] = cubeNative;
                 break;
             }
 

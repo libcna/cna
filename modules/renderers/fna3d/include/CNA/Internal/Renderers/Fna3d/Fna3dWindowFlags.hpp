@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MS-PL
 #pragma once
 
-#include <cstdint>
-
 namespace CNA::Internal::Renderers::Fna3d::Detail
 {
     /**
-     * @brief CNAEXT. SDL window flags the FNA3D driver selection requires, as bitflags.
+     * @brief CNAEXT. Runs FNA3D's pre-window driver selection and reports whether it needs OpenGL.
      *
      * FNA3D chooses its driver at runtime and reports the window flags that driver needs through
      * `FNA3D_PrepareWindowAttributes()` -- `SDL_WINDOW_OPENGL` for the OpenGL driver, none for
@@ -18,7 +16,7 @@ namespace CNA::Internal::Renderers::Fna3d::Detail
      * Declared in a header that pulls in neither SDL nor FNA3D so the graphics module can call it
      * without taking a dependency on either.
      *
-     * @return Bitflags to OR into the SDL window creation flags.
+     * @return True when the selected FNA3D driver needs an OpenGL-capable window.
      */
-    [[nodiscard]] std::uint64_t PrepareWindowFlags();
+    [[nodiscard]] bool PrepareWindowNeedsOpenGl();
 }
