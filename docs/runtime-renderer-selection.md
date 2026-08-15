@@ -207,6 +207,7 @@ configure time, not merely to exist.
 | `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` (Emscripten) | 🟨 **one wasm bundle carries all five**, and the selection API works inside it — `GetAvailable()` reports all five and `GetSelected()` resolves. Creating a device needs a real browser, which is not yet automated here |
 | `OPENGLES3;SOKOL;SOFTWARE;HEADLESS;STUB` | ✅ two GL-based abstractions in one binary; all five selectable |
 | `OPENGLES3;MAGNUM;SOFTWARE;HEADLESS` | ✅ all four selectable |
+| `OPENGLES3;DILIGENT;SOFTWARE;HEADLESS` | ✅ all four selectable (`DILIGENT` needs `SDL_VIDEODRIVER=x11`). **Two-level dispatch verified**: CNA chooses DILIGENT at runtime, then DiligentCore chooses its own device — `CNA_DILIGENT_DEVICE=opengl` is still honoured |
 | `OPENGLES3;LLGL;SOFTWARE;HEADLESS` | ✅ all four selectable (`LLGL` needs `SDL_VIDEODRIVER=x11`; on Wayland it is the real fallback example above) |
 | `SOFTWARE;PORTABLEGL;HEADLESS;STUB` | ✅ 6269 passed, 0 failed. PORTABLEGL *can* join a multi build — its global `gl*` symbols only conflict with a renderer that calls the real OpenGL of the same names |
 | `SDL_RENDERER;OPENGLES3;SOFTWARE;HEADLESS;STUB` | ✅ builds, all five selectable at runtime, window recreation across window kinds verified. Its 16 test failures are identical to a single-renderer `SDL_RENDERER` build's — pre-existing renderer boundaries, none caused by multi-renderer mode |
@@ -247,6 +248,15 @@ CNA: graphics renderer: OPENGLES3 (selected at runtime from 4 compiled in)
 Active renderer: OPENGLES3
 Fallback history (1 renderer(s) passed over):
   - LLGL (InitializationFailed): LLGL renderer: the SDL window exposes no X11 handles ...
+```
+
+`DILIGENT` behaves the same way on Wayland, and shows that a renderer's *own* internal dispatch
+survives being wrapped in CNA's:
+
+```
+  - DILIGENT (InitializationFailed): CNA Diligent: no device type could be created --
+    tried Vulkan (unsupported SDL video driver for Diligent: wayland),
+    OpenGL (unsupported SDL video driver for Diligent: wayland)
 ```
 
 Note what survives: `GetSelected()` still reports what was **asked for**, `GetActive()` reports what
