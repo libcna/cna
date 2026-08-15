@@ -1439,6 +1439,15 @@ namespace CNA::Internal::Renderers::DirectX11
             srvs[3] = params.pbrEmissiveMap ? GetSrvForTextureEXT(params.pbrEmissiveMap) : GetOrCreateDefaultWhiteSrvEXT();
             srvs[4] = params.pbrOcclusionMap ? GetSrvForTextureEXT(params.pbrOcclusionMap) : GetOrCreateDefaultWhiteSrvEXT();
         }
+        else if (needsSkinned)
+        {
+            // GLTF-386: SkinnedEffect always enables and samples its texture, including for an
+            // untextured KHR_materials_unlit skin. D3D11 samples an unbound SRV as transparent
+            // black, so preserve SkinnedEffect's established renderer contract by substituting
+            // opaque white. Vulkan, EasyGL and OpenGL use the same semantic fallback.
+            srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                      : GetOrCreateDefaultWhiteSrvEXT();
+        }
         else
         {
             srvs[0] = GetSrvForTextureEXT(params.texture0);

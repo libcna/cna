@@ -2080,6 +2080,20 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderComposesDirectionDeterminantsI
     }
 }
 
+TEST(GltfRendererPbrFallbackPolicy, DirectX11SkinnedEffectUsesOpaqueWhiteForMissingTexture)
+{
+    // GLTF-386: skin-unlit has no base-color texture, while SkinnedEffect deliberately keeps
+    // TextureEnabled=true. An unbound Direct3D 11 SRV samples transparent black and therefore
+    // erases this otherwise valid glTF draw. Keep the SkinnedEffect-specific null branch tied to
+    // the same opaque-white fallback used by the other full renderers.
+    const std::string directx11 = RendererText(
+        RepositoryRoot() / "modules" / "renderers" / "directx11");
+    EXPECT_EQ(2u, CountOccurrences(directx11, Normalize(R"(
+        srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
+                                  : GetOrCreateDefaultWhiteSrvEXT();
+    )"))) << "both the PBR and plain-skinned bindings require opaque-white texture0 fallbacks";
+}
+
 TEST(GltfRendererIndexWidthPolicy, InventoryClassifiesEveryRenderer)
 {
     // A provider has a local CreateIndexBuffer32 implementation. The two explicit rejecters also
