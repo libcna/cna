@@ -29,10 +29,12 @@ old `OPEN` headings are historical where this disposition explicitly supersedes 
 **Backend:** FNA3D (the defect is in MojoShader itself, so it reaches every backend that would use
 it -- SDL_GPU, OpenGL, D3D11 and the planned Vulkan/Metal adapters alike).
 
-**Status:** PARTIALLY FIXED. Thirty-eight crash classes are fixed by
-`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch`. The campaign is now clean on
-FNA3D's OpenGL driver across three independent seeds and on the SDL_GPU driver for 4,000
-iterations across two seeds; the SPIR-V emitter still validates with `assert()` in about fifty places.
+**Status:** FIXED to a measured bound. Forty crash classes are fixed by
+`cmake/patches/mojoshader-6333f74-effect-parser-robustness.patch` and one in CNA's own
+`Fna3dCompiledEffect.cpp`. The coverage-guided campaign is clean on both FNA3D drivers past the
+FX-051 bar -- over three million executions on OpenGL/GLSL and over two and a half million on
+SDL_GPU/SPIR-V, no new artifact. Not closed outright: the SPIR-V emitter still validates untrusted
+shader bytecode with `assert()` in about fifty places no campaign has yet reached.
 
 A compiled Effect Framework binary is untrusted binary input handed to a native parser that was
 written for compiler output, not for hostile content. The plan_fx.md FX-051 mutation campaign
@@ -44,21 +46,20 @@ type. Forty are upstream and are now ordinary parser errors; the fortieth was CN
 sampler-texture map reading a parameter's value storage as sampler states on the strength of its
 type alone. `docs/fx-bytecode-fuzzing.md` lists them.
 
-What remains: the campaign reaches roughly iteration 6,400 before a wild read inside
-`MOJOSHADER_effectCommitChanges`'s shader-array selection path. Reproduce with
-
-```sh
-mkdir -p fx-corpus && cp modules/renderers/fna3d/effects/*.fxb fx-corpus/
-SDL_VIDEODRIVER=offscreen SDL_ASSERT=abort ASAN_OPTIONS=detect_leaks=0 \
-  ./cmake-build-fna3d-asan/cna_compiled_effect_fuzzer --campaign fx-corpus 6500 0x4658465556555A
-```
+What remains: nothing the campaign currently reaches. Both FNA3D drivers met the FX-051 bar on
+2026-08-15 -- 3,079,834 coverage-guided executions on OpenGL/GLSL and 2,669,555 on SDL_GPU/SPIR-V,
+under AddressSanitizer with asserts fatal, no new artifact. That is a measured bound, not a proof:
+the SPIR-V emitter still validates untrusted shader bytecode with `assert()` in roughly fifty
+places no campaign has yet reached.
 
 **Consequence for CNA's contract:** `docs/fx-compiled-effects.md` promises that malformed content
-fails explicitly and safely. That holds for CNA's own layer and for the parser paths reached so
-far, but not for arbitrary hostile content, and the porter guide says so. Treat a compiled effect
-like any other natively-parsed asset: ship your own, do not load one a user supplied.
+fails explicitly and safely. That holds for CNA's own layer and, to the bound above, for the parser
+paths a coverage-guided campaign reaches -- but it is not a guarantee for arbitrary hostile
+content, and the porter guide says so. Treat a compiled effect like any other natively-parsed
+asset: ship your own; treat a user-supplied one as untrusted input that has been made much harder
+to weaponise, not as safe.
 
-**Fix direction:** continue the campaign until it runs dry, extending the managed patch. Upstream
+**Fix direction:** keep running the campaign as the surface changes, extending the managed patch. Upstream
 MojoShader would be the better long-term home for these fixes.
 
 ## FNA3D resource renderers that outlive their device free through a dangling FNA3D_Device

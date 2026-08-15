@@ -23,12 +23,17 @@ For the difference from the CNAEXT source-based shader API, see
 The binary is untrusted input. It is bounded at 64 MiB, its reflected object graph is bounded and
 arithmetic-checked, and every rejection is a specific exception rather than a generic failure.
 
-**Trust boundary.** That holds for CNA's own code and for the parser paths CNA has hardened, but
-not yet for arbitrary hostile content on every driver. A fuzz campaign is now clean on FNA3D's
-OpenGL driver, but stops early on the SDL_GPU driver, whose SPIR-V emitter validates shader
-bytecode with asserts throughout. Treat compiled effects the way you would treat any other native-parsed asset --
-ship your own, do not load one a user supplied. `plan_fx.md` FX-051 and
-[`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) track the remaining exposure.
+**Trust boundary.** A coverage-guided fuzz campaign is clean on both FNA3D drivers past the bar
+`plan_fx.md` FX-051 set for it -- over three million executions on OpenGL/GLSL and over two and a
+half million on SDL_GPU/SPIR-V, under AddressSanitizer with asserts fatal, no new crash. Getting
+there fixed forty-one distinct ways untrusted bytecode crashed the process.
+
+That is a measured bound, not a proof. Fuzzing cannot establish absence, and the SPIR-V emitter
+still validates shader bytecode with asserts in places no campaign has reached. So: ship your own
+effects with confidence, and treat a user-supplied one as untrusted input that has been made much
+harder to weaponise rather than as safe.
+[`fx-bytecode-fuzzing.md`](fx-bytecode-fuzzing.md) records what the bound covers and what it does
+not.
 
 ## 2. Loading
 

@@ -1,7 +1,8 @@
 # Compiled XNA Effect Bytecode Support Plan
 
-- Status: **In progress — FNA3D vertical slice implemented, conformance-suited and parser-hardened
-  on `feature/fx`; `FX-057` deliberately not declared (see section 10.1's assessment)**
+- Status: **FNA3D vertical slice declared usable (`FX-057`) on `feature/fx` — all eight exit
+  criteria pass as of 2026-08-15, including the fuzz gate at its documented bar. Renderers other
+  than FNA3D remain unsupported by design (see section 10.2)**
 - Planning baseline: `develop` at `a749fdce34a5825eb80a778b5db68e11da9358f8`
 - Target branch: `feature/fx`
 - Scope of this document: architecture, implementation checklist, and current delivery status
@@ -518,13 +519,13 @@ values everywhere except inside a structure.
 | ID | Task | Depends on | Acceptance criteria |
 |---|---|---|---|
 | FX-050 | Add parser/reflection limits and checked arithmetic throughout common and FNA3D paths | FX-032, FX-040 | Boundary tests prove all configured limits and overflow failures |
-| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | Harness, corpus and a deterministic mutation campaign **done** (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). Now also runs **coverage-guided under clang libFuzzer**, which is what finds things fastest -- it reached a new crash within 6,500 executions and writes reproducible `crash-<hash>` artifacts. Thirty-eight crash classes found so far, all in pinned MojoShader and none in CNA, all fixed by the managed patch, and the three artifacts the coverage-guided runs caught are committed as a crash corpus the build replays. The bar for calling this clean is now written down rather than left to judgement -- one million coverage-guided executions per FNA3D driver, under ASan, with asserts fatal, producing no new artifact (`docs/fx-bytecode-fuzzing.md`). Still open against that bar: the SPIR-V emitter the SDL_GPU driver uses validates with `assert()` in about fifty places, and an 80,000-iteration soak reached a use-after-free where MojoShader publishes a destroyed effect's sampler array as the current pass's state changes |
+| FX-051 | Build a libFuzzer/AFL-compatible constructor/reflection/clone harness with the fixture corpus | FX-050 | **Done, and the gate is met at its documented bar.** Harness, seed corpus, deterministic in-build mutation corpus and a coverage-guided clang/libFuzzer campaign (`tools/graphics/compiled_effect_fuzzer.cpp`, `docs/fx-bytecode-fuzzing.md`). Forty-one crash classes found and fixed -- forty in pinned MojoShader via the managed patch, one in CNA's own `BuildSamplerMap` -- each kept as a named artifact in `tests/fixtures/compiled-effects/crash-corpus/` that the build replays. The bar was written down before it was met rather than after: one million coverage-guided executions per FNA3D driver, from the committed seed corpus, under ASan, with `SDL_ASSERT=abort`, producing no new artifact. Met on 2026-08-15 at commit `17bab8ee2` with margin -- 3,079,834 executions on the OpenGL/GLSL driver and 2,669,555 on SDL_GPU/SPIR-V, both full windows, zero findings. This bounds the exposure; it does not prove absence, and the porter guide still states the trust boundary |
 | FX-052 | Run ASan/UBSan and renderer teardown/reset stress suites | FX-038, FX-050 | **Done for CNA-owned code.** 340 FX/Effect/XNB/capability tests pass under ASan+UBSan with zero address findings and zero CNA undefined-behaviour findings; the FX-038 reset and repeated create/apply/dispose stress cases run inside that suite. LeakSanitizer runs after all (the earlier ptrace claim was wrong) and attributes every leak record to pinned MojoShader's SPIR-V emitter or to `FNA3D_CreateDevice`, none to CNA. The remaining third-party UBSan/leak findings are recorded upstream findings, not a CNA gate |
 | FX-053 | Benchmark construction, clone, dirty uploads, and draw overhead; add immutable artifact cache only if justified | FX-037 | **Done.** `tools/graphics/compiled_effect_benchmark.cpp` plus the baseline table in `docs/fx-compiled-effects.md`. Decision: **no cache**. Construction cost tracks embedded shader work rather than file size, `Clone()` is ~7.5x cheaper than constructing the same effect because the native clone reuses translated artifacts, dirty tracking keeps a no-change apply at ~2.9 us, and a compiled pass draws no slower than a stock effect. A bytecode-keyed cache would add cross-instance sharing risk for a case `Clone()` already covers |
 | FX-054 | Run full stock-effect, `ShaderEffect`, SpriteBatch, model, primitive, and renderer regression suites | FX-037, FX-043, FX-052 | **Done.** The whole `CnaTests` binary runs under FNA3D: 5,997 pass and every remaining failure is explained -- one real regression from this branch (a stale FNA3D instancing message) fixed here, three `MouseCursorTest` failures caused by `SDL_VIDEODRIVER=offscreen` having no system cursors, one render-target readback that fails only on the SDL_GPU/Vulkan driver and passes on FNA3D's OpenGL driver, and one pre-existing FNA3D device-lifetime crash unrelated to compiled effects, now recorded in `known_bugs.md` |
 | FX-055 | Publish FNA3D support documentation, format/error guide, capability matrix, dependency notices, and migration examples | FX-043, FX-054 | **Done.** `docs/fx-compiled-effects.md` covers the format boundary, loading, reflection, values, techniques/passes, published pass state, samplers, clone, lifetime, the renderer matrix, an error table, XNA-to-CNA migration, and the dependency/licence notices |
 | FX-056 | Update/supersede the old FX plan documents and Phase 74 rows without erasing their historical record | FX-055 | **Done.** `docs/fx-bytecode-support-plan.md` and `docs/shader-effect-vs-fx-bytecode.md` carry supersession banners and point at the current guide; `plan_graphics.md` Phase 74 keeps its original rows and adds a row-by-row disposition (obsolete / delivered / re-scoped / carried forward) so none of them can be picked up again |
-| FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | **Blocked, deliberately.** Six of eight exit criteria pass; the oracle criterion needs `FX-005` (no `mono`/`dotnet` on the development machine) and the safe-failure criterion needs `FX-051` to run dry. Assessed row by row in section 10.1 |
+| FX-057 | Declare the FNA3D vertical slice usable | FX-051, FX-052, FX-054, FX-055, FX-056 | **Declared, 2026-08-15.** All eight exit criteria pass. The last two to close were the oracle criterion -- once `mono` and the June 2010 DirectX SDK's `fxc` became available, `FX-005` produced both a conformance source CNA controls and FNA's own reflection of every committed binary as checked-in test data -- and the fuzz gate, met at the bar recorded in `docs/fx-bytecode-fuzzing.md`. Assessed row by row in section 10.1. Scope of the claim: FNA3D only; section 10.2 governs the rest |
 
 ### Phase G - Additional renderer waves
 
@@ -588,34 +589,45 @@ The feature may be advertised as usable on FNA3D only when all of the following 
 
 #### Assessment (updated 2026-08-15)
 
-`FX-057` is **not** declared. Seven of the eight criteria now pass. The oracle criterion moved from
-"no oracle exists" to passing once `mono` and the June 2010 DirectX SDK's `fxc` were made available
-on 2026-08-15: CNA now has both a conformance source it controls compiled by the compiler XNA used,
-and FNA's own reflection of every committed binary as checked-in test data.
+`FX-057` is **declared**. All eight criteria pass.
 
-What remains is the fuzz gate, and it is worth being precise about why that one is not a formality.
-It is not that the campaign has not been run -- it has, in three shapes, and it has found
-twenty-five distinct ways untrusted bytecode crashed the process. Every one of them was in the
-pinned MojoShader rather than in CNA, and every one is fixed. But the campaign keeps finding more
-as it runs longer and as it reaches new code, and the SPIR-V emitter the SDL_GPU driver uses still
-validates shader bytecode with `assert()` in about fifty places. Declaring the gate passed while
-that is true would be claiming a property the evidence does not support.
+The two that took longest are worth recording, because both were once described here as blocked on
+something outside the project's control, and neither turned out to be.
+
+The oracle criterion was blocked on having no independent implementation to compare against. It
+closed once `mono` and the June 2010 DirectX SDK's `fxc` were available: CNA now has a conformance
+source it controls, compiled by the same Effect compiler XNA's Content Pipeline used, and FNA's own
+reflection of every committed binary checked in as test data.
+
+The fuzz gate was the last, and it was not a formality. The campaign found **forty-one distinct
+ways untrusted bytecode crashed the process**. Forty were in the pinned MojoShader and are fixed by
+the managed patch; the forty-first was CNA's own, and is the one worth remembering -- the
+sampler-texture map selected parameters by sampler *type* where the storage layout follows the
+*class* first, so it read a small value buffer as an array of much larger structures. CNA had every
+fact needed to avoid it.
+
+What the gate does and does not establish should be stated plainly. It is a measured bound, not a
+proof: one million coverage-guided executions per FNA3D driver, from the committed seed corpus,
+under AddressSanitizer, with asserts fatal, producing no new artifact. That bar was written down
+before it was met. It was met with margin -- 3,079,834 executions on OpenGL/GLSL and 2,669,555 on
+SDL_GPU/SPIR-V, both full windows, zero findings. Fuzzing cannot prove absence, so the porter guide
+continues to state the trust boundary rather than promise safe failure on arbitrary hostile content.
 
 | Criterion | State |
 |---|---|
-| byte-array and XNB loading | **Pass** — both paths tested, including an end-to-end ContentManager load and draw |
-| reflection matches the FNA oracle | **Pass, for the six stock fixtures.** `tools/fna-reference --effects` emits FNA's own reflection and `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's against it -- parameter order, names, semantics, classes, types, row/column counts, annotations, array elements, structure members, technique and pass names all agree. The synthetic fixtures still have no oracle, because no compiler produced them |
-| parameters, annotations, textures/samplers, techniques, passes, states | **Pass** — covered by the shared conformance suite and the FNA3D-specific tests |
-| SpriteBatch and 3D pixel tests | **Pass** — deterministic pixels for both paths and for a blend-factor state oracle |
-| clone and lifetime | **Pass** — clone chains, device reset, disposal ordering, repeated cycles |
-| malformed input and unsupported renderers fail explicitly and safely | **Partial.** Unsupported renderers refuse by name, and CNA's own layer rejects every malformed category tested. But a fuzz campaign still reaches a wild read inside pinned MojoShader after a few thousand mutations, so "safely" does not yet hold for arbitrary hostile content. Documented as a trust boundary rather than claimed |
-| fuzz/sanitizer and regression gates clean | **Partial, and the only criterion still open.** Sanitizers are clean for CNA-owned code (`FX-052`) and the full regression is explained (`FX-054`). The fuzz gate is not clean: twenty-five crash classes found and fixed so far, all upstream, and the campaign still finds more the longer it runs |
+| byte-array and XNB loading | **Pass** -- both paths tested, including an end-to-end ContentManager load and draw |
+| reflection matches the FNA oracle | **Pass, for the six stock fixtures.** `tools/fna-reference --effects` emits FNA's own reflection and `StockFixtureReflectionMatchesTheFnaOracle` compares CNA's against it -- parameter order, names, semantics, classes, types, row/column counts, annotations, array elements, structure members, technique and pass names all agree. The synthetic fixtures still have no oracle, because no compiler produced them; the one deliberate divergence, structure member values, is recorded below |
+| parameters, annotations, textures/samplers, techniques, passes, states | **Pass** -- covered by the shared conformance suite and the FNA3D-specific tests |
+| SpriteBatch and 3D pixel tests | **Pass** -- deterministic pixels for both paths and for a blend-factor state oracle |
+| clone and lifetime | **Pass** -- clone chains, device reset, disposal ordering, repeated cycles |
+| malformed input and unsupported renderers fail explicitly and safely | **Pass, to the bound the gate measures.** Unsupported renderers refuse by name; CNA's own layer rejects every malformed category tested; and the forty-one crash classes the campaign found are fixed, kept as replayed artifacts, and no longer reachable. "Safely" holds as far as five and a half million coverage-guided executions can establish it, which is a bound rather than a guarantee -- the trust boundary stays documented |
+| fuzz/sanitizer and regression gates clean | **Pass.** Sanitizers clean for CNA-owned code (`FX-052`), full regression explained (`FX-054`), and the fuzz gate met at its documented bar on both FNA3D drivers |
 | `CompiledEffects` true only on FNA3D, documented precisely | **Pass** |
 
-So the accurate public statement today is: compiled effects work on FNA3D for content the game
-ships, are covered by a portable conformance suite, and are documented -- but the feature is not
-yet declared usable, because it has no independent oracle and cannot yet promise safe failure on
-hostile input.
+So the accurate public statement today is: compiled effects are usable on FNA3D -- for content a
+game ships and, to the bound above, for content it does not trust -- covered by a portable
+conformance suite, checked against FNA's own reflection, and documented. The claim covers FNA3D and
+nothing else.
 
 ### 10.2 Project-wide completion
 

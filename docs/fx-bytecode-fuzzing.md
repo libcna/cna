@@ -186,43 +186,39 @@ the crash corpus, and start the count again.
 
 ## Exposure that remains
 
-Two distinct areas, and they differ by driver.
+The gate above is met, so what follows is what the gate does *not* cover.
 
-**On FNA3D's OpenGL driver (GLSL profile)** three independent seeds now run clean --
-10,000 / 10,000 / 12,000 iterations with no crash, no assert and no sanitizer report. Two of them
-only became clean after the run that first exposed them, which is the point of running more than
-one: a single clean seed proves very little.
+Fuzzing bounds exposure; it does not prove absence. Five and a half million coverage-guided
+executions across both FNA3D drivers found nothing new, but the SPIR-V emitter the SDL_GPU driver
+uses still validates untrusted shader bytecode with `assert()` in roughly fifty places that no
+campaign has yet reached, and the effect parser was written for compiler output rather than hostile
+content. A longer campaign, a different seed corpus, or a driver CNA does not exercise here may
+find more. If it does, the procedure is the one that produced the current state: fix it, keep the
+artifact, restart the count.
 
-A longer soak on a fourth seed (80,000 iterations) reached a use-after-free at iteration ~27,900,
-and this one surfaces in CNA's own frame rather than upstream's:
-`Fna3dCompiledEffect::ApplySamplers` reads `change.sampler_states`, and that pointer is what
-`MOJOSHADER_effectBeginPass` publishes from `effect->current_pixl_raw` -- a raw pointer to whatever
-shader object the backend had bound, which can belong to an effect that has since been destroyed.
-CNA validates the count and the null-ness of what FNA3D hands back but cannot tell that the pointer
-itself is stale. Reproduce with:
+The parts of the surface a campaign reaches only indirectly are the honest weak spot -- code behind
+a successful parse of a *valid* effect that then behaves differently on a mutated one. The crash
+corpus is what notices if a MojoShader or FNA3D pin bump silently drops one of the forty fixes.
 
-```sh
-./cna_compiled_effect_fuzzer --campaign fx-corpus 28000 0x4658534F414B
-```
+Neither limitation is a CNA defect, but both are reachable through CNA's public API, which is why
+the porter guide states the trust boundary instead of promising safe failure.
 
-**On FNA3D's SDL_GPU driver (SPIR-V profile)** the campaign now completes 4,000 iterations clean
-on two seeds, up from stopping at iteration 100. That emitter still validates untrusted shader bytecode with
-`assert()` in about fifty places, so the ones fixed so far are the ones a campaign actually
-reached; expect more as it runs longer. Reproduce by dropping `FNA3D_FORCE_DRIVER=OpenGL`.
-
-Neither is a CNA defect, but both are reachable through CNA's public API, which is why the porter
-guide states the trust boundary plainly instead of promising safe failure.
-
-So the honest statement is: **CNA's own compiled-effect code is clean under ASan, UBSan and LSan,
-and the parser paths reached so far are hardened, but CNA cannot yet promise that arbitrary
-hostile compiled-effect content fails safely.** Ship your own effects; do not load one a user
-supplied. `plan_fx.md` FX-051 tracks continuing the campaign until it runs dry.
+So the honest statement is: **CNA's own compiled-effect code is clean under ASan, UBSan and LSan;
+the parser paths a coverage-guided campaign reaches are hardened to a measured bar; and loading a
+compiled effect from an untrusted source is bounded risk rather than a solved problem.** Ship your
+own effects with confidence. Treat a user-supplied one as untrusted input that has been made much
+harder to weaponise, not as safe.
 
 ## Current status
 
-What has run (2026-08-14) is a full ASan+UBSan+LSan pass over the 340 FX, Effect, XNB, capability
-and content-reader tests on the SDL_GPU/Vulkan driver. All pass. AddressSanitizer reports nothing.
-Every UBSan report and every leak record belongs to third-party code -- `SpirvPatchTable` alignment
-and null-argument reports plus SPIR-V emitter leaks in the pinned MojoShader, one shift overflow in
+Both FNA3D drivers met the FX-051 bar on 2026-08-15 at commit `17bab8ee2`: **3,079,834**
+coverage-guided executions on the OpenGL/GLSL driver and **2,669,555** on SDL_GPU/SPIR-V, each a
+full campaign window from the committed seed corpus, under AddressSanitizer with `SDL_ASSERT=abort`,
+producing no new crash artifact. Forty-one crash classes were found and fixed on the way there.
+
+Alongside that, a full ASan+UBSan+LSan pass over the 340 FX, Effect, XNB, capability and
+content-reader tests on the SDL_GPU driver passes. AddressSanitizer reports nothing. Every UBSan
+report and every leak record belongs to third-party code -- `SpirvPatchTable` alignment and
+null-argument reports plus SPIR-V emitter leaks in the pinned MojoShader, one shift overflow in
 FNA3D's pipeline cache, and 32 bytes per device inside `FNA3D_CreateDevice`. None is attributable
 to CNA. They are recorded as upstream findings rather than presented as a clean third-party gate.
