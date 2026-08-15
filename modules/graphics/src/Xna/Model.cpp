@@ -327,6 +327,11 @@ namespace Microsoft::Xna::Framework::Graphics
                 binding.part->setSamplerStateEXTProperty(
                     static_cast<int>(slot), selected->samplerStates[slot]);
             }
+            for (std::size_t slot = 0; slot < selected->specularSamplerStatesEXT.size(); ++slot)
+            {
+                binding.part->setSpecularSamplerStateEXTProperty(
+                    static_cast<int>(slot), selected->specularSamplerStatesEXT[slot]);
+            }
             // Last: this updates the owning ModelMesh::Effects collection. All other part state
             // is complete before an observer can find the new effect through that collection.
             binding.part->setEffectProperty(selected->effect);

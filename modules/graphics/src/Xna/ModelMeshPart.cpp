@@ -35,6 +35,17 @@ namespace Microsoft::Xna::Framework::Graphics
         samplerStates_[static_cast<std::size_t>(slot)] = value;
     }
 
+    const std::array<SamplerState, 2>& ModelMeshPart::getSpecularSamplerStatesEXTProperty() const
+    {
+        return specularSamplerStatesEXT_;
+    }
+
+    void ModelMeshPart::setSpecularSamplerStateEXTProperty(int slot, const SamplerState& value)
+    {
+        if (slot < 0 || slot >= static_cast<int>(specularSamplerStatesEXT_.size())) { return; }
+        specularSamplerStatesEXT_[static_cast<std::size_t>(slot)] = value;
+    }
+
     int ModelMeshPart::getStartIndexProperty()   const { return startIndex_; }
     int ModelMeshPart::getVertexOffsetProperty() const { return vertexOffset_; }
 

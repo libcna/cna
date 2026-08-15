@@ -37,6 +37,8 @@ namespace CNA::Internal::Graphics
         Microsoft::Xna::Framework::Graphics::Effect* effect = nullptr;
         System::Object* tag = nullptr;
         std::array<Microsoft::Xna::Framework::Graphics::SamplerState, 5> samplerStates{};
+        std::array<Microsoft::Xna::Framework::Graphics::SamplerState, 2>
+            specularSamplerStatesEXT{};
         int numVertices = 0;
     };
 

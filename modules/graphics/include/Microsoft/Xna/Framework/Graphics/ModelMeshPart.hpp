@@ -111,6 +111,19 @@ namespace Microsoft::Xna::Framework::Graphics
         CNAEXT void setSamplerStateEXTProperty(int slot, const SamplerState& value);
 
         /**
+         * @brief Samplers for `KHR_materials_specular` strength then colour maps.
+         *
+         * Kept separate from the established five-entry core PBR array so adding the extension
+         * does not change that public property's ABI or slot meanings. Both entries default to
+         * `LinearWrap`.
+         */
+        CNAEXT [[nodiscard]] const std::array<SamplerState, 2>&
+        getSpecularSamplerStatesEXTProperty() const;
+
+        /** @brief Sets extension sampler slot 0 (strength) or 1 (colour); others are ignored. */
+        CNAEXT void setSpecularSamplerStateEXTProperty(int slot, const SamplerState& value);
+
+        /**
          * @brief Gets the location in the index array at which to start reading vertices.
          * @return The start index.
          */
@@ -209,6 +222,7 @@ namespace Microsoft::Xna::Framework::Graphics
         int primitiveCount_ = 0;
         PrimitiveType primitiveType_ = PrimitiveType::TriangleList;
         std::array<SamplerState, 5> samplerStates_{};
+        std::array<SamplerState, 2> specularSamplerStatesEXT_{};
         int startIndex_     = 0;
         int vertexOffset_   = 0;
         Effect* effect_     = nullptr;
