@@ -277,17 +277,25 @@ namespace CNA::Internal::Renderers::DirectX9
         const float fogColor[4] = {params.fogColor[0], params.fogColor[1], params.fogColor[2],
                                    params.pbrEncodeOutputToSrgb ? 1.0f : 0.0f};
         TryUploadPixelShaderConstantEXT(device_.Get(), psRegs, psCount, "FogColor", fogColor);
-        const float dielectricFresnel[4] = {params.pbrDielectricF0[0], params.pbrDielectricF0[1],
-                                            params.pbrDielectricF0[2], params.pbrDielectricF90};
+        const float dielectricFresnel[4] = {
+            params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+            params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor};
         TryUploadPixelShaderConstantEXT(
-            device_.Get(), psRegs, psCount, "DielectricFresnel", dielectricFresnel);
+            device_.Get(), psRegs, psCount, "SpecularFresnelInputs", dielectricFresnel);
+        const float specularMapFlags[4] = {
+            params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f};
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "SpecularMapFlags", specularMapFlags);
         TryUploadPixelShaderConstantEXT(
             device_.Get(), psRegs, psCount, "TextureTransformRows",
             &params.pbrTextureTransformRows[0][0]);
+        TryUploadPixelShaderConstantEXT(
+            device_.Get(), psRegs, psCount, "SpecularTextureTransformRows",
+            &params.pbrSpecularTextureTransformRows[0][0]);
 
         // Texture units: s0=base color, s1=NormalMap, s2=MetallicRoughnessMap, s3=EmissiveMap,
-        // s4=OcclusionMap -- matches EnsurePbrProgram()'s own unit assignment and GpuDrawParams'
-        // own field order. Base color falls back to opaque white (matches EasyGL's own
+        // s4=OcclusionMap, s5=specular strength, s6=specular colour. Base color falls back to
+        // opaque white (matches EasyGL's own
         // BindDrawParams() -- PbrEffect never requires a bound texture0, unlike the Stock Effects'
         // own DrawXxxEffectEXT "requires non-null texture0" checks).
         BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
@@ -295,6 +303,8 @@ namespace CNA::Internal::Renderers::DirectX9
         BindPbrSampler(device_.Get(), 2, params.pbrMetallicRoughnessMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 3, params.pbrEmissiveMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
         BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+        BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+        BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
 
         device_->SetVertexDeclaration(GetOrCreateVertexDeclarationEXT(stride));
         const auto& d3dVb = static_cast<const D3D9VertexBufferRenderer&>(vb);

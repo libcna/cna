@@ -4176,8 +4176,8 @@ namespace CNA::Internal::GltfImport
                  "Factor and colour are converted to dielectric F0/F90 and consumed by all 15 "
                  "PBR renderers. The optional specularTexture and specularColorTexture now survive "
                  "direct import and offline .cnj with independent UV, transform, sampler and "
-                 "colour-space state. EasyGL, OpenGL2, OpenGL4, DirectX11 and DirectX12 sample "
-                 "both maps; the remaining 10 PBR renderer shader bindings are pending. "
+                 "colour-space state. EasyGL, OpenGL2, OpenGL4, DirectX9, DirectX11 and DirectX12 "
+                 "sample both maps; the remaining 9 PBR renderer shader bindings are pending. "
                  "Required use remains refused and optional use is warned by name.",
                  "GLTF-344"},
                 {"KHR_materials_clearcoat", GltfExtensionSupportEXT::ParsedButIgnored, false,

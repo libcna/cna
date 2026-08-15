@@ -222,17 +222,21 @@ namespace
               SamplerState g_EmissiveMap_sampler;
               Texture2D g_OcclusionMap;
               SamplerState g_OcclusionMap_sampler;)"}}},
-        {"directx9", "sampler registers s0,s1,s2,s3,s4",
+        {"directx9", "sampler registers s0 through s6",
          {{R"(BindPbrSampler(device_.Get(), 0, params.texture0, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
               BindPbrSampler(device_.Get(), 1, params.pbrNormalMap, ResolveD3D9TextureEXT(GetOrCreateDefaultFlatNormalTextureEXT()));
               BindPbrSampler(device_.Get(), 2, params.pbrMetallicRoughnessMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
               BindPbrSampler(device_.Get(), 3, params.pbrEmissiveMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
-              BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));)",
+              BindPbrSampler(device_.Get(), 4, params.pbrOcclusionMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+              BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));
+              BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap, ResolveD3D9TextureEXT(GetOrCreateDefaultWhiteTextureEXT()));)",
            R"(sampler2D Texture : register(s0);
               sampler2D NormalMap : register(s1);
               sampler2D MetallicRoughnessMap : register(s2);
               sampler2D EmissiveMap : register(s3);
-              sampler2D OcclusionMap : register(s4);)"}}},
+              sampler2D OcclusionMap : register(s4);
+              sampler2D SpecularMap : register(s5);
+              sampler2D SpecularColorMap : register(s6);)"}}},
         {"directx11", "SRV/sampler registers t0/s0 through t6/s6",
          {{R"(srvs[0] = params.texture0 ? GetSrvForTextureEXT(params.texture0)
                                         : GetOrCreateDefaultWhiteSrvEXT();
@@ -787,8 +791,8 @@ namespace
          "float3 F90 = lerp(float3(g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w, g_PbrDielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 1},
         {"directx9",
-         "float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic)",
-         "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
+         "float3 F0 = lerp(dielectricF0, albedo, metallic)",
+         "float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
         {"directx11",
          "float3 F0 = lerp(dielectricF0, albedo, metallic)",
@@ -1502,7 +1506,9 @@ TEST(GltfRendererPbrFallbackPolicy, RigidAndSkinnedShaderVariantsKeepMatchingPbr
             sampler2D NormalMap : register(s1);
             sampler2D MetallicRoughnessMap : register(s2);
             sampler2D EmissiveMap : register(s3);
-            sampler2D OcclusionMap : register(s4);)"},
+            sampler2D OcclusionMap : register(s4);
+            sampler2D SpecularMap : register(s5);
+            sampler2D SpecularColorMap : register(s6);)"},
         {"directx11/directx12", "common/d3d/src/shaders/pbr3d.frag.hlsl",
          "common/d3d/src/shaders/pbr_skinned3d.frag.hlsl",
          R"(Texture2D uTexture : register(t0);
@@ -1693,8 +1699,10 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
 
         EXPECT_NE(std::string::npos, source.find("pbrDielectricF0"))
             << "the renderer does not upload the transported dielectric F0";
-        EXPECT_NE(std::string::npos, source.find("pbrDielectricF90"))
-            << "the renderer does not upload the transported dielectric F90";
+        EXPECT_TRUE(source.find("pbrDielectricF90") != std::string::npos
+                    || source.find("pbrSpecularFactor") != std::string::npos)
+            << "the renderer uploads neither the factor-only F90 nor the textured specular "
+               "weight from which F90 is evaluated";
 
         for (const char* evidence :
              {audit.dielectricF0, audit.dielectricF90, audit.schlickEndpoints})
@@ -1847,6 +1855,44 @@ TEST(GltfRendererPbrFallbackPolicy, ModernDirectXRenderersSampleBothKhrMaterials
     {
         EXPECT_NE(std::string::npos, dx12.find(Normalize(evidence)))
             << "missing DirectX 12 specular/dual-UV binding evidence: " << evidence;
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, DirectX9SamplesBothKhrMaterialsSpecularTextures)
+{
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "directx9");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "BindPbrSampler(device_.Get(), 5, params.pbrSpecularMap",
+             "BindPbrSampler(device_.Get(), 6, params.pbrSpecularColorMap",
+             "params.pbrDielectricF0Unclamped[0]",
+             "params.pbrSpecularFactor",
+             "params.pbrSpecularColorTextureIsSrgb",
+             "params.pbrSpecularTextureTransformRows[0][0]",
+             "SpecularFresnelInputs", "'p', 24, 1",
+             "SpecularMapFlags", "'p', 25, 1",
+             "SpecularTextureTransformRows", "'p', 26, 4",
+             "kPbr3DPSBytecode[5588]",
+             "kPbrSkinned3DPSBytecode[5588]"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing DirectX 9 specular binding evidence: " << evidence;
+    }
+
+    for (const char* evidence : {
+             "sampler2D SpecularMap : register(s5)",
+             "sampler2D SpecularColorMap : register(s6)",
+             "tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a",
+             "tex2D(SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb",
+             "lerp(specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x)",
+             "min(SpecularFresnelInputs.xyz * specularColorTex, 1.0) * specularWeight",
+             "lerp(float3(specularWeight, specularWeight, specularWeight), "
+             "float3(1.0, 1.0, 1.0), metallic)"})
+    {
+        EXPECT_EQ(2u, CountOccurrences(source, Normalize(evidence)))
+            << "both DirectX 9 PBR shaders must contain: " << evidence;
     }
 }
 

@@ -23,8 +23,8 @@
 // Vertex declaration (stride 48, D3D9VertexDeclarations.hpp): POSITION0 (FLOAT3, 0), NORMAL0
 // (FLOAT3, 12), TANGENT0 (FLOAT4, 24 -- xyz=tangent, w=bitangent sign, glTF convention), TEXCOORD0
 // (FLOAT2, 40). Texture samplers: s0=base color (Texture), s1=NormalMap, s2=MetallicRoughnessMap
-// (glTF packing: G=roughness, B=metallic), s3=EmissiveMap, s4=OcclusionMap (R channel) -- matches
-// EnsurePbrProgram()'s own texture-unit assignment (0..4) and GpuDrawParams' own field order.
+// (glTF packing: G=roughness, B=metallic), s3=EmissiveMap, s4=OcclusionMap (R channel),
+// s5=specular strength and s6=specular colour.
 
 float4x4 WorldViewProj : register(c0); // c0-c3
 float4x4 World         : register(c4); // c4-c7
@@ -81,6 +81,8 @@ sampler2D NormalMap            : register(s1);
 sampler2D MetallicRoughnessMap : register(s2);
 sampler2D EmissiveMap          : register(s3);
 sampler2D OcclusionMap         : register(s4);
+sampler2D SpecularMap          : register(s5);
+sampler2D SpecularColorMap     : register(s6);
 
 float4 DiffuseColor           : register(c0);
 float4 AmbientColor            : register(c1); // xyz=color, w=decode base-color texture from sRGB
@@ -95,8 +97,10 @@ float3 Light2Diffuse           : register(c9);
 float3 EyePosition             : register(c10);
 float4 AlphaTest               : register(c11);
 float4 FogColor                : register(c12); // xyz=color, w=encode PBR output to sRGB
-float4 DielectricFresnel       : register(c13); // xyz=dielectric F0, w=dielectric F90
 float4 TextureTransformRows[10] : register(c14); // two affine UV rows per PBR map
+float4 SpecularFresnelInputs    : register(c24); // xyz=unclamped F0, w=specular factor
+float4 SpecularMapFlags        : register(c25); // x=decode specular-colour sample from sRGB
+float4 SpecularTextureTransformRows[4] : register(c26); // two affine rows per specular map
 
 struct PSInput
 {
@@ -127,6 +131,13 @@ float2 CnaPbrTransformUv(float2 uv, int slot)
     float3 value = float3(uv, 1.0);
     return float2(dot(value, TextureTransformRows[slot * 2].xyz),
                   dot(value, TextureTransformRows[slot * 2 + 1].xyz));
+}
+
+float2 CnaPbrSpecularTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, SpecularTextureTransformRows[slot * 2].xyz),
+                  dot(value, SpecularTextureTransformRows[slot * 2 + 1].xyz));
 }
 
 // GGX/Trowbridge-Reitz normal distribution (D), Smith-Schlick-GGX geometry/visibility term
@@ -175,8 +186,16 @@ float4 PSPbr3D(PSInput pin) : SV_Target0
     float metallic = clamp(mr.b * MetallicRoughnessFactor.x, 0.0, 1.0);
 
     float3 V = normalize(EyePosition - pin.WorldPos);
-    float3 F0 = lerp(DielectricFresnel.xyz, albedo, metallic);
-    float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w),
+    float specularWeight = SpecularFresnelInputs.w
+        * tex2D(SpecularMap, CnaPbrSpecularTransformUv(pin.UV, 0)).a;
+    float3 specularColorTex = tex2D(
+        SpecularColorMap, CnaPbrSpecularTransformUv(pin.UV, 1)).rgb;
+    specularColorTex = lerp(
+        specularColorTex, CnaSrgbToLinear(specularColorTex), SpecularMapFlags.x);
+    float3 dielectricF0 = min(SpecularFresnelInputs.xyz * specularColorTex, 1.0)
+        * specularWeight;
+    float3 F0 = lerp(dielectricF0, albedo, metallic);
+    float3 F90 = lerp(float3(specularWeight, specularWeight, specularWeight),
                       float3(1.0, 1.0, 1.0), metallic);
 
     float3 Lo = float3(0.0, 0.0, 0.0);
