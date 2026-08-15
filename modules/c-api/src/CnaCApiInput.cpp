@@ -5,6 +5,7 @@
 #include "CNA/C/input_keyboard.h"
 #include "CNA/C/input_mouse.h"
 #include "CNA/C/input_cursor.h"
+#include "CNA/C/input_text.h"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -31,6 +32,9 @@
 #include "Microsoft/Xna/Framework/Input/Mouse.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseCursor.hpp"
 #include "Microsoft/Xna/Framework/Input/MouseState.hpp"
+#include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
+#include "Microsoft/Xna/Framework/Rectangle.hpp"
+#include "CNA/Input/TextInputType.hpp"
 #include "System/MulticastAction.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchCollection.hpp"
 #include "Microsoft/Xna/Framework/Input/Touch/TouchLocation.hpp"
@@ -46,6 +50,7 @@
 #include <cstring>
 #include <unordered_set>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -3380,6 +3385,475 @@ CNA_Result cna_mouse_set_cursor_ext(
             return result;
         }
         Mouse::SetCursor(*resource->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Rectangle;
+using Microsoft::Xna::Framework::Input::TextInputEXT;
+using CNA::Input::TextInputTypeEXT;
+using SharpRuntime::charcs;
+
+// The C identities are the canonical ordinals, not a renumbering.
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::Text) == CNA_TEXT_INPUT_TYPE_TEXT);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::TextName) == CNA_TEXT_INPUT_TYPE_TEXT_NAME);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::TextEmail) == CNA_TEXT_INPUT_TYPE_TEXT_EMAIL);
+static_assert(
+    static_cast<uint32_t>(TextInputTypeEXT::TextUsername) == CNA_TEXT_INPUT_TYPE_TEXT_USERNAME);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::TextPasswordHidden) ==
+    CNA_TEXT_INPUT_TYPE_TEXT_PASSWORD_HIDDEN);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::TextPasswordVisible) ==
+    CNA_TEXT_INPUT_TYPE_TEXT_PASSWORD_VISIBLE);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::Number) == CNA_TEXT_INPUT_TYPE_NUMBER);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::NumberPasswordHidden) ==
+    CNA_TEXT_INPUT_TYPE_NUMBER_PASSWORD_HIDDEN);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::NumberPasswordVisible) ==
+    CNA_TEXT_INPUT_TYPE_NUMBER_PASSWORD_VISIBLE);
+static_assert(static_cast<uint32_t>(TextInputTypeEXT::NumberPasswordVisible) ==
+    CNA_TEXT_INPUT_TYPE_MAXIMUM);
+
+// The three canonical text-input events are process-wide static state with three different
+// signatures, so one registration records which event it came from and detaches by token. Releasing
+// it after ResetForTests() cleared the events simply removes nothing.
+enum class TextInputEventKind : uint32_t {
+    TextInput,
+    TextEditing,
+    TextEditingCandidates
+};
+
+class TextInputRegistration final {
+public:
+    TextInputRegistration(const TextInputEventKind kind, const uint64_t token)
+        : kind_(kind), token_(token)
+    {
+    }
+
+    TextInputRegistration(const TextInputRegistration&) = delete;
+    TextInputRegistration& operator=(const TextInputRegistration&) = delete;
+
+    ~TextInputRegistration()
+    {
+        switch (kind_) {
+            case TextInputEventKind::TextInput:
+                if (token_ != System::MulticastAction<charcs>::InvalidToken) {
+                    (void)TextInputEXT::TextInput.Remove(token_);
+                }
+                return;
+            case TextInputEventKind::TextEditing:
+                if (token_ !=
+                    System::MulticastAction<const std::string&, int, int>::InvalidToken) {
+                    (void)TextInputEXT::TextEditing.Remove(token_);
+                }
+                return;
+            case TextInputEventKind::TextEditingCandidates:
+                if (token_ !=
+                    System::MulticastAction<const std::vector<std::string>&, int, bool>
+                        ::InvalidToken) {
+                    (void)TextInputEXT::TextEditingCandidatesEXT.Remove(token_);
+                }
+                return;
+        }
+    }
+
+private:
+    TextInputEventKind kind_;
+    uint64_t token_;
+};
+
+[[nodiscard]] CNA_Result CreateTextInputRegistration(
+    const TextInputEventKind kind,
+    const uint64_t token,
+    CNA_TextInputRegistrationHandle* const outRegistration)
+{
+    const auto resource = std::make_shared<TextInputRegistration>(kind, token);
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+        CNA::C::Detail::ObjectKind::TextInputEventRegistration,
+        resource,
+        outRegistration);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            CNA::C::Detail::ErrorCategoryForResult(result),
+            "The text-input registration could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result ToTextInputType(
+    const CNA_TextInputType value,
+    TextInputTypeEXT* const outType)
+{
+    // The canonical conversion silently falls back to plain text for an out-of-range value; C
+    // refuses instead, so a consumer is told about a bad identity rather than getting a different
+    // keyboard than it asked for.
+    if (value > CNA_TEXT_INPUT_TYPE_MAXIMUM) {
+        return InvalidInput("The text input type identity is undefined.");
+    }
+    *outType = static_cast<TextInputTypeEXT>(value);
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_text_input_subscribe_text_input_ext(
+    const CNA_TextInputCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The text-input registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The text-input callback is null.");
+        }
+        const auto token = TextInputEXT::TextInput.Add([callback, context](const charcs value) {
+            callback(static_cast<uint16_t>(value), context);
+        });
+        return CreateTextInputRegistration(
+            TextInputEventKind::TextInput,
+            token,
+            outRegistration);
+    });
+}
+
+CNA_Result cna_text_input_subscribe_text_editing_ext(
+    const CNA_TextEditingCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The text-editing registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The text-editing callback is null.");
+        }
+        const auto token = TextInputEXT::TextEditing.Add(
+            [callback, context](const std::string& text, const int start, const int length) {
+                CNA_TextEditingEventInfo info = {
+                    sizeof(CNA_TextEditingEventInfo),
+                    StructureVersion,
+                    {text.data(), static_cast<uint64_t>(text.size())},
+                    static_cast<int32_t>(start),
+                    static_cast<int32_t>(length)
+                };
+                callback(&info, context);
+            });
+        return CreateTextInputRegistration(
+            TextInputEventKind::TextEditing,
+            token,
+            outRegistration);
+    });
+}
+
+CNA_Result cna_text_input_subscribe_text_editing_candidates_ext(
+    const CNA_TextEditingCandidatesCallback callback,
+    void* const context,
+    CNA_TextInputRegistrationHandle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return InvalidInput("The text-editing candidates registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return InvalidInput("The text-editing candidates callback is null.");
+        }
+        const auto token = TextInputEXT::TextEditingCandidatesEXT.Add(
+            [callback, context](
+                const std::vector<std::string>& candidates,
+                const int selected,
+                const bool horizontal) {
+                std::vector<CNA_StringView> views;
+                views.reserve(candidates.size());
+                for (const std::string& candidate : candidates) {
+                    views.push_back(
+                        CNA_StringView{candidate.data(), static_cast<uint64_t>(candidate.size())});
+                }
+                CNA_TextEditingCandidatesEventInfo info = {
+                    sizeof(CNA_TextEditingCandidatesEventInfo),
+                    StructureVersion,
+                    views.empty() ? nullptr : views.data(),
+                    static_cast<int32_t>(views.size()),
+                    static_cast<int32_t>(selected),
+                    horizontal ? CNA_TRUE : CNA_FALSE,
+                    {0U, 0U, 0U}
+                };
+                callback(&info, context);
+            });
+        return CreateTextInputRegistration(
+            TextInputEventKind::TextEditingCandidates,
+            token,
+            outRegistration);
+    });
+}
+
+CNA_Result cna_text_input_unsubscribe_ext(const CNA_TextInputRegistrationHandle registration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<TextInputRegistration> resource;
+        const CNA_Result getResult = CNA::C::Detail::GetRuntimeHandles().Get(
+            registration,
+            CNA::C::Detail::ObjectKind::TextInputEventRegistration,
+            &resource);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                getResult,
+                CNA::C::Detail::ErrorCategoryForResult(getResult),
+                "The text-input registration handle is invalid for this call.");
+        }
+        const CNA_Result releaseResult =
+            CNA::C::Detail::GetRuntimeHandles().Release(registration);
+        if (releaseResult == CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_SUCCESS;
+        }
+        return Fail(
+            releaseResult,
+            CNA::C::Detail::ErrorCategoryForResult(releaseResult),
+            "The text-input registration handle could not be released.");
+    });
+}
+
+CNA_Result cna_text_input_raise_text_input_ext(
+    const CNA_Handle gameHandle,
+    const uint16_t codeUnit)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::INTERNAL_OnTextInput(static_cast<charcs>(codeUnit));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_raise_text_editing_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView text,
+    const int32_t start,
+    const int32_t length)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copied;
+        // Composition text is byte-length delimited on both sides, so an embedded NUL is
+        // representable and is not rejected; invalid UTF-8 still is.
+        if (const CNA_Result result = CNA::C::Detail::CopyStringView(text, false, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                CNA::C::Detail::ErrorCategoryForResult(result),
+                "The text-editing composition is not valid UTF-8.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::INTERNAL_OnTextEditing(
+            copied,
+            static_cast<int>(start),
+            static_cast<int>(length));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_raise_text_editing_candidates_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView* const candidates,
+    const int32_t candidateCount,
+    const int32_t selected,
+    const CNA_Bool horizontal)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (candidateCount < 0) {
+            return InvalidInput("The candidate count is negative.");
+        }
+        if (candidates == nullptr && candidateCount != 0) {
+            return InvalidInput("The candidate array is null.");
+        }
+        std::vector<std::string> copied;
+        copied.reserve(static_cast<std::size_t>(candidateCount));
+        for (int32_t index = 0; index < candidateCount; ++index) {
+            std::string candidate;
+            if (const CNA_Result result =
+                    CNA::C::Detail::CopyStringView(candidates[index], false, &candidate);
+                result != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    result,
+                    CNA::C::Detail::ErrorCategoryForResult(result),
+                    "A text-editing candidate is not valid UTF-8.");
+            }
+            copied.push_back(std::move(candidate));
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::INTERNAL_OnTextEditingCandidates(
+            copied,
+            static_cast<int>(selected),
+            horizontal != CNA_FALSE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_get_window_handle_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outWindow)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outWindow == nullptr) {
+            return InvalidInput("The text-input window-handle output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outWindow = static_cast<uint64_t>(TextInputEXT::getWindowHandleProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_set_window_handle_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t window)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::setWindowHandleProperty(static_cast<std::uintptr_t>(window));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_is_active_ext(const CNA_Handle gameHandle, CNA_Bool* const outActive)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outActive == nullptr) {
+            return InvalidInput("The text-input active output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outActive = TextInputEXT::IsTextInputActive() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_is_screen_keyboard_shown_ext(
+    const CNA_Handle gameHandle,
+    CNA_Bool* const outShown)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outShown == nullptr) {
+            return InvalidInput("The screen-keyboard output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outShown = TextInputEXT::IsScreenKeyboardShown() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_is_screen_keyboard_shown_for_window_ext(
+    const CNA_Handle gameHandle,
+    const uint64_t window,
+    CNA_Bool* const outShown)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outShown == nullptr) {
+            return InvalidInput("The screen-keyboard output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outShown = TextInputEXT::IsScreenKeyboardShown(static_cast<std::uintptr_t>(window))
+            ? CNA_TRUE
+            : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_start_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::StartTextInput();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_stop_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::StopTextInput();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_start_with_type_ext(
+    const CNA_Handle gameHandle,
+    const CNA_TextInputType type)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        TextInputTypeEXT nativeType = TextInputTypeEXT::Text;
+        if (const CNA_Result result = ToTextInputType(type, &nativeType);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::StartTextInputWithTypeEXT(nativeType);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_set_input_rectangle_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Rectangle rectangle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::SetInputRectangle(Rectangle(
+            static_cast<int>(rectangle.x),
+            static_cast<int>(rectangle.y),
+            static_cast<int>(rectangle.width),
+            static_cast<int>(rectangle.height)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_text_input_reset_for_tests_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        TextInputEXT::ResetForTests();
         return CNA_RESULT_SUCCESS;
     });
 }

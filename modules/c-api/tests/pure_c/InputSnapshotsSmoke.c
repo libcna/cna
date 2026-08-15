@@ -17,6 +17,7 @@ typedef struct WrongThreadState {
     CNA_Result capabilities_result;
     CNA_Result vibration_result;
     CNA_Result touch_result;
+    CNA_Result text_input_result;
 } WrongThreadState;
 
 /* The next representable float above a positive finite value, without pulling in libm: the C API's
@@ -1318,6 +1319,340 @@ static int validate_cursor_family(const CNA_Handle game)
     return cna_texture2d_destroy(texture) == CNA_RESULT_SUCCESS;
 }
 
+typedef struct TextRecord {
+    int32_t code_unit_count;
+    uint16_t last_code_unit;
+    int32_t editing_count;
+    int32_t last_start;
+    int32_t last_length;
+    uint64_t last_text_bytes;
+    char last_text[32];
+    int32_t candidates_count;
+    int32_t last_candidate_count;
+    int32_t last_selected;
+    CNA_Bool last_horizontal;
+    char last_candidate[32];
+    int malformed;
+} TextRecord;
+
+static void on_text_input(const uint16_t code_unit, void* const context)
+{
+    TextRecord* const record = (TextRecord*)context;
+    record->last_code_unit = code_unit;
+    record->code_unit_count += 1;
+}
+
+static void on_text_editing(const CNA_TextEditingEventInfo* const info, void* const context)
+{
+    TextRecord* const record = (TextRecord*)context;
+    if (info == 0 || info->struct_size != sizeof(CNA_TextEditingEventInfo) ||
+        info->struct_version != UINT32_C(1) ||
+        (info->text.data == 0 && info->text.byte_length != UINT64_C(0)) ||
+        info->text.byte_length >= sizeof(record->last_text)) {
+        record->malformed = 1;
+        return;
+    }
+    record->editing_count += 1;
+    record->last_start = info->start;
+    record->last_length = info->length;
+    record->last_text_bytes = info->text.byte_length;
+    memset(record->last_text, 0, sizeof(record->last_text));
+    if (info->text.byte_length != UINT64_C(0)) {
+        memcpy(record->last_text, info->text.data, (size_t)info->text.byte_length);
+    }
+}
+
+static void on_text_editing_candidates(
+    const CNA_TextEditingCandidatesEventInfo* const info,
+    void* const context)
+{
+    TextRecord* const record = (TextRecord*)context;
+    if (info == 0 || info->struct_size != sizeof(CNA_TextEditingCandidatesEventInfo) ||
+        info->struct_version != UINT32_C(1) || info->candidate_count < 0 ||
+        (info->candidates == 0 && info->candidate_count != 0) ||
+        info->reserved[0] != UINT8_C(0) || info->reserved[1] != UINT8_C(0) ||
+        info->reserved[2] != UINT8_C(0)) {
+        record->malformed = 1;
+        return;
+    }
+    record->candidates_count += 1;
+    record->last_candidate_count = info->candidate_count;
+    record->last_selected = info->selected;
+    record->last_horizontal = info->horizontal;
+    memset(record->last_candidate, 0, sizeof(record->last_candidate));
+    if (info->candidate_count > 0) {
+        const CNA_StringView first = info->candidates[0];
+        if (first.byte_length >= sizeof(record->last_candidate)) {
+            record->malformed = 1;
+            return;
+        }
+        if (first.byte_length != UINT64_C(0)) {
+            memcpy(record->last_candidate, first.data, (size_t)first.byte_length);
+        }
+    }
+}
+
+/* Text input is probed by behavior, never by renderer identity. A backend that creates a real
+   window publishes it into the canonical static, so this suite must not assume either state: it
+   forces the unbound case to prove the documented null-guarded contract, then restores whatever was
+   bound and exercises the real path for whichever answer that backend gives. The events are
+   observable on every backend through the raise routes, which is exactly why the canonical class
+   has them. */
+static int validate_text_input_family(const CNA_Handle game)
+{
+    /* A three-byte code point and a two-byte one, so the borrowed view is real UTF-8, not ASCII. */
+    static const char composition[] = "\xE6\x97\xA5\xC3\xA9";
+    static const char invalid_utf8[] = "\xC0\xAF";
+    static const CNA_StringView candidates[2] = {
+        {"\xE6\x97\xA5", UINT64_C(3)}, {"ok", UINT64_C(2)}
+    };
+    static const CNA_StringView malformed_candidates[2] = {
+        {"ok", UINT64_C(2)}, {invalid_utf8, UINT64_C(2)}
+    };
+    TextRecord record;
+    CNA_TextInputRegistrationHandle text_registration = CNA_INVALID_HANDLE;
+    CNA_TextInputRegistrationHandle editing_registration = CNA_INVALID_HANDLE;
+    CNA_TextInputRegistrationHandle candidates_registration = CNA_INVALID_HANDLE;
+    CNA_TextInputRegistrationHandle rejected = CNA_INVALID_HANDLE;
+    CNA_TextInputRegistrationHandle scratch = CNA_INVALID_HANDLE;
+    const CNA_Rectangle area = {4, 8, 32, 16};
+    CNA_Bool flag = UINT8_C(9);
+    CNA_Bool after_start = UINT8_C(9);
+    CNA_Bool after_stop = UINT8_C(9);
+    uint64_t window = UINT64_C(9);
+    uint64_t bound = UINT64_C(0);
+    CNA_TextInputType type = UINT32_C(0);
+
+    memset(&record, 0, sizeof(record));
+
+    /* Whatever this backend bound is process-wide state that must be put back. A windowed backend
+       publishes its real window here; a windowless one leaves zero. Neither is assumed. */
+    if (cna_text_input_get_window_handle_ext(game, &bound) != CNA_RESULT_SUCCESS ||
+        cna_text_input_get_window_handle_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+
+    /* Forcing the unbound case makes the canonical null guard a deterministic contract on every
+       backend: every query answers false and every activation succeeds unchanged. */
+    if (cna_text_input_set_window_handle_ext(game, UINT64_C(0)) != CNA_RESULT_SUCCESS ||
+        cna_text_input_get_window_handle_ext(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0)) {
+        return 0;
+    }
+    if (cna_text_input_is_active_ext(game, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_text_input_is_active_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_is_screen_keyboard_shown_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_text_input_is_screen_keyboard_shown_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_is_screen_keyboard_shown_for_window_ext(game, UINT64_C(0), &flag) !=
+            CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_text_input_is_screen_keyboard_shown_for_window_ext(game, UINT64_C(0), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_text_input_start_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_is_active_ext(game, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_text_input_stop_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_set_input_rectangle_ext(game, area) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* Every defined hint is accepted; an undefined one is refused rather than silently becoming
+       plain text, which is where C deliberately differs from the canonical fallback. */
+    for (type = CNA_TEXT_INPUT_TYPE_TEXT; type <= CNA_TEXT_INPUT_TYPE_MAXIMUM; ++type) {
+        if (cna_text_input_start_with_type_ext(game, type) != CNA_RESULT_SUCCESS) {
+            return 0;
+        }
+    }
+    if (cna_text_input_start_with_type_ext(game, CNA_TEXT_INPUT_TYPE_MAXIMUM + UINT32_C(1)) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_stop_ext(game) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* A bogus handle round trips because the C API never dereferences it, and the canonical reset
+       is what clears it -- which is also how a stale handle can never reach the backend. */
+    if (cna_text_input_set_window_handle_ext(game, UINT64_C(0xDEADBEEF)) != CNA_RESULT_SUCCESS ||
+        cna_text_input_get_window_handle_ext(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0xDEADBEEF) ||
+        cna_text_input_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_get_window_handle_ext(game, &window) != CNA_RESULT_SUCCESS ||
+        window != UINT64_C(0)) {
+        return 0;
+    }
+
+    /* With whatever this backend really bound put back, the same routes reach the platform. The
+       answer is the backend's to give: only the relationship between the answers is asserted, so a
+       backend with a live window supplies real activation evidence and one without stays honest. */
+    if (cna_text_input_set_window_handle_ext(game, bound) != CNA_RESULT_SUCCESS ||
+        cna_text_input_start_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_is_active_ext(game, &after_start) != CNA_RESULT_SUCCESS ||
+        (after_start != CNA_FALSE && after_start != CNA_TRUE) ||
+        cna_text_input_set_input_rectangle_ext(game, area) != CNA_RESULT_SUCCESS ||
+        cna_text_input_stop_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_is_active_ext(game, &after_stop) != CNA_RESULT_SUCCESS ||
+        (after_stop != CNA_FALSE && after_stop != CNA_TRUE)) {
+        return 0;
+    }
+    /* Activation that took effect must be undone by stopping it. */
+    if (after_start == CNA_TRUE && after_stop != CNA_FALSE) {
+        return 0;
+    }
+    for (type = CNA_TEXT_INPUT_TYPE_TEXT; type <= CNA_TEXT_INPUT_TYPE_MAXIMUM; ++type) {
+        if (cna_text_input_start_with_type_ext(game, type) != CNA_RESULT_SUCCESS ||
+            cna_text_input_is_active_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+            (flag != CNA_FALSE && flag != CNA_TRUE)) {
+            return 0;
+        }
+    }
+    if (cna_text_input_stop_ext(game) != CNA_RESULT_SUCCESS ||
+        cna_text_input_is_screen_keyboard_shown_ext(game, &flag) != CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE) ||
+        cna_text_input_is_screen_keyboard_shown_for_window_ext(game, bound, &flag) !=
+            CNA_RESULT_SUCCESS ||
+        (flag != CNA_FALSE && flag != CNA_TRUE)) {
+        return 0;
+    }
+
+    /* All three subscriptions are static, so none takes a game handle. */
+    if (cna_text_input_subscribe_text_input_ext(0, &record, &scratch) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        scratch != CNA_INVALID_HANDLE ||
+        cna_text_input_subscribe_text_input_ext(on_text_input, &record, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_subscribe_text_editing_ext(0, &record, &scratch) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        scratch != CNA_INVALID_HANDLE ||
+        cna_text_input_subscribe_text_editing_ext(on_text_editing, &record, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_subscribe_text_editing_candidates_ext(0, &record, &scratch) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        scratch != CNA_INVALID_HANDLE ||
+        cna_text_input_subscribe_text_editing_candidates_ext(
+            on_text_editing_candidates, &record, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_text_input_subscribe_text_input_ext(on_text_input, &record, &text_registration) !=
+            CNA_RESULT_SUCCESS ||
+        text_registration == CNA_INVALID_HANDLE ||
+        cna_text_input_subscribe_text_editing_ext(
+            on_text_editing, &record, &editing_registration) != CNA_RESULT_SUCCESS ||
+        editing_registration == CNA_INVALID_HANDLE ||
+        cna_text_input_subscribe_text_editing_candidates_ext(
+            on_text_editing_candidates, &record, &candidates_registration) !=
+            CNA_RESULT_SUCCESS ||
+        candidates_registration == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+
+    /* A code point above U+FFFF arrives as a surrogate pair -- two calls, not one. */
+    if (cna_text_input_raise_text_input_ext(game, UINT16_C(0x0041)) != CNA_RESULT_SUCCESS ||
+        record.code_unit_count != 1 || record.last_code_unit != UINT16_C(0x0041) ||
+        cna_text_input_raise_text_input_ext(game, UINT16_C(0xD83D)) != CNA_RESULT_SUCCESS ||
+        record.last_code_unit != UINT16_C(0xD83D) ||
+        cna_text_input_raise_text_input_ext(game, UINT16_C(0xDE00)) != CNA_RESULT_SUCCESS ||
+        record.code_unit_count != 3 || record.last_code_unit != UINT16_C(0xDE00)) {
+        return 0;
+    }
+
+    /* start and length are byte offsets forwarded verbatim: the canonical dispatch does not
+       validate them against the text, and neither does C. */
+    {
+        const CNA_StringView text = {composition, sizeof(composition) - 1U};
+        const CNA_StringView empty = {0, UINT64_C(0)};
+        const CNA_StringView malformed = {invalid_utf8, sizeof(invalid_utf8) - 1U};
+        if (cna_text_input_raise_text_editing_ext(game, text, 1000, -5) != CNA_RESULT_SUCCESS ||
+            record.editing_count != 1 || record.malformed != 0 ||
+            record.last_start != 1000 || record.last_length != -5 ||
+            record.last_text_bytes != (uint64_t)(sizeof(composition) - 1U) ||
+            memcmp(record.last_text, composition, sizeof(composition) - 1U) != 0) {
+            return 0;
+        }
+        if (cna_text_input_raise_text_editing_ext(game, empty, 0, 0) != CNA_RESULT_SUCCESS ||
+            record.editing_count != 2 || record.last_text_bytes != UINT64_C(0)) {
+            return 0;
+        }
+        if (cna_text_input_raise_text_editing_ext(game, malformed, 0, 0) !=
+                CNA_RESULT_ENCODING ||
+            record.editing_count != 2) {
+            return 0;
+        }
+    }
+
+    /* The candidate list crosses as borrowed views valid only for the callback. */
+    if (cna_text_input_raise_text_editing_candidates_ext(game, candidates, 2, 1, CNA_TRUE) !=
+            CNA_RESULT_SUCCESS ||
+        record.candidates_count != 1 || record.malformed != 0 ||
+        record.last_candidate_count != 2 || record.last_selected != 1 ||
+        record.last_horizontal != CNA_TRUE ||
+        memcmp(record.last_candidate, "\xE6\x97\xA5", 3U) != 0) {
+        return 0;
+    }
+    if (cna_text_input_raise_text_editing_candidates_ext(game, 0, 0, -1, CNA_FALSE) !=
+            CNA_RESULT_SUCCESS ||
+        record.candidates_count != 2 || record.last_candidate_count != 0 ||
+        record.last_selected != -1 || record.last_horizontal != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_text_input_raise_text_editing_candidates_ext(game, candidates, -1, 0, CNA_FALSE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_raise_text_editing_candidates_ext(game, 0, 1, 0, CNA_FALSE) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_text_input_raise_text_editing_candidates_ext(
+            game, malformed_candidates, 2, 0, CNA_FALSE) != CNA_RESULT_ENCODING ||
+        record.candidates_count != 2) {
+        return 0;
+    }
+
+    /* One release route covers all three kinds, and a released handler stops running. */
+    if (cna_text_input_unsubscribe_ext(text_registration) != CNA_RESULT_SUCCESS ||
+        cna_text_input_unsubscribe_ext(text_registration) != CNA_RESULT_INVALID_HANDLE ||
+        cna_text_input_unsubscribe_ext(rejected) != CNA_RESULT_INVALID_HANDLE ||
+        cna_text_input_raise_text_input_ext(game, UINT16_C(0x0042)) != CNA_RESULT_SUCCESS ||
+        record.code_unit_count != 3) {
+        return 0;
+    }
+    if (cna_text_input_unsubscribe_ext(editing_registration) != CNA_RESULT_SUCCESS ||
+        cna_text_input_unsubscribe_ext(candidates_registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    /* The canonical reset drops every subscription to all three events, including ones this API
+       handed out, so a release afterwards is a no-op rather than a failure. */
+    record.code_unit_count = 0;
+    record.editing_count = 0;
+    record.candidates_count = 0;
+    if (cna_text_input_subscribe_text_input_ext(on_text_input, &record, &text_registration) !=
+            CNA_RESULT_SUCCESS ||
+        cna_text_input_subscribe_text_editing_ext(
+            on_text_editing, &record, &editing_registration) != CNA_RESULT_SUCCESS ||
+        cna_text_input_subscribe_text_editing_candidates_ext(
+            on_text_editing_candidates, &record, &candidates_registration) !=
+            CNA_RESULT_SUCCESS ||
+        cna_text_input_reset_for_tests_ext(game) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    {
+        const CNA_StringView text = {composition, sizeof(composition) - 1U};
+        if (cna_text_input_raise_text_input_ext(game, UINT16_C(0x0043)) != CNA_RESULT_SUCCESS ||
+            cna_text_input_raise_text_editing_ext(game, text, 0, 0) != CNA_RESULT_SUCCESS ||
+            cna_text_input_raise_text_editing_candidates_ext(game, candidates, 2, 0, CNA_FALSE) !=
+                CNA_RESULT_SUCCESS ||
+            record.code_unit_count != 0 || record.editing_count != 0 ||
+            record.candidates_count != 0 || record.malformed != 0) {
+            return 0;
+        }
+    }
+    if (cna_text_input_unsubscribe_ext(text_registration) != CNA_RESULT_SUCCESS ||
+        cna_text_input_unsubscribe_ext(editing_registration) != CNA_RESULT_SUCCESS ||
+        cna_text_input_unsubscribe_ext(candidates_registration) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* The reset above cleared process-wide state this suite does not own, so it goes back. */
+    return cna_text_input_set_window_handle_ext(game, bound) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -1404,7 +1739,8 @@ static CNA_Result on_update(
     }
 
     if (!validate_device_queries(game) || !validate_keyboard_queries(game) ||
-        !validate_mouse_queries(game) || !validate_cursor_family(game)) {
+        !validate_mouse_queries(game) || !validate_cursor_family(game) ||
+        !validate_text_input_family(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -1498,6 +1834,10 @@ static int capture_on_wrong_thread(void* const context)
             &applied);
     }
     state->touch_result = cna_touch_get_state(state->game, &touch);
+    {
+        CNA_Bool active = CNA_FALSE;
+        state->text_input_result = cna_text_input_is_active_ext(state->game, &active);
+    }
     return 0;
 }
 
@@ -1557,7 +1897,7 @@ int main(void)
 
     WrongThreadState wrong_thread = {
         game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS,
-        CNA_RESULT_SUCCESS
+        CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
     };
     thrd_t thread;
     if (thrd_create(&thread, capture_on_wrong_thread, &wrong_thread) != thrd_success ||
@@ -1566,7 +1906,8 @@ int main(void)
         wrong_thread.gamepad_result != CNA_RESULT_THREAD ||
         wrong_thread.capabilities_result != CNA_RESULT_THREAD ||
         wrong_thread.vibration_result != CNA_RESULT_THREAD ||
-        wrong_thread.touch_result != CNA_RESULT_THREAD) {
+        wrong_thread.touch_result != CNA_RESULT_THREAD ||
+        wrong_thread.text_input_result != CNA_RESULT_THREAD) {
         return 3;
     }
 

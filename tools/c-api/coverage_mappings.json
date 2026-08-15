@@ -3254,6 +3254,142 @@
       "tests": "`InputSnapshotsSmoke.c` creates one, sets it, disposes it twice and releases it, then refuses a second release, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037B4c"
+    },
+    {
+      "id": "text-input-type-identities",
+      "qualified_name_regex": "^CNA::Input::TextInputTypeEXT(?:::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_TextInputType` with the nine `CNA_TEXT_INPUT_TYPE_*` identities at their canonical ordinals, plus `CNA_TEXT_INPUT_TYPE_MAXIMUM`. **Borrowed into CBIND-037B4d** from CBIND-037B7, because `StartTextInputWithTypeEXT` cannot be mapped without it. A route validates against the maximum and refuses an undefined identity, where the canonical conversion silently falls back to plain text",
+      "tests": "`InputSnapshotsSmoke.c` starts text input with every one of the nine identities and refuses the first undefined one; source-side `static_assert`s bind each identity to its native ordinal, and C/C++ ABI assertions freeze the width and every value under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-class",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT$",
+      "kinds": [
+        "class"
+      ],
+      "mapping": "the `input_text.h` family: `cna_text_input_*` free functions over the canonical static class, since C has no static class. Every route that reaches the platform backend takes an active game handle and is creation-thread bound, exactly as the other input families are; the three event subscriptions take none, because the canonical events belong to the process",
+      "tests": "`InputSnapshotsSmoke.c` covers every route, all three events, the null-guarded no-op paths and wrong-thread refusal under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-events",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::(?:TextInput|TextEditing|TextEditingCandidatesEXT)$",
+      "kinds": [
+        "field",
+        "constant"
+      ],
+      "mapping": "one `cna_text_input_subscribe_*_ext` route per event, each returning an owned `CNA_TextInputRegistrationHandle`, plus one shared `cna_text_input_unsubscribe_ext` \u2014 one release route, because a registration already knows which of the three events it came from. The subscriptions take no game handle, since the canonical events are process-wide statics. `TextInput` hands over a single `uint16_t` UTF-16 code unit; the two multi-field events hand over a fixed versioned `CNA_TextEditingEventInfo` / `CNA_TextEditingCandidatesEventInfo` whose UTF-8 `CNA_StringView`s are borrowed for the duration of the callback, so neither `std::string` nor `std::vector` crosses the ABI",
+      "tests": "`InputSnapshotsSmoke.c` subscribes to all three, proves an above-BMP code point arrives as two surrogate calls, reads a real multi-byte composition and candidate list back out of the borrowed views, refuses a null callback or output, and proves a released handler stops running; ASan+UBSan with leak detection covers the borrowed-view lifetime",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-window-handle",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::(?:get|set)WindowHandleProperty$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_get_window_handle_ext` and `cna_text_input_set_window_handle_ext`, carrying the native window as an opaque `uint64_t` the C API never dereferences \u2014 not a `CNA_Handle`, and not the graphics device's native handle, which the C API deliberately does not hand out. Only zero is guarded, exactly as the canonical property is: a nonzero value must be a live native window supplied by the platform layer",
+      "tests": "`InputSnapshotsSmoke.c` round trips a bogus nonzero value without ever handing it to the backend, then proves the canonical reset clears it, so every later activation route takes the documented null-guarded path, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-is-active",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::IsTextInputActive$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_is_active_ext`, reporting the answer through an output flag so an unbound window is an ordinary `CNA_FALSE` rather than a failure",
+      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound, both before and after a start, and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-screen-keyboard-bound",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::IsScreenKeyboardShown$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_is_screen_keyboard_shown_ext`, which queries the bound window handle",
+      "tests": "`InputSnapshotsSmoke.c` asserts false with no window bound and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-screen-keyboard-window",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::IsScreenKeyboardShown$",
+      "signature_regex": "^\\(std::uintptr_t window\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_is_screen_keyboard_shown_for_window_ext`, kept a separate route rather than an optional argument because the canonical overload ignores the bound window handle entirely. The window crosses as the same opaque `uint64_t`",
+      "tests": "`InputSnapshotsSmoke.c` asserts false for the zero window and refuses a null output, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-activation",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::(?:StartTextInput|StopTextInput)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_start_ext` and `cna_text_input_stop_ext`. Both return nothing canonically, so with no window bound they succeed and change nothing, preserving the canonical null guard rather than inventing a failure",
+      "tests": "`InputSnapshotsSmoke.c` starts and stops with no window bound and asserts the activity query stays false, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-start-with-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::StartTextInputWithTypeEXT$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_start_with_type_ext`, taking a `CNA_TEXT_INPUT_TYPE_*` identity. **Documented deviation:** the canonical conversion falls back to plain text for an out-of-range value; C refuses with `CNA_RESULT_INVALID_ARGUMENT` instead, so a consumer is told about a bad identity rather than silently getting a different keyboard",
+      "tests": "`InputSnapshotsSmoke.c` calls it with all nine identities and refuses the first undefined one, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-set-input-rectangle",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::SetInputRectangle$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_set_input_rectangle_ext`, taking the existing fixed `CNA_Rectangle` by value. The canonical operation reports nothing back and passes a zero text-cursor offset to the backend, so a backend that ignores the hint \u2014 and an unbound window \u2014 succeed and change nothing",
+      "tests": "`InputSnapshotsSmoke.c` sets a rectangle with no window bound and asserts success, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-internal-raises",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::INTERNAL_On(?:TextInput|TextEditing|TextEditingCandidates)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_raise_text_input_ext`, `cna_text_input_raise_text_editing_ext` and `cna_text_input_raise_text_editing_candidates_ext`. These are what make the three events observable without a real keyboard, which is the only reason the canonical dispatchers are public. Input text is a borrowed `CNA_StringView` copied and UTF-8 validated before dispatch; a candidate list is a pointer plus a count. Two canonical behaviors are preserved rather than tidied up: the composition `start`/`length` are byte offsets forwarded verbatim and are deliberately not range-checked against the text, and `selected` is not range-checked against the candidate count, because the canonical dispatch checks neither",
+      "tests": "`InputSnapshotsSmoke.c` delivers an ASCII unit and a surrogate pair, a real multi-byte composition with a deliberately out-of-range start and a negative length, an empty composition, a two-entry candidate list, an empty list, and refuses invalid UTF-8, a negative count and a null array with a nonzero count \u2014 each refusal proved to have dispatched nothing. Runs under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
+    },
+    {
+      "id": "text-input-reset-for-tests",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::TextInputEXT::ResetForTests$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_text_input_reset_for_tests_ext`, documented as clearing the bound window handle and dropping every subscription to all three events \u2014 including registrations this API handed out, so releasing one afterwards is a no-op rather than a failure",
+      "tests": "`InputSnapshotsSmoke.c` subscribes to all three events, resets, proves no handler runs for any of them and that the window handle is back to zero, then releases all three registrations successfully, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B4d"
     }
   ]
 }

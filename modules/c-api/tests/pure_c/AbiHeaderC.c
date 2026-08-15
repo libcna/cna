@@ -961,3 +961,33 @@ _Static_assert(sizeof(CNA_MouseCursorHandle) == 8U &&
                    CNA_MOUSE_CURSOR_STOCK_ARROW == UINT32_C(0) &&
                    CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW == UINT32_C(11),
                "CNA mouse cursor identities must remain stable");
+
+_Static_assert(sizeof(CNA_TextInputRegistrationHandle) == 8U &&
+                   sizeof(CNA_TextInputType) == sizeof(uint32_t) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT == UINT32_C(0) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT_NAME == UINT32_C(1) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT_EMAIL == UINT32_C(2) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT_USERNAME == UINT32_C(3) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT_PASSWORD_HIDDEN == UINT32_C(4) &&
+                   CNA_TEXT_INPUT_TYPE_TEXT_PASSWORD_VISIBLE == UINT32_C(5) &&
+                   CNA_TEXT_INPUT_TYPE_NUMBER == UINT32_C(6) &&
+                   CNA_TEXT_INPUT_TYPE_NUMBER_PASSWORD_HIDDEN == UINT32_C(7) &&
+                   CNA_TEXT_INPUT_TYPE_NUMBER_PASSWORD_VISIBLE == UINT32_C(8) &&
+                   CNA_TEXT_INPUT_TYPE_MAXIMUM == UINT32_C(8),
+               "CNA text input identities must remain stable");
+
+_Static_assert(sizeof(CNA_TextEditingEventInfo) == 32U &&
+                   _Alignof(CNA_TextEditingEventInfo) == 8U &&
+                   offsetof(CNA_TextEditingEventInfo, text) == 8U &&
+                   offsetof(CNA_TextEditingEventInfo, start) == 24U &&
+                   offsetof(CNA_TextEditingEventInfo, length) == 28U,
+               "CNA_TextEditingEventInfo layout must remain stable");
+
+_Static_assert(sizeof(CNA_TextEditingCandidatesEventInfo) == 32U &&
+                   _Alignof(CNA_TextEditingCandidatesEventInfo) == 8U &&
+                   offsetof(CNA_TextEditingCandidatesEventInfo, candidates) == 8U &&
+                   offsetof(CNA_TextEditingCandidatesEventInfo, candidate_count) == 16U &&
+                   offsetof(CNA_TextEditingCandidatesEventInfo, selected) == 20U &&
+                   offsetof(CNA_TextEditingCandidatesEventInfo, horizontal) == 24U &&
+                   offsetof(CNA_TextEditingCandidatesEventInfo, reserved) == 25U,
+               "CNA_TextEditingCandidatesEventInfo layout must remain stable");

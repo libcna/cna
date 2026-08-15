@@ -72,9 +72,45 @@ find-by-id helper always writes either the first match or the canonical invalid 
 previous-location helper always reconstructs an output location and reports false when its state
 is invalid, matching CNA's out-parameter behavior.
 
+## Text input
+
+Text input is the one input family that is event-driven rather than sampled, so it is the one that
+carries callbacks. `input_text.h` maps all three canonical events —
+committed text, IME composition and the IME candidate list — as owned
+`CNA_TextInputRegistrationHandle` values. The canonical events are process-wide statics, so a
+subscription takes no game handle; one `cna_text_input_unsubscribe_ext` releases all three kinds,
+because a registration already knows which event it came from.
+
+A committed code unit crosses as a `uint16_t`. A code point above U+FFFF arrives as two calls, a
+high surrogate then a low surrogate, exactly as the canonical event delivers it. The two multi-field
+events hand over a versioned `CNA_TextEditingEventInfo` or `CNA_TextEditingCandidatesEventInfo`
+whose UTF-8 text and candidate strings are `CNA_StringView`s **borrowed only for the duration of the
+callback**; copy them before returning. Composition `start`/`length` are byte offsets into
+multi-byte text, forwarded verbatim and deliberately not range-checked, because the canonical
+dispatch does not check them either.
+
+The three `cna_text_input_raise_*_ext` routes map the canonical internal dispatchers, which is what
+makes the events observable without a real keyboard. Input text is copied and UTF-8 validated before
+dispatch; a refusal dispatches nothing.
+
+The native window is an opaque `uint64_t` the C API never dereferences, and only zero is guarded —
+a nonzero value must be a live window published by the platform layer. A backend that creates a real
+window publishes one automatically, and there activation genuinely takes effect; with no window
+bound, every activation route is a successful no-op and every query answers false. Do not infer
+which case applies from the compiled-in renderer: query the handle, or observe the answers.
+
+An undefined `CNA_TEXT_INPUT_TYPE_*` identity is refused. This is a deliberate deviation: the
+canonical conversion silently falls back to plain text, so a C consumer would otherwise get a
+different keyboard than it asked for without being told.
+
+`cna_text_input_reset_for_tests_ext` maps the canonical test-support reset. It clears the bound
+window handle and drops every subscription to all three events, including registrations this API
+handed out, so releasing one afterwards is a no-op rather than a failure. It changes process-wide
+state a caller may not own; restore the window handle afterwards.
+
 ## Current scope boundary
 
-The input slice deliberately exposes no live native state pointer, per-key platform call, device
-event subscription or callback. Player-index keyboard capture, cursor mutation, gamepad vibration
-and capability/extensions, touch gestures and the remaining equality/hash/string/constructor
-surfaces remain planned for complete-public-API coverage.
+Apart from the text-input events above, the input families deliberately expose no live native state
+pointer, per-key platform call or device event subscription. Touch gestures, the haptics family and
+the remaining `CNA::Input` joystick, sensor, clipboard, power and device-enumeration extensions
+remain planned for complete-public-API coverage.

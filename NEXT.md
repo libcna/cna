@@ -419,6 +419,24 @@
 > answer the backend gives, the success path is exercised fully and the refusal path must leave the
 > output handle invalid. The inventory is now 4,182 implemented, 30 partial, 2,082 planned and 121
 > N/A; all four trees stay green at 51/51.
+>
+> CBIND-037B4d then closes text input, and with it the parent CBIND-037B4. All three canonical
+> events — committed text, IME composition and the SDL3 candidate list — become owned registrations
+> that take **no game handle**, because the canonical events are static and belong to the process;
+> one release route covers all three, since a registration already knows which event it came from.
+> Each event's arguments cross as a versioned info structure of borrowed views valid only for the
+> duration of the callback, so no `std::string` or `std::vector` reaches the ABI. The three
+> `INTERNAL_On*` dispatches become raise routes, which is what makes the whole family observable on
+> a backend with no keyboard or IME. Two canonical behaviors are preserved rather than tidied up:
+> `start`/`length` are byte offsets forwarded verbatim and are deliberately not validated against
+> the composition text, and `selected` is not range-checked against the candidate count. One
+> deliberate deviation is documented: an undefined `CNA_TEXT_INPUT_TYPE_*` is **refused** instead of
+> silently falling back to plain text as the canonical conversion does, so a consumer is never
+> handed a different keyboard than it asked for. The suite probes by behavior, not by renderer
+> identity — a windowed backend publishes a real window into the canonical static, so it forces the
+> unbound case to pin the null-guarded contract, then restores whatever was bound and asserts only
+> the relationship between the answers. The inventory is now 4,209 implemented, 30 partial, 2,055
+> planned and 121 N/A; all four trees stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

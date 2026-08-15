@@ -764,3 +764,16 @@ static_assert(CNA_KEY_MODIFIER_ALL == UINT32_C(0xFF));
 static_assert(sizeof(CNA_MouseCursorHandle) == 8U);
 static_assert(sizeof(CNA_MouseEventRegistrationHandle) == 8U);
 static_assert(CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW == UINT32_C(11));
+
+static_assert(sizeof(CNA_TextInputRegistrationHandle) == 8U);
+static_assert(sizeof(CNA_TextInputType) == sizeof(uint32_t));
+static_assert(CNA_TEXT_INPUT_TYPE_TEXT == UINT32_C(0));
+static_assert(CNA_TEXT_INPUT_TYPE_NUMBER == UINT32_C(6));
+static_assert(CNA_TEXT_INPUT_TYPE_NUMBER_PASSWORD_VISIBLE == UINT32_C(8));
+static_assert(CNA_TEXT_INPUT_TYPE_MAXIMUM == UINT32_C(8));
+static_assert(sizeof(CNA_TextEditingEventInfo) == 32U);
+static_assert(offsetof(CNA_TextEditingEventInfo, text) == 8U);
+static_assert(offsetof(CNA_TextEditingEventInfo, length) == 28U);
+static_assert(sizeof(CNA_TextEditingCandidatesEventInfo) == 32U);
+static_assert(offsetof(CNA_TextEditingCandidatesEventInfo, candidates) == 8U);
+static_assert(offsetof(CNA_TextEditingCandidatesEventInfo, horizontal) == 24U);
