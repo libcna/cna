@@ -1,6 +1,9 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) and all of CBIND-036 under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through all of CBIND-035 and
+> CBIND-036, plus CBIND-037A and CBIND-037B1–B3/B4a–B4c, verified under HEADLESS, SDL_RENDERER,
+> SOFTWARE and a combined ASan+UBSan tree (2026-08-15). Coverage: 4,182 implemented / 2,082 planned
+> — see *Current status* for the remaining order of work.** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -526,9 +529,76 @@ Runtime value is never an acceptable substitute for a C mapping.
 
 ## Current status
 
-`CBIND-000` through `CBIND-034`, slices `CBIND-035A`–`CBIND-035D` and
-`CBIND-035C1`–`CBIND-035E7` and parent `CBIND-035E` are ✅; parent `CBIND-035` remains open, while
-`CBIND-035F` through `CBIND-044` remain ⬜. The
+**Snapshot (2026-08-15, after `CBIND-037B4c`):** 414 headers / 6,415 symbols —
+**4,182 implemented, 30 partial, 2,082 planned, 121 not applicable.**
+Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
+
+### What is closed
+
+| Scope | State |
+|---|---|
+| `CBIND-000`–`CBIND-034` | ✅ all |
+| `CBIND-035` (math, geometry, textures, effects, models, device and draw submission) | ✅ closed by `CBIND-035G` |
+| `CBIND-036` (storage, content, networking, fake-async) | ✅ closed by `CBIND-036E5` |
+| `CBIND-037A` core, `CBIND-037B1`–`B3` gamepad, `CBIND-037B4a`–`B4c` keyboard/mouse/cursor | ✅ |
+
+**Four modules now have no planned row left: `storage`, `content`, `net`, `core`.**
+
+### What remains
+
+Everything still open belongs to `CBIND-037` (2,082 rows), the B7 hardening phase
+(`CBIND-038`–`042`), the CI coverage gate (`CBIND-043`) and the final close (`CBIND-044`).
+`CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
+later one composes the earlier ones:
+
+| Order | Slice | Rows left | Note |
+|---:|---|---:|---|
+| 1 | `CBIND-037B4d` text input | 17 (+10 borrowed) | closes parent `CBIND-037B4` |
+| 2 | `CBIND-037B5` touch and gestures | 80 | |
+| 3 | `CBIND-037B6` haptics | 126 | |
+| 4 | `CBIND-037B7` remaining input extensions | 102 (92 after B4d borrows) | closes parent `CBIND-037B`; joysticks, sensors, clipboard, power, device enumeration |
+| 5 | `CBIND-037C` media | 325 | sub-partition on arrival |
+| 6 | `CBIND-037D` devices and devices-ext | 289 | sensors, vibration, camera, dialogs, system info |
+| 7 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services |
+| 8 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
+| 9 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
+
+After `CBIND-037` closes: `CBIND-043` (make the coverage matrix a configured/CI gate — it already
+passes `--check` deterministically, so this is small and high-leverage), then `CBIND-038`–`042`,
+then `CBIND-044`.
+
+### Working method that produced the closed slices
+
+Repeat it; it is what makes each slice reviewable and each claim checkable.
+
+1. Read the canonical header **and** its `.cpp` — several slices turned on behavior only the
+   implementation shows (a square clamp, an epsilon comparison, a silent drop, a no-op disposal).
+2. Design the C surface; prefer the representation the ABI already has over a second spelling of
+   the same data.
+3. Implement behind `CallWithExceptionBarrier`, validating identities against their `_ALL` masks.
+4. Extend the strict-C smoke test, including every refusal path.
+5. Probe struct layouts with a throwaway `gcc -std=c17` compile, then freeze them in the C and C++
+   ABI assertion files.
+6. Add coverage rules, regenerate, **and check the implemented delta equals the slice's row count**
+   — that check has caught a rule silently claiming another slice's rows.
+7. Update `plan_binding.md`, `AUDIT.md`, `NEXT.md` and the `docs/c-api/` pages.
+8. Verify all four trees, then commit — one task, one commit, explicit file names.
+
+### Recorded deviations and re-partitions
+
+Both kinds are recorded rather than smoothed over; a new context should not "fix" them:
+
+- **Deliberate C-layer deviations:** out-of-range keyboard keys and unchecked
+  `NetworkSessionProperties` indices are refused instead of silently dropped or left undefined;
+  a gamepad snapshot carries one button mask, so a supplied directional pad is merged into it.
+- **Re-partitions:** `LocalNetworkGamer` D→E; three `Create` overloads E4→E2; a minimum
+  gamer-services surface borrowed into E2/E3; `GamePad::GetCapabilities` B3→B1;
+  `Mouse::SetCursor` B4b→B4c; the CNA::Input identity enumerations borrowed from B7 into B3 and
+  B4a.
+
+### Historical narrative (append-only, oldest first)
+
+The
 exported ABI is still experimental `0.1.0`: it contains the version/error substrate, the HEADLESS-
 and SDL_RENDERER-tested C game lifecycle slice, callback-scoped graphics capability discovery and
 owned Color `Texture2D` bulk transfer, batched textured-quad submission, expanded input POD
@@ -734,7 +804,14 @@ opens it with CBIND-037B1: `GamePadType` at its canonical ordinals and the whole
 flags, because every canonical property has both a getter and a setter. One boundary moved while
 implementing it: `GamePad::GetCapabilities` came here from CBIND-037B3, because a capabilities
 value with no producer cannot be tested against anything real. The snapshot is now 3,998
-implemented, 30 partial, 2,270 planned and 117 not applicable. CBIND-037B3 then maps the `GamePad` statics, keeping the canonical
+implemented, 30 partial, 2,270 planned and 117 not applicable. CBIND-037B2 then maps the five
+gamepad value types onto the representations C already had rather than adding a second spelling of
+the same numbers, and preserves three canonical behaviors worth naming: the thumbstick square clamp
+and trigger clamp, the epsilon trigger comparison, and the directional pad's own hash weighting. It
+also records one representational limit instead of hiding it — the C snapshot carries a single
+button mask, so a supplied directional pad is merged into it, which is the relationship every state
+CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial, 2,205 planned and
+117 not applicable. CBIND-037B3 then maps the `GamePad` statics, keeping the canonical
 availability-plus-answer shape of the sensor and touchpad queries instead of folding "no sensor"
 into a failure, and borrowing the three CNA::Input identity enumerations three of those statics
 return. The snapshot is now 4,108 implemented, 30 partial, 2,160 planned and 117 not applicable.
@@ -748,55 +825,74 @@ device. The snapshot is now 4,164 implemented, 30 partial, 2,104 planned and 117
 CBIND-037B4c then closes the mouse cursor, whose stock singletons become borrowed views precisely
 because their canonical disposal is a no-op, and records four honest `not-applicable` rows rather
 than putting an `SDL_Cursor*` in the ABI. The snapshot is now 4,182 implemented, 30 partial, 2,082
-planned and 121 not applicable. CBIND-037B2 then maps the five
-gamepad value types onto the representations C already had rather than adding a second spelling of
-the same numbers, and preserves three canonical behaviors worth naming: the thumbstick square clamp
-and trigger clamp, the epsilon trigger comparison, and the directional pad's own hash weighting. It
-also records one representational limit instead of hiding it — the C snapshot carries a single
-button mask, so a supplied directional pad is merged into it, which is the relationship every state
-CNA itself builds already has. The snapshot is now 4,063 implemented, 30 partial, 2,205 planned and
-117 not applicable.
+planned and 121 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-037B4c is the final task completed in this handoff. Parent
-  CBIND-036 closed with CBIND-036E5, and parent CBIND-035 with CBIND-035G.
-- Next task: `CBIND-037B4d` complete text input (17 planned rows plus a 10-row `TextInputTypeEXT`
-  borrow from CBIND-037B7, which then drops to 92). That closes parent CBIND-037B4. Do not reopen
-  closed CBIND-035, CBIND-036, CBIND-037A, CBIND-037B1–B3 or CBIND-037B4a–B4c slices without a
-  concrete demonstrated defect.
-- When a coverage rule matches a free operator in a shared namespace (`CNA::Input::operator|` and
-  friends), add a `signature_regex`: without one it silently swallows the identically named
-  operators of *other* enumerations in that namespace and claims coverage that does not exist.
-  This was caught once, on the haptics operators, by checking the implemented delta against the
-  slice's row count — always do that check.
-- `sharp-runtime` is a **sibling checkout that other sessions edit live**
+Read *Current status* above first: it carries the snapshot, what is closed, and the ordered list of
+what remains. This section carries only what a fresh context cannot infer from the plan.
+
+### Where things stand
+
+- Branch: `feature/binding`. `CBIND-037B4c` is the last task completed; the working tree is clean
+  and every slice below is committed one-task-one-commit.
+- **Next task:** `CBIND-037B4d`, text input — 17 `TextInputEXT` rows plus a 10-row
+  `TextInputTypeEXT` borrow from `CBIND-037B7` (which then drops to 92). It closes parent
+  `CBIND-037B4`. `TextInputEXT` carries three events (`TextInput`, `TextEditing`,
+  `TextEditingCandidatesEXT`); the owned-registration shape from `cna_mouse_subscribe_clicked_ext`
+  is the precedent to follow, and the `INTERNAL_On*` raises are what make them observable without
+  a real keyboard.
+- Do not reopen a closed slice without a concrete demonstrated defect.
+
+### Verification (do all four before committing a slice)
+
+All four trees live under `/media/robertvokac/claude/tmp/cna/` (off the repo, on the scratch
+partition, with `CCACHE_DIR=/media/robertvokac/claude/tmp/ccache`). Build only `modules/c-api` in
+each — `make -C <tree>/modules/c-api -j3` — never the default `all` target, which pulls in
+unrelated modules and examples. Then `ctest --test-dir modules/c-api`. Cap parallelism at `-j3`.
+
+| Tree | Configuration | Why it exists |
+|---|---|---|
+| `cmake-build-binding-headless` | `HEADLESS`, `CNA_CNAEXT=OFF` | deterministic state; the no-extension-layer half |
+| `cmake-build-binding-sdlrenderer` | `SDL_RENDERER`, `CNA_CNAEXT=ON` | the extension-layer half; needs `SDL_VIDEODRIVER=dummy` |
+| `cmake-build-binding-software` | `SOFTWARE` | the only tree that can supply real 3D pixel evidence |
+| `cmake-build-binding-asan` | `SOFTWARE`, `CNA_CNAEXT=ON`, `CNA_SANITIZE=address,undefined` | verification only |
+
+All four run the same 51 C API tests green. The sanitizer tree runs with
+`ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=print_stacktrace=1` — stricter than the
+`detect_leaks=0` the CBIND-035B–E slices used; **do not weaken it back**. Every tree needs
+`-DCNA_BUILD_C_API=ON`, which defaults to OFF: a freshly configured tree silently has no
+`modules/c-api` build directory at all without it.
+
+**Never branch a test on a renderer identity.** Probe the capability or the actual result, so a new
+backend needs no test edits. `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and `CApi_LifecycleSmoke`
+were rewritten once for exactly this reason.
+
+### Traps this campaign actually hit
+
+- **Coverage rules on free operators need a `signature_regex`.** `^CNA::Input::operator\|$` with no
+  signature also swallowed `HapticFeatureEXT`'s five operators and claimed haptics coverage that
+  does not exist. Caught only by comparing the implemented delta against the slice's row count —
+  **always do that comparison** after regenerating.
+- **`sharp-runtime` is a sibling checkout other sessions edit and commit to mid-build**
   (`/rv/data/development/github.com/openeggbert/sharp-runtime`). A build failure inside it is very
-  likely someone else's in-progress edit, not a regression here: check `git status`/`git log` there
-  before diagnosing anything, and never modify that tree from this task.
-- Known unrelated breakage found while verifying: the aggregate `CnaTests` target globs
-  `modules/*/tests/*.cpp`, which now picks up `modules/c-api/tests/cpp/AbiHeaderCpp.cpp` — a
-  standalone C API ABI translation unit that is not a GTest unit and has no `CNA/C` include path
-  there. `cmake/UnitTests.cmake` already excludes the Glide ABI programs and the module probes for
-  the same reason; the C API's own test tree needs the same exclusion. The 50 C API tests are
-  unaffected.
-- Sanitizer baseline: `cmake-build-binding-asan` is a fourth, verification-only tree
-  (`-DCNA_GRAPHICS_RENDERER=SOFTWARE -DCNA_CNAEXT=ON -DCNA_SANITIZE=address,undefined
-  -DCNA_BUILD_C_API=ON`). All 51 C API tests pass there with `ASAN_OPTIONS=detect_leaks=1`, which
-  is stricter than the `detect_leaks=0` the earlier slices used. Build only `modules/c-api` in it.
-- Verification baseline: three trees each run the same 51 C API tests green — HEADLESS,
-  SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
-  the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
-  probe the capability or the actual result, so a new backend needs no test edits. The
-  SDL_RENDERER tree is configured with `-DCNA_CNAEXT=ON` and the HEADLESS tree without it, so the
-  same strict-C source covers both extension-layer states. SDL tests
-  and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
-  use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-037B4c: 414 headers / 6,415 symbols; 4,182 implemented, 30
-  partial, 2,082 planned and 121 not applicable. Regenerate/check with
-  `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
-- `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
-  binding is in scope; do not plan or implement C# or other language bindings.
-- Preserve one task per commit, stage explicit file names only, and keep unrelated worktree changes
-  out of commits. The repository has no `CNA` target in the configured build trees; the affected
-  build target is `cna_c_api` plus the strict-C and C/C++ ABI targets.
+  likely someone else's work in progress, not a regression here: run `git status` and `git log` in
+  *that* tree before diagnosing, and never modify it from this task.
+- **Out-parameter clobbering.** Routes set `*out = CNA_INVALID_HANDLE` before validating, so
+  reusing one variable for an expected-failure call destroys a live handle. Hit three times; use a
+  separate scratch variable for the failure case.
+- **Do not pipe a build into `grep … | head`.** SIGPIPE kills the build and leaves a target
+  unlinked, which then shows up as a mysterious "Not Run" in ctest. Redirect to a log and grep the
+  log.
+- Read the canonical `.cpp`, not just the header. Several slices turned on behavior only the
+  implementation reveals: a square clamp, an epsilon comparison, a silent drop, a no-op disposal,
+  a hash that ignores half the fields.
+
+### Standing constraints
+
+- `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are **strictly read-only**.
+- Only the C binding is in scope. Do not plan or implement C#, .NET, JavaScript, Rust, Python,
+  Java, Zig, Go, Swift or any other language binding.
+- One task, one commit. Stage explicit file names; never `git add -A`. Do not push unless asked.
+- Build targets are `cna_c_api` plus the strict-C and C/C++ ABI targets; there is no `CNA` target
+  in the configured build trees.
