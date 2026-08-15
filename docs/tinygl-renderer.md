@@ -37,11 +37,13 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | Resize | ✅ | `ZB_resize`, no context teardown; private width is padded up to a multiple of four so upstream cannot truncate logical columns. |
 | `Texture2D` create/update/`GetData` | ✅ | `GetData` is exact (CPU shadow), alpha included. |
 | Perspective projection | ✅ | Real w-divide: a quad at z=-6 covers 256 px where the same quad at z=0 covers 1521. |
+| Perspective-correct texture mapping | ✅ | An analytical control pixel distinguishes reciprocal-W interpolation from affine interpolation. |
 | Depth-buffer occlusion | ✅ | Draw-order independent; `DepthStencilState::DepthRead` tests without writing. |
 | Modelview transform | ✅ | A 60° Y rotation foreshortens 1521 px to 854 px. |
 | 3D `VertexPositionColor` (stride 16) | ✅ | `glDrawArrays`. |
 | 3D `VertexPositionColorTexture` (stride 24) | ✅ | Texel × vertex colour, which is XNA's own modulate. |
-| Indexed draws | ✅ | `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
+| Point, line and triangle topologies | ✅ | `PointListEXT`, `LineList`, `LineStrip`, `TriangleList` and `TriangleStrip` are all exercised. |
+| Indexed draws | ✅ | Both 16-bit and 32-bit indices through `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
 | Draw offsets (`vertexStart`, `startIndex`, `baseVertex`, `VertexOffset`) | ✅ | |
 | `BasicEffect`: `VertexColorEnabled`, `DiffuseColor`, `Alpha`, `TextureEnabled` | ✅ | |
 | `SpriteBatch` (source/dest rects, tint, rotation, origin, flips) | ✅ | Real viewport-local textured quads; origin uses source-rectangle texels. |
@@ -176,8 +178,9 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
 
-Six suites, 81 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
-`TinyGL_State` (9), `TinyGL_Rejection` (17), and the post-audit `TinyGL_Contract` (30). All pass.
+Seven suites, 87 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+`TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
+`TinyGL_DrawRoutes` (6). All pass.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

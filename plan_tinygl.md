@@ -29,8 +29,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 6 CTest suites, 81 checks,
-6/6 passing under
+**Delivered and green after the post-implementation contract audit.** 7 CTest suites, 87 checks,
+7/7 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -55,9 +55,11 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   order, `DepthStencilState::DepthRead`'s test-without-write, modelview rotation that really
   foreshortens (1521 px -> 854 px at 60 degrees about Y), and perspective texture mapping. All
   measured by `TinyGL_3D`.
-- 3D: the `VertexPositionColor` (stride 16) and `VertexPositionColorTexture` (stride 24) routes,
-  non-indexed (`glDrawArrays`) and indexed (`glArrayElement` inside `glBegin`/`glEnd`), honouring
-  `vertexStart`, `startIndex`, `baseVertex` and the stream's `VertexOffset`.
+- 3D: the `VertexPositionColor` (stride 16) and `VertexPositionColorTexture` (stride 24) routes;
+  every point, line and triangle topology; non-indexed (`glDrawArrays`) and 16/32-bit indexed
+  (`glArrayElement` inside `glBegin`/`glEnd`) draws; and `vertexStart`, `startIndex`, `baseVertex`
+  plus the stream's `VertexOffset`. A pixel-level analytical test distinguishes real reciprocal-W
+  texture interpolation from an affine substitute.
 - `BasicEffect`'s `VertexColorEnabled`, `DiffuseColor`, `Alpha` and `TextureEnabled`; packed vertex
   colour is multiplied by the forwarded diffuse/alpha material exactly once.
 - 2D: a real textured, viewport-local `SpriteBatch` quad path with source/destination rectangles,
@@ -149,6 +151,7 @@ them are refused one step earlier.
 | `TINYGL-15` | `docs/tinygl-renderer.md` capability boundary | **DONE** |
 | `TINYGL-20` | Post-audit contract remediation: explicit effect identity, vertex-alpha cutout, depth-clear validation and transactional overflow-safe resize | **DONE** |
 | `TINYGL-21` | Make OpenMP optional: accelerated when found, complete single-threaded archive with no runtime dependency otherwise | **DONE** |
+| `TINYGL-22` | `TinyGL_DrawRoutes` (6 checks): every topology, 32-bit indices and analytical perspective-correct texture mapping proof | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
 | `TINYGL-18` | `VertexPositionNormalTexture` (stride 32) route, prerequisite for TINYGL-16 | **OPEN** |
