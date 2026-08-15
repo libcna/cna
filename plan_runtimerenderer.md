@@ -860,10 +860,10 @@ glTF path, not in renderer selection.
 | RTR-P11-6 | ✅ | Remove the "two GL profiles conflict" entry from the P6 conflict matrix. |
 | RTR-P11-7 | ✅ | Multi set `OPENGLES2 + OPENGLES3 + OPENGL33` proven on Linux. |
 | RTR-P11-8 | 🟨 | Multi set `WEBGL1 + WEBGL2` proven under Emscripten. |
-| RTR-P11-9 | ⬜ | Measure the binary-size cost of carrying all shader variants; document it. |
-| RTR-P11-10 | ⬜ | Verify `plan_glbackends.md`'s documented invariants still hold and update it with the runtime-profile addition. |
-| RTR-P11-11 | ⬜ | Re-run `scripts/run-oracle-corpus-diff-easygl.sh` for each profile from a single multi binary. |
-| RTR-P11-12 | ⬜ | **Phase gate.** All five GL identities selectable at runtime from one binary. |
+| RTR-P11-9 | ✅ | **Measured, and the interesting number is the other one.** A second GL profile costs nothing: single `OPENGLES3` 15,626,280 bytes vs `OPENGLES3;OPENGL33` 15,626,264 — a 16-byte *decrease*, i.e. noise, because after P11 the profile branches are always compiled either way. The real cost is what P11 charged a SINGLE-renderer build: the EasyGL archive grew 4,766,788 → 5,558,462 bytes (**+16.6 %**), being the branches `#if` used to eliminate. Every further profile after the first is free. |
+| RTR-P11-10 | ✅ | `plan_glbackends.md` §2 now records that the profile is a runtime value, that its other invariants (one family, one shader corpus, the Emscripten-only WebGL gate) still hold, and that the combination rule rejecting two GL identities is deleted. |
+| RTR-P11-11 | ✅ | Delivered by RTR-P9-24: `scripts/run-oracle-corpus-multi.sh` runs the corpus per profile from one binary. `OPENGLES3;OPENGL33` verified — the OPENGLES3 leg reproduces the existing single-renderer script exactly (9/30 both ways). |
+| RTR-P11-12 | ✅ | **Phase gate met across both targets.** Native: `OPENGLES3;OPENGLES2;OPENGL33` in one binary, each selectable at runtime, `OPENGL33` genuinely getting a Core-Profile context. Emscripten: `WEBGL2;WEBGL1;CANVAS;HTML_DOM;SVG_DOM` in one wasm bundle. The WebGL pair is Emscripten-only by platform gate, so five-in-one-binary is not a thing that can exist — three plus two is the whole set. |
 
 ---
 

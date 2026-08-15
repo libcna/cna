@@ -237,6 +237,12 @@ It deliberately does **not** compare two renderers' answers to each other: rende
 differ (SOFTWARE rasterizes, STUB renders nothing). What they may not do is disagree about the
 framework contract.
 
+**What a second renderer costs.** Adding another GL profile is free: `OPENGLES3` alone and
+`OPENGLES3;OPENGL33` produce the same binary to within 16 bytes, because after phase P11 the profile
+branches are compiled either way. The cost was paid once, by that phase, in the single-renderer
+build: the EasyGL archive grew 16.6 % (4.77 MB → 5.56 MB) when `#if`-eliminated branches became
+runtime ones. Every profile after the first is free.
+
 Cost of that set versus a single-renderer `HEADLESS` build: the `CnaTests` binary grows from
 238.5 MB to 241.2 MB (**+1.2 %**) for two additional renderers. The runtime cost is one
 function-pointer call per `GraphicsDevice` construction and none per frame.
