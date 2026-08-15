@@ -23,7 +23,7 @@ namespace CNA::Internal::Renderers::TinyGL
      * colour -- is not expressible either way.
      *
      * This handle therefore keeps the record bytes CNA-side, and the draw path de-interleaves the
-     * buffer into the three tightly packed float arrays TinyGL's API actually defines
+     * buffer into tightly packed float arrays TinyGL's API actually defines
      * (`TinyGLRenderer::BindVertexArrays`). Everything after that -- transform, clip, cull,
      * rasterize, texture, blend -- is TinyGL's own vertex-array path.
      */
@@ -328,9 +328,11 @@ namespace CNA::Internal::Renderers::TinyGL
      * `glBlendFunc`, `glCullFace`, `glPolygonMode`, `glDepthMask`).
      *
      * Scope, stated as capability truth rather than intent:
-     *  - 3D: the unlit `VertexPositionColor` (stride 16) and `VertexPositionColorTexture`
-     *    (stride 24) routes. `BasicEffect`'s `VertexColorEnabled`, `DiffuseColor`, `Alpha` and
-     *    `TextureEnabled` are honoured; lighting, fog, alpha test, skinning, dual-texture,
+     *  - 3D: the four built-in fixed-function vertex layouts: `VertexPositionColor` (stride 16),
+     *    `VertexPositionTexture` (stride 20), `VertexPositionColorTexture` (stride 24) and
+     *    `VertexPositionNormalTexture` (stride 32). `BasicEffect`'s `VertexColorEnabled`,
+     *    `DiffuseColor`, `Alpha` and `TextureEnabled` are honoured; lighting, fog, alpha test,
+     *    skinning, dual-texture,
      *    environment mapping, PBR, instancing and multi-stream input are **refused
      *    deterministically**, never approximated.
      *  - 2D: a real textured SpriteBatch quad path.
@@ -823,7 +825,7 @@ namespace CNA::Internal::Renderers::TinyGL
                               const char* route,
                               const std::vector<std::uint32_t>& referencedVertices);
         /// Tears the array pointers down again, leaving no client state pointing at freed memory.
-        void UnbindVertexArrays(bool textured);
+        void UnbindVertexArrays(bool textured, bool normal);
         /// Installs world/view/projection through TinyGL's own matrix stack.
         void LoadDrawMatrices(const Matrix& world, const Matrix& view, const Matrix& projection);
         /// Shared body of both non-indexed routes.

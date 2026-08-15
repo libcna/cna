@@ -40,9 +40,11 @@ namespace CNA::Internal::Renderers::TinyGL
         /// The renderer's public CNA identity, used verbatim in every diagnostic below.
         constexpr const char* kRendererName = "TINYGL";
 
-        /// Stride of the two vertex layouts the fixed-function routes can fetch.
+        /// Strides of the four built-in vertex layouts the fixed-function routes can fetch.
         constexpr std::size_t kPositionColorStride = 16;
+        constexpr std::size_t kPositionTextureStride = 20;
         constexpr std::size_t kPositionColorTextureStride = 24;
+        constexpr std::size_t kPositionNormalTextureStride = 32;
 
         /// TinyGL's own discard key (TGL_NO_DRAW_COLOR in zfeatures.h). A textured fragment whose
         /// texel matches this colour is not drawn at all -- the only transparency TinyGL has.
@@ -516,6 +518,7 @@ namespace CNA::Internal::Renderers::TinyGL
         /// They must outlive the draw because TinyGL stores the pointers, not the data.
         std::vector<float> scratchPositions;
         std::vector<float> scratchColors;
+        std::vector<float> scratchNormals;
         std::vector<float> scratchTexCoords;
     };
 
@@ -1030,18 +1033,34 @@ namespace CNA::Internal::Renderers::TinyGL
     {
         const std::size_t stride = vb.StrideInBytes();
         const bool textured = state.texture != nullptr;
-        const std::size_t expected = textured ? kPositionColorTextureStride : kPositionColorStride;
+        const bool hasPackedColor =
+            stride == kPositionColorStride || stride == kPositionColorTextureStride;
+        const bool hasTexCoords =
+            stride == kPositionTextureStride || stride == kPositionColorTextureStride ||
+            stride == kPositionNormalTextureStride;
+        const bool hasNormal = stride == kPositionNormalTextureStride;
 
-        if (stride != expected)
+        if (!hasPackedColor && !hasTexCoords)
             Unsupported(
-                std::string("the ") + route + " draw needs the " +
-                (textured ? "VertexPositionColorTexture (stride 24)" : "VertexPositionColor (stride 16)") +
-                " layout; the bound vertex buffer's stride is " + std::to_string(stride) + " bytes.");
+                std::string("the ") + route + " draw needs VertexPositionColor (stride 16), "
+                "VertexPositionTexture (stride 20), VertexPositionColorTexture (stride 24), or "
+                "VertexPositionNormalTexture (stride 32); the bound vertex buffer's stride is " +
+                std::to_string(stride) + " bytes.");
+        if (state.vertexColorEnabled && !hasPackedColor)
+            Unsupported(
+                std::string("the ") + route +
+                " draw enables BasicEffect.VertexColorEnabled, but the bound vertex layout has "
+                "no Color element.");
+        if (textured && !hasTexCoords)
+            Unsupported(
+                std::string("the ") + route +
+                " draw enables BasicEffect.TextureEnabled, but the bound vertex layout has no "
+                "TextureCoordinate element.");
 
         // A stride does not determine element composition: a declaration that puts something else
         // in the same bytes is refused here, before any TinyGL call, rather than reinterpreted.
         CNA::Internal::Graphics::RequireFaithfulVertexDeclaration(
-            vb.DeclaredLayout(), static_cast<int>(expected),
+            vb.DeclaredLayout(), static_cast<int>(stride),
             CNA::Internal::Graphics::UnlistedStrideLayout::RendererRefusesIt,
             kRendererName, route);
 
@@ -1049,7 +1068,7 @@ namespace CNA::Internal::Renderers::TinyGL
         // ignores the `type` argument entirely and always reads floats -- and its stride counts EXTRA
         // FLOATS between records, not bytes (arrays.c: `i = idx * (size + stride)`). An interleaved
         // XNA record with a packed 4-byte colour cannot be described that way at all, so the buffer
-        // is de-interleaved into three tightly packed float arrays here and TinyGL is handed exactly
+        // is de-interleaved into tightly packed float arrays here and TinyGL is handed exactly
         // the shape its API defines. Every transform, clip, raster and texel decision after this
         // point is still TinyGL's.
         const int vertexCount = vb.GetVertexCount();
@@ -1101,9 +1120,11 @@ namespace CNA::Internal::Renderers::TinyGL
 
         auto& positions = impl_->scratchPositions;
         auto& colors = impl_->scratchColors;
+        auto& normals = impl_->scratchNormals;
         auto& texCoords = impl_->scratchTexCoords;
         positions.resize(static_cast<std::size_t>(vertexCount) * 3u);
-        colors.resize(static_cast<std::size_t>(vertexCount) * 4u);
+        if (hasPackedColor) colors.resize(static_cast<std::size_t>(vertexCount) * 4u);
+        if (hasNormal) normals.resize(static_cast<std::size_t>(vertexCount) * 3u);
         if (textured) texCoords.resize(static_cast<std::size_t>(vertexCount) * 2u);
 
         for (int i = 0; i < vertexCount; ++i)
@@ -1115,15 +1136,30 @@ namespace CNA::Internal::Renderers::TinyGL
             positions[static_cast<std::size_t>(i) * 3u + 1] = position[1];
             positions[static_cast<std::size_t>(i) * 3u + 2] = position[2];
 
-            // XNA packs Color as four unsigned bytes in RGBA order at offset 12 of both layouts.
-            for (int c = 0; c < 4; ++c)
-                colors[static_cast<std::size_t>(i) * 4u + static_cast<std::size_t>(c)] =
-                    (static_cast<float>(record[12 + c]) / 255.0f) * state.diffuse[c];
+            if (hasPackedColor)
+            {
+                // XNA packs Color as four unsigned bytes in RGBA order at offset 12.
+                for (int c = 0; c < 4; ++c)
+                    colors[static_cast<std::size_t>(i) * 4u + static_cast<std::size_t>(c)] =
+                        (static_cast<float>(record[12 + c]) / 255.0f) * state.diffuse[c];
+            }
+
+            if (hasNormal)
+            {
+                float normal[3];
+                std::memcpy(normal, record + 12, sizeof(normal));
+                normals[static_cast<std::size_t>(i) * 3u + 0] = normal[0];
+                normals[static_cast<std::size_t>(i) * 3u + 1] = normal[1];
+                normals[static_cast<std::size_t>(i) * 3u + 2] = normal[2];
+            }
 
             if (textured)
             {
                 float uv[2];
-                std::memcpy(uv, record + 16, sizeof(uv));
+                const std::size_t uvOffset =
+                    stride == kPositionTextureStride ? 12u :
+                    stride == kPositionColorTextureStride ? 16u : 24u;
+                std::memcpy(uv, record + uvOffset, sizeof(uv));
                 texCoords[static_cast<std::size_t>(i) * 2u + 0] = uv[0];
                 texCoords[static_cast<std::size_t>(i) * 2u + 1] = uv[1];
             }
@@ -1155,6 +1191,16 @@ namespace CNA::Internal::Renderers::TinyGL
             glColor4f(state.diffuse[0], state.diffuse[1], state.diffuse[2], state.diffuse[3]);
         }
 
+        if (hasNormal)
+        {
+            glEnableClientState(GL_NORMAL_ARRAY);
+            glNormalPointer(GL_FLOAT, 0, normals.data());
+        }
+        else
+        {
+            glDisableClientState(GL_NORMAL_ARRAY);
+        }
+
         if (textured)
         {
             glEnableClientState(GL_TEXTURE_COORD_ARRAY);
@@ -1170,13 +1216,14 @@ namespace CNA::Internal::Renderers::TinyGL
         return true;
     }
 
-    void TinyGLRenderer::UnbindVertexArrays(bool textured)
+    void TinyGLRenderer::UnbindVertexArrays(bool textured, bool normal)
     {
         if (textured)
         {
             glDisableClientState(GL_TEXTURE_COORD_ARRAY);
             glDisable(GL_TEXTURE_2D);
         }
+        if (normal) glDisableClientState(GL_NORMAL_ARRAY);
         glDisableClientState(GL_COLOR_ARRAY);
         glDisableClientState(GL_VERTEX_ARRAY);
     }
@@ -1227,7 +1274,8 @@ namespace CNA::Internal::Renderers::TinyGL
         if (!BindVertexArrays(*vb, state, route, referencedVertices)) return;
         LoadDrawMatrices(world, view, projection);
         glDrawArrays(mode, static_cast<GLint>(firstElement), vertexCount);
-        UnbindVertexArrays(state.texture != nullptr);
+        UnbindVertexArrays(state.texture != nullptr,
+                           vb->StrideInBytes() == kPositionNormalTextureStride);
     }
 
     void TinyGLRenderer::DrawIndexedCommon(const IVertexBufferRenderer& vbBase,
@@ -1279,7 +1327,8 @@ namespace CNA::Internal::Renderers::TinyGL
         glBegin(mode);
         for (const std::uint32_t element : elements) glArrayElement(static_cast<GLint>(element));
         glEnd();
-        UnbindVertexArrays(state.texture != nullptr);
+        UnbindVertexArrays(state.texture != nullptr,
+                           vb->StrideInBytes() == kPositionNormalTextureStride);
     }
 
     void TinyGLRenderer::DrawColoredPrimitives(const IVertexBufferRenderer& vb,

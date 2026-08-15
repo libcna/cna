@@ -41,7 +41,9 @@ no-opped. ⚠️ = accepted, but executed as a documented approximation (see the
 | Depth-buffer occlusion | ✅ | Draw-order independent; `DepthStencilState::DepthRead` tests without writing. |
 | Modelview transform | ✅ | A 60° Y rotation foreshortens 1521 px to 854 px. |
 | 3D `VertexPositionColor` (stride 16) | ✅ | `glDrawArrays`. |
+| 3D `VertexPositionTexture` (stride 20) | ✅ | UV plus `BasicEffect.DiffuseColor`, with no invented color channel. |
 | 3D `VertexPositionColorTexture` (stride 24) | ✅ | Texel × vertex colour, which is XNA's own modulate. |
+| 3D `VertexPositionNormalTexture` (stride 32) | ✅ | Normal and UV arrays are both bound; lighting is tracked separately below. |
 | Point, line and triangle topologies | ✅ | `PointListEXT`, `LineList`, `LineStrip`, `TriangleList` and `TriangleStrip` are all exercised. |
 | Indexed draws | ✅ | Both 16-bit and 32-bit indices through `glArrayElement` inside `glBegin`/`glEnd` — TinyGL has **no `glDrawElements`**. |
 | Draw offsets (`vertexStart`, `startIndex`, `baseVertex`, `VertexOffset`) | ✅ | |
@@ -178,9 +180,9 @@ TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
 
-Seven suites, 87 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
+Eight suites, 91 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
-`TinyGL_DrawRoutes` (6). All pass.
+`TinyGL_DrawRoutes` (6), plus `TinyGL_FixedLayouts` (4). All pass.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at
 z=0 with identity matrices, which a purely 2D rasterizer would also pass. `TinyGL_3D` is what

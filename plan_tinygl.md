@@ -29,8 +29,8 @@ zlib does not have — an acknowledgment in the product **and its documentation*
 
 ## Status
 
-**Delivered and green after the post-implementation contract audit.** 7 CTest suites, 87 checks,
-7/7 passing under
+**Delivered and green after the post-implementation contract audit.** 8 CTest suites, 91 checks,
+8/8 passing under
 `-DCNA_GRAPHICS_RENDERER=TINYGL`. Public renderer identity count is **47**
 (`scripts/check_renderer_identities.py`).
 
@@ -55,8 +55,10 @@ zlib does not have — an acknowledgment in the product **and its documentation*
   order, `DepthStencilState::DepthRead`'s test-without-write, modelview rotation that really
   foreshortens (1521 px -> 854 px at 60 degrees about Y), and perspective texture mapping. All
   measured by `TinyGL_3D`.
-- 3D: the `VertexPositionColor` (stride 16) and `VertexPositionColorTexture` (stride 24) routes;
-  every point, line and triangle topology; non-indexed (`glDrawArrays`) and 16/32-bit indexed
+- 3D: all four built-in fixed-function layouts: `VertexPositionColor` (stride 16),
+  `VertexPositionTexture` (stride 20), `VertexPositionColorTexture` (stride 24), and
+  `VertexPositionNormalTexture` (stride 32); every point, line and triangle topology;
+  non-indexed (`glDrawArrays`) and 16/32-bit indexed
   (`glArrayElement` inside `glBegin`/`glEnd`) draws; and `vertexStart`, `startIndex`, `baseVertex`
   plus the stream's `VertexOffset`. A pixel-level analytical test distinguishes real reciprocal-W
   texture interpolation from an affine substitute.
@@ -154,7 +156,7 @@ them are refused one step earlier.
 | `TINYGL-22` | `TinyGL_DrawRoutes` (6 checks): every topology, 32-bit indices and analytical perspective-correct texture mapping proof | **DONE** |
 | `TINYGL-16` | Fixed-function lighting via `glLight*` | **OPEN** — needs its own owner instruction |
 | `TINYGL-17` | Golden-image reuse against the shared `examples/golden/` corpus | **OPEN** |
-| `TINYGL-18` | `VertexPositionNormalTexture` (stride 32) route, prerequisite for TINYGL-16 | **OPEN** |
+| `TINYGL-18` | Fixed-function layouts without packed color: `VertexPositionTexture` (stride 20) and `VertexPositionNormalTexture` (stride 32), including normal-array binding for TINYGL-16 | **DONE** |
 | `TINYGL-19` | Windows/macOS build verification (only Linux x86_64 has been run) | **OPEN** |
 
 ## Design decisions
@@ -260,11 +262,9 @@ than overridden.
 
 Each needs its own explicit owner instruction, exactly like every other renderer's plan.
 
-1. `TINYGL-16`/`TINYGL-18` — fixed-function lighting. TinyGL has a complete `glLight*`/`glMaterial*`
-   pipeline that CNA does not currently drive. Doing it properly needs the stride-32
-   `VertexPositionNormalTexture` route first, and then a careful translation of XNA's
-   `BasicEffect` lighting parameters onto TinyGL's material model — `OPENGL1`'s own phase 4 is the
-   obvious reference.
+1. `TINYGL-16` — fixed-function lighting. The stride-32 `VertexPositionNormalTexture` prerequisite
+   is complete; TinyGL's `glLight*`/`glMaterial*` pipeline still needs a careful translation of
+   XNA's `BasicEffect` lighting parameters. `OPENGL1`'s own phase 4 is the obvious reference.
 2. `TINYGL-17` — golden-image reuse. `OPENGL1` reuses `examples/golden/`'s checked-in PNGs through
    the shared `PixelTestGame::CompareGoldenImage()` helper; the flat, edge-free scenes in that
    corpus are the ones a second fixed-function rasterizer can match. The 256×256 texture resample
