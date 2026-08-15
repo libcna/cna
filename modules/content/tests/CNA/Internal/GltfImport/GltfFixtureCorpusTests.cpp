@@ -444,9 +444,8 @@ TEST(GltfFixtureCorpus, ViewerRetakeMatrixIsPinnedCompleteAndStrict)
 
 TEST(GltfFixtureCorpus, VulkanMaterialL7ReportIsCompleteExactAndReproducible)
 {
-    // GLTF-244: EasyGL already owns the complete corpus oracle.  The second-renderer material
-    // claim is narrower, so keep its exact 14-fixture boundary, zero-delta policy, input hashes
-    // and Vulkan goldens reviewable without requiring a display in this integrity test.
+    // GLTF-244: keep the fast 14-fixture material subset independently reviewable even though the
+    // later GLTF-385 campaign now gives Vulkan its own complete corpus oracle too.
     const std::filesystem::path repository =
         CorpusDirectory().parent_path().parent_path().parent_path();
     const std::filesystem::path reportPath =
@@ -506,6 +505,132 @@ TEST(GltfFixtureCorpus, VulkanMaterialL7ReportIsCompleteExactAndReproducible)
     EXPECT_NE(std::string::npos, scriptText.find("require_equal(first, second"));
     EXPECT_NE(std::string::npos, scriptText.find("maximum != 0"));
     EXPECT_NE(std::string::npos, scriptText.find("[Vulkan] GPU:"));
+}
+
+TEST(GltfFixtureCorpus, VulkanCorpusL7ReportIsCompleteExactAndReproducible)
+{
+    // GLTF-385/390/391: verify the permanent evidence without requiring Vulkan, SDL or a display.
+    // The system retake proves pixels; this integrity gate proves that its claimed 145 inputs,
+    // exact 137 renderer-owned goldens, eight safe rejections and zero-delta policy are the bytes
+    // actually present in this checkout.
+    const std::filesystem::path repository =
+        CorpusDirectory().parent_path().parent_path().parent_path();
+    const std::filesystem::path policyPath =
+        repository / "tests" / "gltf-l7" / "vulkan-policy.json";
+    const std::filesystem::path reportPath =
+        repository / "docs" / "gltf-l7-vulkan-corpus-report.json";
+
+    JsonValue policy;
+    const std::vector<std::uint8_t> policyBytes = ReadAllBytes(policyPath);
+    ASSERT_NO_THROW(policy = CNA::Internal::ParseJson(
+        std::string(policyBytes.begin(), policyBytes.end())));
+    ASSERT_EQ(JsonType::Object, policy.type);
+    EXPECT_EQ("VULKAN", StringOr(policy, "renderer", ""));
+    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "rgbTolerance", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(policy, "goldenComparison"), "alphaTolerance", -1.0));
+    const std::vector<std::string> tasks = Strings(Member(policy, "tasks"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-385"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-390"));
+    EXPECT_NE(tasks.end(), std::find(tasks.begin(), tasks.end(), "GLTF-391"));
+
+    JsonValue report;
+    const std::vector<std::uint8_t> reportBytes = ReadAllBytes(reportPath);
+    ASSERT_NO_THROW(report = CNA::Internal::ParseJson(
+        std::string(reportBytes.begin(), reportBytes.end())));
+    ASSERT_EQ(JsonType::Object, report.type);
+    EXPECT_EQ("VULKAN", StringOr(report, "renderer", ""));
+    EXPECT_EQ(145.0, NumberOr(report, "distinctAssetCount", -1.0));
+    EXPECT_EQ(137.0, NumberOr(report, "capturedAssetCount", -1.0));
+    EXPECT_EQ(8.0, NumberOr(report, "rejectedAssetCount", -1.0));
+    EXPECT_EQ(2.0, NumberOr(Member(report, "capture"), "processesPerAsset", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "rgbTolerance", -1.0));
+    EXPECT_EQ(0.0, NumberOr(Member(report, "goldenComparison"), "alphaTolerance", -1.0));
+    EXPECT_FALSE(StringOr(Member(Member(report, "capture"), "environment"),
+                          "VK_DRIVER_FILES", "").empty());
+    const JsonValue& rendererEnvironment = Member(report, "rendererEnvironment");
+    ASSERT_EQ(JsonType::Array, rendererEnvironment.type);
+    ASSERT_EQ(1u, rendererEnvironment.arrayValue.size());
+    EXPECT_NE(std::string::npos, rendererEnvironment.arrayValue.front().stringValue.find("llvmpipe"));
+    const JsonValue& activeDivergences =
+        Member(Member(report, "classification"), "activeGoldenDivergences");
+    ASSERT_EQ(JsonType::Array, activeDivergences.type);
+    EXPECT_TRUE(activeDivergences.arrayValue.empty());
+
+    const std::vector<std::string> fixtureIds = CorpusFixtureIds();
+    ASSERT_EQ(145u, fixtureIds.size());
+    const std::set<std::string> expectedIds(fixtureIds.begin(), fixtureIds.end());
+    const JsonValue& assets = Member(report, "assets");
+    ASSERT_EQ(JsonType::Array, assets.type);
+    ASSERT_EQ(expectedIds.size(), assets.arrayValue.size());
+
+    std::set<std::string> seen;
+    std::set<std::string> capturedIds;
+    std::size_t rejected = 0;
+    System::Security::Cryptography::SHA256 sha;
+    for (const JsonValue& result : assets.arrayValue)
+    {
+        const std::string id = StringOr(result, "id", "");
+        ASSERT_NE(expectedIds.end(), expectedIds.find(id)) << "unknown Vulkan L7 asset " << id;
+        EXPECT_TRUE(seen.insert(id).second) << "duplicate Vulkan L7 result " << id;
+
+        const std::filesystem::path source =
+            CorpusDirectory() / StringOr(result, "source", "");
+        ASSERT_TRUE(std::filesystem::is_regular_file(source)) << source.string();
+        EXPECT_EQ(StringOr(result, "sourceSha256", ""),
+                  HexDigest(sha.ComputeHash(ReadAllBytes(source)))) << id;
+
+        const std::string disposition = StringOr(result, "disposition", "");
+        if (disposition == "capture")
+        {
+            capturedIds.insert(id);
+            const std::filesystem::path golden =
+                repository / StringOr(result, "golden", "");
+            ASSERT_TRUE(std::filesystem::is_regular_file(golden)) << golden.string();
+            const std::string digest = HexDigest(sha.ComputeHash(ReadAllBytes(golden)));
+            EXPECT_EQ(StringOr(result, "goldenPngSha256", ""), digest) << id;
+            EXPECT_EQ(StringOr(result, "twoProcessPngSha256", ""), digest) << id;
+            EXPECT_TRUE(BoolOr(result, "twoProcessPngByteIdentical", false)) << id;
+            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumRgbDelta", -1.0)) << id;
+            EXPECT_EQ(0.0, NumberOr(Member(result, "comparison"), "maximumAlphaDelta", -1.0)) << id;
+            EXPECT_TRUE(NumberOr(result, "nonClearPixelCount", 0.0) > 0.0
+                        || BoolOr(result, "emptyForegroundAllowed", false)) << id;
+        }
+        else if (disposition == "reject")
+        {
+            ++rejected;
+            EXPECT_TRUE(BoolOr(result, "twoProcessDispositionIdentical", false)) << id;
+            EXPECT_FALSE(StringOr(result, "owningTask", "").empty()) << id;
+            EXPECT_FALSE(StringOr(result, "errorContains", "").empty()) << id;
+        }
+        else
+        {
+            ADD_FAILURE() << id << ": unknown Vulkan L7 disposition " << disposition;
+        }
+    }
+    EXPECT_EQ(expectedIds, seen);
+    EXPECT_EQ(137u, capturedIds.size());
+    EXPECT_EQ(8u, rejected);
+
+    std::set<std::string> goldenIds;
+    const std::filesystem::path goldenRoot = repository / "tests" / "gltf-l7" / "vulkan";
+    for (const std::filesystem::directory_entry& entry :
+         std::filesystem::directory_iterator(goldenRoot))
+    {
+        if (entry.is_regular_file() && entry.path().extension() == ".png")
+        {
+            goldenIds.insert(entry.path().stem().string());
+        }
+    }
+    EXPECT_EQ(capturedIds, goldenIds)
+        << "the Vulkan L7 golden directory has a missing or stale PNG";
+
+    const std::filesystem::path script = repository / "scripts" / "gltf-l7-corpus.py";
+    const std::vector<std::uint8_t> scriptBytes = ReadAllBytes(script);
+    const std::string scriptText(scriptBytes.begin(), scriptBytes.end());
+    EXPECT_NE(std::string::npos, scriptText.find("tests/gltf-l7/vulkan"));
+    EXPECT_NE(std::string::npos, scriptText.find("[Vulkan] GPU: "));
+    EXPECT_NE(std::string::npos, scriptText.find("VK_DRIVER_FILES"));
+    EXPECT_NE(std::string::npos, scriptText.find("if len(renderers) != 1"));
 }
 
 TEST(GltfFixtureCorpus, KhronosValidatorPinIsImmutableAndNotARuntimeDependency)
