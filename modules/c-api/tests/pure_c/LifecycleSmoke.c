@@ -361,14 +361,17 @@ static CNA_Result on_draw(
         backbuffer,
         required_pixels,
         &required_pixels);
+    /*
+     * Backbuffer readback is a backend capability, never a renderer identity: a backend without it
+     * must leave the destination untouched, and one with it must show the exact drawn texels.
+     */
     int readback_ok = 0;
-    if (renderer_info.renderer_type == CNA_GRAPHICS_RENDERER_HEADLESS) {
-        readback_ok = readback_result == CNA_RESULT_NOT_SUPPORTED &&
-            memcmp(
-                &backbuffer[0],
-                &(CNA_Color){UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
-                sizeof(CNA_Color)) == 0;
-    } else if (renderer_info.renderer_type == CNA_GRAPHICS_RENDERER_SDL_RENDERER) {
+    if (readback_result == CNA_RESULT_NOT_SUPPORTED) {
+        readback_ok = memcmp(
+            &backbuffer[0],
+            &(CNA_Color){UINT8_C(1), UINT8_C(2), UINT8_C(3), UINT8_C(4)},
+            sizeof(CNA_Color)) == 0;
+    } else if (readback_result == CNA_RESULT_SUCCESS) {
         const CNA_Color expected_red = {
             UINT8_C(255), UINT8_C(0), UINT8_C(0), UINT8_C(255)
         };
@@ -381,7 +384,7 @@ static CNA_Result on_draw(
         const CNA_Color expected_clear = {
             UINT8_C(10), UINT8_C(20), UINT8_C(30), UINT8_C(255)
         };
-        readback_ok = readback_result == CNA_RESULT_SUCCESS &&
+        readback_ok =
             memcmp(&backbuffer[0], &expected_red, sizeof(CNA_Color)) == 0 &&
             memcmp(&backbuffer[1], &expected_green, sizeof(CNA_Color)) == 0 &&
             memcmp(

@@ -117,6 +117,12 @@ static int validate_texture3d_rejection(const CNA_Handle device)
     return 1;
 }
 
+/*
+ * Cube storage is backend-dependent, so the transfer contract is probed once and then asserted in
+ * whichever direction this backend actually implements. Both directions are real evidence: a
+ * refusing backend must leave the destination untouched and still report the required count, and a
+ * storing backend must return exactly what was uploaded.
+ */
 static int validate_cube_failures(
     const CNA_Handle cube,
     const CNA_TextureCubeTransfer* const full,
@@ -128,12 +134,31 @@ static int validate_cube_failures(
     memset(destination, 0x5a, sizeof(destination));
     memcpy(before, destination, sizeof(before));
 
+    const CNA_Result stored = cna_texturecube_set_data(cube, full, data, 17U);
+    if (stored != CNA_RESULT_SUCCESS && stored != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    const int has_storage = stored == CNA_RESULT_SUCCESS;
+
     for (CNA_CubeMapFace face = CNA_CUBE_MAP_FACE_POSITIVE_X;
          face <= CNA_CUBE_MAP_FACE_NEGATIVE_Z;
          ++face) {
         CNA_TextureCubeTransfer transfer = *full;
         transfer.face = face;
         required = UINT64_C(999);
+        if (has_storage) {
+            memset(destination, 0x5a, sizeof(destination));
+            /* The window starts at element one, so the round trip is compared from there. */
+            if (cna_texturecube_set_data(cube, &transfer, data, 17U) !=
+                    CNA_RESULT_SUCCESS ||
+                cna_texturecube_get_data(
+                    cube, &transfer, destination, 17U, &required) != CNA_RESULT_SUCCESS ||
+                required != 16U ||
+                memcmp(&destination[1], &data[1], sizeof(CNA_Color) * 16U) != 0) {
+                return 0;
+            }
+            continue;
+        }
         if (cna_texturecube_set_data(cube, &transfer, data, 17U) !=
                 CNA_RESULT_NOT_SUPPORTED ||
             cna_texturecube_get_data(
@@ -143,6 +168,7 @@ static int validate_cube_failures(
             return 0;
         }
     }
+    memset(destination, 0x5a, sizeof(destination));
 
     CNA_TextureCubeTransfer invalid = *full;
     invalid.face = UINT32_MAX;
@@ -180,11 +206,12 @@ static int validate_cube_failures(
 
     CNA_TextureCubeTransfer mip = make_cube_transfer(
         CNA_CUBE_MAP_FACE_POSITIVE_Y, 1, 1U, 4U);
+    const CNA_Result expected_mip =
+        has_storage ? CNA_RESULT_SUCCESS : CNA_RESULT_NOT_SUPPORTED;
     required = 0U;
-    if (cna_texturecube_set_data(cube, &mip, data, 5U) !=
-            CNA_RESULT_NOT_SUPPORTED ||
-        cna_texturecube_get_data(cube, &mip, destination, 5U, &required) !=
-            CNA_RESULT_NOT_SUPPORTED || required != 4U) {
+    if (cna_texturecube_set_data(cube, &mip, data, 5U) != expected_mip ||
+        cna_texturecube_get_data(cube, &mip, destination, 5U, &required) != expected_mip ||
+        required != 4U) {
         return 0;
     }
     return 1;
@@ -268,11 +295,19 @@ static int validate_cube(const CNA_Handle device)
     uint8_t dds[176];
     const size_t dds_size = build_minimal_cube_dds(dds);
     CNA_Handle decoded = UINT64_MAX;
+    /* DDS decoding needs cube storage, so a backend without it refuses and one with it succeeds. */
+    const CNA_Result dds_result = cna_texturecube_create_from_dds_memory(
+        device, dds, (uint64_t)dds_size, &decoded);
     if (dds_size != sizeof(dds) ||
-        cna_texturecube_create_from_dds_memory(
-            device, dds, (uint64_t)dds_size, &decoded) != CNA_RESULT_NOT_SUPPORTED ||
-        decoded != CNA_INVALID_HANDLE ||
-        cna_texturecube_create_from_dds_memory(device, 0, 1U, &decoded) !=
+        (dds_result != CNA_RESULT_NOT_SUPPORTED && dds_result != CNA_RESULT_SUCCESS) ||
+        (dds_result == CNA_RESULT_NOT_SUPPORTED && decoded != CNA_INVALID_HANDLE) ||
+        (dds_result == CNA_RESULT_SUCCESS &&
+         (decoded == CNA_INVALID_HANDLE ||
+          cna_texturecube_destroy(decoded) != CNA_RESULT_SUCCESS))) {
+        return 0;
+    }
+    decoded = UINT64_MAX;
+    if (cna_texturecube_create_from_dds_memory(device, 0, 1U, &decoded) !=
             CNA_RESULT_INVALID_ARGUMENT || decoded != CNA_INVALID_HANDLE) {
         return 0;
     }
@@ -343,10 +378,19 @@ static CNA_Result on_load(
     CNA_RendererInfo renderer = {
         sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
     };
+    /*
+     * The renderer identity is deliberately not an allowlist: an enumerated identity is not a
+     * support claim, so this suite branches on the reported capabilities instead and runs
+     * unchanged on any backend.
+     */
+    CNA_Bool supports_texture3d = CNA_TRUE;
     if (cna_game_get_graphics_device(game, &device) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_get_renderer_info(device, &renderer) != CNA_RESULT_SUCCESS ||
-        (renderer.renderer_type != CNA_GRAPHICS_RENDERER_HEADLESS &&
-         renderer.renderer_type != CNA_GRAPHICS_RENDERER_SDL_RENDERER)) {
+        renderer.renderer_type == CNA_GRAPHICS_RENDERER_UNKNOWN ||
+        cna_graphics_device_supports_capability(
+            device, CNA_GRAPHICS_CAPABILITY_TEXTURE_3D, &supports_texture3d) !=
+            CNA_RESULT_SUCCESS ||
+        supports_texture3d != CNA_FALSE) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stage = 2;

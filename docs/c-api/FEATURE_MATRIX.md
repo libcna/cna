@@ -113,7 +113,8 @@ time. The initial slice currently has this automated evidence:
 
 An enumerated renderer identity is not a support claim. Applications must query graphics, touch
 and audio capabilities and handle `CNA_RESULT_NOT_SUPPORTED`; future platform work must add
-appropriate C evidence before this table claims support.
+appropriate C evidence before this table claims support. The strict-C suite holds itself to the
+same rule: no test branches on a renderer identity, so adding a backend needs no test edits.
 
 ## Ownership and call context
 

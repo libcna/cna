@@ -191,9 +191,10 @@
 > backend without the 3D capability, and observable pixel change through converted user primitives,
 > indexed user primitives, buffered indexed geometry and a full owned Model draw on the CPU-raster
 > SOFTWARE backend. Pixel readback is treated as a capability separate from 3D, so HEADLESS draws
-> without claiming pixel evidence. The suite is green on HEADLESS and SDL_RENDERER (47/47 each);
-> the new SOFTWARE tree runs 44/47 because `CApi_TextureSmoke`, `CApi_TextureVolumeSmoke` and
-> `CApi_LifecycleSmoke` still carry HEADLESS/SDL-specific expectations there. CBIND-036 is next.
+> without claiming pixel evidence. Adding the third tree exposed three suites that branched on
+> renderer *identity* instead of capability; they now probe actual behavior, which also turned
+> SOFTWARE's real cube storage, mip upload and exact drawn texels into new positive evidence. All
+> three trees run the same 47 tests green. CBIND-036 is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

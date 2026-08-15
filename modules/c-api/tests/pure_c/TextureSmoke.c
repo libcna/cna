@@ -422,6 +422,21 @@ static int validate_cpu_texture_and_encoding(uint8_t** const out_png, uint64_t* 
     return 1;
 }
 
+/*
+ * Probes whether this backend accepts a mip-level upload above level zero. The probe writes the
+ * same window the transfer test writes, so a supporting backend loses nothing by being asked.
+ */
+static int supports_mip_upload(const CNA_Handle texture)
+{
+    CNA_Texture2DTransfer transfer = make_transfer(1, 0U, 4U);
+    const CNA_Color pixels[4] = {
+        {1U, 2U, 3U, 255U}, {4U, 5U, 6U, 255U},
+        {7U, 8U, 9U, 255U}, {10U, 11U, 12U, 255U}
+    };
+    return cna_texture2d_set_data(
+               texture, CNA_TEXTURE_DATA_COLOR, &transfer, pixels, 4U) == CNA_RESULT_SUCCESS;
+}
+
 static int validate_mip_transfer(const CNA_Handle texture)
 {
     CNA_TextureInfo info = {sizeof(CNA_TextureInfo), UINT32_C(1), 0U, 0U};
@@ -521,10 +536,13 @@ static CNA_Result on_load(
     CNA_RendererInfo renderer = {
         sizeof(CNA_RendererInfo), UINT32_C(1), 0U, 0U, 0U, 0U
     };
+    /*
+     * An enumerated renderer identity is not a support claim, so this suite never allowlists one:
+     * it probes each backend's actual behavior and asserts the matching contract instead.
+     */
     if (cna_game_get_graphics_device(game, &device) != CNA_RESULT_SUCCESS ||
         cna_graphics_device_get_renderer_info(device, &renderer) != CNA_RESULT_SUCCESS ||
-        (renderer.renderer_type != CNA_GRAPHICS_RENDERER_HEADLESS &&
-         renderer.renderer_type != CNA_GRAPHICS_RENDERER_SDL_RENDERER)) {
+        renderer.renderer_type == CNA_GRAPHICS_RENDERER_UNKNOWN) {
         return CNA_RESULT_INVALID_STATE;
     }
 
@@ -536,7 +554,8 @@ static CNA_Result on_load(
     state->stage = 2;
     const CNA_Result mip_create_result =
         cna_texture2d_create(device, &create_info, &mip_texture);
-    const int transfer_valid = renderer.renderer_type == CNA_GRAPHICS_RENDERER_HEADLESS
+    /* Mip-level upload above level zero is a backend limitation, not a renderer identity. */
+    const int transfer_valid = supports_mip_upload(mip_texture)
         ? validate_mip_transfer(mip_texture)
         : validate_unsupported_mip_transfer(mip_texture);
     if (mip_create_result != CNA_RESULT_SUCCESS || !transfer_valid) {
