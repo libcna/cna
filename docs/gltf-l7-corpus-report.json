@@ -7,7 +7,7 @@
   ],
   "capturedOn": "2026-08-15",
   "corpusManifest": "tests/assets/gltf/manifest.json",
-  "corpusManifestSha256": "853043837d19af5d5d56e8ad93be0f6a812640afb2e81390da75f9bad749ae86",
+  "corpusManifestSha256": "899b977e385efbff7b347ff926234243968aaeadc50e3ea05c208f3b2ca710b1",
   "distinctAssetCount": 145,
   "capturedAssetCount": 137,
   "rejectedAssetCount": 8,
@@ -15,9 +15,9 @@
   "rendererEnvironment": [
     "OpenGL OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
   ],
-  "cnaCommit": "88b9c8da0b99c1e4d6ff62893b77380dc33f2c17",
+  "cnaCommit": "a585bdf00256fc84120f73a9550ac740ac962df7",
   "viewerCommit": "3cd89e9deddf4903f0c766c75c75ba367a4d0749",
-  "viewerExecutableSha256": "6e36391becfc950f79e62a71293642367e3b8533498966051d16826392a810ce",
+  "viewerExecutableSha256": "bb9dc73d235b0c311aa59e4840a1d7ddd53c113e04ee52a3057181d4bce033b2",
   "capture": {
     "processesPerAsset": 2,
     "resolution": [
@@ -230,8 +230,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/gltf-external-image.png",
-      "goldenPngSha256": "981ba4d17d483b66bc1cf949876811ca2eb6e54b305c7177079b30388ef0ff02",
-      "twoProcessPngSha256": "981ba4d17d483b66bc1cf949876811ca2eb6e54b305c7177079b30388ef0ff02",
+      "goldenPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -257,8 +257,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/gltf-data-uri-image.png",
-      "goldenPngSha256": "981ba4d17d483b66bc1cf949876811ca2eb6e54b305c7177079b30388ef0ff02",
-      "twoProcessPngSha256": "981ba4d17d483b66bc1cf949876811ca2eb6e54b305c7177079b30388ef0ff02",
+      "goldenPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
+      "twoProcessPngSha256": "3a77ae0d62fca305f15748eb9c1f2af86d4e89739af9fc0da9352c26fd545a36",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2109,8 +2109,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/tex-reference-checkerboard.png",
-      "goldenPngSha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
-      "twoProcessPngSha256": "8562e0fe8bd831153bddba6531c475f4cd9546332435ec0c78eb17f9b7823966",
+      "goldenPngSha256": "936c2ad35cde82872462f5a6723dfab2f9dce6e76971ed674c8f8b65e0609850",
+      "twoProcessPngSha256": "936c2ad35cde82872462f5a6723dfab2f9dce6e76971ed674c8f8b65e0609850",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2163,8 +2163,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/uv-out-of-range-clamp.png",
-      "goldenPngSha256": "2d52253963a9106fad73189aa25fd4e05d9a4036fbdc18b190a22e958ebe0ef3",
-      "twoProcessPngSha256": "2d52253963a9106fad73189aa25fd4e05d9a4036fbdc18b190a22e958ebe0ef3",
+      "goldenPngSha256": "98ad6a3410c8ad2b94225b8fdee80fcb076360bc463da846c4abdf35d19a6eed",
+      "twoProcessPngSha256": "98ad6a3410c8ad2b94225b8fdee80fcb076360bc463da846c4abdf35d19a6eed",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2190,8 +2190,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/uv-out-of-range-wrap.png",
-      "goldenPngSha256": "410cb71d925921a455e3b6729bc8496697e63fb244d7eb7feeed861e258628c8",
-      "twoProcessPngSha256": "410cb71d925921a455e3b6729bc8496697e63fb244d7eb7feeed861e258628c8",
+      "goldenPngSha256": "a2ab6be1cc82fefe8dad9aa1e55c9c33d3d4ec55084874f386f4d783bd5f3c59",
+      "twoProcessPngSha256": "a2ab6be1cc82fefe8dad9aa1e55c9c33d3d4ec55084874f386f4d783bd5f3c59",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2217,8 +2217,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/uv-out-of-range-mirror.png",
-      "goldenPngSha256": "6938f67be8d68d46020d15128e65b794435cd793e58e2678ca159e917096655c",
-      "twoProcessPngSha256": "6938f67be8d68d46020d15128e65b794435cd793e58e2678ca159e917096655c",
+      "goldenPngSha256": "b0bb11f3c399b02f8b976712aff5edc8310dc29d75a668f9346a59f4cb08f68e",
+      "twoProcessPngSha256": "b0bb11f3c399b02f8b976712aff5edc8310dc29d75a668f9346a59f4cb08f68e",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2244,8 +2244,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/sampler-trilinear.png",
-      "goldenPngSha256": "d42d4d7f9c8a944ddd3ef88cabd37704e1eb44ca405ca503c78d50731fa3a0dc",
-      "twoProcessPngSha256": "d42d4d7f9c8a944ddd3ef88cabd37704e1eb44ca405ca503c78d50731fa3a0dc",
+      "goldenPngSha256": "eacd323f8a85bb68376175ab5dac4f1fc6075f66e6b6a37fd2943b7af0f5dd46",
+      "twoProcessPngSha256": "eacd323f8a85bb68376175ab5dac4f1fc6075f66e6b6a37fd2943b7af0f5dd46",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2271,8 +2271,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/tex-texture-transform.png",
-      "goldenPngSha256": "f154382334ba3541283c03503229ffccdb25eb43788ebe87bb8eb95670c57b14",
-      "twoProcessPngSha256": "f154382334ba3541283c03503229ffccdb25eb43788ebe87bb8eb95670c57b14",
+      "goldenPngSha256": "feb876b9377fdbbb14e57e25c59826698a328fe1d556268a0bb7efe3fd7da7a0",
+      "twoProcessPngSha256": "feb876b9377fdbbb14e57e25c59826698a328fe1d556268a0bb7efe3fd7da7a0",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2294,12 +2294,12 @@
     {
       "id": "texture-transform-per-map",
       "source": "texture-transform-per-map.gltf",
-      "sourceSha256": "bb891967a8a2cc3f617d4fa40e35e7547d56fca87d110769d8609ef26fd109a1",
+      "sourceSha256": "1ac4dbdff2e507251ad80ae5714de74b733871e400761f637188d822cafeca90",
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/texture-transform-per-map.png",
-      "goldenPngSha256": "94cb6b6746ce57cb639c9f3470c6680ba8afdc8bd9320085523d2481d4e851e1",
-      "twoProcessPngSha256": "94cb6b6746ce57cb639c9f3470c6680ba8afdc8bd9320085523d2481d4e851e1",
+      "goldenPngSha256": "73fd84bd2317ba02480814fe749ad2f179c9bb0996f4b9e3e45e2ea9e586db4b",
+      "twoProcessPngSha256": "73fd84bd2317ba02480814fe749ad2f179c9bb0996f4b9e3e45e2ea9e586db4b",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,
@@ -2325,8 +2325,8 @@
       "disposition": "capture",
       "viewerArguments": [],
       "golden": "tests/gltf-l7/easygl/texture-shared-two-samplers.png",
-      "goldenPngSha256": "28c482be101317cd0146bc9a00e7ff1d0360ba6fa4a82cc8ba969c8422c5843d",
-      "twoProcessPngSha256": "28c482be101317cd0146bc9a00e7ff1d0360ba6fa4a82cc8ba969c8422c5843d",
+      "goldenPngSha256": "945f40c758580f84d84814d256be4a5553349cbdb58fab7fb6f9eebdb3ff3efa",
+      "twoProcessPngSha256": "945f40c758580f84d84814d256be4a5553349cbdb58fab7fb6f9eebdb3ff3efa",
       "twoProcessPngByteIdentical": true,
       "resolution": [
         512,

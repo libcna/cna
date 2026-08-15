@@ -969,6 +969,15 @@ wrong premultiplied preset produce distinct `(255,184,80)` and `(255,184,208)` c
 authors `KHR_materials_transmission=0.5`. Glass-first hides the later dial and produces
 `(7,26,115)` over black; dial-first followed by straight-alpha glass keeps both authored colours
 visible at `(83,38,127)` on both EasyGL profiles.
+`EasyGL_Gltf_TextureTransformPerMap` adds the generated `texture-transform-per-map` witness: one
+authored UV stream drives base-colour and normal maps through deliberately different affine rows,
+and both OPENGLES2 and OPENGLES3 select the expected blue base texel and +Z normal texel. The first
+complete viewer retake after the affine rows reached every PBR shader remained 145/145: all 137
+accepted assets were byte-identical between their two new processes and all eight rejections kept
+their diagnostic. Ten texture-bearing goldens were deliberately rebaselined. The target fixture is
+the only material image change; ordinary linear-filtered cases move by at most four byte levels,
+while two nearest/checker cases change only the texels exactly on a sampling boundary (whole-image
+mean absolute delta below 0.009 byte). The report records the new executable, input and image hashes.
 
 Those focused analytic tests remain valuable because a whole-image hash says *which fixture*
 changed while a centre-pixel analytic witness says *which equation* changed. The corpus rung adds
