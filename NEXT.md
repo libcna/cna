@@ -343,6 +343,18 @@
 > no callable behavior. The inventory is now 3,912 implemented, 30 partial, 2,356 planned and 117
 > N/A, with no planned `core` row left; all three trees are green at 51/51 and the sanitizer tree
 > agrees with leak detection on.
+>
+> CBIND-037B then splits the input module by device family and opens it with CBIND-037B1: the
+> gamepad controller type at its canonical ordinals, and the whole `GamePadCapabilities` surface as
+> one fixed 48-byte value carrying the type plus 35 directly readable **and writable** flags. A
+> value rather than a handle, because the canonical type is a copyable snapshot with no identity;
+> direct fields rather than 74 routes, because that is what a getter/setter pair means in C. One
+> boundary moved while implementing it: `GamePad::GetCapabilities` came here from CBIND-037B3,
+> since a capabilities value with no producer cannot be tested against anything real. The test
+> cross-checks connection against the gamepad state snapshot, so the two answers can never
+> disagree, and asserts the canonical disconnected value whenever a slot is empty. The inventory is
+> now 3,998 implemented, 30 partial, 2,270 planned and 117 N/A; all three trees and the sanitizer
+> tree stay green at 51/51.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

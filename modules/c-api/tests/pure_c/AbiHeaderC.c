@@ -884,3 +884,21 @@ _Static_assert(sizeof(CNA_LogLevel) == sizeof(uint32_t) &&
                    CNA_GRAPHICS_BACKEND_MATURITY_PRODUCTION == UINT32_C(0) &&
                    CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4),
                "CNA core-extension identities must remain stable");
+
+_Static_assert(sizeof(CNA_GamePadType) == sizeof(uint32_t) &&
+                   CNA_GAMEPAD_TYPE_UNKNOWN == UINT32_C(0) &&
+                   CNA_GAMEPAD_TYPE_GAMEPAD == UINT32_C(1) &&
+                   CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD == UINT32_C(9),
+               "CNA gamepad-type identities must remain stable");
+_Static_assert(sizeof(CNA_GamePadCapabilities) == 48U &&
+                   _Alignof(CNA_GamePadCapabilities) == 4U &&
+                   offsetof(CNA_GamePadCapabilities, struct_size) == 0U &&
+                   offsetof(CNA_GamePadCapabilities, struct_version) == 4U &&
+                   offsetof(CNA_GamePadCapabilities, gamepad_type) == 8U &&
+                   offsetof(CNA_GamePadCapabilities, is_connected) == 12U &&
+                   offsetof(CNA_GamePadCapabilities, has_a_button) == 13U &&
+                   offsetof(CNA_GamePadCapabilities, has_voice_support) == 36U &&
+                   offsetof(CNA_GamePadCapabilities, has_light_bar_ext) == 37U &&
+                   offsetof(CNA_GamePadCapabilities, has_accelerometer_ext) == 46U &&
+                   offsetof(CNA_GamePadCapabilities, reserved) == 47U,
+               "CNA_GamePadCapabilities layout must remain stable");

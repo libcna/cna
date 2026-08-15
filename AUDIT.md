@@ -33,8 +33,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
 > opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
 > the compile-time platform, desktop operating system, renderer identity and renderer name, and
-> both backend classifications for any of the 46 public renderer identities. The generated
-> inventory currently records 3,912 implemented, 30 partial, 2,356 planned and 117
+> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> adds the gamepad controller type and the complete gamepad-capabilities value. The generated
+> inventory currently records 3,998 implemented, 30 partial, 2,270 planned and 117
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

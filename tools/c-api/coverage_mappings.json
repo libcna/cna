@@ -2890,6 +2890,42 @@
       "tests": "Doxygen declaration inventory; the distinction it marks is covered by the `_ext`-suffixed routes across the C headers",
       "status": "not-applicable",
       "task": "CBIND-037A"
+    },
+    {
+      "id": "gamepad-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadType(?:::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "`CNA_GamePadType` and the `CNA_GAMEPAD_TYPE_*` identities at the canonical ordinals",
+      "tests": "C and C++ ABI assertions freeze the ordinals; `InputSnapshotsSmoke.c` asserts every reported controller type is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B1"
+    },
+    {
+      "id": "gamepad-capabilities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePadCapabilities(?:::(?:GamePadCapabilities|get[A-Za-z0-9]+Property|set[A-Za-z0-9]+Property))?$",
+      "kinds": [
+        "struct",
+        "constructor",
+        "method"
+      ],
+      "mapping": "the fixed 48-byte `CNA_GamePadCapabilities` value with `struct_size`/`struct_version`, one directly readable and writable field per canonical property and the controller type as a `CNA_GamePadType` identity. A value rather than a handle, because the canonical type is a copyable snapshot with no identity; direct fields rather than routes, because every canonical property has both a getter and a setter. The ten CNA extension properties keep an `_ext` suffix on their fields so a consumer can see which state has no XNA 4.0 counterpart. `cna_gamepad_capabilities_init` reproduces the canonical default constructor exactly: every flag false and the type `Unknown`",
+      "tests": "`InputSnapshotsSmoke.c` checks all 35 flags and the type after initialization, writes through the extension and core fields to prove they are settable, asserts a null-output refusal, and reads real capabilities for all four player slots inside the game callback -- cross-checking connection against the gamepad state snapshot so the two can never disagree, and asserting the canonical disconnected value whenever a slot is empty. Wrong-thread, bad-player-index, null-output and wrong-struct-version refusals are covered. C and C++ ABI assertions freeze the size, alignment and every offset. Runs under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B1"
+    },
+    {
+      "id": "gamepad-get-capabilities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::GamePad::GetCapabilities$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_gamepad_get_capabilities`, which takes an active game handle for the same reason `cna_gamepad_get_state` does: CNA is event-driven, so a snapshot is only meaningful on the game thread of a running game. An empty slot is an ordinary answer -- the canonical disconnected value -- not a failure",
+      "tests": "`InputSnapshotsSmoke.c` reads all four slots inside the update callback and covers the wrong-thread, bad-player-index, null-output and wrong-struct-version refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-037B1"
     }
   ]
 }

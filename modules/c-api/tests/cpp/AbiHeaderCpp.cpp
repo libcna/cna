@@ -729,3 +729,12 @@ static_assert(CNA_PLATFORM_WEB == UINT32_C(3));
 static_assert(CNA_DESKTOP_OS_OTHER == UINT32_C(3));
 static_assert(CNA_GRAPHICS_BACKEND_CATEGORY_DIAGNOSTIC == UINT32_C(4));
 static_assert(CNA_GRAPHICS_BACKEND_MATURITY_DEPRECATED == UINT32_C(4));
+
+static_assert(sizeof(CNA_GamePadType) == sizeof(uint32_t));
+static_assert(CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD == UINT32_C(9));
+static_assert(sizeof(CNA_GamePadCapabilities) == 48U);
+static_assert(alignof(CNA_GamePadCapabilities) == 4U);
+static_assert(offsetof(CNA_GamePadCapabilities, gamepad_type) == 8U);
+static_assert(offsetof(CNA_GamePadCapabilities, is_connected) == 12U);
+static_assert(offsetof(CNA_GamePadCapabilities, has_accelerometer_ext) == 46U);
+static_assert(offsetof(CNA_GamePadCapabilities, reserved) == 47U);

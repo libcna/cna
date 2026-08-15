@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/input.h"
+#include "CNA/C/input_gamepad.h"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Input/ButtonState.hpp"
 #include "Microsoft/Xna/Framework/Input/Buttons.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePad.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadCapabilities.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadDeadZone.hpp"
 #include "Microsoft/Xna/Framework/Input/GamePadState.hpp"
+#include "Microsoft/Xna/Framework/Input/GamePadType.hpp"
 #include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
 #include "Microsoft/Xna/Framework/Input/KeyboardState.hpp"
 #include "Microsoft/Xna/Framework/Input/Keys.hpp"
@@ -35,8 +38,10 @@ using Microsoft::Xna::Framework::Vector2;
 using Microsoft::Xna::Framework::Input::ButtonState;
 using Microsoft::Xna::Framework::Input::Buttons;
 using Microsoft::Xna::Framework::Input::GamePad;
+using Microsoft::Xna::Framework::Input::GamePadCapabilities;
 using Microsoft::Xna::Framework::Input::GamePadDeadZone;
 using Microsoft::Xna::Framework::Input::GamePadState;
+using Microsoft::Xna::Framework::Input::GamePadType;
 using Microsoft::Xna::Framework::Input::Keyboard;
 using Microsoft::Xna::Framework::Input::KeyboardState;
 using Microsoft::Xna::Framework::Input::Keys;
@@ -740,6 +745,120 @@ CNA_Result cna_touch_location_try_get_previous(
         *outFound = location->previous_state == CNA_TOUCH_LOCATION_INVALID
             ? CNA_FALSE
             : CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_GamePadType MapGamePadType(const GamePadType type) noexcept
+{
+    switch (type) {
+        case GamePadType::Unknown: return CNA_GAMEPAD_TYPE_UNKNOWN;
+        case GamePadType::GamePad: return CNA_GAMEPAD_TYPE_GAMEPAD;
+        case GamePadType::Wheel: return CNA_GAMEPAD_TYPE_WHEEL;
+        case GamePadType::ArcadeStick: return CNA_GAMEPAD_TYPE_ARCADE_STICK;
+        case GamePadType::FlightStick: return CNA_GAMEPAD_TYPE_FLIGHT_STICK;
+        case GamePadType::DancePad: return CNA_GAMEPAD_TYPE_DANCE_PAD;
+        case GamePadType::Guitar: return CNA_GAMEPAD_TYPE_GUITAR;
+        case GamePadType::AlternateGuitar: return CNA_GAMEPAD_TYPE_ALTERNATE_GUITAR;
+        case GamePadType::DrumKit: return CNA_GAMEPAD_TYPE_DRUM_KIT;
+        case GamePadType::BigButtonPad: return CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD;
+    }
+    return CNA_GAMEPAD_TYPE_UNKNOWN;
+}
+
+[[nodiscard]] CNA_Bool Flag(const bool value) noexcept
+{
+    return value ? CNA_TRUE : CNA_FALSE;
+}
+
+[[nodiscard]] CNA_GamePadCapabilities SnapshotCapabilities(const GamePadCapabilities& value)
+{
+    CNA_GamePadCapabilities snapshot;
+    snapshot.struct_size = sizeof(CNA_GamePadCapabilities);
+    snapshot.struct_version = StructureVersion;
+    snapshot.gamepad_type = MapGamePadType(value.getGamePadTypeProperty());
+    snapshot.is_connected = Flag(value.getIsConnectedProperty());
+    snapshot.has_a_button = Flag(value.getHasAButtonProperty());
+    snapshot.has_b_button = Flag(value.getHasBButtonProperty());
+    snapshot.has_x_button = Flag(value.getHasXButtonProperty());
+    snapshot.has_y_button = Flag(value.getHasYButtonProperty());
+    snapshot.has_back_button = Flag(value.getHasBackButtonProperty());
+    snapshot.has_start_button = Flag(value.getHasStartButtonProperty());
+    snapshot.has_big_button = Flag(value.getHasBigButtonProperty());
+    snapshot.has_dpad_up_button = Flag(value.getHasDPadUpButtonProperty());
+    snapshot.has_dpad_down_button = Flag(value.getHasDPadDownButtonProperty());
+    snapshot.has_dpad_left_button = Flag(value.getHasDPadLeftButtonProperty());
+    snapshot.has_dpad_right_button = Flag(value.getHasDPadRightButtonProperty());
+    snapshot.has_left_shoulder_button = Flag(value.getHasLeftShoulderButtonProperty());
+    snapshot.has_right_shoulder_button = Flag(value.getHasRightShoulderButtonProperty());
+    snapshot.has_left_stick_button = Flag(value.getHasLeftStickButtonProperty());
+    snapshot.has_right_stick_button = Flag(value.getHasRightStickButtonProperty());
+    snapshot.has_left_x_thumb_stick = Flag(value.getHasLeftXThumbStickProperty());
+    snapshot.has_left_y_thumb_stick = Flag(value.getHasLeftYThumbStickProperty());
+    snapshot.has_right_x_thumb_stick = Flag(value.getHasRightXThumbStickProperty());
+    snapshot.has_right_y_thumb_stick = Flag(value.getHasRightYThumbStickProperty());
+    snapshot.has_left_trigger = Flag(value.getHasLeftTriggerProperty());
+    snapshot.has_right_trigger = Flag(value.getHasRightTriggerProperty());
+    snapshot.has_left_vibration_motor = Flag(value.getHasLeftVibrationMotorProperty());
+    snapshot.has_right_vibration_motor = Flag(value.getHasRightVibrationMotorProperty());
+    snapshot.has_voice_support = Flag(value.getHasVoiceSupportProperty());
+    snapshot.has_light_bar_ext = Flag(value.getHasLightBarEXTProperty());
+    snapshot.has_trigger_vibration_motors_ext =
+        Flag(value.getHasTriggerVibrationMotorsEXTProperty());
+    snapshot.has_misc1_ext = Flag(value.getHasMisc1EXTProperty());
+    snapshot.has_paddle1_ext = Flag(value.getHasPaddle1EXTProperty());
+    snapshot.has_paddle2_ext = Flag(value.getHasPaddle2EXTProperty());
+    snapshot.has_paddle3_ext = Flag(value.getHasPaddle3EXTProperty());
+    snapshot.has_paddle4_ext = Flag(value.getHasPaddle4EXTProperty());
+    snapshot.has_touchpad_ext = Flag(value.getHasTouchPadEXTProperty());
+    snapshot.has_gyro_ext = Flag(value.getHasGyroEXTProperty());
+    snapshot.has_accelerometer_ext = Flag(value.getHasAccelerometerEXTProperty());
+    snapshot.reserved[0] = UINT8_C(0);
+    return snapshot;
+}
+
+} // namespace
+
+CNA_Result cna_gamepad_capabilities_init(CNA_GamePadCapabilities* const outCapabilities)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCapabilities == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The gamepad-capabilities output structure is null.");
+        }
+        *outCapabilities = SnapshotCapabilities(GamePadCapabilities{});
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamepad_get_capabilities(
+    const CNA_Handle gameHandle,
+    const CNA_PlayerIndex playerIndex,
+    CNA_GamePadCapabilities* const outCapabilities)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateVersionedStructure(
+                outCapabilities,
+                "The gamepad-capabilities output structure is invalid.");
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        PlayerIndex nativePlayerIndex = PlayerIndex::One;
+        if (!TryMapPlayerIndex(playerIndex, &nativePlayerIndex)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The gamepad player index is invalid.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCapabilities = SnapshotCapabilities(GamePad::GetCapabilities(nativePlayerIndex));
         return CNA_RESULT_SUCCESS;
     });
 }

@@ -366,12 +366,28 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-037A | 72 | Complete the CNA core module | ✅ | `core_ext.h` and `CnaCApiCoreExt.cpp` map every `core` row: one `cna_logger_*` route per canonical static so C never depends on a defaulted argument, the process-wide minimum level, the compile-time platform and desktop operating system, both backend classifications for any of the 46 public renderer identities plus their compiled-in forms, and the compiled-in renderer identity and name. Names use the project's count/copy pair rather than the canonical static-storage `std::string_view`, so no pointer into CNA storage crosses the ABI. `CNA::CNAException` gained a central boundary conversion to `CNA_RESULT_INVALID_STATE`, which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` observable in C instead of collapsing into a generic internal failure. The canonical `EXPERIMENT` log level keeps its ordinal 100 rather than being renumbered into a dense range, and 6 is refused. `CNAEXT` is `not-applicable`: a documentation-only marker macro with no callable behavior. Strict-C `CoreExtSmoke.c` plus C/C++ ABI assertions and two new `cna_c_api_boundary_detail_test` return codes run green in all three trees (51/51) and under ASan+UBSan with leak detection on. The `core` module has no planned row left. |
-| CBIND-037B | 599 | Complete the input module | ⬜ | Map `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration). |
+| CBIND-037B | 599 | Complete the input module | 🟨 | Map `GamePadCapabilities`, the remaining `GamePad`/`Mouse`/`Keyboard`/`TouchPanel` surfaces, `MouseCursor`, `TextInputEXT`, the touch collection and gesture types, and the whole `CNA::Input` extension family (haptics, joysticks, sensors, clipboard, power, device enumeration). Decomposed into CBIND-037B1–B7 below. |
 | CBIND-037C | 325 | Complete the media module | ⬜ | Map `MediaPlayer`, `Song`, `VideoPlayer`, `Video`, the media library and every media collection through count/copy collections and owned handles, without exposing a native stream or decoder. |
 | CBIND-037D | 289 | Complete the devices and devices-ext modules | ⬜ | Map the `Microsoft::Devices::Sensors` family, `VibrateController`, and the `CNA::Devices` extensions (camera, clipboard, file dialog, message box, system tray, power, locale, display and system info). |
 | CBIND-037E | 273 | Complete the runtime module | ⬜ | Map the remaining `Game`, `GameWindow` and `GraphicsDeviceManager` surfaces, the game-component collection and its events, the service container, and the drawable/updateable contracts. |
 | CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
+
+#### CBIND-037B input implementation slices
+
+The 599 rows CBIND-037B owns split by device family, and within the gamepad family by what each
+part needs to exist: the capabilities value is independent, the state values compose into a
+snapshot, and the `GamePad` statics need both.
+
+| # | Rows | Task | Status | Acceptance criteria |
+|---|---:|---|---|---|
+| CBIND-037B1 | 86 | Complete gamepad capabilities and controller type | ✅ | `input_gamepad.h` maps `GamePadType` at its canonical ordinals and the whole `GamePadCapabilities` surface as one fixed 48-byte value: `struct_size`/`struct_version`, the controller type and 35 directly readable **and writable** flags, because every canonical property has both a getter and a setter. A value rather than a handle, since the canonical type is a copyable snapshot with no identity, and direct fields rather than 74 routes, since that is what the getter/setter pair means in C. The ten CNA extension properties keep an `_ext` suffix on their fields. `cna_gamepad_capabilities_init` reproduces the canonical default constructor exactly. **Borrowed from CBIND-037B3:** `GamePad::GetCapabilities` is mapped here as `cna_gamepad_get_capabilities` (86 rows here, 24 left there), because a capabilities value with no producer cannot be tested against anything real. It takes an active game handle for the same reason `cna_gamepad_get_state` does, and an empty slot is an ordinary answer rather than a failure. `InputSnapshotsSmoke.c` cross-checks connection against the state snapshot so the two can never disagree, and runs green in all three trees (51/51) plus ASan+UBSan with leak detection on. |
+| CBIND-037B2 | 65 | Complete gamepad state values | ⬜ | Map `GamePadButtons`, `GamePadDPad`, `GamePadThumbSticks`, `GamePadTriggers`, `GamePadState` and the `Buttons` flag operators, including every equality, hash and string operation. |
+| CBIND-037B3 | 24 | Complete the GamePad statics | ⬜ | Map the remaining `GamePad` statics: vibration, light bar, trigger vibration, gyro and accelerometer reads, player-index get/set, power info, button labels, the identity strings, connection state and the touchpad queries. |
+| CBIND-037B4 | 80 | Complete keyboard, mouse and text input | ⬜ | Map the remaining `Keyboard`/`KeyboardState`, `Mouse`/`MouseState`, `KeyState`, `MouseCursor` and `TextInputEXT` rows. |
+| CBIND-037B5 | 80 | Complete touch and gestures | ⬜ | Map the remaining `TouchPanel`, `TouchCollection`, `TouchLocation`, `TouchPanelCapabilities`, `GestureType` and `GestureSample` rows. |
+| CBIND-037B6 | 126 | Complete the haptics extension family | ⬜ | Map `CNA::Input` haptics: devices, features, effects, effect types, capabilities, directions and the haptics facade. |
+| CBIND-037B7 | 138 | Complete the remaining input extensions | ⬜ | Map the `CNA::Input` joystick, sensor, key-modifier, button-label, text-input-type, device-enumeration, clipboard, power and connection-state surfaces. |
 
 #### CBIND-036B content implementation slices
 
@@ -708,15 +724,25 @@ which is what makes the canonical non-desktop refusal of `getCurrentDesktopOS` o
 rather than collapsing into a generic internal failure. And the canonical log levels keep their
 exact ordinals including the deliberate 100 for `EXPERIMENT`, so 6 is not an identity and is
 refused. The snapshot is now 3,912 implemented, 30 partial, 2,356 planned and 117 not applicable,
-with no planned `core` row left.
+with no planned `core` row left. CBIND-037B then splits the input module by device family and
+opens it with CBIND-037B1: `GamePadType` at its canonical ordinals and the whole
+`GamePadCapabilities` surface as one fixed 48-byte value with 35 directly readable and writable
+flags, because every canonical property has both a getter and a setter. One boundary moved while
+implementing it: `GamePad::GetCapabilities` came here from CBIND-037B3, because a capabilities
+value with no producer cannot be tested against anything real. The snapshot is now 3,998
+implemented, 30 partial, 2,270 planned and 117 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-037A is the final task completed in this handoff. Parent
+- Branch: `feature/binding`; CBIND-037B1 is the final task completed in this handoff. Parent
   CBIND-036 closed with CBIND-036E5, and parent CBIND-035 with CBIND-035G.
-- Next task: `CBIND-037B` complete the input module (599 planned rows) — sub-partition it on
-  arrival, as CBIND-035 and CBIND-036 were. Do not reopen closed CBIND-035, CBIND-036 or
-  CBIND-037A slices without a concrete demonstrated defect.
+- Next task: `CBIND-037B2` complete the gamepad state values (65 planned rows). Do not reopen
+  closed CBIND-035, CBIND-036, CBIND-037A or CBIND-037B1 slices without a concrete demonstrated
+  defect.
+- `sharp-runtime` is a **sibling checkout that other sessions edit live**
+  (`/rv/data/development/github.com/openeggbert/sharp-runtime`). A build failure inside it is very
+  likely someone else's in-progress edit, not a regression here: check `git status`/`git log` there
+  before diagnosing anything, and never modify that tree from this task.
 - Known unrelated breakage found while verifying: the aggregate `CnaTests` target globs
   `modules/*/tests/*.cpp`, which now picks up `modules/c-api/tests/cpp/AbiHeaderCpp.cpp` — a
   standalone C API ABI translation unit that is not a GTest unit and has no `CNA/C` include path
@@ -735,8 +761,8 @@ with no planned `core` row left.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-037A: 414 headers / 6,415 symbols; 3,912 implemented, 30 partial,
-  2,356 planned and 117 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-037B1: 414 headers / 6,415 symbols; 3,998 implemented, 30 partial,
+  2,270 planned and 117 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.

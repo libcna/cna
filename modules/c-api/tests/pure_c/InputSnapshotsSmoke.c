@@ -14,6 +14,7 @@ typedef struct WrongThreadState {
     CNA_Handle game;
     CNA_Result mouse_result;
     CNA_Result gamepad_result;
+    CNA_Result capabilities_result;
     CNA_Result touch_result;
 } WrongThreadState;
 
@@ -144,6 +145,65 @@ static int validate_pure_gamepad_helpers(void)
     return 1;
 }
 
+/* A disconnected controller is exactly what the canonical default constructor produces. */
+static int capabilities_are_disconnected(const CNA_GamePadCapabilities* const value)
+{
+    return value->gamepad_type == CNA_GAMEPAD_TYPE_UNKNOWN &&
+        value->is_connected == CNA_FALSE && value->has_a_button == CNA_FALSE &&
+        value->has_b_button == CNA_FALSE && value->has_x_button == CNA_FALSE &&
+        value->has_y_button == CNA_FALSE && value->has_back_button == CNA_FALSE &&
+        value->has_start_button == CNA_FALSE && value->has_big_button == CNA_FALSE &&
+        value->has_dpad_up_button == CNA_FALSE && value->has_dpad_down_button == CNA_FALSE &&
+        value->has_dpad_left_button == CNA_FALSE && value->has_dpad_right_button == CNA_FALSE &&
+        value->has_left_shoulder_button == CNA_FALSE &&
+        value->has_right_shoulder_button == CNA_FALSE &&
+        value->has_left_stick_button == CNA_FALSE &&
+        value->has_right_stick_button == CNA_FALSE &&
+        value->has_left_x_thumb_stick == CNA_FALSE &&
+        value->has_left_y_thumb_stick == CNA_FALSE &&
+        value->has_right_x_thumb_stick == CNA_FALSE &&
+        value->has_right_y_thumb_stick == CNA_FALSE &&
+        value->has_left_trigger == CNA_FALSE && value->has_right_trigger == CNA_FALSE &&
+        value->has_left_vibration_motor == CNA_FALSE &&
+        value->has_right_vibration_motor == CNA_FALSE &&
+        value->has_voice_support == CNA_FALSE && value->has_light_bar_ext == CNA_FALSE &&
+        value->has_trigger_vibration_motors_ext == CNA_FALSE &&
+        value->has_misc1_ext == CNA_FALSE && value->has_paddle1_ext == CNA_FALSE &&
+        value->has_paddle2_ext == CNA_FALSE && value->has_paddle3_ext == CNA_FALSE &&
+        value->has_paddle4_ext == CNA_FALSE && value->has_touchpad_ext == CNA_FALSE &&
+        value->has_gyro_ext == CNA_FALSE && value->has_accelerometer_ext == CNA_FALSE &&
+        value->reserved[0] == UINT8_C(0);
+}
+
+/* Every field is writable, because each canonical property has a setter as well as a getter. */
+static int capabilities_are_all_set(const CNA_GamePadCapabilities* const value)
+{
+    return value->is_connected != CNA_FALSE && value->has_a_button != CNA_FALSE &&
+        value->has_accelerometer_ext != CNA_FALSE && value->has_touchpad_ext != CNA_FALSE &&
+        value->gamepad_type == CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD;
+}
+
+static int validate_pure_capabilities_helpers(void)
+{
+    CNA_GamePadCapabilities capabilities;
+    memset(&capabilities, 0xEE, sizeof(capabilities));
+    if (cna_gamepad_capabilities_init(&capabilities) != CNA_RESULT_SUCCESS ||
+        capabilities.struct_size != sizeof(CNA_GamePadCapabilities) ||
+        capabilities.struct_version != UINT32_C(1) ||
+        !capabilities_are_disconnected(&capabilities)) {
+        return 0;
+    }
+    capabilities.is_connected = CNA_TRUE;
+    capabilities.has_a_button = CNA_TRUE;
+    capabilities.has_accelerometer_ext = CNA_TRUE;
+    capabilities.has_touchpad_ext = CNA_TRUE;
+    capabilities.gamepad_type = CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD;
+    if (!capabilities_are_all_set(&capabilities)) {
+        return 0;
+    }
+    return cna_gamepad_capabilities_init(0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
 static int validate_pure_touch_helpers(void)
 {
     CNA_TouchState state = {0};
@@ -257,6 +317,34 @@ static CNA_Result on_update(
         }
     }
 
+    for (CNA_PlayerIndex player = CNA_PLAYER_INDEX_ONE;
+         player <= CNA_PLAYER_INDEX_FOUR;
+         ++player) {
+        CNA_GamePadCapabilities pad_capabilities;
+        CNA_GamePadState pad_state = {
+            sizeof(CNA_GamePadState), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U}, 0, 0U, 0U,
+            {{0.0F, 0.0F}, {0.0F, 0.0F}, 0.0F, 0.0F}
+        };
+        if (cna_gamepad_capabilities_init(&pad_capabilities) != CNA_RESULT_SUCCESS ||
+            cna_gamepad_get_capabilities(game, player, &pad_capabilities) !=
+                CNA_RESULT_SUCCESS ||
+            pad_capabilities.gamepad_type > CNA_GAMEPAD_TYPE_BIG_BUTTON_PAD ||
+            pad_capabilities.reserved[0] != UINT8_C(0) ||
+            cna_gamepad_get_state(game, player, &pad_state) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* Connection is one answer, not two: capabilities and state must agree. */
+        if (pad_capabilities.is_connected != pad_state.is_connected) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* Nothing is connected in any verification tree, so the canonical disconnected value is
+           the expected answer -- but it is asserted only when the slot really is empty. */
+        if (pad_capabilities.is_connected == CNA_FALSE &&
+            !capabilities_are_disconnected(&pad_capabilities)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
     CNA_TouchCapabilities capabilities = {
         sizeof(CNA_TouchCapabilities), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U}, 0U
     };
@@ -281,8 +369,23 @@ static CNA_Result on_update(
         sizeof(CNA_GamePadState), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U}, 0, 0U, 0U,
         {{0.0F, 0.0F}, {0.0F, 0.0F}, 0.0F, 0.0F}
     };
+    CNA_GamePadCapabilities invalid_capabilities;
     CNA_MouseState invalid_mouse = mouse;
     invalid_mouse.struct_version = UINT32_C(2);
+    if (cna_gamepad_capabilities_init(&invalid_capabilities) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    if (cna_gamepad_get_capabilities(game, UINT32_C(4), &invalid_capabilities) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_gamepad_get_capabilities(game, CNA_PLAYER_INDEX_ONE, 0) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+    invalid_capabilities.struct_version = UINT32_C(2);
+    if (cna_gamepad_get_capabilities(game, CNA_PLAYER_INDEX_ONE, &invalid_capabilities) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return CNA_RESULT_INVALID_STATE;
+    }
     if (cna_gamepad_get_state(game, UINT32_C(4), &invalid_gamepad) !=
             CNA_RESULT_INVALID_ARGUMENT ||
         cna_gamepad_get_state_with_dead_zone(
@@ -308,21 +411,28 @@ static int capture_on_wrong_thread(void* const context)
         sizeof(CNA_GamePadState), UINT32_C(1), CNA_FALSE, {0U, 0U, 0U}, 0, 0U, 0U,
         {{0.0F, 0.0F}, {0.0F, 0.0F}, 0.0F, 0.0F}
     };
+    CNA_GamePadCapabilities capabilities;
     CNA_TouchState touch = {0};
     touch.struct_size = sizeof(CNA_TouchState);
     touch.struct_version = UINT32_C(1);
+    (void)cna_gamepad_capabilities_init(&capabilities);
     state->mouse_result = cna_mouse_get_state(state->game, &mouse);
     state->gamepad_result = cna_gamepad_get_state(
         state->game,
         CNA_PLAYER_INDEX_ONE,
         &gamepad);
+    state->capabilities_result = cna_gamepad_get_capabilities(
+        state->game,
+        CNA_PLAYER_INDEX_ONE,
+        &capabilities);
     state->touch_result = cna_touch_get_state(state->game, &touch);
     return 0;
 }
 
 int main(void)
 {
-    if (!validate_pure_gamepad_helpers() || !validate_pure_touch_helpers()) {
+    if (!validate_pure_gamepad_helpers() || !validate_pure_capabilities_helpers() ||
+        !validate_pure_touch_helpers()) {
         return 1;
     }
 
@@ -347,13 +457,14 @@ int main(void)
     }
 
     WrongThreadState wrong_thread = {
-        game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
+        game, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS, CNA_RESULT_SUCCESS
     };
     thrd_t thread;
     if (thrd_create(&thread, capture_on_wrong_thread, &wrong_thread) != thrd_success ||
         thrd_join(thread, 0) != thrd_success ||
         wrong_thread.mouse_result != CNA_RESULT_THREAD ||
         wrong_thread.gamepad_result != CNA_RESULT_THREAD ||
+        wrong_thread.capabilities_result != CNA_RESULT_THREAD ||
         wrong_thread.touch_result != CNA_RESULT_THREAD) {
         return 3;
     }
