@@ -876,7 +876,7 @@ glTF path, not in renderer selection.
 | RTR-P12-3 | ✅ | `README.md` — short section on choosing a renderer at runtime, linking the doc. |
 | RTR-P12-4 | ✅ | `AUDIT.md` — record the new CNAEXT public surface (`GraphicsRendererSelection`, `GetActive`, fallback API) with its test status. |
 | RTR-P12-5 | ✅ | `NEXT.md` — record what remains after this plan closes. |
-| RTR-P12-6 | ✅ | The four plan documents that describe renderer selection as compile-time (, , , ) each carry a pointer to this plan and to , stating that single-renderer mode is unchanged.  got its own, fuller note in RTR-P11-10. The other 48 plan documents never mention the option and were left alone rather than papered with a notice they do not need. |
+| RTR-P12-6 | ✅ | The four plan documents that describe renderer selection as compile-time (`plan_blend2d.md`, `plan_gltf.md`, `plan_opengles2.md`, `plan_svg_dom.md`) each carry a pointer to this plan and to `docs/runtime-renderer-selection.md`, stating that single-renderer mode is unchanged. `plan_glbackends.md` got its own, fuller note in RTR-P11-10. The other 48 plan documents never mention the option and were left alone rather than papered with a notice they do not need. |
 | RTR-P12-7 | ✅ | CI: single-renderer matrix unchanged, plus the P8 reference multi set. |
 | RTR-P12-8 | ⬜ | CI: the Emscripten multi set from RTR-P10-22, since that is the one with real end-user value. |
 | RTR-P12-9 | ✅ | Doxygen coverage check on every new public header (`CLAUDE.md` requires a full block on every public member). |
