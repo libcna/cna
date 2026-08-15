@@ -69,10 +69,11 @@ jobs:
           path: cna
           submodules: true
 
-      - name: Checkout sharp-runtime sibling
+      - name: Checkout pinned sharp-runtime sibling
         uses: actions/checkout@v4
         with:
           repository: openeggbert/sharp-runtime
+          ref: 74a8fe5ad32c60af3365f4ee40d6afd31229866f
           path: sharp-runtime
 
       - name: Checkout pinned TinyGL
