@@ -580,7 +580,7 @@ Worth doing on its own merits. After this phase, `modules/graphics/src` should c
 | RTR-P3-15 | ✅ | `GDI` multisample write-back: `GraphicsDevice::SetPresentationParameters()` and `createRenderer()` currently special-case `GDI`. Generalize to "always echo `GetMultiSampleCount()` back" — verify no other renderer regresses, since every other one already returns what it was given. |
 | RTR-P3-16 | ✅ | `GraphicsAdapter.cpp` — drop the now-unused `D3D9FormatMapping.hpp`/`D3D9ProfileCapabilities.hpp` includes from the XNA layer. |
 | RTR-P3-17 | ✅ | Verification: a test asserts `grep -c CNA_RENDERER_ modules/graphics/src` is **0**. |
-| RTR-P3-18 | 🟨 | Re-run the D3D9 divergence suite (`docs/d3d9-divergence-report.md`) and the Skia 2D oracle diff (`scripts/run-skia-2d-oracle-diff.sh`) — behaviour must be unchanged, this is a pure relocation. |
+| RTR-P3-18 | 🟨 | **Skia half done.** `scripts/run-skia-2d-oracle-diff.sh` passes 9/9 against the real-XNA oracle policy — seven scenes pixel-exact, two filtered ones within measured bounds — so P3's move of Skia's format tables behind `IGraphicsRenderer` virtuals changed no rendered pixel. The three SKIA unit failures were each shown pre-existing (two by a clean detached build at `a749fdce3`, the third by quoting both disagreeing lists from that commit — see `threeissues.md` #5). The D3D9 divergence suite remains undone: it needs a Windows cross-build under Wine, which is out of scope. |
 | RTR-P3-19 | ✅ | **Phase gate.** `DIRECTX9` (Wine), `SKIA`, `GDI` (Wine) and `OPENGLES3` builds all green with their existing suites. |
 
 ---

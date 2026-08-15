@@ -182,6 +182,7 @@ unnoticed until someone tries the target. CNA has an Emscripten preset (`CMakePr
 | 2 | `OPENGL33` glTF segfault | yes, at `c5045553b` | no | no |
 | 3 | Emscripten build blocked in `sharp-runtime` | yes | no | worked around with flags only |
 | 4 | Backslash comment dropped `PORTABLEGL` from a test's renderer list | yes; benign in effect | no | **fixed**, trap removed |
+| 5 | Skia's Texture2D validation and its test disagree about DXT/BC7 | yes, at `a749fdce3` | no | behaviour preserved |
 
 ---
 
@@ -254,3 +255,48 @@ from "refused" would have silently inherited the wrong answer.
 The same pattern — a `//` comment ending in a backslash inside a multi-line `#if` — would silently
 drop a condition anywhere it occurs. A grep for `//.*\\$` inside preprocessor conditionals across
 the corpus would find any others.
+
+---
+
+## 5. Skia's Texture2D validation and its own test disagree about compressed formats
+
+**Where:** `modules/graphics/src/Xna/Texture2D.cpp` (the Skia surface-format list, now
+`SkiaRenderer::ClassifySurfaceFormatEXT`) versus
+`modules/graphics/tests/Microsoft/Xna/Framework/Graphics/Texture2DTests.cpp`
+(`UnsupportedFormatConstructionTest`, the `kAllFormats` loop).
+
+**Status:** confirmed pre-existing. Behaviour preserved, not changed.
+
+### What was found
+
+Under `SKIA`, constructing a `Texture2D` with `Dxt1` (SurfaceFormat ordinal 4) or `Dxt3` (5)
+succeeds, while the test asserts it must throw `std::runtime_error` — "must throw, not silently
+succeed with the wrong GPU format".
+
+Both halves are stated explicitly in the pre-campaign source, and they disagree:
+
+| At `a749fdce3` | `Dxt1`/`Dxt3`/`Dxt5`/`Bc7EXT`/`Bc7SrgbEXT` |
+|---|---|
+| `ValidateTexture2DFormatEXT`'s Skia branch | **accepts** all five |
+| `UnsupportedFormatConstructionTest`'s supported list | **omits** all five |
+
+So the test has been failing on `SKIA` for as long as both lists have had their current contents.
+
+### Why it is not caused by the renderer-selection work
+
+Verified two ways. A clean detached build at `a749fdce3` reproduces the neighbouring `SKIA` failures
+(`SetRenderTargets_FourTargets_DoesNotThrow`,
+`RenderTargetCubeSetDataContractTest.StoresTheFaceOrRefusesButNeverSilentlyDiscardsIt`), and the two
+lists above are quoted directly from that commit — the disagreement is in the original source, not
+introduced by moving either list.
+
+Phase P3 moved the validation list verbatim into `SkiaRenderer::ClassifySurfaceFormatEXT` and phase
+P9 moved the test's list verbatim into a runtime predicate. Neither changed a member.
+
+### How to settle it
+
+Decide which list is right — whether Skia genuinely stores DXT/BC7 blocks (in which case the test's
+list is missing five entries) or does not (in which case the validation should refuse them) — and
+correct the other. `SkiaRenderer::IsCompressedTransferFormatEXT` already claims the compressed
+transfer path for exactly those five formats, which suggests the validation is the accurate half and
+the test simply was never updated for them.
