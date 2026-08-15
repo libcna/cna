@@ -826,7 +826,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-13 | ✅ | `+ MAGNUM`. |
 | RTR-P10-14 | ✅ | `+ WICKED`. |
 | RTR-P10-15 | ✅ | `+ SOKOL` (GL). |
-| RTR-P10-16 | ⬜ | `+ WEBGPU` (native wgpu-native). |
+| RTR-P10-16 | ✅ | `+ WEBGPU` (native wgpu-native). Built 2026-08-15 as `HEADLESS;WEBGPU;SOFTWARE;STUB` with `HEADLESS` as the default. **This row had been listed as blocked on a missing dependency, and that was my own unverified assumption:** the CMake integration downloads the pinned `wgpu-native v29.0.1.1` **binary** release rather than building from source, so it needed only network access. Evidence: the generated registry holds exactly four descriptors (`Headless`, `WebGPU`, `Software`, `Stub`); `MultiRendererFallbackTest` is 11 passed / 1 skipped (the cross-window-kind case, which this set cannot reach — see RTR-P5-13); `EachCompiledInRendererCanBeSelectedAndReallyBacksTheDevice` logs `graphics renderer: WEBGPU (selected at runtime from 4 compiled in)`, so the renderer is genuinely reached rather than merely linked; and `ldd` shows `libwgpu_native.so` bound into the test binary. Disk checked before starting: 27 GB free on the build partition, 95 GB on the one holding dependency checkouts. |
 | RTR-P10-17 | ✅ | `+ OPENGL1 + OPENGL2 + OPENGL4` — three native GL renderers coexisting; verify no loader/symbol conflict. |
 | RTR-P10-18 | ✅ | `+ OPENGLES1`. |
 | RTR-P10-19 | ⬜ | Windows/MinGW multi set: `DIRECTX9 + DIRECTX11 + DIRECTX12`. |
