@@ -158,6 +158,20 @@ iteration 0 to 100, 300, 500, 700, 1,200, 3,700, 4,000, 6,400, 8,700 and then aw
 The one pre-existing fix in the same patch -- a missing shader-to-effect parameter match, which
 asserted and then dereferenced -- was found earlier by the deterministic in-build corpus.
 
+## What "clean" has to mean
+
+Fuzzing cannot prove absence, so the gate needs a number rather than a feeling. For `plan_fx.md`
+FX-051 the bar is:
+
+- **one million coverage-guided executions on each FNA3D driver** CNA can select at runtime
+  (OpenGL/GLSL and SDL_GPU/SPIR-V), from the committed seed corpus,
+- under AddressSanitizer, with `SDL_ASSERT=abort` so an assert counts as a finding,
+- **producing no new crash artifact**, no timeout, and no allocation the limits did not catch.
+
+Anything less is a partial result and should be reported as one, with the execution count. A run
+that ends early because it found something is progress, not a pass: fix it, keep the artifact in
+the crash corpus, and start the count again.
+
 ## Exposure that remains
 
 Two distinct areas, and they differ by driver.
