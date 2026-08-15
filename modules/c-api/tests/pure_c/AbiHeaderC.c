@@ -798,3 +798,25 @@ _Static_assert(sizeof(CNA_OptionalInt32) == 8U && _Alignof(CNA_OptionalInt32) ==
                    offsetof(CNA_OptionalInt32, reserved) == 1U &&
                    offsetof(CNA_OptionalInt32, value) == 4U,
                "CNA_OptionalInt32 layout must remain stable");
+_Static_assert(sizeof(CNA_NetworkGamerHandle) == 8U && sizeof(CNA_NetworkMachineHandle) == 8U &&
+                   sizeof(CNA_GameEndedEventInfo) == 8U &&
+                   sizeof(CNA_GameStartedEventInfo) == 8U &&
+                   sizeof(CNA_GamerJoinedEventInfo) == 16U &&
+                   _Alignof(CNA_GamerJoinedEventInfo) == 8U &&
+                   offsetof(CNA_GamerJoinedEventInfo, gamer) == 8U &&
+                   sizeof(CNA_GamerLeftEventInfo) == 16U &&
+                   offsetof(CNA_GamerLeftEventInfo, gamer) == 8U &&
+                   sizeof(CNA_HostChangedEventInfo) == 24U &&
+                   offsetof(CNA_HostChangedEventInfo, old_host) == 8U &&
+                   offsetof(CNA_HostChangedEventInfo, new_host) == 16U,
+               "CNA network gamer event layouts must remain stable");
+_Static_assert(sizeof(CNA_NetworkSessionEndedEventInfo) == 16U &&
+                   _Alignof(CNA_NetworkSessionEndedEventInfo) == 4U &&
+                   offsetof(CNA_NetworkSessionEndedEventInfo, end_reason) == 8U &&
+                   offsetof(CNA_NetworkSessionEndedEventInfo, reserved) == 12U &&
+                   sizeof(CNA_WriteLeaderboardsEventInfo) == 24U &&
+                   _Alignof(CNA_WriteLeaderboardsEventInfo) == 8U &&
+                   offsetof(CNA_WriteLeaderboardsEventInfo, gamer) == 8U &&
+                   offsetof(CNA_WriteLeaderboardsEventInfo, is_leaving) == 16U &&
+                   offsetof(CNA_WriteLeaderboardsEventInfo, reserved) == 17U,
+               "CNA network session event layouts must remain stable");

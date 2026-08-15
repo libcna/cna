@@ -2,10 +2,10 @@
 
 ## Scope
 
-`CNA/C/net.h` currently covers the network identity enumerations, the quality-of-service value, the
-session-property list and both packet buffers. Gamers, machines, session events, sessions
-themselves and discovery are later coverage tasks and have no C route yet; nothing in this header
-opens a socket or joins a session.
+`CNA/C/net.h` covers the network identity enumerations, the quality-of-service value, the
+session-property list and both packet buffers. `CNA/C/net_gamers.h` adds gamers, machines and the
+event descriptions. Sessions, local gamers and discovery are a later coverage task and have no C
+route yet; nothing in either header opens a socket or joins a session.
 
 ## Identities
 
@@ -96,3 +96,28 @@ per thread as well. `cna_net_get_last_join_error` reads it back.
 Any later failure on the same thread clears the record, so a stale join error can never be
 returned; a caller that needs it must read it immediately after the failing call, exactly as with
 the rest of the per-thread error information.
+
+## Gamers, machines and event descriptions
+
+`CNA_NetworkGamerHandle` owns a canonical gamer. Every canonical flag, the session-local
+identifier, the round-trip time as 100-nanosecond ticks and the owning session handle are exposed.
+`cna_network_gamer_create` takes a session handle so its shape is already final; session handles
+arrive with the session slice, so for now only `CNA_INVALID_HANDLE` is accepted.
+
+The CNA extension setters keep an `_ext` suffix — `set_has_left_session_ext`, `set_id_ext`,
+`set_is_host_ext`, `set_roundtrip_ticks_ext` — so a consumer can see at a glance which state the
+canonical API leaves permanently fixed without them.
+
+`cna_network_gamer_copy_machine` hands back an **independent copy** rather than an alias. The
+canonical setter already takes its machine by value, and the canonical machine exposes no mutator,
+so a copy is observationally identical to the reference the canonical getter returns.
+
+`CNA_NetworkMachineHandle` owns a machine. Its roster is exposed as a count plus indexed access
+returning a borrowed gamer view; a view keeps its machine alive and blocks the machine's release.
+Only a session populates a roster, so a machine created from C reports none.
+`cna_network_machine_remove_from_session` reports the canonical always-throwing placeholder as
+`CNA_RESULT_NOT_SUPPORTED` rather than pretending it succeeded.
+
+The seven canonical event-argument types become fixed `CNA_*EventInfo` descriptions with `_init`
+routines, delivered by value exactly as every other C API event payload is. A payload gamer is a
+validated handle, so a description can never name a handle that was never a gamer.

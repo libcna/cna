@@ -34,6 +34,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiMatrix.cpp
     src/CnaCApiModels.cpp
     src/CnaCApiNet.cpp
+    src/CnaCApiNetGamers.cpp
     src/CnaCApiPackedVectors.cpp
     src/CnaCApiQuaternion.cpp
     src/CnaCApiRuntime.cpp

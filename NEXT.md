@@ -254,7 +254,19 @@
 > routes move packet bytes, because the canonical API hands buffers straight to send/receive and
 > never exposes them, which would otherwise leave the whole packet surface untestable. The inventory
 > is now 3,665 implemented, 29 partial, 2,606 planned and 115 N/A; all three trees are green at
-> 50/50. CBIND-036D (network gamers, machines and events, 65 rows) is next.
+> 50/50.
+>
+> CBIND-036D then maps gamers, machines and the event-argument types, and its slice boundary needed
+> one correction: `LocalNetworkGamer` moved to CBIND-036E, because its receive and send paths
+> dereference the owning session and so it cannot exist before sessions do — the 65/104 split became
+> 47/122. The four CNA extension setters on a gamer keep an `_ext` suffix so a consumer can see
+> which state the canonical API otherwise leaves permanently fixed. A machine's roster is a count
+> plus borrowed views that block the machine's release, and the canonical always-throwing
+> roster-removal placeholder is reported as `NOT_SUPPORTED` rather than faked. The seven
+> event-argument types become fixed descriptions with validating initializers, delivered by value
+> like every other C API event payload. The inventory is now 3,711 implemented, 29 partial, 2,559
+> planned and 116 N/A; all three trees stay green at 50/50. CBIND-036E (sessions, local gamers and
+> discovery, 122 rows) is the last CBIND-036 slice.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

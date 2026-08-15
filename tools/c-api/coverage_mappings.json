@@ -2442,6 +2442,56 @@
       "tests": "Doxygen declaration inventory; C iteration is covered by the count/index and enumerator tests in `NetSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-036C"
+    },
+    {
+      "id": "network-gamer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer(?:::(?:CreateInternal|getHasLeftSessionProperty|SetHasLeftSession|getHasVoiceProperty|getIdProperty|SetId|getIsGuestProperty|getIsHostProperty|SetIsHost|getIsLocalProperty|getIsMutedByLocalUserProperty|getIsPrivateSlotProperty|getIsReadyProperty|setIsReadyProperty|getIsTalkingProperty|getMachineProperty|setMachineProperty|getRoundtripTimeProperty|SetRoundtripTime|getSessionProperty))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "an owned `CNA_NetworkGamerHandle` with every canonical flag, the session-local identifier, the round-trip time as 100-nanosecond ticks and the owning session handle. The CNA extension setters keep their `_ext` suffix so a consumer can see which state the canonical API leaves permanently fixed. `getMachineProperty` becomes an independent owned copy rather than an alias, because the canonical setter already takes its machine by value and the canonical machine exposes no mutator, so a copy is observationally identical. No `NetworkSession` or `System::TimeSpan` pointer crosses the boundary",
+      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036D"
+    },
+    {
+      "id": "network-gamer-protected-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkGamer::NetworkGamer$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: a protected constructor for C++ subclasses. C creates gamers through `cna_network_gamer_create`, which maps the canonical public factory",
+      "tests": "Doxygen declaration inventory; the public factory is covered by `NetSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036D"
+    },
+    {
+      "id": "network-machine",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Net::NetworkMachine(?:::.*)?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_NetworkMachineHandle` with a gamer count and indexed borrowed-view access to its roster, and a removal route that reports the canonical always-throwing placeholder as `CNA_RESULT_NOT_SUPPORTED` rather than pretending it succeeded. A borrowed gamer view keeps its machine alive and blocks the machine's release; only a session populates the roster, so a machine created from C reports none",
+      "tests": "`NetSmoke.c` creation with and without a gamertag, every default flag, the identifier, round-trip time and session answers, each extension setter observed through its getter, machine copy-and-set round trip with the independent-copy check, the empty roster and its out-of-range refusals, the canonical always-throwing removal reported as unsupported, and stale-handle refusals, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036D"
+    },
+    {
+      "id": "network-session-event-arguments",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/net/include/Microsoft/Xna/Framework/Net/(?:GameEndedEventArgs|GameStartedEventArgs|GamerJoinedEventArgs|GamerLeftEventArgs|HostChangedEventArgs|NetworkSessionEndedEventArgs|WriteLeaderboardsEventArgs)\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "fixed `CNA_*EventInfo` descriptions with versioned prefixes and `cna_*_event_info_init` initializers, one per canonical event-argument type. A payload gamer is a validated `CNA_NetworkGamerHandle`, so a description can never name a handle that was never a gamer, and the session-ended reason is a validated identity. The descriptions are delivered by value, matching how every other C API event payload is delivered; no `System::EventArgs` object crosses the boundary",
+      "tests": "`NetSmoke.c` initialization of all seven descriptions, payload handle validation including the refusal of a handle that was never a gamer, the rejected end-reason identity, invalid structure prefixes, plus C and C++ ABI layout assertions",
+      "status": "implemented",
+      "task": "CBIND-036D"
     }
   ]
 }

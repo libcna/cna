@@ -5,6 +5,14 @@
 #include <stdint.h>
 #include <string.h>
 
+static CNA_StringView view(const char* const text)
+{
+    CNA_StringView result;
+    result.data = text;
+    result.byte_length = (uint64_t)strlen(text);
+    return result;
+}
+
 static CNA_OptionalInt32 present(const int32_t value)
 {
     const CNA_OptionalInt32 result = {CNA_TRUE, {0U, 0U, 0U}, value};
@@ -451,6 +459,191 @@ static int validate_packets(void)
         cna_packet_reader_destroy(reader) == CNA_RESULT_INVALID_HANDLE;
 }
 
+static int validate_gamer_defaults(const CNA_NetworkGamerHandle gamer)
+{
+    CNA_Bool flag = CNA_TRUE;
+    uint8_t id = UINT8_C(9);
+    int64_t ticks = INT64_C(-1);
+    CNA_Handle session = UINT64_C(9);
+
+    if (cna_network_gamer_get_has_left_session(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_network_gamer_get_has_voice(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_network_gamer_get_is_guest(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_network_gamer_get_is_host(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_network_gamer_get_is_muted_by_local_user(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_network_gamer_get_is_private_slot(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE ||
+        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE ||
+        cna_network_gamer_get_is_talking(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_FALSE) {
+        return 0;
+    }
+    /* A plain network gamer is not a local gamer; only the local subtype reports otherwise. */
+    if (cna_network_gamer_get_is_local(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_FALSE) {
+        return 0;
+    }
+    if (cna_network_gamer_get_id(gamer, &id) != CNA_RESULT_SUCCESS || id != UINT8_C(0) ||
+        cna_network_gamer_get_roundtrip_ticks(gamer, &ticks) != CNA_RESULT_SUCCESS ||
+        ticks != INT64_C(0)) {
+        return 0;
+    }
+    return cna_network_gamer_get_session(gamer, &session) == CNA_RESULT_SUCCESS &&
+        session == CNA_INVALID_HANDLE &&
+        cna_network_gamer_get_id(gamer, 0) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
+static int validate_gamer_mutation(const CNA_NetworkGamerHandle gamer)
+{
+    CNA_Bool flag = CNA_FALSE;
+    uint8_t id = UINT8_C(0);
+    int64_t ticks = INT64_C(0);
+
+    if (cna_network_gamer_set_has_left_session_ext(gamer, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_get_has_left_session(gamer, &flag) != CNA_RESULT_SUCCESS ||
+        flag != CNA_TRUE) {
+        return 0;
+    }
+    if (cna_network_gamer_set_id_ext(gamer, UINT8_C(42)) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_get_id(gamer, &id) != CNA_RESULT_SUCCESS || id != UINT8_C(42)) {
+        return 0;
+    }
+    if (cna_network_gamer_set_is_host_ext(gamer, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_get_is_host(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+        return 0;
+    }
+    if (cna_network_gamer_set_is_ready(gamer, CNA_TRUE) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_get_is_ready(gamer, &flag) != CNA_RESULT_SUCCESS || flag != CNA_TRUE) {
+        return 0;
+    }
+    return cna_network_gamer_set_roundtrip_ticks_ext(gamer, INT64_C(5000)) ==
+            CNA_RESULT_SUCCESS &&
+        cna_network_gamer_get_roundtrip_ticks(gamer, &ticks) == CNA_RESULT_SUCCESS &&
+        ticks == INT64_C(5000);
+}
+
+static int validate_machine(const CNA_NetworkGamerHandle gamer)
+{
+    CNA_NetworkMachineHandle machine = CNA_INVALID_HANDLE;
+    CNA_NetworkMachineHandle copied = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle view = UINT64_C(9);
+    int32_t count = -1;
+
+    if (cna_network_machine_create(0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_machine_create(&machine) != CNA_RESULT_SUCCESS ||
+        machine == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* Only a session populates a machine's roster, so a standalone machine reports none. */
+    if (cna_network_machine_get_gamer_count(machine, &count) != CNA_RESULT_SUCCESS ||
+        count != 0 ||
+        cna_network_machine_get_gamer(machine, 0, &view) != CNA_RESULT_INVALID_ARGUMENT ||
+        view != CNA_INVALID_HANDLE ||
+        cna_network_machine_get_gamer(machine, -1, &view) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    /* The canonical removal is a declared placeholder that always throws. */
+    if (cna_network_machine_remove_from_session(machine) != CNA_RESULT_NOT_SUPPORTED) {
+        return 0;
+    }
+    if (cna_network_gamer_set_machine(gamer, machine) != CNA_RESULT_SUCCESS ||
+        cna_network_gamer_set_machine(gamer, CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    /* The canonical setter copies by value, so the C route hands back an independent copy. */
+    if (cna_network_gamer_copy_machine(gamer, &copied) != CNA_RESULT_SUCCESS ||
+        copied == CNA_INVALID_HANDLE || copied == machine ||
+        cna_network_machine_get_gamer_count(copied, &count) != CNA_RESULT_SUCCESS || count != 0) {
+        return 0;
+    }
+    return cna_network_machine_destroy(copied) == CNA_RESULT_SUCCESS &&
+        cna_network_machine_destroy(machine) == CNA_RESULT_SUCCESS &&
+        cna_network_machine_destroy(machine) == CNA_RESULT_INVALID_HANDLE;
+}
+
+static int validate_event_descriptions(const CNA_NetworkGamerHandle gamer)
+{
+    CNA_GameEndedEventInfo ended = {sizeof(CNA_GameEndedEventInfo), UINT32_C(1)};
+    CNA_GameStartedEventInfo started = {sizeof(CNA_GameStartedEventInfo), UINT32_C(1)};
+    CNA_GamerJoinedEventInfo joined = {
+        sizeof(CNA_GamerJoinedEventInfo), UINT32_C(1), CNA_INVALID_HANDLE};
+    CNA_GamerLeftEventInfo left = {
+        sizeof(CNA_GamerLeftEventInfo), UINT32_C(1), CNA_INVALID_HANDLE};
+    CNA_HostChangedEventInfo host = {
+        sizeof(CNA_HostChangedEventInfo), UINT32_C(1), CNA_INVALID_HANDLE, CNA_INVALID_HANDLE};
+    CNA_NetworkSessionEndedEventInfo session_ended = {
+        sizeof(CNA_NetworkSessionEndedEventInfo), UINT32_C(1), UINT32_C(0), {0U, 0U, 0U, 0U}};
+    CNA_WriteLeaderboardsEventInfo leaderboards = {
+        sizeof(CNA_WriteLeaderboardsEventInfo), UINT32_C(1), CNA_INVALID_HANDLE, CNA_FALSE,
+        {0U, 0U, 0U, 0U, 0U, 0U, 0U}};
+
+    if (cna_game_ended_event_info_init(&ended) != CNA_RESULT_SUCCESS ||
+        cna_game_started_event_info_init(&started) != CNA_RESULT_SUCCESS ||
+        cna_game_ended_event_info_init(0) != CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_gamer_joined_event_info_init(gamer, &joined) != CNA_RESULT_SUCCESS ||
+        joined.gamer != gamer ||
+        cna_gamer_left_event_info_init(gamer, &left) != CNA_RESULT_SUCCESS ||
+        left.gamer != gamer) {
+        return 0;
+    }
+    if (cna_host_changed_event_info_init(CNA_INVALID_HANDLE, gamer, &host) !=
+            CNA_RESULT_SUCCESS ||
+        host.old_host != CNA_INVALID_HANDLE || host.new_host != gamer) {
+        return 0;
+    }
+    /* A payload can never name a handle that was never a gamer. */
+    if (cna_gamer_joined_event_info_init(UINT64_C(1234), &joined) != CNA_RESULT_INVALID_HANDLE ||
+        cna_host_changed_event_info_init(UINT64_C(1234), gamer, &host) !=
+            CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_network_session_ended_event_info_init(
+            CNA_NETWORK_SESSION_END_REASON_REMOVED_BY_HOST,
+            &session_ended) != CNA_RESULT_SUCCESS ||
+        session_ended.end_reason != CNA_NETWORK_SESSION_END_REASON_REMOVED_BY_HOST ||
+        cna_network_session_ended_event_info_init(UINT32_C(9), &session_ended) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+        return 0;
+    }
+    if (cna_write_leaderboards_event_info_init(gamer, CNA_TRUE, &leaderboards) !=
+            CNA_RESULT_SUCCESS ||
+        leaderboards.gamer != gamer || leaderboards.is_leaving != CNA_TRUE) {
+        return 0;
+    }
+    ended.struct_version = UINT32_C(2);
+    return cna_game_ended_event_info_init(&ended) == CNA_RESULT_INVALID_ARGUMENT;
+}
+
+static int validate_gamers(void)
+{
+    CNA_NetworkGamerHandle gamer = CNA_INVALID_HANDLE;
+    CNA_NetworkGamerHandle rejected = UINT64_C(9);
+
+    if (cna_network_gamer_create(CNA_INVALID_HANDLE, view("Tester"), 0) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        cna_network_gamer_create(UINT64_C(1234), view("Tester"), &rejected) !=
+            CNA_RESULT_INVALID_HANDLE ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (cna_network_gamer_create(CNA_INVALID_HANDLE, view("Tester"), &gamer) !=
+            CNA_RESULT_SUCCESS ||
+        gamer == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    if (!validate_gamer_defaults(gamer) || !validate_gamer_mutation(gamer) ||
+        !validate_machine(gamer) || !validate_event_descriptions(gamer)) {
+        (void)cna_network_gamer_destroy(gamer);
+        return 0;
+    }
+    return cna_network_gamer_destroy(gamer) == CNA_RESULT_SUCCESS &&
+        cna_network_gamer_destroy(gamer) == CNA_RESULT_INVALID_HANDLE;
+}
+
 static int validate_join_error(void)
 {
     CNA_NetworkSessionJoinError join_error = CNA_NETWORK_SESSION_JOIN_ERROR_SESSION_FULL;
@@ -488,6 +681,9 @@ int main(void)
     }
     if (!validate_join_error()) {
         return 6;
+    }
+    if (!validate_gamers()) {
+        return 7;
     }
     return 0;
 }
