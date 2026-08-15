@@ -31,6 +31,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"
@@ -1172,8 +1177,6 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 }
 #endif
 
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU)
 // Non-indexed point addressing: vertexStart selects the first consumed vertex and primitiveCount
 // limits the consumed range to exactly that many points.
 //
@@ -1184,6 +1187,9 @@ TEST_F(PointListPrimitiveTest, PointListRespectsViewportScissorAndBlendState)
 // REMED-GFX-111's topology contract.
 TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU);
     RequirePointRendering();
 
     const int width = BackbufferWidth();
@@ -1222,7 +1228,6 @@ TEST_F(PointListPrimitiveTest, NonIndexedPointListHonorsVertexStartAndExactCount
     ExpectPointCoverageBudget(
         pixels, Color::Black, 3, "non-indexed point range with vertexStart");
 }
-#endif
 
 #ifdef CNA_RENDERER_BGFX
 // Bgfx expresses topology as per-submission state (BGFX_STATE_PT_*), not as a cached graphics
@@ -1352,7 +1357,6 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 }
 #endif
 
-#ifdef CNA_RENDERER_SDL_GPU
 // SDL_GPU maps PointListEXT to SDL_GPU_PRIMITIVETYPE_POINTLIST and consumes exactly
 // primitiveCount vertices/indices, but implements no backbuffer readback. Its practical exact-pixel
 // control therefore runs through RenderTarget2D::GetData, which this renderer does support.
@@ -1365,6 +1369,9 @@ TEST_F(PointListPrimitiveTest, BgfxNonIndexedPointRangeCoversExactlyTheRequested
 // vertexStart, which this renderer honours.
 TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(SdlGpu);
     RequirePointRendering();
 
     constexpr int kSize = 128;
@@ -1434,13 +1441,14 @@ TEST_F(PointListPrimitiveTest, SdlGpuPointListRendersExactRenderTargetPixels)
     ExpectPointCoverageBudget(
         direct, Color::Black, 3, "SDL_GPU non-indexed render-target point coverage");
 }
-#endif
 
-#ifdef CNA_RENDERER_SOFTWARE
 // Software's documented v1 raster boundary is TriangleList only. It must keep rejecting
 // PointListEXT explicitly on every public entry point rather than approximating it.
 TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this group,
+    // so on every other renderer these tests did not exist and reported nothing.
+    CNA_SKIP_IF_RENDERER_IS_NONE_OF(Software);
     RequirePointRendering();
 
     const std::array<VertexPositionColor, 3> vertices{
@@ -1476,4 +1484,3 @@ TEST_F(PointListPrimitiveTest, SoftwareExplicitlyRejectsPointListTopology)
             PrimitiveType::PointListEXT, vertices.data(), 0, 3, indices.data(), 0, 3),
         std::runtime_error);
 }
-#endif
