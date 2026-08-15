@@ -826,7 +826,7 @@ namespace CNA::Internal::Renderers::WebGPU
         // pbr3d.wgsl's third (small) uniform buffer: PBR factors/map scales plus glTF MASK coverage,
         // the only per-draw PBR-specific scalars not already covered by FillExtUniforms()'s
         // diffuseColor/ambientColor or FillLitLightUniforms()'s emissiveColor/world/eyePos.
-        void FillPbrFactors(std::array<float, 16>& out, const GpuDrawParams& p)
+        void FillPbrFactors(std::array<float, 56>& out, const GpuDrawParams& p)
         {
             out[0] = p.pbrMetallicFactor;
             out[1] = p.pbrRoughnessFactor;
@@ -844,6 +844,10 @@ namespace CNA::Internal::Renderers::WebGPU
             out[13] = p.pbrDielectricF0[1];
             out[14] = p.pbrDielectricF0[2];
             out[15] = p.pbrDielectricF90;
+            for (int row = 0; row < 10; ++row)
+                for (int component = 0; component < 4; ++component)
+                    out[16 + row * 4 + component] =
+                        p.pbrTextureTransformRows[row][component];
         }
 
         // New bone-palette uniform buffer for the skinned shaders (skinned3d.wgsl/skinned_pbr3d.wgsl):
@@ -8482,6 +8486,7 @@ struct PbrFactors {
     alphaTest: vec4f,
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
+    textureTransformRows: array<vec4f, 10>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -8555,8 +8560,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
+}
+
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
+    let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
     let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
@@ -8573,12 +8584,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    var sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
     sampledNormal.x *= pf.metallicRoughness.z;
     sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
-    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let mr = textureSample(metallicRoughnessTex, texSampler, pbrTransformUv(input.uv, 2u));
     let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
@@ -8601,10 +8612,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
-    let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissiveSample = textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
@@ -8636,8 +8647,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains four vec4 values (map factors, alpha test, sRGB flags, Fresnel).
-        uboEntries[2].buffer.minBindingSize = 16 * sizeof(float);
+        // Four material vec4s followed by ten affine texture-transform rows.
+        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
         WGPUBindGroupLayoutDescriptor uboLayoutDescriptor{};
         uboLayoutDescriptor.label = StringView("CNA WebGPU Pbr3D BindGroupLayout0");
         uboLayoutDescriptor.entryCount = uboEntries.size();
@@ -9965,6 +9976,7 @@ struct PbrFactors {
     alphaTest: vec4f,
     srgbFlags: vec4f,
     dielectricFresnel: vec4f,
+    textureTransformRows: array<vec4f, 10>,
 };
 @group(0) @binding(2) var<uniform> pf: PbrFactors;
 
@@ -10083,8 +10095,14 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     return (kd * diffuseColor / 3.14159265 + specular) * lightColor * ndotl;
 }
 
+fn pbrTransformUv(uv: vec2f, slot: u32) -> vec2f {
+    let value = vec3f(uv, 1.0);
+    return vec2f(dot(value, pf.textureTransformRows[slot * 2u].xyz),
+                 dot(value, pf.textureTransformRows[slot * 2u + 1u].xyz));
+}
+
 @fragment fn fs_main(input: VertexOutput) -> @location(0) vec4f {
-    let baseColorSample = textureSample(baseColorTex, texSampler, input.uv);
+    let baseColorSample = textureSample(baseColorTex, texSampler, pbrTransformUv(input.uv, 0u));
     let baseColor = select(baseColorSample.rgb, srgbToLinear(baseColorSample.rgb), pf.srgbFlags.x > 0.5);
     let albedo = baseColor * u.diffuseColor.rgb;
     let alpha = baseColorSample.a * u.diffuseColor.a;
@@ -10101,12 +10119,12 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     let t0 = normalize(input.worldTangent - n0 * dot(n0, input.worldTangent));
     let b0 = cross(n0, t0) * input.bitangentSign;
     let tbn = mat3x3f(t0, b0, n0);
-    var sampledNormal = textureSample(normalTex, texSampler, input.uv).rgb * 2.0 - 1.0;
+    var sampledNormal = textureSample(normalTex, texSampler, pbrTransformUv(input.uv, 1u)).rgb * 2.0 - 1.0;
     sampledNormal.x *= pf.metallicRoughness.z;
     sampledNormal.y *= pf.metallicRoughness.z;
     let finalNormal = normalize(tbn * sampledNormal);
 
-    let mr = textureSample(metallicRoughnessTex, texSampler, input.uv);
+    let mr = textureSample(metallicRoughnessTex, texSampler, pbrTransformUv(input.uv, 2u));
     let roughness = clamp(mr.g * pf.metallicRoughness.y, 0.045, 1.0);
     let metallic = clamp(mr.b * pf.metallicRoughness.x, 0.0, 1.0);
 
@@ -10126,10 +10144,10 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
     lo += pbrLight(finalNormal, eye, l1, lp.light1Diffuse.xyz, albedo, f0, f90, roughness, metallic);
     lo += pbrLight(finalNormal, eye, l2, lp.light2Diffuse.xyz, albedo, f0, f90, roughness, metallic);
 
-    let occlusionSample = textureSample(occlusionTex, texSampler, input.uv).r;
+    let occlusionSample = textureSample(occlusionTex, texSampler, pbrTransformUv(input.uv, 4u)).r;
     let occlusion = 1.0 + pf.metallicRoughness.w * (occlusionSample - 1.0);
     let ambient = u.ambientLighting.xyz * albedo * occlusion;
-    let emissiveSample = textureSample(emissiveTex, texSampler, input.uv).rgb;
+    let emissiveSample = textureSample(emissiveTex, texSampler, pbrTransformUv(input.uv, 3u)).rgb;
     let emissiveLinear = select(emissiveSample, srgbToLinear(emissiveSample), pf.srgbFlags.y > 0.5);
     let emissive = lp.emissiveColor.xyz * emissiveLinear;
 
@@ -10161,8 +10179,8 @@ fn pbrLight(n: vec3f, v: vec3f, l: vec3f, lightColor: vec3f, albedo: vec3f, f0: 
         uboEntries[2].binding = 2;
         uboEntries[2].visibility = WGPUShaderStage_Fragment;
         uboEntries[2].buffer.type = WGPUBufferBindingType_Uniform;
-        // PbrFactors contains four vec4 values (map factors, alpha test, sRGB flags, Fresnel).
-        uboEntries[2].buffer.minBindingSize = 16 * sizeof(float);
+        // Four material vec4s followed by ten affine texture-transform rows.
+        uboEntries[2].buffer.minBindingSize = 56 * sizeof(float);
         uboEntries[3].binding = 3;
         uboEntries[3].visibility = WGPUShaderStage_Vertex;
         uboEntries[3].buffer.type = WGPUBufferBindingType_Uniform;
