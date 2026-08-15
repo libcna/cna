@@ -542,7 +542,7 @@ values everywhere except inside a structure.
 | FX-067 | Assess DirectX 9, D3D12, LLGL, Diligent, Magnum, Sokol, Wicked, and other programmable renderers individually | FX-060 | **Done.** Section 10.3 classifies every one of the 46 renderer identities as planned, assessed-feasible or unsupported-by-design, from two measured facts: which profiles the pinned MojoShader actually compiles (GLSL in four dialects and SPIR-V portably; HLSL Windows-gated, Metal Apple-gated; ARB1/BYTECODE/D3D disabled) and which APIs it ships binding glue for (OpenGL, SDL_GPU, D3D11 -- and nothing else). The finding worth acting on is DirectX 9: a compiled XNA effect *is* D3D9 bytecode, and CNA's D3D9 renderer already feeds raw DWORD token blobs to `CreateVertexShader`/`CreatePixelShader`, so it needs the container parsed and no shader translated at all -- filed as `FX-070` |
 | FX-068 | Keep bgfx false until a reproducible bgfx-native shader packaging route is proven | FX-060 | Feasibility record covers shaderc format, reflection, pass states, and redistribution |
 | FX-069 | Publish the final cross-renderer support matrix and project-wide completion definition | FX-061, FX-062, FX-063, FX-065, FX-066, FX-067, FX-068 | Every renderer is tested-supported or intentionally unsupported; no silent fallback exists |
-| FX-070 | Implement and gate DirectX 9, which needs the effect container parsed but no shader translated | FX-060, FX-067 | Full shared suite passes on a Windows or DXVK-native configuration. Structurally the smallest backend in the project: MojoShader parses parameters, techniques, passes and states, and each pass's shader bytecode goes to Direct3D 9 untranslated with every MojoShader profile left disabled. Cannot be verified on this Linux development machine, so it ships behind the same capability gate as every other backend |
+| FX-070 | Implement and gate DirectX 9, which needs the effect container parsed but no shader translated | FX-060, FX-067 | Full shared suite passes on a Windows or DXVK-native configuration. Structurally the smallest backend in the project: `MOJOSHADER_compileShaderFunc` receives the raw D3D9 token buffer, so the backend's compile step is `CreateVertexShader` / `CreatePixelShader` on that buffer with nothing translated. Two facts the `cna_mojoshader_effect_probe` existence gate established: the parser refuses to run without a nine-function backend context, and reflection comes from `MOJOSHADER_parse`, whose non-translating `BYTECODE` profile the pin disables -- so this task either re-enables `SUPPORT_PROFILE_BYTECODE` for its configuration or parses through a translating profile and discards the output. Cannot be verified on this Linux development machine, so it ships behind the same capability gate as every other backend |
 
 ### Phase H - Optional future formats and tooling
 
@@ -660,6 +660,12 @@ APIs: `mojoshader_opengl.c`, `mojoshader_sdlgpu.c` and `mojoshader_d3d11.c`. Eve
 renderer writes its own binding layer, which is the real cost driver and is why Vulkan and Metal
 have their own prototype tasks rather than being folded into a single "SPIR-V works" claim.
 
+**What every backend must supply regardless.** `MOJOSHADER_effectShaderContext` is nine function
+pointers -- compile, addref, delete, getParseData, bind, getBound, map/unmap uniform memory, and
+error -- and the parser refuses to run without them. `cna_mojoshader_effect_probe` implements the
+smallest set that parses the committed fixtures, so the size of that obligation is measured rather
+than guessed: it is the floor for every row below.
+
 #### Planned backends
 
 | Renderer | Route | Task |
@@ -683,13 +689,27 @@ constants through `SetVertexShaderConstantF` / `SetPixelShaderConstantF`
 (`modules/renderers/directx9/src/D3D9EffectRenderer.cpp`). That is exactly the shape MojoShader
 hands back after parsing the effect container.
 
-So the work is: use MojoShader for the container only -- parameters, techniques, passes, render
-states, sampler states, and which shader object each pass selects -- and pass the shader bytecode
-through untranslated. Every profile stays disabled. This is a smaller job than any other backend
-here and should be scheduled ahead of the harder ones; it is filed as `FX-070`.
+The `FX-070` existence gate (`tools/graphics/mojoshader_effect_probe.cpp`) confirms the shape
+concretely. MojoShader hands a backend the **raw token buffer**: `MOJOSHADER_compileShaderFunc`
+takes `(tokenbuf, bufsize, ...)`, so a Direct3D 9 backend's implementation of it is
+`CreateVertexShader` / `CreatePixelShader` on that buffer, with nothing translated.
 
-The caveat is platform, not design: the renderer needs a live Direct3D 9 device, so it can only be
-gated on a Windows or DXVK-native configuration, and this project develops on Linux. The
+Two corrections to the obvious reading, both found by building the probe rather than reading
+headers:
+
+- **The parser does not run without a backend.** `MOJOSHADER_compileEffect` refuses a null context
+  outright and calls `compileShader` for every shader object in the container, so "parse the
+  container only" is not an available mode. The backend is small, but it is mandatory.
+- **Reflection has to come from a profile.** The backend's `getParseData` must return a
+  `MOJOSHADER_parseData`, which is produced by `MOJOSHADER_parse` -- and the profile that returns
+  reflection *without* translating, `BYTECODE`, is one of the four the pin disables. So `FX-070`
+  either turns `SUPPORT_PROFILE_BYTECODE` back on for its configuration, or parses through a
+  translating profile and discards the output. That decision belongs to the task, and it is a build
+  switch either way rather than a design problem.
+
+This is still a smaller job than any other backend here and should be scheduled ahead of the harder
+ones. The caveat is platform, not design: the renderer needs a live Direct3D 9 device, so it can
+only be gated on a Windows or DXVK-native configuration, and this project develops on Linux. The
 implementation is portable to write and cannot be verified here.
 
 #### Assessed feasible, not yet scheduled

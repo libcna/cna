@@ -321,3 +321,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     add_executable(cna_compiled_effect_benchmark tools/graphics/compiled_effect_benchmark.cpp)
     target_link_libraries(cna_compiled_effect_benchmark PRIVATE CNA SHARP_RUNTIME SDL3::SDL3)
 endif()
+
+# plan_fx.md FX-061/FX-062/FX-063/FX-065 existence gate: proves the pinned MojoShader parses a
+# compiled Effect Framework binary while linking only MojoShader -- no FNA3D and no CNA. Every
+# backend planned after FNA3D depends on that being true, and it was not obvious: MojoShader is
+# FNA3D's submodule, its include root is absent from FNA3D's install surface, and its header hides
+# every Effect Framework struct unless the right switches are defined.
+#
+# Built only where cna_mojoshader exists, which today means a configuration that fetched FNA3D.
+# Separating the target is the first half of decoupling those two; the fetch is the second and is
+# not needed until a non-FNA3D backend is actually implemented.
+if(CNA_BUILD_TESTS AND TARGET cna_mojoshader AND NOT EMSCRIPTEN AND NOT ANDROID)
+    add_executable(cna_mojoshader_effect_probe tools/graphics/mojoshader_effect_probe.cpp)
+    target_link_libraries(cna_mojoshader_effect_probe PRIVATE cna_mojoshader SDL3::SDL3)
+    add_test(NAME cna_mojoshader_effect_probe
+             COMMAND cna_mojoshader_effect_probe
+                     "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/BasicEffect.fxb"
+                     "${CMAKE_CURRENT_SOURCE_DIR}/modules/renderers/fna3d/effects/CnaConformanceEffect.fxb")
+endif()
