@@ -1595,6 +1595,8 @@ namespace CNA::Internal::Renderers::DirectX11
             perDraw.DielectricFresnel[1] = params.pbrDielectricF0[1];
             perDraw.DielectricFresnel[2] = params.pbrDielectricF0[2];
             perDraw.DielectricFresnel[3] = params.pbrDielectricF90;
+            std::memcpy(perDraw.TextureTransformRows, params.pbrTextureTransformRows,
+                        sizeof(perDraw.TextureTransformRows));
 
             D3DCommon::D3DPbrLightConstants lights{};
             lights.EyePosWeights[0] = params.eyePositionWorld[0];

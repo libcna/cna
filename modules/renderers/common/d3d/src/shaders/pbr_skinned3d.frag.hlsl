@@ -27,6 +27,7 @@ cbuffer PerDraw : register(b0)
     // x = normal scale, y = occlusion strength, z = decode base, w = decode emissive
     float4 PbrMapScales;
     float4 DielectricFresnel; // xyz = dielectric F0, w = dielectric F90
+    float4 TextureTransformRows[10]; // two affine UV rows per PBR map
 };
 
 cbuffer PbrLights : register(b2)
@@ -69,6 +70,13 @@ float3 CnaLinearToSrgb(float3 color)
     return lerp(low, high, step(float3(0.0031308, 0.0031308, 0.0031308), color));
 }
 
+float2 CnaPbrTransformUv(float2 uv, int slot)
+{
+    float3 value = float3(uv, 1.0);
+    return float2(dot(value, TextureTransformRows[slot * 2].xyz),
+                  dot(value, TextureTransformRows[slot * 2 + 1].xyz));
+}
+
 float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, float3 F0,
                 float3 F90, float roughness, float metallic)
 {
@@ -91,7 +99,7 @@ float3 PbrLight(float3 N, float3 V, float3 L, float3 lightColor, float3 albedo, 
 
 float4 main(PSInput input) : SV_Target
 {
-    float4 baseColorTex = uTexture.Sample(uTextureSampler, input.UV);
+    float4 baseColorTex = uTexture.Sample(uTextureSampler, CnaPbrTransformUv(input.UV, 0));
     float3 baseColor = lerp(baseColorTex.rgb, CnaSrgbToLinear(baseColorTex.rgb), PbrMapScales.z);
     float3 albedo = baseColor * DiffuseColor.rgb;
     float alpha = baseColorTex.a * DiffuseColor.a;
@@ -104,11 +112,11 @@ float4 main(PSInput input) : SV_Target
     float3 T = normalize(input.Tangent.xyz - N * dot(N, input.Tangent.xyz));
     float3 B = cross(N, T) * input.Tangent.w;
     float3x3 TBN = float3x3(T, B, N);
-    float3 sampledNormal = uNormalMap.Sample(uNormalMapSampler, input.UV).rgb * 2.0 - 1.0;
+    float3 sampledNormal = uNormalMap.Sample(uNormalMapSampler, CnaPbrTransformUv(input.UV, 1)).rgb * 2.0 - 1.0;
     sampledNormal.xy *= PbrMapScales.x;
     float3 finalNormal = normalize(mul(sampledNormal, TBN));
 
-    float4 mr = uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, input.UV);
+    float4 mr = uMetallicRoughnessMap.Sample(uMetallicRoughnessSampler, CnaPbrTransformUv(input.UV, 2));
     float roughness = clamp(mr.g * EmissiveRoughness.w, 0.045, 1.0);
     float metallic  = clamp(mr.b * AmbientMetallic.w, 0.0, 1.0);
 
@@ -122,10 +130,10 @@ float4 main(PSInput input) : SV_Target
     Lo += PbrLight(finalNormal, V, normalize(-Light1DirPad.xyz), Light1DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
     Lo += PbrLight(finalNormal, V, normalize(-Light2DirPad.xyz), Light2DiffusePad.xyz, albedo, F0, F90, roughness, metallic);
 
-    float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, input.UV).r;
+    float occlusion = uOcclusionMap.Sample(uOcclusionMapSampler, CnaPbrTransformUv(input.UV, 4)).r;
     occlusion = 1.0 + PbrMapScales.y * (occlusion - 1.0);
     float3 ambient = AmbientMetallic.xyz * albedo * occlusion;
-    float3 emissiveSample = uEmissiveMap.Sample(uEmissiveMapSampler, input.UV).rgb;
+    float3 emissiveSample = uEmissiveMap.Sample(uEmissiveMapSampler, CnaPbrTransformUv(input.UV, 3)).rgb;
     emissiveSample = lerp(emissiveSample, CnaSrgbToLinear(emissiveSample), PbrMapScales.w);
     float3 emissive = EmissiveRoughness.xyz * emissiveSample;
 
