@@ -331,6 +331,28 @@ def _flat_png() -> bytes:
     return encode_png(4, 4, [row] * 4)
 
 
+def _normal_quadrant_png() -> bytes:
+    """An 8x8 normal map whose quadrants make a transform swap visible at L7.
+
+    The per-map-transform fixture samples its bottom-right quadrant through the normal map's own
+    transform, but its bottom-left quadrant if the base-colour transform is incorrectly reused.
+    Those encode +Z and +X respectively, which separate a front light into a bright and a nearly
+    dark fragment. The remaining directions keep any other rearrangement visibly non-neutral too.
+    """
+    from ..png import encode_png
+    directions = (
+        (128, 255, 128, 255),  # top-left: +Y
+        (0, 128, 128, 255),    # top-right: -X
+        (255, 128, 128, 255),  # bottom-left: +X (wrong shared-transform sample)
+        (128, 128, 255, 255),  # bottom-right: +Z (correct normal-transform sample)
+    )
+    rows = []
+    for y in range(8):
+        rows.append([directions[(0 if y < 4 else 2) + (0 if x < 4 else 1)]
+                     for x in range(8)])
+    return encode_png(8, 8, rows)
+
+
 #: `tex-texture-transform`'s authored transform. Every term is non-neutral and no two are equal, so
 #: a swapped offset pair, a swapped scale pair, or a rotation applied in the wrong order each
 #: produce different UVs. The rotation is a quarter turn, whose sine and cosine are exact.
@@ -415,7 +437,7 @@ def texture_transform_per_map() -> Fixture:
     """
     b = GltfBuilder("texture-transform-per-map")
     base_image = b.add_image(reference_texture(), name="BaseColor")
-    normal_image = b.add_image(_flat_png(), name="Normal")
+    normal_image = b.add_image(_normal_quadrant_png(), name="Normal")
     base_texture = b.add_texture(source=base_image, name="BaseColorTexture")
     normal_texture = b.add_texture(source=normal_image, name="NormalTexture")
     normal_transform = {

@@ -231,6 +231,15 @@ if(CNA_BUILD_EXAMPLES AND CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
             TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
             ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
 
+        # plan_gltf.md GLTF-184/336: one imported UV samples the base-colour and normal maps
+        # through two distinct KHR_texture_transform affine matrices at the real PBR samplers.
+        cna_easygl_test(cna_test_easygl_gltf_texture_transform_per_map
+                        easygl_gltf_texture_transform_per_map_test.cpp)
+        cna_register_renderer_test(NAME EasyGL_Gltf_TextureTransformPerMap
+            COMMAND cna_test_easygl_gltf_texture_transform_per_map
+            TIMEOUT 30 WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+            ENVIRONMENT "SDL_VIDEODRIVER=x11;DISPLAY=${CNA_TEST_DISPLAY}")
+
         # plan_gltf.md GLTF-439: retain one loaded glTF model across EasyGL's real desktop GL
         # context destroy/recreate cycle, then draw the same imported buffers and texture again.
         cna_easygl_test(cna_test_easygl_gltf_context_loss

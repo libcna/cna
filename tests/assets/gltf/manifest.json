@@ -5826,13 +5826,13 @@
     },
     {
       "path": "texture-transform-per-map.glb",
-      "bytes": 2124,
-      "sha256": "f84c7aa08f236d284911aff5b6a2a047f6a1d224e6489196f9e4fbca864ac33b"
+      "bytes": 2136,
+      "sha256": "ee1f0d5a02047bf75e0a04da24e360042da247cae86e5353001018ae268dcfe5"
     },
     {
       "path": "texture-transform-per-map.gltf",
-      "bytes": 3607,
-      "sha256": "bb891967a8a2cc3f617d4fa40e35e7547d56fca87d110769d8609ef26fd109a1"
+      "bytes": 3619,
+      "sha256": "1ac4dbdff2e507251ad80ae5714de74b733871e400761f637188d822cafeca90"
     },
     {
       "path": "texture-transform-per-map.ib.bin",
