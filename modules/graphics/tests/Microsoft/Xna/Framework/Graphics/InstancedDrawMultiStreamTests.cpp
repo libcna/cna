@@ -87,6 +87,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -145,12 +150,12 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // instanced draw implementation at all (`IGraphicsRenderer::DrawInstancedPrimitivesEx`'s default
 // throws), which is a pre-existing capability boundary this task neither creates nor closes; the
 // public transport group below still runs there and still asserts the shared validation contract.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_MAGNUM)
-#define CNA_INSTANCED_MULTI_STREAM_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
+[[nodiscard]] inline bool MultiStreamOracle()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12, Magnum);
+}
 
 // The renderers whose instanced path was corrected to consume VertexBufferBinding.VertexOffset AND
 // InstanceFrequency -- EasyGL (REMED-GFX-122), D3D11/D3D12 (REMED-GFX-123), Vulkan, bgfx and
@@ -165,12 +170,11 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 // legs themselves stay -- they still print what every renderer consumed -- and their remaining
 // `#else` arm covers D3D9, which is outside this set only because no D3D display was reachable to
 // measure it, and an unmeasured renderer must not be asserted either way.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_WEBGPU) || \
-    defined(CNA_RENDERER_MAGNUM)
-#define CNA_INSTANCED_BINDING_OFFSET_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same set, asked of the ACTIVE renderer.
+[[nodiscard]] inline bool BindingOffsetOracle()
+{
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12, Vulkan, Bgfx, WebGPU, Magnum);
+}
 
 namespace
 {
@@ -872,7 +876,6 @@ namespace
     }
 }
 
-#ifdef CNA_INSTANCED_MULTI_STREAM_ORACLE
 
 // ---------------------------------------------------------------------------
 // Coverage items 3, 4, 5, 6, 7, 8, 12, 13, 14: the canonical arrangement. TWO per-vertex streams
@@ -882,6 +885,10 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, TwoPerVertexAndTwoPerInstanceStreamsEachSupplyTheirOwnAxis)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -939,6 +946,10 @@ TEST_F(InstancedDrawMultiStreamTest, TwoPerVertexAndTwoPerInstanceStreamsEachSup
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, BaseVertexAdvancesOnlyPerVertexStreams)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1002,6 +1013,10 @@ TEST_F(InstancedDrawMultiStreamTest, BaseVertexAdvancesOnlyPerVertexStreams)
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ReplacingOneStreamAtATimeAndReturningKeepsEachLegsBindings)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1100,6 +1115,10 @@ TEST_F(InstancedDrawMultiStreamTest, ReplacingOneStreamAtATimeAndReturningKeepsE
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepTheirOwn)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1192,6 +1211,10 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedDrawsUnderDifferentBindingSetsKeepThe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsStayNonContiguous)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1261,6 +1284,10 @@ TEST_F(InstancedDrawMultiStreamTest, DuplicateSemanticStreamsAreDroppedAndSlotsS
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFrame)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1336,6 +1363,10 @@ TEST_F(InstancedDrawMultiStreamTest, RepeatedFramesReproduceTheSameMixedStreamFr
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamIsUnchanged)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1415,6 +1446,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicSingleVertexAndSingleInstanceStreamI
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowthAndWrapperDeath)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
     CNA_REQUIRE_MIXED_STREAM_INSTANCING();
 
@@ -1503,7 +1538,6 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
         "growth and the death of two of its wrappers");
 }
 
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
 // ---------------------------------------------------------------------------
 // The same classic shape WITH a nonzero per-instance VertexOffset, on the renderers REMED-GFX-122,
 // REMED-GFX-123 and REMED-GFX-211 corrected. A prefix decoy record displacing five columns and
@@ -1514,6 +1548,14 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedMixedStreamDrawsSurviveContainerGrowt
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1574,7 +1616,6 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
         snapshot, layout, CanonicalCells(0),
         "the per-instance stream's own VertexOffset skips its decoy record");
 }
-#endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
 
 // ===========================================================================
 // The CHECKPOINT TRIAGE group (REMED-GFX-211, REMED-GFX-213).
@@ -1596,26 +1637,14 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamHonoursItsOwnVertexOff
 
 namespace
 {
-    /// The compile-time renderer identity, so a printed measurement names its own renderer rather
-    /// than relying on the reader to remember which build directory produced the log.
-    constexpr const char* kTriageRendererName =
-#if defined(CNA_RENDERER_EASYGL)
-        "EasyGL";
-#elif defined(CNA_RENDERER_VULKAN)
-        "Vulkan";
-#elif defined(CNA_RENDERER_BGFX)
-        "bgfx";
-#elif defined(CNA_RENDERER_WEBGPU)
-        "WebGPU";
-#elif defined(CNA_RENDERER_DIRECTX9)
-        "DIRECTX9";
-#elif defined(CNA_RENDERER_DIRECTX11)
-        "DIRECTX11";
-#elif defined(CNA_RENDERER_DIRECTX12)
-        "DIRECTX12";
-#else
-        "unknown";
-#endif
+    /// The renderer identity a printed measurement names, so a log says which renderer produced
+    /// it rather than relying on the reader to remember which build directory it came from.
+    /** @brief The active renderer's display name. */
+    [[nodiscard]] inline std::string RendererName()
+    {
+        return std::string(CNA::getGraphicsRendererName(
+            CNA::GraphicsRendererSelection::GetSelected()));
+    }
 
     /// The column and band a single per-instance record displaces its geometry by.
     struct InstanceShift
@@ -1755,7 +1784,7 @@ namespace
         const char* ticket, const char* leg, const std::string& reading,
         const FrameSnapshot& snapshot, const GridLayout& layout)
     {
-        std::cout << "[  TRIAGE  ] " << ticket << ' ' << kTriageRendererName << ' ' << leg
+        std::cout << "[  TRIAGE  ] " << ticket << ' ' << RendererName() << ' ' << leg
                   << ": reading = " << reading << DescribeFrame(snapshot, layout) << std::endl;
     }
 
@@ -1785,6 +1814,10 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryInstancingRenderer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1833,18 +1866,21 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
         : "rejected: " + rejection;
     PrintTriageMeasurement("REMED-GFX-211", "legA(instance-offset)", reading, snapshot, layout);
 
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
-    EXPECT_EQ(std::string("instance-offset-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this renderer: the per-instance binding's own VertexOffset "
-           "must select records 1..4, not 0..3"
-        << DescribeFrame(snapshot, layout);
-#else
-    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched no reading "
-           "this leg can name, so the measurement is not decisive and the ticket cannot be "
-           "classified from it"
-        << DescribeFrame(snapshot, layout);
-#endif
+    if (BindingOffsetOracle())
+    {
+        EXPECT_EQ(std::string("instance-offset-honoured"), reading)
+            << "REMED-GFX-122/123/211/213 corrected this renderer: the per-instance binding's own VertexOffset "
+               "must select records 1..4, not 0..3"
+            << DescribeFrame(snapshot, layout);
+    }
+    else
+    {
+        EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched no reading "
+               "this leg can name, so the measurement is not decisive and the ticket cannot be "
+               "classified from it"
+            << DescribeFrame(snapshot, layout);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1855,6 +1891,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceStreamOffsetIsReadOnEveryIns
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryInstancingRenderer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1905,17 +1945,20 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
         : "rejected: " + rejection;
     PrintTriageMeasurement("REMED-GFX-211", "legB(per-vertex-offset)", reading, snapshot, layout);
 
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
-    EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this renderer: the geometry binding's own VertexOffset must "
-           "skip the decoy triangle on the instanced route too"
-        << DescribeFrame(snapshot, layout);
-#else
-    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched no reading "
-           "this leg can name, so the per-vertex side cannot be classified from it"
-        << DescribeFrame(snapshot, layout);
-#endif
+    if (BindingOffsetOracle())
+    {
+        EXPECT_EQ(std::string("vertex-offset-honoured"), reading)
+            << "REMED-GFX-122/123/211/213 corrected this renderer: the geometry binding's own VertexOffset must "
+               "skip the decoy triangle on the instanced route too"
+            << DescribeFrame(snapshot, layout);
+    }
+    else
+    {
+        EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched no reading "
+               "this leg can name, so the per-vertex side cannot be classified from it"
+            << DescribeFrame(snapshot, layout);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1926,6 +1969,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicPerVertexStreamOffsetIsReadOnEveryIn
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInstancingRenderer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1988,17 +2035,20 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
         : "rejected: " + rejection;
     PrintTriageMeasurement("REMED-GFX-211", "legC(both-offsets)", reading, snapshot, layout);
 
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
-    EXPECT_EQ(std::string("both-offsets-honoured"), reading)
-        << "REMED-GFX-122/123/211/213 corrected this renderer: each binding's own VertexOffset applies to "
-           "its own stream, exactly once"
-        << DescribeFrame(snapshot, layout);
-#else
-    EXPECT_NE(std::string("UNCLASSIFIED"), reading)
-        << "REMED-GFX-211 triage on " << kTriageRendererName << ": the frame matched none of the "
-           "six readings this leg can name"
-        << DescribeFrame(snapshot, layout);
-#endif
+    if (BindingOffsetOracle())
+    {
+        EXPECT_EQ(std::string("both-offsets-honoured"), reading)
+            << "REMED-GFX-122/123/211/213 corrected this renderer: each binding's own VertexOffset applies to "
+               "its own stream, exactly once"
+            << DescribeFrame(snapshot, layout);
+    }
+    else
+    {
+        EXPECT_NE(std::string("UNCLASSIFIED"), reading)
+            << "REMED-GFX-211 triage on " << RendererName() << ": the frame matched none of the "
+               "six readings this leg can name"
+            << DescribeFrame(snapshot, layout);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2014,6 +2064,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothStreamOffsetsAreReadOnEveryInsta
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEveryInstancingRenderer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2089,17 +2143,20 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
         << "the frequency-2 reading changed after an intervening frequency-1 draw, so the renderer "
            "carries stale per-instance step state across draws";
 
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
-    EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
-        << "this renderer implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
-           "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
-           "expanding the grouping into Vulkan's and bgfx's own instance staging copies: six "
-           "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
-#else
-    EXPECT_NE(std::string("UNCLASSIFIED"), atTwo)
-        << "REMED-GFX-213 triage on " << kTriageRendererName << ": the frequency-2 frame matched "
-           "no reading this leg can name, so the ticket cannot be classified from it";
-#endif
+    if (BindingOffsetOracle())
+    {
+        EXPECT_EQ(std::string("divisor-2-honoured"), atTwo)
+            << "this renderer implements the per-instance divisor -- REMED-GFX-123 by keying D3D11/D3D12's "
+               "input layout on the step rate, EasyGL through glVertexAttribDivisor, REMED-GFX-213 by "
+               "expanding the grouping into Vulkan's and bgfx's own instance staging copies: six "
+               "instances at InstanceFrequency 2 must consume records 0,0,1,1,2,2";
+    }
+    else
+    {
+        EXPECT_NE(std::string("UNCLASSIFIED"), atTwo)
+            << "REMED-GFX-213 triage on " << RendererName() << ": the frequency-2 frame matched "
+               "no reading this leg can name, so the ticket cannot be classified from it";
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2120,6 +2177,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyDivisorIsReadOnEver
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColorEnabled)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!MultiStreamOracle())
+        GTEST_SKIP() << "this renderer is outside the MultiStreamOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2185,28 +2246,29 @@ TEST_F(InstancedDrawMultiStreamTest, OrdinaryAndInstancedRoutesAgreeOnVertexColo
         << "VertexColorEnabled = true with a bound COLOR0 stream and a white DiffuseColor must "
            "produce the stream's own colour on the ORDINARY route";
 
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_BGFX) || \
-    defined(CNA_RENDERER_VULKAN) || defined(CNA_RENDERER_WEBGPU)
-    // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
-    // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
-    // for as long as either renderer was known to substitute DiffuseColor for the bound COLOR0
-    // stream on this route, asserting that pixel measurement until the correction landed and made
-    // the assertion fail -- which is what forced its removal.
-    EXPECT_EQ(ordinary, instanced)
-        << "REMED-GFX-212: this renderer was measured honouring VertexColorEnabled on BOTH routes, "
-           "which is the reference contract -- BasicEffect's shader index has no instancing term, "
-           "so the same vertex shader runs for both";
-#else
-    // D3D9, D3D11 and D3D12: REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
-    // instanced route from DiffuseColor, but no D3D display was reachable from the triage session
-    // (SDL reports "x11 not available" under Wine on the Xvfb displays this environment permits),
-    // so neither arm above may claim them. The measurement above still prints on any host that can
-    // run this renderer, which is the whole evidence the ticket is missing for them.
-    SUCCEED() << "unmeasured renderer: ordinary=" << ordinary << " instanced=" << instanced;
-#endif
+    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, Bgfx, Vulkan, WebGPU))
+    {
+        // EasyGL and bgfx always honoured it; Vulkan and WebGPU were corrected by REMED-GFX-212, which
+        // is why the measured-defect arm this leg used to carry for those two is gone. It carried one
+        // for as long as either renderer was known to substitute DiffuseColor for the bound COLOR0
+        // stream on this route, asserting that pixel measurement until the correction landed and made
+        // the assertion fail -- which is what forced its removal.
+        EXPECT_EQ(ordinary, instanced)
+            << "REMED-GFX-212: this renderer was measured honouring VertexColorEnabled on BOTH routes, "
+               "which is the reference contract -- BasicEffect's shader index has no instancing term, "
+               "so the same vertex shader runs for both";
+    }
+    else
+    {
+        // D3D9, D3D11 and D3D12: REMED-GFX-212 identifies D3D11/D3D12 from source as colouring the
+        // instanced route from DiffuseColor, but no D3D display was reachable from the triage session
+        // (SDL reports "x11 not available" under Wine on the Xvfb displays this environment permits),
+        // so neither arm above may claim them. The measurement above still prints on any host that can
+        // run this renderer, which is the whole evidence the ticket is missing for them.
+        SUCCEED() << "unmeasured renderer: ordinary=" << ordinary << " instanced=" << instanced;
+    }
 }
 
-#endif   // CNA_INSTANCED_MULTI_STREAM_ORACLE
 
 // ===========================================================================
 // The PUBLIC TRANSPORT group. No rasterizer, no capability: every one of these runs on EVERY
@@ -2434,83 +2496,90 @@ TEST_F(InstancedDrawMultiStreamTest, UnsupportedRendererRejectsMixedStreamInstan
         return;
     }
 
-#ifdef CNA_INSTANCED_MULTI_STREAM_ORACLE
-    EXPECT_NO_THROW(draw())
-        << "a renderer that claims MultiStreamVertexInput and implements instanced drawing must "
-           "accept a mixed-frequency multi-stream instanced draw";
-#elif defined(CNA_RENDERER_FNA3D)
-    // A FIFTH measured outcome (plan_fna3d.md): this renderer claims MultiStreamVertexInput
-    // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
-    // takes an array of per-stream declarations natively -- but it has no shader that could
-    // consume a PER-INSTANCE stream. FNA3D's only shader entry point takes a compiled Direct3D 9
-    // Effect binary, so this renderer draws through XNA's own stock effects, and none of them
-    // declares a per-instance vertex input (in real XNA, hardware instancing needs a custom
-    // Effect that does). Rendering it anyway would stack every instance on top of the first, so
-    // the draw must reach that declared boundary with the message naming the exact reason.
-    try
+    if (MultiStreamOracle())
     {
-        draw();
-        ADD_FAILURE()
-            << "this renderer executes XNA's stock effects, which declare no per-instance vertex "
-               "input, and was expected to refuse rather than stack every instance on the first";
+        EXPECT_NO_THROW(draw())
+            << "a renderer that claims MultiStreamVertexInput and implements instanced drawing must "
+               "accept a mixed-frequency multi-stream instanced draw";
     }
-    catch (const std::exception& e)
+    else if (CNA_RENDERER_IS(Fna3d))
     {
-        EXPECT_STREQ(
-            "FNA3D renderer: instanced drawing is not supported. FNA3D's only shader entry point "
-            "takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's "
-            "stock effects, none of which declares a per-instance vertex input.",
-            e.what())
-            << "the refusal must be this renderer's own declared stock-effect boundary, not a "
-               "different failure";
+        // A FIFTH measured outcome (plan_fna3d.md): this renderer claims MultiStreamVertexInput
+        // because several PER-VERTEX streams genuinely re-slot -- FNA3D_ApplyVertexBufferBindings
+        // takes an array of per-stream declarations natively -- but it has no shader that could
+        // consume a PER-INSTANCE stream. FNA3D's only shader entry point takes a compiled Direct3D 9
+        // Effect binary, so this renderer draws through XNA's own stock effects, and none of them
+        // declares a per-instance vertex input (in real XNA, hardware instancing needs a custom
+        // Effect that does). Rendering it anyway would stack every instance on top of the first, so
+        // the draw must reach that declared boundary with the message naming the exact reason.
+        try
+        {
+            draw();
+            ADD_FAILURE()
+                << "this renderer executes XNA's stock effects, which declare no per-instance vertex "
+                   "input, and was expected to refuse rather than stack every instance on the first";
+        }
+        catch (const std::exception& e)
+        {
+            EXPECT_STREQ(
+                "FNA3D renderer: instanced drawing is not supported. FNA3D's only shader entry point "
+                "takes a compiled Direct3D 9 Effect binary, so this renderer draws through XNA's "
+                "stock effects, none of which declares a per-instance vertex input.",
+                e.what())
+                << "the refusal must be this renderer's own declared stock-effect boundary, not a "
+                   "different failure";
+        }
     }
-#elif defined(CNA_RENDERER_WICKED)
-    // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
-    // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it
-    // implements instanced drawing -- but its instanced vertex programs declare exactly one
-    // per-instance record, so a second per-instance stream cannot be expressed. The draw must
-    // reach that declared boundary, with the message naming the exact limit -- never a render
-    // from a subset of the streams, and never some other failure.
-    try
+    else if (CNA_RENDERER_IS(Wicked))
     {
-        draw();
-        ADD_FAILURE()
-            << "this renderer declares exactly one per-instance stream and was expected to refuse "
-               "the second rather than render from a subset of the streams";
+        // A FOURTH measured outcome (plan_wicked.md WICKED-58 / REMED-GFX-202): this renderer claims
+        // MultiStreamVertexInput because several PER-VERTEX streams genuinely re-slot, and it
+        // implements instanced drawing -- but its instanced vertex programs declare exactly one
+        // per-instance record, so a second per-instance stream cannot be expressed. The draw must
+        // reach that declared boundary, with the message naming the exact limit -- never a render
+        // from a subset of the streams, and never some other failure.
+        try
+        {
+            draw();
+            ADD_FAILURE()
+                << "this renderer declares exactly one per-instance stream and was expected to refuse "
+                   "the second rather than render from a subset of the streams";
+        }
+        catch (const std::exception& e)
+        {
+            EXPECT_STREQ(
+                "Wicked renderer: only one per-instance VertexBufferBinding is supported (2 were "
+                "bound).",
+                e.what())
+                << "the refusal must be this renderer's own declared one-instance-stream boundary, "
+                   "not a different failure";
+        }
     }
-    catch (const std::exception& e)
+    else
     {
-        EXPECT_STREQ(
-            "Wicked renderer: only one per-instance VertexBufferBinding is supported (2 were "
-            "bound).",
-            e.what())
-            << "the refusal must be this renderer's own declared one-instance-stream boundary, "
-               "not a different failure";
+        // A THIRD, measured outcome, not a silent skip: this renderer claims MultiStreamVertexInput
+        // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no
+        // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
+        // IGraphicsRenderer's own default. The mixed-stream array must reach that SAME declared
+        // boundary and not some other failure; this arm fails the moment such a renderer gains an
+        // instanced path, so the boundary cannot outlive itself. REMED-GFX-210 records that CNA has
+        // no capability a caller can query for hardware instancing (FNA3D's own
+        // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by renderer set.
+        try
+        {
+            draw();
+            ADD_FAILURE()
+                << "this renderer was expected to implement no instanced draw path at all, but the "
+                   "mixed-stream draw was accepted -- see REMED-GFX-210";
+        }
+        catch (const std::exception& e)
+        {
+            EXPECT_STREQ(
+                "DrawInstancedPrimitives is not supported on this graphics renderer.", e.what())
+                << "a renderer without an instanced draw path must reach IGraphicsRenderer's own "
+                   "declared boundary for a mixed-stream array too, not a different failure";
+        }
     }
-#else
-    // A THIRD, measured outcome, not a silent skip: this renderer claims MultiStreamVertexInput
-    // (REMED-GFX-201 taught it ordinary multi-stream input) but overrides no
-    // DrawInstancedPrimitivesEx at all, so every instanced draw -- one stream or four -- reaches
-    // IGraphicsRenderer's own default. The mixed-stream array must reach that SAME declared
-    // boundary and not some other failure; this arm fails the moment such a renderer gains an
-    // instanced path, so the boundary cannot outlive itself. REMED-GFX-210 records that CNA has
-    // no capability a caller can query for hardware instancing (FNA3D's own
-    // FNA3D_SupportsHardwareInstancing), which is why this arm has to be selected by renderer set.
-    try
-    {
-        draw();
-        ADD_FAILURE()
-            << "this renderer was expected to implement no instanced draw path at all, but the "
-               "mixed-stream draw was accepted -- see REMED-GFX-210";
-    }
-    catch (const std::exception& e)
-    {
-        EXPECT_STREQ(
-            "DrawInstancedPrimitives is not supported on this graphics renderer.", e.what())
-            << "a renderer without an instanced draw path must reach IGraphicsRenderer's own "
-               "declared boundary for a mixed-stream array too, not a different failure";
-    }
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -2583,7 +2652,6 @@ TEST_F(InstancedDrawMultiStreamTest, BindingStateKeepsEverySlotsOwnOffsetAndFreq
 // on several renderers (REMED-GFX-212, open), and WHICH RECORDS each stream supplied -- which is
 // the whole question here -- is already carried by the cell positions.
 // ===========================================================================
-#ifdef CNA_INSTANCED_BINDING_OFFSET_ORACLE
 namespace
 {
     /// The live instance records every leg below shares: `count` records displacing 0..count-1
@@ -2633,6 +2701,10 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBaseVertexAndPerVertexOffsetAddExactlyOnce)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2687,6 +2759,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBaseVertexAndPerVertexOffsetAddExact
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBothIndexWidths)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2764,6 +2840,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldUnderStartIndexOnBoth
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpecialCase)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2831,6 +2911,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicInstanceFrequencyIsArithmeticNotASpe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedClassicDrawsKeepTheirOwnOffsetsAndFrequencies)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -2921,6 +3005,10 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedClassicDrawsKeepTheirOwnOffsetsAndFre
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdinaryDraws)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -3032,6 +3120,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsReturnToZeroAndBackAroundOrdi
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDeathAndAddressReuse)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -3118,6 +3210,10 @@ TEST_F(InstancedDrawMultiStreamTest, QueuedClassicInstancedDrawSurvivesWrapperDe
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuffers)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -3182,6 +3278,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicOffsetsAndFrequencyHoldOnDynamicBuff
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -3240,6 +3340,10 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicBothOffsetsHoldAtFrequencyThree)
 // ---------------------------------------------------------------------------
 TEST_F(InstancedDrawMultiStreamTest, ClassicFrequencyAlternatesWithinOneFrame)
 {
+    // plan_runtimerenderer.md RTR-P9-5: was a compile-time fence around this
+    // group, so on every other renderer these tests did not exist at all.
+    if (!BindingOffsetOracle())
+        GTEST_SKIP() << "this renderer is outside the BindingOffsetOracle set";
     RequireInstancedRendering();
 
     const GridLayout layout = TargetLayout();
@@ -3307,4 +3411,3 @@ TEST_F(InstancedDrawMultiStreamTest, ClassicFrequencyAlternatesWithinOneFrame)
         "an InstanceFrequency of 2, then 1, then 2 again in the same frame gave each draw its own "
         "step rate and its own offsets");
 }
-#endif   // CNA_INSTANCED_BINDING_OFFSET_ORACLE
