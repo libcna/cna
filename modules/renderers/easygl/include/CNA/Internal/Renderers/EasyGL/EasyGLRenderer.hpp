@@ -663,10 +663,14 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_mr         = -1;  ///< sampler2D metallic-roughness map (PbrEffect only, G=roughness/B=metallic)
             int loc_pbr_emissivemap = -1; ///< sampler2D emissive map (PbrEffect only)
             int loc_pbr_occlusionmap = -1; ///< sampler2D occlusion map (PbrEffect only, R channel)
+            int loc_pbr_specularmap = -1; ///< KHR_materials_specular strength map (A channel)
+            int loc_pbr_specularcolormap = -1; ///< KHR_materials_specular colour map (RGB)
             int loc_pbr_metallic    = -1;  ///< float metallic factor (PbrEffect only)
             int loc_pbr_roughness   = -1;  ///< float roughness factor (PbrEffect only)
             /// plan_gltf.md GLTF-343/344: xyz = dielectric F0, w = dielectric F90.
             int loc_pbr_dielectric_fresnel = -1;
+            /// GLTF-344: xyz = unclamped IOR F0 * specularColorFactor, w = specularFactor.
+            int loc_pbr_specular_fresnel_inputs = -1;
             /// plan_gltf.md GLTF-210/GLTF-212: vec3 colour-management gate (PbrEffect only).
             /// x = decode the base-colour sample from sRGB, y = decode the emissive sample,
             /// z = encode the fragment's RGB back to sRGB. Each is 0 or 1 and multiplies a
@@ -680,11 +684,15 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_pbr_texcoordsets = -1;
             /// plan_gltf.md GLTF-182/183: UV1 selector for PBR occlusion slot 4.
             int loc_pbr_occlusiontexcoordset = -1;
+            /// GLTF-344: UV1 selectors for specular strength/colour slots 5 and 6.
+            int loc_pbr_specular_texcoordsets = -1;
             /// plan_gltf.md GLTF-184: ten vec4 affine rows, two for each PBR texture slot.
             std::array<int, 10> loc_pbr_texture_transform_rows{
                 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+            /// GLTF-344: two affine rows for each specular texture, kept ABI-separate from slots 0-4.
+            std::array<int, 4> loc_pbr_specular_texture_transform_rows{-1, -1, -1, -1};
             int loc_rt_flip_v       = -1;  ///< REMED-GFX-147: vec4 render-target V-flip flags for texture units 0-3
-            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: vec4 whose x is texture unit 4's flag (PbrEffect only)
+            int loc_rt_flip_v_hi    = -1;  ///< REMED-GFX-147: units 4-6 in xyz (PbrEffect only)
             int loc_instanced       = -1;  ///< REMED-GFX-122: stock-program per-instance matrix gate
             void reset_no_gl() { prog.reset_handle_no_gl(); ready = false; }
         };

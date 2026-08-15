@@ -78,7 +78,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 // the rows), which is why the public GetData contract has always been top-down. Sampling did not,
 // so a rendered texture arrived vertically mirrored while an uploaded one did not.
 //
-// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x carries unit 4: 1 when the source
+// uRtFlipV.x/.y/.z/.w carry texture units 0-3 and uRtFlipVHi.x/.y/.z carry units 4-6: 1 when the source
 // bound there is a render-target colour attachment, 0 for an ordinary texture (and 0 always on a
 // renderer whose framebuffer origin is top-left). Exactly one correction is applied, at sample
 // time, per bound source -- nothing is copied, read back or re-uploaded, and no shader variant is
@@ -89,7 +89,7 @@ EM_JS(void, CNA_DebugRestoreWebGLContext, (), {
 "uniform vec4 uRtFlipV;\n" \
 "vec2 cnaSampleUV(vec2 uv,float flip){return vec2(uv.x,mix(uv.y,1.0-uv.y,flip));}\n"
 
-/// REMED-GFX-147: unit 4's flag, declared only by the shaders that reach that far (PbrEffect).
+/// REMED-GFX-147: units 4-6, declared only by the shaders that reach that far (PbrEffect).
 #define CNA_GL_RT_SAMPLE_UV_HI_DECL \
 "uniform vec4 uRtFlipVHi;\n"
 
@@ -5963,6 +5963,10 @@ CNA_GL_DIRECTION_HANDEDNESS_DECL
         const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
         const char* const occlusionUv =
             dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
 "precision mediump float;\n"
@@ -5978,6 +5982,8 @@ std::string("#version 300 es\n") +
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
@@ -5986,20 +5992,25 @@ std::string("#version 300 es\n") +
 // plan_gltf.md GLTF-343/344: factor-only KHR_materials_ior/specular state, already reduced by
 // FillGpuDrawParams to the exact shader-ready Fresnel endpoints. xyz is dielectric F0; w is F90.
 "uniform vec4 uDielectricFresnel;\n"
+// GLTF-344: the colour texture is multiplied before clamping, so this must retain the pre-clamp
+// value instead of attempting to reconstruct it from uDielectricFresnel.
+"uniform vec4 uSpecularFresnelInputs;\n"
 // plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
-"uniform vec3 uSrgb;\n"
+"uniform vec4 uSrgb;\n"
 // plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
-          "uniform float uOcclusionTextureCoordinateSet;\n" : "") +
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
 // GLTF-184: two precomputed affine rows per texture map. The selected vertex stream is transformed
 // before cnaSampleUV applies the storage-origin adjustment for a render-target texture.
 "uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6037,6 +6048,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 value=vec3(uv,1.0);\n"
 "    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
 "}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
 "    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
@@ -6058,8 +6073,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);\n"
-"    vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
@@ -6108,19 +6127,30 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
             p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
         for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
         {
             p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
                 "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
         }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
@@ -6199,6 +6229,10 @@ CNA_GL_SKIN_NORMAL_DECL
         const char* const emissiveUv = dualUv ? "cnaPbrUV(uTextureCoordinateSets.w)" : "vUV";
         const char* const occlusionUv =
             dualUv ? "cnaPbrUV(uOcclusionTextureCoordinateSet)" : "vUV";
+        const char* const specularUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.x)" : "vUV";
+        const char* const specularColorUv =
+            dualUv ? "cnaPbrUV(uSpecularTextureCoordinateSets.y)" : "vUV";
         const std::string fsrc =
 std::string("#version 300 es\n") +
 "precision mediump float;\n"
@@ -6214,6 +6248,8 @@ std::string("#version 300 es\n") +
 "uniform sampler2D uMetallicRoughnessMap;\n"
 "uniform sampler2D uEmissiveMap;\n"
 "uniform sampler2D uOcclusionMap;\n"
+"uniform sampler2D uSpecularMap;\n"
+"uniform sampler2D uSpecularColorMap;\n"
 "uniform vec4 uDiffuseColor;\n"
 "uniform vec3 uAmbientColor;\n"
 "uniform vec3 uEmissiveColor;\n"
@@ -6221,18 +6257,21 @@ std::string("#version 300 es\n") +
 "uniform float uRoughnessFactor;\n"
 // plan_gltf.md GLTF-343/344: same shader-ready dielectric Fresnel endpoints as unskinned PBR.
 "uniform vec4 uDielectricFresnel;\n"
+"uniform vec4 uSpecularFresnelInputs;\n"
 // plan_gltf.md GLTF-210/GLTF-212: x = decode the base-colour sample from sRGB, y = decode the
 // emissive sample, z = encode the fragment's RGB back. Each is 0 or 1 and drives a mix() rather
 // than a branch, so every fragment costs the same whichever way it is set.
-"uniform vec3 uSrgb;\n"
+"uniform vec4 uSrgb;\n"
 // plan_gltf.md GLTF-224/GLTF-225: normalTexture.scale and occlusionTexture.strength. Two scalar
 // uniforms rather than one vec2, to stay on the single-float set_uniform overload this file
 // already uses everywhere.
 "uniform float uNormalScale;\n"
 "uniform float uOcclusionStrength;\n"
 + (dualUv ? "uniform vec4 uTextureCoordinateSets;\n"
-          "uniform float uOcclusionTextureCoordinateSet;\n" : "") +
+          "uniform float uOcclusionTextureCoordinateSet;\n"
+          "uniform vec2 uSpecularTextureCoordinateSets;\n" : "") +
 "uniform vec4 uTextureTransformRows[10];\n"
+"uniform vec4 uSpecularTextureTransformRows[4];\n"
 "uniform vec3 uLight0Dir;\n"
 "uniform vec3 uLight0Diffuse;\n"
 "uniform vec3 uLight1Dir;\n"
@@ -6268,6 +6307,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    vec3 value=vec3(uv,1.0);\n"
 "    return vec2(dot(value,uTextureTransformRows[slot*2].xyz),dot(value,uTextureTransformRows[slot*2+1].xyz));\n"
 "}\n"
+"vec2 cnaPbrSpecularTransformUV(vec2 uv,int slot){\n"
+"    vec3 value=vec3(uv,1.0);\n"
+"    return vec2(dot(value,uSpecularTextureTransformRows[slot*2].xyz),dot(value,uSpecularTextureTransformRows[slot*2+1].xyz));\n"
+"}\n"
 "void main(){\n"
 "    vec4 baseColorTex=texture(uTexture,cnaSampleUV(cnaPbrTransformUV(" + baseUv + ",0),uRtFlipV.x));\n"
 // glTF §3.9.2: the base-colour TEXTURE is sRGB-encoded, the base-colour FACTOR is linear. Only
@@ -6289,8 +6332,12 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "    float roughness=clamp(mr.g*uRoughnessFactor,0.045,1.0);\n"
 "    float metallic=clamp(mr.b*uMetallicFactor,0.0,1.0);\n"
 "    vec3 V=normalize(uEyePosition-vWorldPos);\n"
-"    vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic);\n"
-"    vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic);\n"
+"    float specularWeight=uSpecularFresnelInputs.w*texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularUv + ",0),uRtFlipVHi.y)).a;\n"
+"    vec3 specularColorTex=texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(" + specularColorUv + ",1),uRtFlipVHi.z)).rgb;\n"
+"    specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w);\n"
+"    vec3 dielectricF0=min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight;\n"
+"    vec3 F0=mix(dielectricF0,albedo,metallic);\n"
+"    vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic);\n"
 "    vec3 Lo=vec3(0.0);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight0Dir),uLight0Diffuse,albedo,F0,F90,roughness,metallic);\n"
 "    Lo+=PbrLight(finalNormal,V,normalize(-uLight1Dir),uLight1Diffuse,albedo,F0,F90,roughness,metallic);\n"
@@ -6341,19 +6388,30 @@ CNA_GL_RT_SAMPLE_UV_DECL
         p.loc_pbr_mr            = p.prog.uniform_location("uMetallicRoughnessMap");
         p.loc_pbr_emissivemap   = p.prog.uniform_location("uEmissiveMap");
         p.loc_pbr_occlusionmap  = p.prog.uniform_location("uOcclusionMap");
+        p.loc_pbr_specularmap   = p.prog.uniform_location("uSpecularMap");
+        p.loc_pbr_specularcolormap = p.prog.uniform_location("uSpecularColorMap");
         p.loc_pbr_metallic      = p.prog.uniform_location("uMetallicFactor");
         p.loc_pbr_roughness     = p.prog.uniform_location("uRoughnessFactor");
         p.loc_pbr_dielectric_fresnel = p.prog.uniform_location("uDielectricFresnel");
+        p.loc_pbr_specular_fresnel_inputs =
+            p.prog.uniform_location("uSpecularFresnelInputs");
         p.loc_pbr_srgb          = p.prog.uniform_location("uSrgb");
         p.loc_pbr_normalscale   = p.prog.uniform_location("uNormalScale");
         p.loc_pbr_occlstrength  = p.prog.uniform_location("uOcclusionStrength");
         p.loc_pbr_texcoordsets  = p.prog.uniform_location("uTextureCoordinateSets");
         p.loc_pbr_occlusiontexcoordset =
             p.prog.uniform_location("uOcclusionTextureCoordinateSet");
+        p.loc_pbr_specular_texcoordsets =
+            p.prog.uniform_location("uSpecularTextureCoordinateSets");
         for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
         {
             p.loc_pbr_texture_transform_rows[row] = p.prog.uniform_location(
                 "uTextureTransformRows[" + std::to_string(row) + "]");
+        }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            p.loc_pbr_specular_texture_transform_rows[row] = p.prog.uniform_location(
+                "uSpecularTextureTransformRows[" + std::to_string(row) + "]");
         }
         p.loc_alphatest = p.prog.uniform_location("uAlphaTest");
         p.loc_fog_vector = p.prog.uniform_location("uFogVector");
@@ -6583,7 +6641,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
         // A render target's GL texel memory is bottom-up; an uploaded texture's is not. Cube maps
         // are deliberately absent -- REMED-GFX-137 owns rendered cube faces, and uEnvMap is sampled
         // with a direction vector, not a UV.
-        float rtFlipV[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        float rtFlipV[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
         // WVP
         const Matrix wvp = world * view * projection;
@@ -6837,6 +6895,32 @@ CNA_GL_RT_SAMPLE_UV_DECL
                                                    ::easygl::TextureTarget::Texture2D);
             ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
         }
+        // GLTF-344: both KHR_materials_specular inputs use white as their identity fallback.
+        // The strength texture consumes alpha; the colour texture consumes RGB in sRGB space.
+        if (p.loc_pbr_specularmap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularmap, 5);
+            rtFlipV[5] = SampledRowOrderIsBottomUp(params.pbrSpecularMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularMap)
+                params.pbrSpecularMap->BindGL(5);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture5,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
+        if (p.loc_pbr_specularcolormap >= 0)
+        {
+            EnsureDefaultWhiteTexture();
+            p.prog.set_uniform(p.loc_pbr_specularcolormap, 6);
+            rtFlipV[6] = SampledRowOrderIsBottomUp(params.pbrSpecularColorMap) ? 1.0f : 0.0f;
+            if (params.pbrSpecularColorMap)
+                params.pbrSpecularColorMap->BindGL(6);
+            else
+                default_white_texture_.active_bind(::easygl::TextureUnit::Texture6,
+                                                   ::easygl::TextureTarget::Texture2D);
+            ::metagl::glActiveTexture(::metagl::TextureUnit::Texture0);
+        }
         if (p.loc_pbr_metallic >= 0)
             p.prog.set_uniform(p.loc_pbr_metallic, params.pbrMetallicFactor);
         if (p.loc_pbr_roughness >= 0)
@@ -6847,6 +6931,13 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 p.loc_pbr_dielectric_fresnel,
                 params.pbrDielectricF0[0], params.pbrDielectricF0[1],
                 params.pbrDielectricF0[2], params.pbrDielectricF90);
+        }
+        if (p.loc_pbr_specular_fresnel_inputs >= 0)
+        {
+            p.prog.set_uniform(
+                p.loc_pbr_specular_fresnel_inputs,
+                params.pbrDielectricF0Unclamped[0], params.pbrDielectricF0Unclamped[1],
+                params.pbrDielectricF0Unclamped[2], params.pbrSpecularFactor);
         }
         // plan_gltf.md GLTF-210/GLTF-212. Three independent decisions, so three independent
         // components: two about what a bound texture contains, one about where the fragment is
@@ -6873,6 +6964,14 @@ CNA_GL_RT_SAMPLE_UV_DECL
                 (params.pbrTextureCoordinateSetMask & (std::uint32_t{1} << 4)) != 0
                     ? 1.0f : 0.0f);
         }
+        if (p.loc_pbr_specular_texcoordsets >= 0)
+        {
+            const std::uint32_t mask = params.pbrTextureCoordinateSetMask;
+            p.prog.set_uniform(
+                p.loc_pbr_specular_texcoordsets,
+                (mask & (std::uint32_t{1} << 5)) != 0 ? 1.0f : 0.0f,
+                (mask & (std::uint32_t{1} << 6)) != 0 ? 1.0f : 0.0f);
+        }
         for (std::size_t row = 0; row < p.loc_pbr_texture_transform_rows.size(); ++row)
         {
             const int location = p.loc_pbr_texture_transform_rows[row];
@@ -6880,12 +6979,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
             const float* values = params.pbrTextureTransformRows[row];
             p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
         }
+        for (std::size_t row = 0; row < p.loc_pbr_specular_texture_transform_rows.size(); ++row)
+        {
+            const int location = p.loc_pbr_specular_texture_transform_rows[row];
+            if (location < 0) { continue; }
+            const float* values = params.pbrSpecularTextureTransformRows[row];
+            p.prog.set_uniform(location, values[0], values[1], values[2], values[3]);
+        }
         if (p.loc_pbr_srgb >= 0)
         {
             p.prog.set_uniform(p.loc_pbr_srgb,
                 params.pbrBaseColorTextureIsSrgb ? 1.0f : 0.0f,
                 params.pbrEmissiveTextureIsSrgb  ? 1.0f : 0.0f,
-                params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f);
+                params.pbrEncodeOutputToSrgb     ? 1.0f : 0.0f,
+                params.pbrSpecularColorTextureIsSrgb ? 1.0f : 0.0f);
         }
 
         // Texture (unit 0)
@@ -6906,8 +7013,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         // ES 2.0 keeps sampling state on the texture objects -- re-apply each unit's recorded
         // SamplerState onto whatever this draw just bound above (GraphicsDevice applies sampler
         // state BEFORE the draw binds its textures on this route, so the bind is what must pull
-        // the state in). Units 0-4 are the stock effects' complete sampling range.
-        for (int unit = 0; unit < 5; ++unit)
+        // the state in). Units 0-6 are the stock effects' complete sampling range.
+        for (int unit = 0; unit < 7; ++unit)
             Es2ApplyPendingSamplerToUnit(unit);
 #endif
 
@@ -6935,7 +7042,8 @@ CNA_GL_RT_SAMPLE_UV_DECL
         if (p.loc_rt_flip_v >= 0)
             p.prog.set_uniform(p.loc_rt_flip_v, rtFlipV[0], rtFlipV[1], rtFlipV[2], rtFlipV[3]);
         if (p.loc_rt_flip_v_hi >= 0)
-            p.prog.set_uniform(p.loc_rt_flip_v_hi, rtFlipV[4], 0.0f, 0.0f, 0.0f);
+            p.prog.set_uniform(
+                p.loc_rt_flip_v_hi, rtFlipV[4], rtFlipV[5], rtFlipV[6], 0.0f);
     }
 
     void EasyGLRenderer::ClearColorAndDepth(float r, float g, float b, float a, float depth)

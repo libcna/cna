@@ -787,8 +787,8 @@ namespace
          "float3 F90 = lerp(float3(DielectricFresnel.w, DielectricFresnel.w, DielectricFresnel.w), float3(1.0, 1.0, 1.0), metallic)",
          "float3 F = F0 + (F90 - F0) *", 2},
         {"easygl",
-         "vec3 F0=mix(uDielectricFresnel.xyz,albedo,metallic)",
-         "vec3 F90=mix(vec3(uDielectricFresnel.w),vec3(1.0),metallic)",
+         "vec3 F0=mix(dielectricF0,albedo,metallic)",
+         "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)",
          "vec3 F=F0+(F90-F0)*", 2},
         {"llgl",
          "vec3 F0 = mix(dielectricFresnel.xyz, albedo, metallic)",
@@ -1686,6 +1686,42 @@ TEST(GltfRendererPbrFallbackPolicy, EveryPbrShaderHonorsTransportedFresnelEndpoi
             EXPECT_GE(CountOccurrences(source, Normalize(evidence)), audit.shaderCopies)
                 << "missing rigid/skinned PBR Fresnel evidence: " << evidence;
         }
+    }
+}
+
+TEST(GltfRendererPbrFallbackPolicy, EasyGLSamplesBothKhrMaterialsSpecularTextures)
+{
+    // GLTF-344 lands backend-by-backend. This focused contract prevents the first completed
+    // renderer from regressing while the repository-wide 15-renderer audit is still being filled.
+    const std::string source = RendererSlotText(
+        RepositoryRoot() / "modules" / "renderers", "easygl");
+    ASSERT_FALSE(source.empty());
+
+    for (const char* evidence : {
+             "params.pbrSpecularMap->BindGL(5)",
+             "params.pbrSpecularColorMap->BindGL(6)",
+             "default_white_texture_.active_bind(::easygl::TextureUnit::Texture5",
+             "default_white_texture_.active_bind(::easygl::TextureUnit::Texture6",
+             "params.pbrDielectricF0Unclamped[0]",
+             "params.pbrSpecularFactor",
+             "params.pbrSpecularTextureTransformRows[row]",
+             "params.pbrSpecularColorTextureIsSrgb",
+             "(mask & (std::uint32_t{1} << 5))",
+             "(mask & (std::uint32_t{1} << 6))"})
+    {
+        EXPECT_NE(std::string::npos, source.find(Normalize(evidence)))
+            << "missing EasyGL specular binding evidence: " << evidence;
+    }
+
+    for (const char* shaderEvidence : {
+             "texture(uSpecularMap,cnaSampleUV(cnaPbrSpecularTransformUV(",
+             "texture(uSpecularColorMap,cnaSampleUV(cnaPbrSpecularTransformUV(",
+             "specularColorTex=mix(specularColorTex,cnaSrgbToLinear(specularColorTex),uSrgb.w)",
+             "min(uSpecularFresnelInputs.xyz*specularColorTex,vec3(1.0))*specularWeight",
+             "vec3 F90=mix(vec3(specularWeight),vec3(1.0),metallic)"})
+    {
+        EXPECT_GE(CountOccurrences(source, Normalize(shaderEvidence)), 2u)
+            << "both rigid and skinned EasyGL PBR shaders must contain: " << shaderEvidence;
     }
 }
 

@@ -61,7 +61,7 @@ every lit file would be far worse than the approximation.
 | `KHR_materials_pbrSpecularGlossiness` | **APPROXIMATED_AND_REPORTED** | no | Archived by Khronos but present in older assets, so converted rather than refused: diffuse becomes the base colour, metallic 0, roughness 1 - glossiness. Not claimed, because specularFactor -- a coloured specular reflection -- has no metallic-roughness equivalent, so a file REQUIRING the extension is asking for something the conversion cannot deliver. | `GLTF-349` |
 | `KHR_materials_variants` | **IMPLEMENTED_AND_TESTED** | yes | The source-order variant table and sparse primitive mappings are preserved. Model's CNAEXT selection API swaps the complete material-dependent part state, including effect, vertex layout, textures and samplers, on both direct glTF and offline .cnj paths while leaving the default mapping unchanged. | `GLTF-341` |
 | `KHR_materials_ior` | **IMPLEMENTED_AND_TESTED** | yes | IOR is converted to dielectric F0/F90 and consumed by rigid and skinned PBR shaders on all 15 PBR renderers. Analytic factor-only and grazing pixel witnesses cover the core default and authored endpoints. | `GLTF-343` |
-| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are converted to dielectric F0/F90 and consumed by all 15 PBR renderers. The optional specularTexture and specularColorTexture are not imported, so required use remains refused and optional use is warned by name. | `GLTF-344` |
+| `KHR_materials_specular` | **IMPLEMENTED_WITH_A_NAMED_LIMIT** | no | Factor and colour are consumed by all 15 PBR renderers. Both optional texture inputs survive direct import and offline `.cnj`, including independent UV, transform, sampler and colour-space state; EasyGL samples them, while the other PBR renderer bindings remain pending. Required use therefore remains refused and optional use is warned by name. | `GLTF-344` |
 | `KHR_materials_clearcoat` | **PARSED_BUT_IGNORED** | no | A second specular lobe -- a large shader change. | `GLTF-345` |
 | `KHR_materials_sheen` | **PARSED_BUT_IGNORED** | no | A third BRDF lobe, same shape of change as clearcoat. | `GLTF-346` |
 | `KHR_materials_volume` | **PARSED_BUT_IGNORED** | no | Meaningless without a real transmission pass, which CNA does not have. | `GLTF-347` |
@@ -125,11 +125,11 @@ The **general** statement of this table is `unrepresentableForStrideEXT`: it com
 downgrade CNA performs names itself in one place. `CNA/Internal/Graphics/VertexDeclarationFidelity.hpp`
 (`InferredLayoutForStride`) is the query side of the same table — never hardcode a stride's offsets.
 
-`KHR_materials_specular`'s optional `specularTexture` and `specularColorTexture` are another absent
-input, but deliberately do not masquerade as a `MeshOut` report field in the table above: no PBR
-effect or `GpuDrawParams` slot exists for either. Validation emits an extension-level warning that
-names this residue even when the factor-only state is carried; implementing the maps also needs
-their independent UV and colour-space rules (`GLTF-344`).
+`KHR_materials_specular`'s optional `specularTexture` and `specularColorTexture` now have dedicated
+PBR-effect and `GpuDrawParams` slots. Direct and offline import retain each map's independent UV,
+transform and sampler; the colour map also retains its sRGB declaration. EasyGL is the first shader
+consumer and applies the extension's multiply-before-clamp Fresnel equation. Validation continues
+to name the extension until the remaining PBR renderers consume the same state (`GLTF-344`).
 
 ---
 
