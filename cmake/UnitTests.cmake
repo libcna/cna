@@ -269,6 +269,16 @@ if(CNA_BUILD_TESTS)
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
+    # plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
+    # includes the GENERATED mojoshader_version.h unless MOJOSHADER_NO_VERSION_INCLUDE is defined.
+    # cna_fna3d carries that switch for the renderer target, but RTR-P9-9 gave this executable the
+    # present renderers' include PATHS only -- so CnaTests found the header and then failed on the
+    # generated one it pulls in. The include root alone is not the whole surface a family's suites
+    # compile against; its switches are part of it.
+    if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND TARGET cna_fna3d)
+        target_link_libraries(CnaTests PRIVATE cna_fna3d)
+    endif()
+
     if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
