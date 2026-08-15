@@ -687,3 +687,17 @@ _Static_assert(sizeof(CNA_UserIndices) == 24U &&
                    offsetof(CNA_UserIndices, index_element_size) == 8U &&
                    offsetof(CNA_UserIndices, index_data) == 16U,
                "CNA_UserIndices layout must remain stable");
+_Static_assert(sizeof(CNA_OcclusionQueryHandle) == 8U,
+               "CNA_OcclusionQueryHandle must remain stable");
+_Static_assert(sizeof(CNA_SpriteTextCommand) == 72U &&
+                   _Alignof(CNA_SpriteTextCommand) == 8U &&
+                   offsetof(CNA_SpriteTextCommand, sprite_font) == 8U &&
+                   offsetof(CNA_SpriteTextCommand, text) == 16U &&
+                   offsetof(CNA_SpriteTextCommand, position) == 32U,
+               "CNA_SpriteTextCommand layout must remain stable");
+_Static_assert(sizeof(CNA_SpriteMeshEXT) == 64U &&
+                   _Alignof(CNA_SpriteMeshEXT) == 8U &&
+                   offsetof(CNA_SpriteMeshEXT, effect) == 8U &&
+                   offsetof(CNA_SpriteMeshEXT, positions) == 16U &&
+                   offsetof(CNA_SpriteMeshEXT, vertex_count) == 48U,
+               "CNA_SpriteMeshEXT layout must remain stable");

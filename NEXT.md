@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS DEVICE COMPLETE THROUGH CBIND-035F5 (2026-08-15)
+## C BINDING / C ABI — GRAPHICS DEVICE COMPLETE THROUGH CBIND-035F6 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
-> `CBIND-035F1`–`035F5` are complete:
+> `CBIND-035F1`–`035F6` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -177,8 +177,12 @@
 > twenty-nine canonical user-primitive overloads, built-in vertex sources are converted because the
 > native structures embed a polymorphic Color, and every draw route refuses a backend without 3D
 > support as `NOT_SUPPORTED`. No planned GraphicsDevice.hpp row remains. The inventory is now
-> 3,337 implemented, 23 partial, 2,982 planned and 73 N/A. CBIND-035F6 SpriteBatch text routes and
-> occlusion queries is next.
+> 3,337 implemented, 23 partial, 2,982 planned and 73 N/A. CBIND-035F6 then maps all 21 SpriteBatch
+> text/mesh and OcclusionQuery rows: one versioned text command covers every canonical DrawString
+> overload, mesh colors and positions are converted because the native Color carries a vtable, and
+> the owned query handle is capability-gated and behaves as an ordinary graphics resource. The
+> inventory is now 3,358 implemented, 23 partial, 2,961 planned and 73 N/A; only the 118
+> `graphics-ext` rows of CBIND-035F7 remain in parent CBIND-035F.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

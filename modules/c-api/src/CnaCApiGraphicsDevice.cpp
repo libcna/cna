@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsProfile.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
+#include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/PrimitiveType.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexPositionColor.hpp"
@@ -31,6 +32,7 @@
 #include "Microsoft/Xna/Framework/Graphics/TextureCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Viewport.hpp"
 #include "System/EventArgs.hpp"
+#include "System/IDisposable.hpp"
 #include "System/Object.hpp"
 
 #include <cmath>
@@ -73,6 +75,7 @@ static_assert(
     NativeGraphics::TextureCollection::MaxTextures == CNA_TEXTURE_COLLECTION_MAX_TEXTURES);
 
 using CNA::C::Detail::BorrowedGraphicsDevice;
+using CNA::C::Detail::AddOwnedGraphicsResource;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CopyStringView;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -84,6 +87,8 @@ using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::VertexBufferResource;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OcclusionQueryResource;
+using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::TextureResourceView;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Matrix;
@@ -95,6 +100,7 @@ using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using Microsoft::Xna::Framework::Graphics::GraphicsProfile;
 using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::IndexBuffer;
+using Microsoft::Xna::Framework::Graphics::OcclusionQuery;
 using Microsoft::Xna::Framework::Graphics::PrimitiveType;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
@@ -856,6 +862,62 @@ void DrawUserIndexedPrimitivesNative(
         request,
         static_cast<const std::uint32_t*>(indices.index_data),
         indices.index_offset);
+}
+
+[[nodiscard]] CNA_Result GetOcclusionQuery(
+    const CNA_Handle handle,
+    std::shared_ptr<OcclusionQueryResource>* const outQuery)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::OcclusionQuery, outQuery);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The OcclusionQuery handle is invalid for this call.");
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result OcclusionQueryCommand(
+    const CNA_Handle handle,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<OcclusionQueryResource> query;
+        if (const CNA_Result result = GetOcclusionQuery(handle, &query);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::forward<TCallable>(callable)(*query->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template<typename TValue, typename TCallable>
+[[nodiscard]] CNA_Result OcclusionQueryValue(
+    const CNA_Handle handle,
+    TValue* const output,
+    TCallable&& callable) noexcept
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (output == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The occlusion-query output is null.");
+        }
+        std::shared_ptr<OcclusionQueryResource> query;
+        if (const CNA_Result result = GetOcclusionQuery(handle, &query);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const TValue value =
+            static_cast<TValue>(std::forward<TCallable>(callable)(*query->value));
+        *output = value;
+        return CNA_RESULT_SUCCESS;
+    });
 }
 
 struct LiveRegistrations final {
@@ -2203,5 +2265,108 @@ CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_count_ext(
         return DeviceCommand(graphicsDeviceHandle, [=](GraphicsDevice& device) {
             device.RecreateRendererForMultiSampleCount(multiSampleCount);
         });
+    });
+}
+
+CNA_Result cna_occlusion_query_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_OcclusionQueryHandle* const outOcclusionQuery)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outOcclusionQuery == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The occlusion-query output handle is null.");
+        }
+        *outOcclusionQuery = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result =
+                GetBorrowedGraphicsDevice(graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!graphicsDevice->value->SupportsCapability(CNA::GraphicsCapability::OcclusionQuery)) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "The selected graphics backend does not support occlusion queries.");
+        }
+
+        auto native = std::make_shared<OcclusionQuery>(*graphicsDevice->value);
+        const auto resource = std::make_shared<OcclusionQueryResource>(
+            OcclusionQueryResource{std::move(native), graphicsDevice->parentGame});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::OcclusionQuery, resource, outOcclusionQuery);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned occlusion-query handle could not be created.");
+        }
+        AddOwnedGraphicsResource();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_occlusion_query_begin(const CNA_OcclusionQueryHandle occlusionQueryHandle)
+{
+    return OcclusionQueryCommand(occlusionQueryHandle, [](OcclusionQuery& query) {
+        query.Begin();
+    });
+}
+
+CNA_Result cna_occlusion_query_end(const CNA_OcclusionQueryHandle occlusionQueryHandle)
+{
+    return OcclusionQueryCommand(occlusionQueryHandle, [](OcclusionQuery& query) {
+        query.End();
+    });
+}
+
+CNA_Result cna_occlusion_query_get_is_complete(
+    const CNA_OcclusionQueryHandle occlusionQueryHandle,
+    CNA_Bool* const outIsComplete)
+{
+    return OcclusionQueryValue(occlusionQueryHandle, outIsComplete, [](OcclusionQuery& query) {
+        return query.getIsCompleteProperty() ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_occlusion_query_get_pixel_count(
+    const CNA_OcclusionQueryHandle occlusionQueryHandle,
+    int32_t* const outPixelCount)
+{
+    return OcclusionQueryValue(occlusionQueryHandle, outPixelCount, [](OcclusionQuery& query) {
+        return static_cast<int32_t>(query.getPixelCountProperty());
+    });
+}
+
+CNA_Result cna_occlusion_query_has_renderer(
+    const CNA_OcclusionQueryHandle occlusionQueryHandle,
+    CNA_Bool* const outHasRenderer)
+{
+    return OcclusionQueryValue(occlusionQueryHandle, outHasRenderer, [](OcclusionQuery& query) {
+        return query.HasRenderer() ? CNA_TRUE : CNA_FALSE;
+    });
+}
+
+CNA_Result cna_occlusion_query_destroy(const CNA_OcclusionQueryHandle occlusionQueryHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<OcclusionQueryResource> query;
+        if (const CNA_Result result = GetOcclusionQuery(occlusionQueryHandle, &query);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        static_cast<System::IDisposable*>(query->value.get())->Dispose();
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(occlusionQueryHandle);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The owned occlusion-query handle could not be released.");
+        }
+        RemoveOwnedGraphicsResource();
+        return CNA_RESULT_SUCCESS;
     });
 }

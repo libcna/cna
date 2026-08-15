@@ -334,9 +334,19 @@ effects are already reachable — resource events through the subscriptions abov
 automatically for every owned C resource and readable through the tracked-count query, and renderer
 identity and capabilities through `graphics.h`.
 
+## Occlusion queries
+
+`cna_occlusion_query_create` owns a game-child query; `_begin`, `_end`, `_get_is_complete`,
+`_get_pixel_count`, `_has_renderer` and `_destroy` complete the surface. Creation checks the
+device's occlusion-query capability, so a backend without one refuses at creation rather than at
+the first use. The handle is a full graphics resource: the generic `cna_graphics_resource_*` name,
+string, tag, device, disposal and disposing-subscription routes accept it, which is where the
+canonical protected `Dispose(bool)` and `GetTypeName` behavior is observed. Some backends report
+only zero or one from the pixel count rather than an exact sample count.
+
 ## Not yet in this header
 
 Renderer/capability discovery remains in `graphics.h`; presentation parameters, display mode and
 adapter queries remain in `display.h`; blend/depth-stencil/rasterizer/sampler state remains in
-`graphics_state.h`. SpriteBatch text routes, occlusion queries and the `graphics-ext` post-process family are owned by
-CBIND-035F6 and CBIND-035F7 and are not callable yet.
+`graphics_state.h`. SpriteBatch itself lives in `graphics.h`, including its text and mesh routes. The `graphics-ext`
+post-process family is owned by CBIND-035F7 and is not callable yet.

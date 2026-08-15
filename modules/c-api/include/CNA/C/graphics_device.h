@@ -1219,6 +1219,87 @@ CNA_C_API CNA_Result cna_graphics_device_recreate_renderer_for_multi_sample_coun
     CNA_Handle graphics_device,
     int32_t multi_sample_count);
 
+/** @brief Owned handle for a GPU occlusion query. */
+typedef CNA_Handle CNA_OcclusionQueryHandle;
+
+/**
+ * @brief Creates an owned occlusion query for the active game's graphics device.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param out_occlusion_query Receives an owned occlusion-query handle on success.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no occlusion
+ * queries, or a documented argument/handle/thread/native failure.
+ *
+ * The query is a child of the active game and must be destroyed before @ref cna_game_destroy.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_create(
+    CNA_Handle graphics_device,
+    CNA_OcclusionQueryHandle* out_occlusion_query);
+
+/**
+ * @brief Begins counting visible pixels; every draw until the matching end is counted.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
+ * or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_begin(CNA_OcclusionQueryHandle occlusion_query);
+
+/**
+ * @brief Ends the query and submits it to the GPU for evaluation.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
+ * or a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_end(CNA_OcclusionQueryHandle occlusion_query);
+
+/**
+ * @brief Gets whether the query result can be read without stalling the CPU.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @param out_is_complete Receives `CNA_TRUE` when the result is available.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
+ * or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_get_is_complete(
+    CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* out_is_complete);
+
+/**
+ * @brief Gets the visible pixel count from the most recently completed query.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @param out_pixel_count Receives the visible pixel count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the backend has no query object,
+ * or a documented argument/handle/thread/native failure.
+ *
+ * Some backends report only zero or one rather than an exact sample count.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_get_pixel_count(
+    CNA_OcclusionQueryHandle occlusion_query,
+    int32_t* out_pixel_count);
+
+/**
+ * @brief Gets whether the query still owns a live native query object.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @param out_has_renderer Receives `CNA_TRUE` while the native query object is alive.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_has_renderer(
+    CNA_OcclusionQueryHandle occlusion_query,
+    CNA_Bool* out_has_renderer);
+
+/**
+ * @brief Disposes and releases an owned occlusion query.
+ *
+ * @param occlusion_query Owned occlusion-query handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure. A second destroy
+ * returns `CNA_RESULT_INVALID_HANDLE`.
+ */
+CNA_C_API CNA_Result cna_occlusion_query_destroy(CNA_OcclusionQueryHandle occlusion_query);
+
 #ifdef __cplusplus
 }
 #endif

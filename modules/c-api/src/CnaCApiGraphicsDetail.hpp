@@ -10,6 +10,8 @@
 
 namespace Microsoft::Xna::Framework::Graphics {
 class Effect;
+class OcclusionQuery;
+class SpriteFont;
 class IndexBuffer;
 class RenderTargetCube;
 class Texture;
@@ -28,6 +30,11 @@ struct EffectResource final {
     uint64_t activeModelReferenceCount = 0U;
 };
 
+struct OcclusionQueryResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::OcclusionQuery> value;
+    CNA_Handle parentGame;
+};
+
 struct Texture2DResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> value;
     CNA_Handle parentGame;
@@ -35,6 +42,12 @@ struct Texture2DResource final {
     uint64_t activeFontReferenceCount;
     uint64_t activeEffectReferenceCount;
     uint64_t activeModelReferenceCount;
+};
+
+struct SpriteFontResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::SpriteFont> value;
+    std::shared_ptr<Texture2DResource> texture;
+    CNA_Handle parentGame;
 };
 
 struct RenderTargetCubeResource final {
@@ -96,6 +109,10 @@ struct TextureCubeResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::Texture2D> texture,
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
+
+[[nodiscard]] CNA_Result GetOwnedSpriteFont(
+    CNA_Handle handle,
+    std::shared_ptr<SpriteFontResource>* outSpriteFont);
 
 [[nodiscard]] CNA_Result GetOwnedTexture2D(
     CNA_Handle handle,

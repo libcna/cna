@@ -29,6 +29,7 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::RemoveOwnedGraphicsResource;
 using CNA::C::Detail::Texture2DResource;
 using Microsoft::Xna::Framework::Rectangle;
@@ -37,12 +38,6 @@ using Microsoft::Xna::Framework::Vector3;
 using Microsoft::Xna::Framework::Graphics::SpriteFont;
 
 constexpr uint32_t StructureVersion = UINT32_C(1);
-
-struct SpriteFontResource final {
-    std::shared_ptr<SpriteFont> value;
-    std::shared_ptr<Texture2DResource> texture;
-    CNA_Handle parentGame;
-};
 
 [[nodiscard]] bool IsBool(const CNA_Bool value) noexcept
 {
@@ -349,3 +344,22 @@ CNA_Result cna_sprite_font_destroy(const CNA_Handle spriteFontHandle)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+namespace CNA::C::Detail {
+
+CNA_Result GetOwnedSpriteFont(
+    const CNA_Handle handle,
+    std::shared_ptr<SpriteFontResource>* const outSpriteFont)
+{
+    const CNA_Result result =
+        GetRuntimeHandles().Get(handle, ObjectKind::SpriteFont, outSpriteFont);
+    if (result == CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_SUCCESS;
+    }
+    return Fail(
+        result,
+        ErrorCategoryForResult(result),
+        "The SpriteFont handle is invalid for this call.");
+}
+
+} // namespace CNA::C::Detail

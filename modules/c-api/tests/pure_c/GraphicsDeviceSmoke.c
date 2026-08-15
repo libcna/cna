@@ -1248,6 +1248,178 @@ static int validate_device_extensions(CNA_Handle graphics_device)
                graphics_device, -1) == CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static int validate_sprite_text_and_queries(CNA_Handle graphics_device)
+{
+    static const char ExpectedType[] = "Microsoft.Xna.Framework.Graphics.SpriteBatch";
+    const uint64_t expected_type_length = (uint64_t)(sizeof(ExpectedType) - 1U);
+
+    CNA_Handle sprite_batch = CNA_INVALID_HANDLE;
+    if (cna_sprite_batch_create(graphics_device, &sprite_batch) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    uint64_t type_bytes = 0U;
+    char type_name[sizeof(ExpectedType)];
+    char guard = 'q';
+    memset(type_name, 'z', sizeof(type_name));
+    int ok = cna_sprite_batch_get_type_name_size(sprite_batch, &type_bytes) ==
+            CNA_RESULT_SUCCESS &&
+        type_bytes == expected_type_length &&
+        cna_sprite_batch_get_type_name_size(sprite_batch, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        cna_sprite_batch_copy_type_name(
+            sprite_batch, type_name, expected_type_length, &type_bytes) == CNA_RESULT_SUCCESS &&
+        memcmp(type_name, ExpectedType, (size_t)expected_type_length) == 0 &&
+        type_name[expected_type_length] == 'z' &&
+        cna_sprite_batch_copy_type_name(sprite_batch, &guard, 1U, &type_bytes) ==
+            CNA_RESULT_BUFFER_TOO_SMALL &&
+        guard == 'q' && type_bytes == expected_type_length;
+
+    /* Build a small atlas-backed font for the text route. */
+    const CNA_Texture2DCreateInfo texture_info = {
+        sizeof(CNA_Texture2DCreateInfo), UINT32_C(1), 8U, 8U, CNA_FALSE, {0U, 0U, 0U},
+        CNA_SURFACE_FORMAT_COLOR};
+    CNA_Handle atlas = CNA_INVALID_HANDLE;
+    CNA_Handle font = CNA_INVALID_HANDLE;
+    if (ok && cna_texture2d_create(graphics_device, &texture_info, &atlas) ==
+            CNA_RESULT_SUCCESS) {
+        const CNA_SpriteFontGlyph glyphs[] = {
+            {sizeof(CNA_SpriteFontGlyph), UINT32_C(1), {0, 0, 2, 8}, {0, 0, 2, 8},
+             (CNA_Char16)'A', 0U, {0.0f, 5.0f, 0.0f}},
+            {sizeof(CNA_SpriteFontGlyph), UINT32_C(1), {2, 0, 2, 8}, {0, 0, 2, 8},
+             (CNA_Char16)'?', 0U, {0.0f, 5.0f, 0.0f}}};
+        const CNA_SpriteFontCreateInfo font_info = {
+            sizeof(CNA_SpriteFontCreateInfo), UINT32_C(1), atlas, glyphs,
+            sizeof(glyphs) / sizeof(glyphs[0]), 10, 1.0f, (CNA_Char16)'?', CNA_TRUE,
+            {0U, 0U, 0U, 0U, 0U}};
+        ok = cna_sprite_font_create(&font_info, &font) == CNA_RESULT_SUCCESS;
+    } else {
+        ok = 0;
+    }
+
+    static const char text[] = "AA";
+    CNA_SpriteTextCommand command = {
+        sizeof(CNA_SpriteTextCommand), UINT32_C(1), font, {text, sizeof(text) - 1U},
+        {1.0F, 2.0F}, {255U, 255U, 255U, 255U}, 0.0F, {0.0F, 0.0F}, {1.0F, 1.0F},
+        CNA_SPRITE_EFFECT_NONE, 0.0F};
+
+    if (ok) {
+        /* Text outside a begin/end interval is refused, and malformed commands never reach it. */
+        CNA_SpriteTextCommand malformed = command;
+        malformed.rotation = NAN;
+        CNA_SpriteTextCommand unknown_effects = command;
+        unknown_effects.effects = UINT32_C(8);
+        ok = cna_sprite_batch_draw_string(sprite_batch, &command) == CNA_RESULT_INVALID_STATE &&
+            cna_sprite_batch_draw_string(sprite_batch, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+            cna_sprite_batch_draw_string(sprite_batch, &malformed) ==
+                CNA_RESULT_INVALID_ARGUMENT &&
+            cna_sprite_batch_draw_string(sprite_batch, &unknown_effects) ==
+                CNA_RESULT_INVALID_ARGUMENT;
+    }
+
+    if (ok) {
+        const CNA_SpriteBatchBeginInfo begin_info = {
+            sizeof(CNA_SpriteBatchBeginInfo), UINT32_C(1), CNA_SPRITE_SORT_MODE_IMMEDIATE, 0U};
+        const CNA_Result begun = cna_sprite_batch_begin(sprite_batch, &begin_info);
+        if (begun == CNA_RESULT_SUCCESS) {
+            CNA_SpriteTextCommand scaled = command;
+            scaled.scale.x = 2.0F;
+            scaled.scale.y = 3.0F;
+            scaled.rotation = 0.5F;
+            scaled.effects = CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY;
+            scaled.layer_depth = 0.25F;
+            CNA_SpriteTextCommand foreign = command;
+            foreign.sprite_font = atlas;
+            ok = is_supported(cna_sprite_batch_draw_string(sprite_batch, &command)) &&
+                is_supported(cna_sprite_batch_draw_string(sprite_batch, &scaled)) &&
+                cna_sprite_batch_draw_string(sprite_batch, &foreign) ==
+                    CNA_RESULT_INVALID_HANDLE;
+
+            /* A mesh draw needs an effect from the same game and validated arrays. */
+            CNA_EffectHandle effect = CNA_INVALID_HANDLE;
+            if (ok && cna_basic_effect_create(graphics_device, &effect) == CNA_RESULT_SUCCESS) {
+                const CNA_Vector2 positions[3] = {{0.0F, 0.0F}, {4.0F, 0.0F}, {0.0F, 4.0F}};
+                const CNA_Color colors[3] = {
+                    {255U, 0U, 0U, 255U}, {0U, 255U, 0U, 255U}, {0U, 0U, 255U, 255U}};
+                const CNA_Vector2 uvs[3] = {{0.0F, 0.0F}, {1.0F, 0.0F}, {0.0F, 1.0F}};
+                const uint16_t mesh_indices[3] = {0U, 1U, 2U};
+                CNA_SpriteMeshEXT mesh = {
+                    sizeof(CNA_SpriteMeshEXT), UINT32_C(1), effect, positions, colors, uvs,
+                    mesh_indices, 3U, 3U};
+                CNA_SpriteMeshEXT empty = mesh;
+                empty.vertex_count = 0U;
+                CNA_SpriteMeshEXT no_positions = mesh;
+                no_positions.positions = 0;
+                ok = is_supported(cna_sprite_batch_draw_mesh_ext(sprite_batch, &mesh)) &&
+                    cna_sprite_batch_draw_mesh_ext(sprite_batch, 0) ==
+                        CNA_RESULT_INVALID_ARGUMENT &&
+                    cna_sprite_batch_draw_mesh_ext(sprite_batch, &empty) ==
+                        CNA_RESULT_INVALID_ARGUMENT &&
+                    cna_sprite_batch_draw_mesh_ext(sprite_batch, &no_positions) ==
+                        CNA_RESULT_INVALID_ARGUMENT;
+                /* Optional colors and texture coordinates default cleanly. */
+                if (ok) {
+                    CNA_SpriteMeshEXT minimal = mesh;
+                    minimal.colors = 0;
+                    minimal.texture_coordinates = 0;
+                    ok = is_supported(cna_sprite_batch_draw_mesh_ext(sprite_batch, &minimal));
+                }
+                ok = ok && cna_effect_destroy(effect) == CNA_RESULT_SUCCESS;
+            } else {
+                ok = 0;
+            }
+            ok = ok && is_supported(cna_sprite_batch_end(sprite_batch));
+        } else if (begun != CNA_RESULT_NOT_SUPPORTED) {
+            ok = 0;
+        }
+    }
+
+    if (font != CNA_INVALID_HANDLE) {
+        ok = cna_sprite_font_destroy(font) == CNA_RESULT_SUCCESS && ok;
+    }
+    if (atlas != CNA_INVALID_HANDLE) {
+        ok = cna_texture2d_destroy(atlas) == CNA_RESULT_SUCCESS && ok;
+    }
+    ok = cna_sprite_batch_destroy(sprite_batch) == CNA_RESULT_SUCCESS && ok;
+    if (!ok) {
+        return 0;
+    }
+
+    /* Occlusion queries follow the backend capability exactly. */
+    CNA_Bool supports_queries = CNA_FALSE;
+    if (cna_graphics_device_supports_capability(
+            graphics_device, CNA_GRAPHICS_CAPABILITY_OCCLUSION_QUERY, &supports_queries) !=
+        CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    CNA_OcclusionQueryHandle query = CNA_INVALID_HANDLE;
+    const CNA_Result created = cna_occlusion_query_create(graphics_device, &query);
+    if (supports_queries != CNA_TRUE) {
+        return created == CNA_RESULT_NOT_SUPPORTED && query == CNA_INVALID_HANDLE &&
+            cna_occlusion_query_create(graphics_device, 0) == CNA_RESULT_INVALID_ARGUMENT;
+    }
+    if (created != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+
+    CNA_Bool has_renderer = CNA_FALSE;
+    CNA_Bool complete = CNA_FALSE;
+    int32_t pixels = -1;
+    uint64_t query_type_bytes = 0U;
+    ok = cna_occlusion_query_has_renderer(query, &has_renderer) == CNA_RESULT_SUCCESS &&
+        cna_occlusion_query_has_renderer(query, 0) == CNA_RESULT_INVALID_ARGUMENT &&
+        is_supported(cna_occlusion_query_begin(query)) &&
+        is_supported(cna_occlusion_query_end(query)) &&
+        is_supported(cna_occlusion_query_get_is_complete(query, &complete)) &&
+        is_supported(cna_occlusion_query_get_pixel_count(query, &pixels)) &&
+        /* An occlusion query is an ordinary graphics resource. */
+        cna_graphics_resource_get_string_byte_count(query, &query_type_bytes) ==
+            CNA_RESULT_SUCCESS &&
+        query_type_bytes != 0U &&
+        cna_occlusion_query_destroy(query) == CNA_RESULT_SUCCESS &&
+        cna_occlusion_query_destroy(query) == CNA_RESULT_INVALID_HANDLE;
+    return ok;
+}
+
 static CNA_Result on_load(
     CNA_Handle game,
     const CNA_GameTime* game_time,
@@ -1265,7 +1437,8 @@ static CNA_Result on_load(
         !validate_frame_control(graphics_device, state) ||
         !validate_backbuffer_window(graphics_device) ||
         !validate_buffer_binding(graphics_device) ||
-        !validate_draw_and_extensions(graphics_device)) {
+        !validate_draw_and_extensions(graphics_device) ||
+        !validate_sprite_text_and_queries(graphics_device)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->stale_device = graphics_device;

@@ -11,7 +11,9 @@
 #include "Microsoft/Xna/Framework/Vector2.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteEffects.hpp"
+#include "Microsoft/Xna/Framework/Graphics/SpriteFont.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SpriteSortMode.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SurfaceFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -30,7 +32,11 @@ using CNA::C::Detail::BorrowedGraphicsDevice;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
+using CNA::C::Detail::CopyStringView;
+using CNA::C::Detail::EffectResource;
 using CNA::C::Detail::Fail;
+using CNA::C::Detail::GetOwnedSpriteFont;
+using CNA::C::Detail::SpriteFontResource;
 using CNA::C::Detail::GetBorrowedGraphicsDevice;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
@@ -43,7 +49,9 @@ using CNA::C::Detail::ToNativeSamplerState;
 using Microsoft::Xna::Framework::Color;
 using Microsoft::Xna::Framework::Rectangle;
 using Microsoft::Xna::Framework::Vector2;
+using Microsoft::Xna::Framework::Graphics::Effect;
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
+using Microsoft::Xna::Framework::Graphics::SpriteFont;
 using Microsoft::Xna::Framework::Graphics::SpriteBatch;
 using Microsoft::Xna::Framework::Graphics::SpriteEffects;
 using Microsoft::Xna::Framework::Graphics::SpriteSortMode;
@@ -1156,6 +1164,225 @@ CNA_Result cna_sprite_batch_destroy(const CNA_Handle spriteBatchHandle)
                 "The owned SpriteBatch handle could not be released.");
         }
         RemoveOwnedGraphicsResource();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_get_type_name_size(
+    const CNA_Handle spriteBatchHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The required-byte output is null.");
+        }
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<uint64_t>(spriteBatch->value->GetTypeName().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_copy_type_name(
+    const CNA_Handle spriteBatchHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The string destination or required-byte output is invalid.");
+        }
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::string& text = spriteBatch->value->GetTypeName();
+        *outBytes = static_cast<uint64_t>(text.size());
+        if (capacity < text.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold the complete type name.");
+        }
+        if (!text.empty()) {
+            std::memcpy(destination, text.data(), text.size());
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_draw_string(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteTextCommand* const command)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (command == nullptr || command->struct_size < sizeof(CNA_SpriteTextCommand) ||
+            command->struct_version != StructureVersion ||
+            (command->effects & ~(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY |
+                                  CNA_SPRITE_EFFECT_FLIP_VERTICALLY)) != 0U ||
+            !std::isfinite(command->position.x) || !std::isfinite(command->position.y) ||
+            !std::isfinite(command->rotation) || !std::isfinite(command->origin.x) ||
+            !std::isfinite(command->origin.y) || !std::isfinite(command->scale.x) ||
+            !std::isfinite(command->scale.y) || !std::isfinite(command->layer_depth)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch text command is invalid.");
+        }
+        std::string text;
+        if (const CNA_Result result = CopyStringView(command->text, false, &text);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch is not inside a begin/end interval.");
+        }
+        std::shared_ptr<SpriteFontResource> font;
+        if (const CNA_Result result = GetOwnedSpriteFont(command->sprite_font, &font);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (font->parentGame != spriteBatch->parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteFont belongs to a different game than the SpriteBatch.");
+        }
+
+        spriteBatch->value->DrawString(
+            *font->value,
+            text,
+            Vector2(command->position.x, command->position.y),
+            Color(command->color.r, command->color.g, command->color.b, command->color.a),
+            command->rotation,
+            Vector2(command->origin.x, command->origin.y),
+            Vector2(command->scale.x, command->scale.y),
+            static_cast<SpriteEffects>(command->effects),
+            command->layer_depth);
+
+        // The atlas must outlive the interval, so it is retained exactly like a drawn texture.
+        if (font->texture->activeBatchReferenceCount !=
+            std::numeric_limits<uint64_t>::max()) {
+            ++font->texture->activeBatchReferenceCount;
+            spriteBatch->retainedTextures.push_back(font->texture);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_draw_mesh_ext(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteMeshEXT* const mesh)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (mesh == nullptr || mesh->struct_size < sizeof(CNA_SpriteMeshEXT) ||
+            mesh->struct_version != StructureVersion || mesh->positions == nullptr ||
+            mesh->indices == nullptr || mesh->vertex_count == 0U || mesh->index_count == 0U ||
+            mesh->vertex_count > static_cast<uint64_t>(INT32_MAX) ||
+            mesh->index_count > static_cast<uint64_t>(INT32_MAX)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch mesh command is invalid.");
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch is not inside a begin/end interval.");
+        }
+        std::shared_ptr<EffectResource> effect;
+        const CNA_Result effectResult =
+            GetRuntimeHandles().Get(mesh->effect, ObjectKind::Effect, &effect);
+        if (effectResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                effectResult,
+                ErrorCategoryForResult(effectResult),
+                "The Effect handle is invalid for this call.");
+        }
+        if (effect->parentGame != spriteBatch->parentGame) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The Effect belongs to a different game than the SpriteBatch.");
+        }
+
+        const auto vertexCount = static_cast<std::size_t>(mesh->vertex_count);
+        std::vector<Vector2> positions;
+        std::vector<Vector2> textureCoordinates;
+        std::vector<Color> colors;
+        positions.reserve(vertexCount);
+        for (std::size_t index = 0U; index < vertexCount; ++index) {
+            if (!std::isfinite(mesh->positions[index].x) ||
+                !std::isfinite(mesh->positions[index].y)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A mesh position component is not finite.");
+            }
+            positions.emplace_back(mesh->positions[index].x, mesh->positions[index].y);
+        }
+        if (mesh->texture_coordinates != nullptr) {
+            textureCoordinates.reserve(vertexCount);
+            for (std::size_t index = 0U; index < vertexCount; ++index) {
+                textureCoordinates.emplace_back(
+                    mesh->texture_coordinates[index].x, mesh->texture_coordinates[index].y);
+            }
+        }
+        // Native Color carries a vtable, so C colors are converted rather than reinterpreted.
+        colors.reserve(vertexCount);
+        for (std::size_t index = 0U; index < vertexCount; ++index) {
+            const CNA_Color value = mesh->colors != nullptr
+                ? mesh->colors[index]
+                : CNA_Color{UINT8_C(255), UINT8_C(255), UINT8_C(255), UINT8_C(255)};
+            colors.emplace_back(value.r, value.g, value.b, value.a);
+        }
+
+        // Mesh submission has no capability flag: the renderer interface's own default
+        // implementation throws for every backend that has not implemented it. Every state and
+        // argument precondition is already decided above, so the remaining native failure from
+        // this one call is exactly that unsupported-operation case.
+        try {
+            spriteBatch->value->DrawMeshEXT(
+                *effect->value,
+                positions.data(),
+                colors.data(),
+                textureCoordinates.empty() ? nullptr : textureCoordinates.data(),
+                static_cast<int>(vertexCount),
+                mesh->indices,
+                static_cast<int>(mesh->index_count));
+        } catch (const std::runtime_error& exception) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                exception.what());
+        }
         return CNA_RESULT_SUCCESS;
     });
 }

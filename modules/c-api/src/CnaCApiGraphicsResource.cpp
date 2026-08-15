@@ -6,6 +6,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/GraphicsResource.hpp"
+#include "Microsoft/Xna/Framework/Graphics/OcclusionQuery.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetCube.hpp"
@@ -34,6 +35,7 @@ using CNA::C::Detail::GetOwnedTexture2D;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::IndexBufferResource;
 using CNA::C::Detail::ObjectKind;
+using CNA::C::Detail::OcclusionQueryResource;
 using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::Texture3DResource;
@@ -153,6 +155,15 @@ private:
         result.value = std::static_pointer_cast<GraphicsResource>(target->value);
         result.parentGame = target->parentGame;
         result.activeEffectReferenceCount = &target->activeEffectReferenceCount;
+    } else if (kind == ObjectKind::OcclusionQuery) {
+        std::shared_ptr<OcclusionQueryResource> query;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::OcclusionQuery, &query);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(query->value);
+        result.parentGame = query->parentGame;
     } else if (kind == ObjectKind::VertexDeclaration) {
         std::shared_ptr<VertexDeclaration> declaration;
         const CNA_Result getResult = GetRuntimeHandles().Get(

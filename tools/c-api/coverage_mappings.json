@@ -1350,6 +1350,26 @@
       "tests": "observed resource-created and resource-destroyed delivery from real Texture2D creation and destruction, tracked-resource count and renderer identity/capability queries in strict-C `GraphicsDeviceSmoke.c` and `LifecycleSmoke.c` under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F5"
+    },
+    {
+      "id": "spritebatch-text-and-mesh",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch::(?:SpriteBatch|~SpriteBatch|GetTypeName|DrawString|DrawMeshEXT)$",
+      "kinds": ["constructor", "destructor", "method"],
+      "mapping": "`cna_sprite_batch_draw_string` with a versioned `CNA_SpriteTextCommand`, `cna_sprite_batch_draw_mesh_ext` with a versioned `CNA_SpriteMeshEXT`, and `cna_sprite_batch_get_type_name_size`/`_copy_type_name`. All six `DrawString` overloads collapse into one command: both native text types are copied before layout, so a UTF-8 view expresses either, and the parameter shapes differ only in which transform fields stay at their defaults. Mesh colors and positions are converted rather than reinterpreted because the native Color carries a vtable, and a renderer without mesh submission reports `NOT_SUPPORTED`. `cna_sprite_batch_create` is the only C construction: the canonical default constructor produces a deviceless batch and the other takes a renderer-private object, so neither has a C form; `cna_sprite_batch_destroy` is the destructor route",
+      "tests": "exact type-name bytes with capacity atomicity, malformed and non-finite command rejection, refusal outside a begin/end interval, default and full transform draws, foreign-font refusal, mesh submission with and without optional colors/texture coordinates, malformed mesh rejection and honest backend refusal in strict-C `GraphicsDeviceSmoke.c`, plus C/C++ ABI layout assertions under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F6",
+      "signature_regex": "^(?:\\(\\)|\\(std::unique_ptr< ISpriteBatchRenderer > renderer\\)|\\(\\) override|\\(\\) const override|\\(const SpriteFont &spriteFont.*\\)|\\(Effect &effect.*\\))$"
+    },
+    {
+      "id": "occlusion-query-surface",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/OcclusionQuery\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method"],
+      "mapping": "owned game-child `CNA_OcclusionQueryHandle` values through `cna_occlusion_query_create`, `_begin`, `_end`, `_get_is_complete`, `_get_pixel_count`, `_has_renderer` and `_destroy`. Creation refuses a backend without the occlusion-query capability, and the handle is a full graphics resource: the generic `cna_graphics_resource_*` name, string, tag, device, disposal and disposing-subscription routes accept it, which is where the protected `Dispose(bool)` and `GetTypeName` behavior is observed",
+      "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and SDL_RENDERER",
+      "status": "implemented",
+      "task": "CBIND-035F6"
     }
   ]
 }

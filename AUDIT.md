@@ -10,11 +10,12 @@ Systematic per-class, per-method comparison: FNA (reference) vs CNA (implementat
 For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 
 > **C ABI tracking note (2026-08-15):** `modules/c-api/` remains an experimental C17 ABI and is
-> complete through `CBIND-035F5`: the graphics-resource, texture, vertex/index buffer, effect and
+> complete through `CBIND-035F6`: the graphics-resource, texture, vertex/index buffer, effect and
 > model/animation families are mapped, and the graphics-device family now has its Viewport values,
 > clear/status/2D-policy identities, complete device state, events and exception conversion, and
-> stage-addressed texture collections, frame control, buffer binding and complete draw submission.
-> The generated inventory currently records 3,337 implemented, 23 partial, 2,982 planned and 73
+> stage-addressed texture collections, frame control, buffer binding, complete draw submission,
+> SpriteBatch text and occlusion queries. The generated inventory currently records 3,358
+> implemented, 23 partial, 2,961 planned and 73
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

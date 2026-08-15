@@ -78,6 +78,7 @@ enum class ObjectKind : uint32_t {
     SkinningData = 42,
     AnimationPlayer = 43,
     GraphicsDeviceEventRegistration = 44,
+    OcclusionQuery = 45,
     Test = UINT32_MAX
 };
 

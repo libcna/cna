@@ -667,6 +667,140 @@ CNA_C_API CNA_Result cna_sprite_batch_end(CNA_Handle sprite_batch);
  */
 CNA_C_API CNA_Result cna_sprite_batch_destroy(CNA_Handle sprite_batch);
 
+/**
+ * @brief Describes one SpriteBatch text draw.
+ *
+ * The canonical surface has six `DrawString` overloads: three parameter shapes, each accepting
+ * either a `std::string` or a `System::Text::StringBuilder`. Both text types are copied before
+ * layout, so a single UTF-8 view expresses either; the parameter shapes differ only in which of
+ * the transform fields they leave at their defaults.
+ */
+typedef struct CNA_SpriteTextCommand {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Owned SpriteFont handle belonging to the same game as the batch. */
+    CNA_Handle sprite_font;
+
+    /** @brief UTF-8 text copied during this call. */
+    CNA_StringView text;
+
+    /** @brief Screen-space position of the text origin. Both components must be finite. */
+    CNA_Vector2 position;
+
+    /** @brief Per-glyph tint. */
+    CNA_Color color;
+
+    /** @brief Clockwise rotation in radians. Must be finite. */
+    float rotation;
+
+    /** @brief Rotation origin in unscaled text pixels. Both components must be finite. */
+    CNA_Vector2 origin;
+
+    /** @brief Per-axis scale; use equal components for the uniform-scale overloads. */
+    CNA_Vector2 scale;
+
+    /** @brief Zero or more `CNA_SPRITE_EFFECT_*` bits. */
+    CNA_SpriteEffects effects;
+
+    /** @brief Sort depth consumed by depth-based modes. Must be finite. */
+    float layer_depth;
+} CNA_SpriteTextCommand;
+
+/**
+ * @brief Describes one indexed triangle mesh submitted through a SpriteBatch.
+ */
+typedef struct CNA_SpriteMeshEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Owned effect handle belonging to the same game as the batch. */
+    CNA_Handle effect;
+
+    /** @brief Caller-owned screen-space positions read during this call. */
+    const CNA_Vector2* positions;
+
+    /** @brief Caller-owned per-vertex colors, or null to use opaque white. */
+    const CNA_Color* colors;
+
+    /** @brief Caller-owned texture coordinates, or null when the effect samples nothing. */
+    const CNA_Vector2* texture_coordinates;
+
+    /** @brief Caller-owned 16-bit triangle indices read during this call. */
+    const uint16_t* indices;
+
+    /** @brief Number of vertices in each supplied array. */
+    uint64_t vertex_count;
+
+    /** @brief Number of indices beginning at @ref indices. */
+    uint64_t index_count;
+} CNA_SpriteMeshEXT;
+
+/**
+ * @brief Gets the UTF-8 byte count of the SpriteBatch type name.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @param out_bytes Receives the byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_get_type_name_size(
+    CNA_Handle sprite_batch,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the SpriteBatch type name as UTF-8 bytes without a terminator.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @param destination Caller-owned destination, or null only when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the required byte count without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL`, or a documented
+ * argument/handle/thread failure. No partial name is written.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_copy_type_name(
+    CNA_Handle sprite_batch,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Draws one string through an active SpriteBatch interval.
+ *
+ * @param sprite_batch Owned SpriteBatch handle inside a begin/end interval.
+ * @param command Versioned text description validated before native submission.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside a begin/end interval,
+ * `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the operation, or another documented
+ * argument/handle/thread/native failure.
+ *
+ * The font must belong to the same game as the batch and is retained until a successful
+ * @ref cna_sprite_batch_end, exactly like a drawn texture.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_draw_string(
+    CNA_Handle sprite_batch,
+    const CNA_SpriteTextCommand* command);
+
+/**
+ * @brief Submits one indexed triangle mesh through an active SpriteBatch interval.
+ *
+ * @param sprite_batch Owned SpriteBatch handle inside an Immediate begin/end interval.
+ * @param mesh Versioned mesh description validated before native submission.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside an interval or outside
+ * `CNA_SPRITE_SORT_MODE_IMMEDIATE`, `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the
+ * operation, or another documented argument/handle/thread/native failure.
+ *
+ * A mesh draw deliberately does not join the deferred sprite queue, so the canonical contract
+ * requires Immediate mode. All arrays are read during the call and never retained.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_draw_mesh_ext(
+    CNA_Handle sprite_batch,
+    const CNA_SpriteMeshEXT* mesh);
+
 #ifdef __cplusplus
 }
 #endif
