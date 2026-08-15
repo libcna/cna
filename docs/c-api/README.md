@@ -14,7 +14,8 @@ Point/Rectangle and complete Vector2/Vector3/Vector4/Quaternion/Matrix/Plane/Ray
 operations, complete CurveKey/Curve/CurveKeyCollection evaluation and mutation, packed storage and
 complete PackedVector conversion/equality plus Color operations/named values, all seven built-in
 vertex POD values with equality/hash/text and canonical declaration queries, owned standalone
-vertex declarations and fixed vertex-buffer binding descriptors, the common graphics-resource
+vertex declarations, owned static/dynamic vertex buffers with complete typed/raw transfer and
+fixed vertex-buffer binding descriptors, the common graphics-resource
 name/tag/device/disposal/event contract, core draw/buffer/vertex
 identities, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
@@ -83,7 +84,8 @@ gate.
 The exact modules and headers are defined in the implementation plan. The current header split is
 `abi.h`, `core.h`, `runtime.h`, `graphics.h`, `graphics_state.h`, `display.h`, `render_target.h`,
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
-`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h` and `audio.h`;
+`curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `vertex_values.h`,
+`vertex_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations
@@ -110,6 +112,7 @@ See the sibling contract documents for ABI versioning, handles, ownership, error
 callbacks/threading, renderer capability reporting, [graphics resources](GRAPHICS_RESOURCES.md),
 [textures](TEXTURES.md),
 [3D and cube textures](TEXTURE_VOLUMES.md),
+[vertex buffers](VERTEX_BUFFERS.md),
 [math and 3D values](MATH_AND_3D_VALUES.md), [input snapshots](INPUT_SNAPSHOTS.md) and the Sharp
 Runtime boundary. The owned content/cache
 contract is in [`CONTENT.md`](CONTENT.md). The

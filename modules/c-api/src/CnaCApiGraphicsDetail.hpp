@@ -14,6 +14,7 @@ class Texture;
 class Texture2D;
 class Texture3D;
 class TextureCube;
+class VertexBuffer;
 }
 
 namespace CNA::C::Detail {
@@ -38,6 +39,12 @@ struct Texture3DResource final {
 struct TextureCubeResource final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> value;
     CNA_Handle parentGame;
+};
+
+struct VertexBufferResource final {
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::VertexBuffer> value;
+    CNA_Handle parentGame;
+    bool dynamic;
 };
 
 struct TextureResourceView final {

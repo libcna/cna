@@ -44,6 +44,8 @@ enum class ObjectKind : uint32_t {
     VertexDeclaration = 15,
     Texture3D = 16,
     TextureCube = 17,
+    VertexBuffer = 18,
+    VertexBufferEventRegistration = 19,
     Test = UINT32_MAX
 };
 

@@ -34,6 +34,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiTextureVolume.cpp
     src/CnaCApiVectors.cpp
     src/CnaCApiVertexResources.cpp
+    src/CnaCApiVertexBuffer.cpp
     src/CnaCApiVertexValues.cpp
 )
 add_library(CNA::CApi ALIAS cna_c_api)
@@ -275,6 +276,24 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_vertex_resource_smoke PRIVATE Threads::Threads)
     cna_c_api_enable_strict_warnings(cna_c_api_vertex_resource_smoke)
     add_test(NAME CApi_VertexResourceSmoke COMMAND cna_c_api_vertex_resource_smoke)
+
+    add_executable(cna_c_api_vertex_buffer_smoke
+        tests/pure_c/VertexBufferSmoke.c
+    )
+    set_target_properties(cna_c_api_vertex_buffer_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_vertex_buffer_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_vertex_buffer_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_vertex_buffer_smoke)
+    add_test(NAME CApi_VertexBufferSmoke COMMAND cna_c_api_vertex_buffer_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_VertexBufferSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c

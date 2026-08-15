@@ -267,6 +267,16 @@
       "task": "CBIND-035C5"
     },
     {
+      "id": "vertex-buffer-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/(?:Dynamic)?VertexBuffer\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "event"],
+      "mapping": "owned game-child `CNA_VertexBufferHandle` resources created as static or dynamic buffers; copied declaration metadata, versioned info and caller-array transfer descriptors; all seven typed SetData/GetData families, raw-byte upload, dynamic SetDataOptions overloads, exact type-name count/copy, generic GraphicsResource disposal/state/event operations and owned ContentLost callback registration. Handle ownership represents native move transfer; renderer pointers, protected construction/storage and native events remain behind the adapter",
+      "tests": "all seven built-in vertex types through count and source/destination-window transfers, all four dynamic option overloads, raw upload, copied declaration independence, metadata/type text, WriteOnly refusal, disposal/events, capacity atomicity and invalid/stale/wrong-kind/wrong-thread handles under HEADLESS; explicit 3D-capability creation refusal under SDL_RENDERER; strict-C `VertexBufferSmoke.c`, C/C++ ABI assertions and ASan+UBSan",
+      "status": "implemented",
+      "task": "CBIND-035C6"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

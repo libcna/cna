@@ -11,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture3D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 #include "System/EventArgs.hpp"
 
 #include <cstring>
@@ -33,12 +34,14 @@ using CNA::C::Detail::RenderTargetCubeResource;
 using CNA::C::Detail::Texture2DResource;
 using CNA::C::Detail::Texture3DResource;
 using CNA::C::Detail::TextureCubeResource;
+using CNA::C::Detail::VertexBufferResource;
 using Microsoft::Xna::Framework::Graphics::GraphicsResource;
 using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::Texture3D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
 using Microsoft::Xna::Framework::Graphics::VertexDeclaration;
+using Microsoft::Xna::Framework::Graphics::VertexBuffer;
 
 struct GraphicsResourceView final {
     std::shared_ptr<GraphicsResource> value;
@@ -146,6 +149,15 @@ private:
             return InvalidResource(getResult);
         }
         result.value = std::static_pointer_cast<GraphicsResource>(declaration);
+    } else if (kind == ObjectKind::VertexBuffer) {
+        std::shared_ptr<VertexBufferResource> buffer;
+        const CNA_Result getResult = GetRuntimeHandles().Get(
+            handle, ObjectKind::VertexBuffer, &buffer);
+        if (getResult != CNA_RESULT_SUCCESS) {
+            return InvalidResource(getResult);
+        }
+        result.value = std::static_pointer_cast<GraphicsResource>(buffer->value);
+        result.parentGame = buffer->parentGame;
     } else {
         return InvalidResource(CNA_RESULT_INVALID_HANDLE);
     }
