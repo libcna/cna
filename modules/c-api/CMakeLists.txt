@@ -543,6 +543,19 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_animation_player_smoke
+        tests/pure_c/AnimationPlayerSmoke.c
+    )
+    set_target_properties(cna_c_api_animation_player_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_animation_player_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_animation_player_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_animation_player_smoke)
+    add_test(NAME CApi_AnimationPlayerSmoke COMMAND cna_c_api_animation_player_smoke)
+
     add_executable(cna_c_api_graphics_resource_smoke
         tests/pure_c/GraphicsResourceSmoke.c
     )

@@ -174,6 +174,34 @@ typedef struct CNA_SkinnedModelEXTDescriptor {
     uint64_t clip_count;
 } CNA_SkinnedModelEXTDescriptor;
 
+/** @brief Owned stable handle for copied skeletal animation data. */
+typedef CNA_Handle CNA_SkinningDataHandle;
+
+/** @brief Owned stable handle for a skeletal animation player. */
+typedef CNA_Handle CNA_AnimationPlayerHandle;
+
+/** @brief Complete copied construction state for SkinningData. */
+typedef struct CNA_SkinningDataDescriptor {
+    /** @brief Non-negative skeleton bone count. */
+    int32_t bone_count;
+    /** @brief Reserved padding; initialize to zero. */
+    uint32_t reserved;
+    /** @brief Parent indices borrowed for the call; one per bone. */
+    const int32_t* skeleton_hierarchy;
+    /** @brief Local bind-pose matrices borrowed for the call; one per bone. */
+    const CNA_Matrix* bind_pose;
+    /** @brief Inverse global bind-pose matrices borrowed for the call; one per bone. */
+    const CNA_Matrix* inverse_bind_pose;
+    /** @brief Optional root-prefix matrices borrowed for the call. */
+    const CNA_Matrix* skeleton_root_prefix;
+    /** @brief Root-prefix count; must be zero or equal to bone_count. */
+    uint64_t skeleton_root_prefix_count;
+    /** @brief Named animation clips borrowed for the call. */
+    const CNA_NamedAnimationClipEXTDescriptor* clips;
+    /** @brief Number of named clips. */
+    uint64_t clip_count;
+} CNA_SkinningDataDescriptor;
+
 /**
  * @brief Releases caller state retained as a model-owned resource bundle.
  * @param context Opaque caller context supplied during registration.
@@ -1467,6 +1495,193 @@ CNA_C_API CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
     uint64_t* out_index_buffers,
     uint64_t* out_parts,
     uint64_t* out_textures);
+
+/**
+ * @brief Creates owned SkinningData by deeply copying all descriptor state.
+ * @param descriptor Complete borrowed construction state.
+ * @param out_data Receives the owned SkinningData handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinning_data_create(
+    const CNA_SkinningDataDescriptor* descriptor,
+    CNA_SkinningDataHandle* out_data);
+
+/** @brief Releases an owned SkinningData handle. */
+CNA_C_API CNA_Result cna_skinning_data_destroy(CNA_SkinningDataHandle data);
+
+/** @brief Gets the exact byte count of the SkinningData type name. */
+CNA_C_API CNA_Result cna_skinning_data_get_type_name_byte_count(
+    CNA_SkinningDataHandle data,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the SkinningData type name without a terminator. */
+CNA_C_API CNA_Result cna_skinning_data_copy_type_name(
+    CNA_SkinningDataHandle data,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Gets the SkinningData bone count. */
+CNA_C_API CNA_Result cna_skinning_data_get_bone_count(
+    CNA_SkinningDataHandle data,
+    uint64_t* out_bone_count);
+
+/** @brief Copies every skeleton parent index atomically. */
+CNA_C_API CNA_Result cna_skinning_data_copy_skeleton_hierarchy(
+    CNA_SkinningDataHandle data,
+    int32_t* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies every local bind-pose matrix atomically. */
+CNA_C_API CNA_Result cna_skinning_data_copy_bind_pose(
+    CNA_SkinningDataHandle data,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies every inverse global bind-pose matrix atomically. */
+CNA_C_API CNA_Result cna_skinning_data_copy_inverse_bind_pose(
+    CNA_SkinningDataHandle data,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies the optional root-prefix matrix array atomically. */
+CNA_C_API CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
+    CNA_SkinningDataHandle data,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Gets the number of named SkinningData animation clips. */
+CNA_C_API CNA_Result cna_skinning_data_get_clip_count(
+    CNA_SkinningDataHandle data,
+    uint64_t* out_clip_count);
+
+/** @brief Gets the exact byte count of a sorted SkinningData clip name. */
+CNA_C_API CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
+    CNA_SkinningDataHandle data,
+    uint64_t clip_index,
+    uint64_t* out_byte_count);
+
+/** @brief Copies a sorted SkinningData clip name without a terminator. */
+CNA_C_API CNA_Result cna_skinning_data_copy_clip_name_at(
+    CNA_SkinningDataHandle data,
+    uint64_t clip_index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/**
+ * @brief Gets one SkinningData clip's duration and track count.
+ * @param data SkinningData handle.
+ * @param name Exact UTF-8 clip name.
+ * @param out_found Receives whether the clip exists.
+ * @param out_duration_seconds Receives its duration, or zero when absent.
+ * @param out_track_count Receives its track count, or zero when absent.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_skinning_data_get_clip_info(
+    CNA_SkinningDataHandle data,
+    CNA_StringView name,
+    CNA_Bool* out_found,
+    double* out_duration_seconds,
+    uint64_t* out_track_count);
+
+/** @brief Copies one SkinningData animation track and its keyframes atomically. */
+CNA_C_API CNA_Result cna_skinning_data_copy_clip_track(
+    CNA_SkinningDataHandle data,
+    CNA_StringView name,
+    uint64_t track_index,
+    int32_t* out_bone_index,
+    CNA_KeyframeEXT* destination,
+    uint64_t capacity,
+    uint64_t* out_keyframe_count);
+
+/**
+ * @brief Creates an animation player retaining the supplied SkinningData.
+ * @param data Valid copied skeleton and clip data.
+ * @param out_player Receives the owned player handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_animation_player_create(
+    CNA_SkinningDataHandle data,
+    CNA_AnimationPlayerHandle* out_player);
+
+/** @brief Releases an owned animation-player handle. */
+CNA_C_API CNA_Result cna_animation_player_destroy(CNA_AnimationPlayerHandle player);
+
+/** @brief Starts a named retained clip from position zero. */
+CNA_C_API CNA_Result cna_animation_player_start_clip(
+    CNA_AnimationPlayerHandle player,
+    CNA_StringView clip_name);
+
+/**
+ * @brief Advances or seeks the current animation and recomputes transforms.
+ * @param player Animation-player handle.
+ * @param time_seconds Finite elapsed or absolute position in seconds.
+ * @param relative_to_current_time Whether to add to the current position.
+ * @param loop Whether to wrap rather than clamp.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_animation_player_update(
+    CNA_AnimationPlayerHandle player,
+    double time_seconds,
+    CNA_Bool relative_to_current_time,
+    CNA_Bool loop);
+
+/** @brief Gets the current playback position in seconds. */
+CNA_C_API CNA_Result cna_animation_player_get_current_position(
+    CNA_AnimationPlayerHandle player,
+    double* out_position_seconds);
+
+/**
+ * @brief Gets current-clip presence, duration and track count.
+ * @param player Animation-player handle.
+ * @param out_has_clip Receives whether StartClip has selected a clip.
+ * @param out_duration_seconds Receives its duration, or zero when absent.
+ * @param out_track_count Receives its track count, or zero when absent.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_animation_player_get_current_clip_info(
+    CNA_AnimationPlayerHandle player,
+    CNA_Bool* out_has_clip,
+    double* out_duration_seconds,
+    uint64_t* out_track_count);
+
+/** @brief Gets the current clip-name byte count, or zero when absent. */
+CNA_C_API CNA_Result cna_animation_player_get_current_clip_name_byte_count(
+    CNA_AnimationPlayerHandle player,
+    uint64_t* out_byte_count);
+
+/** @brief Copies the current clip name without a terminator. */
+CNA_C_API CNA_Result cna_animation_player_copy_current_clip_name(
+    CNA_AnimationPlayerHandle player,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_byte_count);
+
+/** @brief Copies all current bone-local transforms atomically. */
+CNA_C_API CNA_Result cna_animation_player_copy_bone_transforms(
+    CNA_AnimationPlayerHandle player,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies all current model-space transforms atomically. */
+CNA_C_API CNA_Result cna_animation_player_copy_world_transforms(
+    CNA_AnimationPlayerHandle player,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/** @brief Copies all current final skin transforms atomically. */
+CNA_C_API CNA_Result cna_animation_player_copy_skin_transforms(
+    CNA_AnimationPlayerHandle player,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
 
 #ifdef __cplusplus
 }

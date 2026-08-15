@@ -68,6 +68,8 @@ enum class ObjectKind : uint32_t {
     Model = 39,
     MorphTargetDataEXT = 40,
     SkinnedModelEXT = 41,
+    SkinningData = 42,
+    AnimationPlayer = 43,
     Test = UINT32_MAX
 };
 

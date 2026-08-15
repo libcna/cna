@@ -158,3 +158,26 @@ atomicity, malformed hierarchy/time/boolean input, attach mismatch and replace-b
 optional texture and resource-count behavior, disposal protection and release, plus stale,
 wrong-kind and wrong-thread calls. The strict-C test runs under HEADLESS and SDL_RENDERER using
 SDL's dummy virtual video driver, with a focused ASan+UBSan run.
+
+## SkinningData and AnimationPlayer
+
+`CNA_SkinningDataHandle` owns the model-facing skeletal animation data used by the native
+AnimationPlayer path. `CNA_SkinningDataDescriptor` deeply copies the topologically ordered parent
+indices, bind and inverse-bind matrices, an optional all-bone root-prefix array, and named clips
+using the same fixed keyframe/track descriptors as SkinnedModelEXT. A root-prefix array is either
+empty or exactly BoneCount long, making the native all-identity fallback explicit. Sorted clip
+names and atomic count/copy functions expose every public field and exact type identity.
+
+`CNA_AnimationPlayerHandle` retains its SkinningData, so the original data handle may be destroyed
+without invalidating playback. StartClip selects a retained clip by exact UTF-8 name instead of
+accepting a dangling native reference. Update accepts finite seconds and canonical C booleans for
+relative/absolute positioning and loop/clamp behavior. Current position and clip state are copied,
+and local, model-space and inverse-bind-composed skin matrices use the standard atomic capacity
+protocol.
+
+`AnimationPlayerSmoke.c` covers all SkinningData fields, descriptor deep copying, type identity,
+clip lookup/track copies, initial bind pose, root-prefix composition, StartClip, relative and
+absolute updates, loop/clamp behavior, all three transform arrays, retained data lifetime,
+capacity atomicity and handle/thread/input failures. It runs unchanged under HEADLESS and
+SDL_RENDERER, with a focused ASan+UBSan run. This completes the CBIND-035E model and animation
+slice.

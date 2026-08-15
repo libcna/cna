@@ -436,6 +436,16 @@
       "task": "CBIND-035E6"
     },
     {
+      "id": "skinning-data-animation-player-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/AnimationPlayer\\.hpp$",
+      "kinds": ["class", "struct", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_SkinningDataHandle` and `CNA_AnimationPlayerHandle` values; SkinningData deeply copies fixed skeleton/root-prefix/named-clip descriptors and exposes deterministic count/copy/name access, while a player retains its SkinningData, selects clips by copied UTF-8 name, accepts finite seconds and canonical booleans, and atomically copies local/world/final skin matrices",
+      "tests": "descriptor and handle ABI, deep-copy independence, exact type identity, every skeleton/root-prefix/clip field, retained player lifetime, bind-pose defaults, StartClip, relative/absolute update, clamp and constant-time loop behavior, current position/clip/name, exact local/world/skin composition, capacity atomicity, malformed prefix/flags/time/name plus stale/wrong-kind/wrong-thread paths in strict-C `AnimationPlayerSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze both handles and descriptor layout",
+      "status": "implemented",
+      "task": "CBIND-035E7"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

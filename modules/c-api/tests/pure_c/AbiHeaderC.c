@@ -152,6 +152,11 @@ _Static_assert(sizeof(CNA_NamedAnimationClipEXTDescriptor) == 40U,
                "CNA named skinned animation-clip descriptor size changed");
 _Static_assert(sizeof(CNA_SkinnedModelEXTDescriptor) == 48U,
                "CNA skinned-model descriptor size changed");
+_Static_assert(sizeof(CNA_SkinningDataHandle) == 8U &&
+                   sizeof(CNA_AnimationPlayerHandle) == 8U,
+               "CNA skeletal-animation handle size changed");
+_Static_assert(sizeof(CNA_SkinningDataDescriptor) == 64U,
+               "CNA SkinningData descriptor size changed");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

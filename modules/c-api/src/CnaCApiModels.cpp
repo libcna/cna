@@ -7,6 +7,7 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
+#include "Microsoft/Xna/Framework/Graphics/AnimationPlayer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/IndexBuffer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelBone.hpp"
@@ -57,9 +58,11 @@ using Microsoft::Xna::Framework::Graphics::MorphTargetDataEXT;
 using Microsoft::Xna::Framework::Graphics::MorphWeightKeyframeEXT;
 using Microsoft::Xna::Framework::Graphics::MorphWeightTrackEXT;
 using Microsoft::Xna::Framework::Graphics::AnimationClipEXT;
+using Microsoft::Xna::Framework::Graphics::AnimationPlayer;
 using Microsoft::Xna::Framework::Graphics::BoneTrackEXT;
 using Microsoft::Xna::Framework::Graphics::KeyframeEXT;
 using Microsoft::Xna::Framework::Graphics::SkinnedModelEXT;
+using Microsoft::Xna::Framework::Graphics::SkinningData;
 
 struct MorphDataResource final {
     std::shared_ptr<MorphTargetDataEXT> value;
@@ -247,6 +250,16 @@ struct SkinnedModelResource final {
     std::shared_ptr<SkinnedModelEXT> value = std::make_shared<SkinnedModelEXT>();
     std::vector<SkinnedPartEntry> parts;
     CNA_Handle parentGame = CNA_INVALID_HANDLE;
+};
+
+struct SkinningDataResource final {
+    std::shared_ptr<SkinningData> value = std::make_shared<SkinningData>();
+};
+
+struct AnimationPlayerResource final {
+    std::shared_ptr<SkinningDataResource> data;
+    std::shared_ptr<AnimationPlayer> value;
+    std::string currentClipName;
 };
 
 [[nodiscard]] const std::vector<std::shared_ptr<PartResource>>& PartList(
@@ -648,6 +661,58 @@ MeshResource::~MeshResource()
             "The owned SkinnedModelEXT handle could not be created.");
 }
 
+[[nodiscard]] CNA_Result GetSkinningData(
+    const CNA_SkinningDataHandle handle,
+    std::shared_ptr<SkinningDataResource>* const outData)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::SkinningData, outData);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The SkinningData handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateSkinningDataHandle(
+    std::shared_ptr<SkinningDataResource> data,
+    CNA_SkinningDataHandle* const outData)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::SkinningData, std::move(data), outData);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The owned SkinningData handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result GetAnimationPlayer(
+    const CNA_AnimationPlayerHandle handle,
+    std::shared_ptr<AnimationPlayerResource>* const outPlayer)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::AnimationPlayer, outPlayer);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The AnimationPlayer handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateAnimationPlayerHandle(
+    std::shared_ptr<AnimationPlayerResource> player,
+    CNA_AnimationPlayerHandle* const outPlayer)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::AnimationPlayer, std::move(player), outPlayer);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result, ErrorCategoryForResult(result),
+            "The owned AnimationPlayer handle could not be created.");
+}
+
 void RebuildSkinnedParts(SkinnedModelResource& model)
 {
     std::vector<SkinnedModelEXT::PartEXT> rebuilt;
@@ -688,6 +753,19 @@ void RebuildSkinnedParts(SkinnedModelResource& model)
     std::vector<std::string> names;
     names.reserve(model.Clips.size());
     for (const auto& [name, ignored] : model.Clips) {
+        static_cast<void>(ignored);
+        names.push_back(name);
+    }
+    std::sort(names.begin(), names.end());
+    return names;
+}
+
+[[nodiscard]] std::vector<std::string> SortedClipNames(
+    const SkinningData& data)
+{
+    std::vector<std::string> names;
+    names.reserve(data.AnimationClips.size());
+    for (const auto& [name, ignored] : data.AnimationClips) {
         static_cast<void>(ignored);
         names.push_back(name);
     }
@@ -842,6 +920,90 @@ constexpr double MaxTimeSpanSeconds = 922337203685.0;
         {key.Translation.X, key.Translation.Y, key.Translation.Z},
         {key.Rotation.X, key.Rotation.Y, key.Rotation.Z, key.Rotation.W},
         {key.Scale.X, key.Scale.Y, key.Scale.Z}};
+}
+
+[[nodiscard]] CNA_Result CopySkinningDataDescriptor(
+    const CNA_SkinningDataDescriptor& descriptor,
+    SkinningData* const outData)
+{
+    if (descriptor.reserved != 0U) {
+        return InvalidArgument("CNA_SkinningDataDescriptor.reserved must be zero.");
+    }
+    if (descriptor.skeleton_root_prefix_count != 0U &&
+        (descriptor.bone_count < 0 || descriptor.skeleton_root_prefix_count !=
+            static_cast<uint64_t>(descriptor.bone_count))) {
+        return InvalidArgument(
+            "The SkinningData root-prefix count must be zero or equal the bone count.");
+    }
+    std::vector<int> hierarchy;
+    std::vector<Matrix> bindPose;
+    std::vector<Matrix> inverseBindPose;
+    if (const CNA_Result result = CopySkeleton(
+            descriptor.bone_count, descriptor.skeleton_hierarchy,
+            descriptor.bind_pose, descriptor.inverse_bind_pose,
+            &hierarchy, &bindPose, &inverseBindPose);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    std::size_t prefixBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor.skeleton_root_prefix,
+            descriptor.skeleton_root_prefix_count,
+            sizeof(CNA_Matrix), &prefixBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The SkinningData root-prefix array is invalid or too large.");
+    }
+    static_cast<void>(prefixBytes);
+    std::size_t clipBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            descriptor.clips, descriptor.clip_count,
+            sizeof(CNA_NamedAnimationClipEXTDescriptor), &clipBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The SkinningData clip array is invalid or too large.");
+    }
+    static_cast<void>(clipBytes);
+
+    SkinningData copied;
+    copied.BoneCount = descriptor.bone_count;
+    copied.SkeletonHierarchy = std::move(hierarchy);
+    copied.BindPose = std::move(bindPose);
+    copied.InverseBindPose = std::move(inverseBindPose);
+    copied.SkeletonRootPrefix.reserve(
+        static_cast<std::size_t>(descriptor.skeleton_root_prefix_count));
+    for (uint64_t index = 0U; index < descriptor.skeleton_root_prefix_count; ++index) {
+        copied.SkeletonRootPrefix.push_back(ToNative(descriptor.skeleton_root_prefix[index]));
+    }
+    if (descriptor.clip_count > copied.AnimationClips.max_size()) {
+        return Fail(
+            CNA_RESULT_OVERFLOW, CNA_ERROR_CATEGORY_RANGE,
+            "The SkinningData clip count is too large.");
+    }
+    copied.AnimationClips.reserve(static_cast<std::size_t>(descriptor.clip_count));
+    for (uint64_t index = 0U; index < descriptor.clip_count; ++index) {
+        const CNA_NamedAnimationClipEXTDescriptor& source = descriptor.clips[index];
+        std::string name;
+        if (const CNA_Result result = CopyStringView(source.name, true, &name);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "A SkinningData clip name is not valid UTF-8 text.");
+        }
+        if (copied.AnimationClips.contains(name)) {
+            return InvalidArgument("SkinningData construction clip names must be unique.");
+        }
+        AnimationClipEXT clip;
+        if (const CNA_Result result = CopyAnimationClipDescriptor(source.clip, &clip);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        copied.AnimationClips.emplace(std::move(name), std::move(clip));
+    }
+    *outData = std::move(copied);
+    return CNA_RESULT_SUCCESS;
 }
 
 template<typename T>
@@ -4750,5 +4912,565 @@ CNA_Result cna_skinned_model_ext_get_owned_resource_counts(
         *outParts = partCount;
         *outTextures = textureCount;
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_create(
+    const CNA_SkinningDataDescriptor* const descriptor,
+    CNA_SkinningDataHandle* const outData)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (descriptor == nullptr || outData == nullptr) {
+            return InvalidArgument("The SkinningData descriptor or output is null.");
+        }
+        *outData = CNA_INVALID_HANDLE;
+        SkinningData copied;
+        if (const CNA_Result result = CopySkinningDataDescriptor(*descriptor, &copied);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<SkinningDataResource>();
+        resource->value = std::make_shared<SkinningData>(std::move(copied));
+        return CreateSkinningDataHandle(std::move(resource), outData);
+    });
+}
+
+CNA_Result cna_skinning_data_destroy(const CNA_SkinningDataHandle dataHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(dataHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned SkinningData handle could not be released.");
+    });
+}
+
+CNA_Result cna_skinning_data_get_type_name_byte_count(
+    const CNA_SkinningDataHandle dataHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The SkinningData type-name size output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(data->value->GetTypeName().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_copy_type_name(
+    const CNA_SkinningDataHandle dataHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopySkinnedName(
+            data->value->GetTypeName(), destination, capacity, outByteCount,
+            "The SkinningData type-name output is invalid.",
+            "The destination cannot hold the complete SkinningData type name.");
+    });
+}
+
+CNA_Result cna_skinning_data_get_bone_count(
+    const CNA_SkinningDataHandle dataHandle,
+    uint64_t* const outBoneCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBoneCount == nullptr) {
+            return InvalidArgument("The SkinningData bone-count output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBoneCount = static_cast<uint64_t>(data->value->BoneCount);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_copy_skeleton_hierarchy(
+    const CNA_SkinningDataHandle dataHandle,
+    int32_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->SkeletonHierarchy, destination, capacity, outCount,
+            [](const int value) noexcept { return static_cast<int32_t>(value); },
+            "The SkinningData hierarchy output is invalid.",
+            "The destination cannot hold the complete SkinningData hierarchy.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_bind_pose(
+    const CNA_SkinningDataHandle dataHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->BindPose, destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The SkinningData bind-pose output is invalid.",
+            "The destination cannot hold all SkinningData bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_inverse_bind_pose(
+    const CNA_SkinningDataHandle dataHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->InverseBindPose, destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The SkinningData inverse-bind-pose output is invalid.",
+            "The destination cannot hold all SkinningData inverse-bind-pose matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_copy_skeleton_root_prefix(
+    const CNA_SkinningDataHandle dataHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            data->value->SkeletonRootPrefix, destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The SkinningData root-prefix output is invalid.",
+            "The destination cannot hold all SkinningData root-prefix matrices.");
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_count(
+    const CNA_SkinningDataHandle dataHandle,
+    uint64_t* const outClipCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outClipCount == nullptr) {
+            return InvalidArgument("The SkinningData clip-count output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outClipCount = static_cast<uint64_t>(data->value->AnimationClips.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_name_byte_count_at(
+    const CNA_SkinningDataHandle dataHandle,
+    const uint64_t clipIndex,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The SkinningData clip-name size output is null.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*data->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The SkinningData clip index is outside the valid range.");
+        }
+        *outByteCount = static_cast<uint64_t>(names[static_cast<std::size_t>(clipIndex)].size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_copy_clip_name_at(
+    const CNA_SkinningDataHandle dataHandle,
+    const uint64_t clipIndex,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<std::string> names = SortedClipNames(*data->value);
+        if (clipIndex >= names.size()) {
+            return InvalidArgument("The SkinningData clip index is outside the valid range.");
+        }
+        return CopySkinnedName(
+            names[static_cast<std::size_t>(clipIndex)], destination, capacity,
+            outByteCount, "The SkinningData clip-name output is invalid.",
+            "The destination cannot hold the complete SkinningData clip name.");
+    });
+}
+
+CNA_Result cna_skinning_data_get_clip_info(
+    const CNA_SkinningDataHandle dataHandle,
+    const CNA_StringView name,
+    CNA_Bool* const outFound,
+    double* const outDurationSeconds,
+    uint64_t* const outTrackCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outFound == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
+            return InvalidArgument("A SkinningData clip-info output is null.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinningData clip name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto clip = data->value->AnimationClips.find(copiedName);
+        if (clip == data->value->AnimationClips.end()) {
+            *outFound = CNA_FALSE;
+            *outDurationSeconds = 0.0;
+            *outTrackCount = 0U;
+            return CNA_RESULT_SUCCESS;
+        }
+        *outFound = CNA_TRUE;
+        *outDurationSeconds = clip->second.Duration.getTotalSecondsProperty();
+        *outTrackCount = static_cast<uint64_t>(clip->second.Tracks.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_skinning_data_copy_clip_track(
+    const CNA_SkinningDataHandle dataHandle,
+    const CNA_StringView name,
+    const uint64_t trackIndex,
+    int32_t* const outBoneIndex,
+    CNA_KeyframeEXT* const destination,
+    const uint64_t capacity,
+    uint64_t* const outKeyframeCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBoneIndex == nullptr || outKeyframeCount == nullptr ||
+            (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("A SkinningData BoneTrack output is invalid.");
+        }
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(name, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The SkinningData clip name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto clip = data->value->AnimationClips.find(copiedName);
+        if (clip == data->value->AnimationClips.end()) {
+            return InvalidArgument("The SkinningData clip name is unknown.");
+        }
+        if (trackIndex >= clip->second.Tracks.size()) {
+            return InvalidArgument("The SkinningData track index is outside the valid range.");
+        }
+        const BoneTrackEXT& track = clip->second.Tracks[static_cast<std::size_t>(trackIndex)];
+        *outKeyframeCount = static_cast<uint64_t>(track.Keys.size());
+        if (capacity < track.Keys.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL, CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all SkinningData keyframes.");
+        }
+        *outBoneIndex = static_cast<int32_t>(track.BoneIndex);
+        for (std::size_t index = 0U; index < track.Keys.size(); ++index) {
+            destination[index] = ToCKeyframe(track.Keys[index]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_create(
+    const CNA_SkinningDataHandle dataHandle,
+    CNA_AnimationPlayerHandle* const outPlayer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPlayer == nullptr) {
+            return InvalidArgument("The AnimationPlayer output handle is null.");
+        }
+        *outPlayer = CNA_INVALID_HANDLE;
+        std::shared_ptr<SkinningDataResource> data;
+        if (const CNA_Result result = GetSkinningData(dataHandle, &data);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto resource = std::make_shared<AnimationPlayerResource>();
+        resource->data = std::move(data);
+        resource->value = std::make_shared<AnimationPlayer>(*resource->data->value);
+        return CreateAnimationPlayerHandle(std::move(resource), outPlayer);
+    });
+}
+
+CNA_Result cna_animation_player_destroy(
+    const CNA_AnimationPlayerHandle playerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(playerHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result, ErrorCategoryForResult(result),
+                "The owned AnimationPlayer handle could not be released.");
+    });
+}
+
+CNA_Result cna_animation_player_start_clip(
+    const CNA_AnimationPlayerHandle playerHandle,
+    const CNA_StringView clipName)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::string copiedName;
+        if (const CNA_Result result = CopyStringView(clipName, true, &copiedName);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The AnimationPlayer clip name is not valid UTF-8 text.");
+        }
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const auto clip = player->data->value->AnimationClips.find(copiedName);
+        if (clip == player->data->value->AnimationClips.end()) {
+            return InvalidArgument("The AnimationPlayer clip name is unknown.");
+        }
+        player->value->StartClip(clip->second);
+        player->currentClipName = std::move(copiedName);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_update(
+    const CNA_AnimationPlayerHandle playerHandle,
+    const double timeSeconds,
+    const CNA_Bool relativeToCurrentTime,
+    const CNA_Bool loop)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!IsValidTimeSpanSeconds(timeSeconds)) {
+            return InvalidArgument("The AnimationPlayer time must fit a finite TimeSpan.");
+        }
+        if ((relativeToCurrentTime != CNA_FALSE && relativeToCurrentTime != CNA_TRUE) ||
+            (loop != CNA_FALSE && loop != CNA_TRUE)) {
+            return InvalidArgument("AnimationPlayer flags must be canonical C booleans.");
+        }
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        player->value->Update(
+            System::TimeSpan::FromSeconds(timeSeconds),
+            relativeToCurrentTime == CNA_TRUE,
+            loop == CNA_TRUE);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_get_current_position(
+    const CNA_AnimationPlayerHandle playerHandle,
+    double* const outPositionSeconds)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPositionSeconds == nullptr) {
+            return InvalidArgument("The AnimationPlayer position output is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPositionSeconds =
+            player->value->getCurrentPositionProperty().getTotalSecondsProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_get_current_clip_info(
+    const CNA_AnimationPlayerHandle playerHandle,
+    CNA_Bool* const outHasClip,
+    double* const outDurationSeconds,
+    uint64_t* const outTrackCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasClip == nullptr || outDurationSeconds == nullptr || outTrackCount == nullptr) {
+            return InvalidArgument("An AnimationPlayer current-clip output is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const AnimationClipEXT* const clip = player->value->getCurrentClipProperty();
+        if (clip == nullptr) {
+            *outHasClip = CNA_FALSE;
+            *outDurationSeconds = 0.0;
+            *outTrackCount = 0U;
+            return CNA_RESULT_SUCCESS;
+        }
+        *outHasClip = CNA_TRUE;
+        *outDurationSeconds = clip->Duration.getTotalSecondsProperty();
+        *outTrackCount = static_cast<uint64_t>(clip->Tracks.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_get_current_clip_name_byte_count(
+    const CNA_AnimationPlayerHandle playerHandle,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outByteCount == nullptr) {
+            return InvalidArgument("The AnimationPlayer clip-name size output is null.");
+        }
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outByteCount = static_cast<uint64_t>(player->currentClipName.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_animation_player_copy_current_clip_name(
+    const CNA_AnimationPlayerHandle playerHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outByteCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopySkinnedName(
+            player->currentClipName, destination, capacity, outByteCount,
+            "The AnimationPlayer clip-name output is invalid.",
+            "The destination cannot hold the complete AnimationPlayer clip name.");
+    });
+}
+
+CNA_Result cna_animation_player_copy_bone_transforms(
+    const CNA_AnimationPlayerHandle playerHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            player->value->GetBoneTransforms(), destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The AnimationPlayer bone-transform output is invalid.",
+            "The destination cannot hold all AnimationPlayer bone transforms.");
+    });
+}
+
+CNA_Result cna_animation_player_copy_world_transforms(
+    const CNA_AnimationPlayerHandle playerHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            player->value->GetWorldTransforms(), destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The AnimationPlayer world-transform output is invalid.",
+            "The destination cannot hold all AnimationPlayer world transforms.");
+    });
+}
+
+CNA_Result cna_animation_player_copy_skin_transforms(
+    const CNA_AnimationPlayerHandle playerHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AnimationPlayerResource> player;
+        if (const CNA_Result result = GetAnimationPlayer(playerHandle, &player);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyOutputValues(
+            player->value->GetSkinTransforms(), destination, capacity, outCount,
+            [](const Matrix value) noexcept { return ToC(value); },
+            "The AnimationPlayer skin-transform output is invalid.",
+            "The destination cannot hold all AnimationPlayer skin transforms.");
     });
 }
