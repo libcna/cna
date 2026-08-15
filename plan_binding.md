@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035F6 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035F7 under HEADLESS and SDL_RENDERER (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -248,7 +248,7 @@ mechanical wrapper.
 | CBIND-035C | Add texture, buffer and vertex-resource coverage | ✅ | `texture.h`, `texture_volume.h`, `vertex_values.h`, `vertex_resources.h`, `index_resources.h` and the common `graphics_resource.h` map all 402 owned rows through fixed values, generation/type/thread-validated handles, caller-window transfers and explicit backend limits. Decomposed into and completed as CBIND-035C1–C7. |
 | CBIND-035D | Add effects, shaders and parameter coverage | ✅ | All 653 Effect/technique/pass/parameter/annotation, stock/custom effect and shader/material rows are mapped without exposing bytecode objects, C++ containers or backend pointers. Completed by CBIND-035D1–D9 with strict-C HEADLESS/SDL_RENDERER and focused sanitizer evidence. |
 | CBIND-035E | Add model, mesh and animation coverage | ✅ | Model/bone/mesh/part collections, morph and both skeletal-animation paths are mapped through stable handles, deep-copied descriptors, deterministic count/copy operations and tested resource lifetimes. |
-| CBIND-035F | Complete graphics-device and draw submission | 🟨 | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. Work is decomposed into CBIND-035F1–F7 below; the parent becomes complete only when all seven rows are closed. |
+| CBIND-035F | Complete graphics-device and draw submission | ✅ | Map remaining device properties/events/clear/present/draw overloads, viewport/scissor, texture collections and SpriteBatch transform/effect/text routes using validated descriptors and bulk submissions. Work is decomposed into CBIND-035F1–F7 below; the parent becomes complete only when all seven rows are closed. |
 | CBIND-035G | Close and verify CBIND-035 | ⬜ | No planned CBIND-035 inventory row remains; strict C tests cover HEADLESS refusal plus actual 3D/effect/model output on suitable real renderers, with capability gaps recorded honestly. |
 
 #### CBIND-035B math implementation slices
@@ -329,7 +329,7 @@ because it builds on the completed effect and texture contracts.
 | CBIND-035F4 | 21 | Complete frame control and buffer binding | ✅ | `graphics_device.h` maps all remaining Clear overloads, Present, all four Reset overloads, both remaining `GetBackBufferData` windows and the complete vertex/index binding set. The reference and pointer adapter overloads collapse into one nullable-index route that preserves the renderer-private window handle; the nullable readback rectangle becomes an explicit flag plus value; and an element count smaller than the selected region is decided in C as `BUFFER_TOO_SMALL` rather than surfacing as a generic native failure. The four canonical index-buffer accessors collapse to one validated get/set pair, multi-binding application is atomic on rejection, and reads report the owning C handle or an invalid handle for a binding applied by canonical CNA code. Strict-C HEADLESS and SDL_RENDERER tests cover every route, non-finite and unknown-bit rejection, observed reset event pairs, untouched destination bytes and honest backend refusal, with C/C++ ABI layout assertions. |
 | CBIND-035F5 | 49 | Complete draw submission and device extensions | ✅ | `graphics_device.h` maps all three buffered draw routes, the canonical topology vertex-count helper and all twenty-nine user-primitive overloads through two calls whose versioned `CNA_UserPrimitives`/`CNA_UserIndices` descriptors carry the vertex-source, declaration and index-width dimensions. Built-in vertex sources are converted before submission because those structures embed a polymorphic Color, and a raw stream always requires a declaration since the declaration-less canonical raw overloads read native objects. All CNAEXT device helpers are mapped; the resource-notification hooks and `GetRenderer` are documented as having no C route because each carries a native object, with their observable effects reachable through the event subscriptions, tracked-resource count and renderer queries. Draw routes and pipeline-state toggles refuse a backend without 3D support as `NOT_SUPPORTED`, and an assigned current effect is kept alive by the C API because the device stores a borrowed pointer. Strict-C HEADLESS and SDL_RENDERER tests cover every route, validation, capability-accurate refusal and lifetime, with C/C++ ABI layout assertions. This leaves no planned GraphicsDevice.hpp row. |
 | CBIND-035F6 | 21 | Complete SpriteBatch text routes and occlusion queries | ✅ | `graphics.h` collapses all six `DrawString` overloads into one versioned `CNA_SpriteTextCommand`, because both native text types are copied before layout and the parameter shapes differ only in which transform fields stay at their defaults; `CNA_SpriteMeshEXT` maps `DrawMeshEXT` with converted colors and positions, since the native Color carries a vtable, and reports `NOT_SUPPORTED` on a renderer without mesh submission. Exact type-name count/copy is added, and both non-C constructors are documented: the default one produces a deviceless batch and the other takes a renderer-private object. `graphics_device.h` owns `OcclusionQuery` through a game-child handle with capability-gated creation, begin/end, completeness, pixel count and live-renderer state; the handle is a full graphics resource, so the generic `cna_graphics_resource_*` routes cover its protected disposal and type name. Strict-C HEADLESS and SDL_RENDERER tests cover every route, malformed and foreign-handle rejection, retained font atlases and honest backend refusal, with C/C++ ABI layout assertions. |
-| CBIND-035F7 | 118 | Complete graphics-ext post-process and pipeline settings | ⬜ | Map the renderer-neutral ASCII/CRT/depth post-process effects, PBR material values and render-pipeline settings, including all six extension identity enumerations, through fixed values and validated handles. |
+| CBIND-035F7 | 118 | Complete graphics-ext post-process and pipeline settings | ✅ | `graphics_ext.h` maps all seven extension identity enumerations at their native ordinals, both settings bags as fixed-layout `CNA_PbrMaterial`/`CNA_RenderPipelineSettings` PODs with canonical-default initializers, and the three post-process effects. CRTEffect and DepthEffect become ordinary owned `CNA_EffectHandle` values so the whole `cna_effect_*` contract covers their inherited ShaderEffect behavior; AsciiPostProcessEffect gets its own handle because it is not a shader Effect, and its two Draw overloads collapse into one nullable-rectangle call. Because the extended layer is an opt-in build option, every declaration exists in every build and the effect routes report `NOT_SUPPORTED` when it is absent, so no exported symbol changes shape with the option. Strict-C tests cover the complete unavailable contract under HEADLESS without the layer and, under SDL_RENDERER with it, real creation of all three effects, exact canonical defaults, native clamping, every mode identity, cross-type handle refusal, cell-size validation and a real ASCII draw with a measured glyph grid, plus C/C++ ABI layout assertions. This closes parent CBIND-035F: no planned CBIND-035 inventory row remains. |
 
 ##### CBIND-035B2 scalar/vector slices
 
@@ -567,18 +567,25 @@ complete CNAEXT helper set, closing every GraphicsDevice.hpp row. The snapshot i
 implemented, 23 partial, 2,982 planned and 73 not applicable. CBIND-035F6 then maps all 21
 SpriteBatch text/mesh and OcclusionQuery rows through one text command covering every canonical
 overload, a converted mesh descriptor and a capability-gated owned query handle. The snapshot is
-now 3,358 implemented, 23 partial, 2,961 planned and 73 not applicable; only the 118
-`graphics-ext` rows of CBIND-035F7 remain in parent CBIND-035F.
+now 3,358 implemented, 23 partial, 2,961 planned and 73 not applicable. CBIND-035F7 then maps all 118
+`graphics-ext` rows through fixed identities, two settings-bag PODs and three owned post-process
+effects whose routes report `NOT_SUPPORTED` when the opt-in extension layer is absent, so the
+exported ABI never changes shape with the build option. The snapshot is now 3,476 implemented,
+23 partial, 2,843 planned and 73 not applicable, and **no planned CBIND-035 inventory row
+remains**; parent CBIND-035F is complete and CBIND-035G closure verification is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-035F6 is the final task completed in this handoff.
-- Next task: implement `CBIND-035F7` from its public-header coverage rows. Do not
+- Branch: `feature/binding`; CBIND-035F7 is the final task completed in this handoff.
+- Next task: verify and close `CBIND-035G`, which needs real 3D/effect/model draw evidence on a
+  renderer that has the 3D capability; HEADLESS and SDL_RENDERER both refuse it honestly today. Do not
   reopen completed CBIND-035E slices unless a regression demonstrates a concrete defect.
-- Verification baseline: both HEADLESS and SDL_RENDERER C API suites contain 45 tests; SDL tests
+- Verification baseline: both HEADLESS and SDL_RENDERER C API suites contain 46 tests. The
+  SDL_RENDERER tree is configured with `-DCNA_CNAEXT=ON` and the HEADLESS tree without it, so the
+  same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after F6: 414 headers / 6,415 symbols; 3,358 implemented, 23 partial, 2,961
+- Coverage baseline after F7: 414 headers / 6,415 symbols; 3,476 implemented, 23 partial, 2,843
   planned and 73 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C

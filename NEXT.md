@@ -1,12 +1,12 @@
 # NEXT.md
 
-## C BINDING / C ABI — GRAPHICS DEVICE COMPLETE THROUGH CBIND-035F6 (2026-08-15)
+## C BINDING / C ABI — CBIND-035 GRAPHICS SURFACE COMPLETE THROUGH CBIND-035F7 (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from
 > the read-only `analysis_binding.md` and `analysis_binding_sharp_runtime.md` design analyses.
 > The owner authorized implementation and requires eventual coverage of the **entire public CNA
 > API** through C-native mappings. `CBIND-001`–`034`, `CBIND-035A`–`035E` and
-> `CBIND-035F1`–`035F6` are complete:
+> `CBIND-035F1`–`035F7` are complete:
 > `docs/c-api/` defines the
 > contract and the opt-in `modules/c-api/` builds a C17 `libcna_c_api` with public `cna_*` exports,
 > the error/handle substrate and a C-owned `Game` lifecycle slice tested under HEADLESS and
@@ -181,8 +181,14 @@
 > text/mesh and OcclusionQuery rows: one versioned text command covers every canonical DrawString
 > overload, mesh colors and positions are converted because the native Color carries a vtable, and
 > the owned query handle is capability-gated and behaves as an ordinary graphics resource. The
-> inventory is now 3,358 implemented, 23 partial, 2,961 planned and 73 N/A; only the 118
-> `graphics-ext` rows of CBIND-035F7 remain in parent CBIND-035F.
+> inventory is now 3,358 implemented, 23 partial, 2,961 planned and 73 N/A. CBIND-035F7 then maps
+> all 118 `graphics-ext` rows: seven identities at their native ordinals, two settings-bag PODs
+> with canonical-default initializers, and CRT/depth/ASCII post-process effects. Because the
+> extended layer is an opt-in build option, every declaration exists in every build and the effect
+> routes report `NOT_SUPPORTED` without it, so the exported ABI never changes shape. The inventory
+> is now 3,476 implemented, 23 partial, 2,843 planned and 73 N/A and **no planned CBIND-035 row
+> remains**; CBIND-035G closure verification, which needs real 3D draw evidence on a 3D-capable
+> renderer, is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

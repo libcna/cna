@@ -1370,6 +1370,36 @@
       "tests": "capability-accurate creation or refusal, begin/end, completeness and pixel-count reads, renderer state, generic graphics-resource string access, double destroy and null-output failures in strict-C `GraphicsDeviceSmoke.c`, plus a C/C++ handle-width assertion under HEADLESS and SDL_RENDERER",
       "status": "implemented",
       "task": "CBIND-035F6"
+    },
+    {
+      "id": "graphics-ext-identities",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:AsciiQuantizeMode|CRTMaskType|DitherMode|RenderQuality|ShadowQuality|TonemappingMode|DepthEffectMode)\\.hpp$",
+      "kinds": ["enum", "enum-value"],
+      "mapping": "`CNA_AsciiQuantizeMode`, `CNA_CRTMaskType`, `CNA_DitherMode`, `CNA_RenderQuality`, `CNA_ShadowQuality`, `CNA_TonemappingMode` and `CNA_DepthEffectMode` with their `CNA_*` constants at the native ordinals. The identities are declared in every build so the exported ABI never changes shape with the extension build option",
+      "tests": "native-ordinal static assertions in `CnaCApiGraphicsExt.cpp`, C/C++ ABI identity assertions and value checks in strict-C `GraphicsExtSmoke.c` under HEADLESS without the extension layer and SDL_RENDERER with it",
+      "status": "implemented",
+      "task": "CBIND-035F7"
+    },
+    {
+      "id": "graphics-ext-settings-values",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:PbrMaterial|RenderPipelineSettings)\\.hpp$",
+      "kinds": ["class", "constructor", "method"],
+      "mapping": "fixed-layout `CNA_PbrMaterial` and `CNA_RenderPipelineSettings` PODs plus `cna_pbr_material_init`/`cna_render_pipeline_settings_init`. Both canonical types are settings bags whose accessors assign without clamping, so direct field access is the exact mapping of every getter and setter and the initializers reproduce the constructors' defaults. Texture slots become handles and stay non-owning, matching the canonical non-owning `Texture2D*` slots; the value routes work in every build because they need no native extension object",
+      "tests": "every default field value, direct unclamped field mutation and null-output rejection in strict-C `GraphicsExtSmoke.c`, plus C/C++ ABI size/alignment/offset assertions under HEADLESS without the extension layer and SDL_RENDERER with it",
+      "status": "implemented",
+      "task": "CBIND-035F7"
+    },
+    {
+      "id": "graphics-ext-post-process-effects",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics-ext/include/CNA/Graphics/(?:CRTEffect|DepthEffect|AsciiPostProcessEffect)\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method"],
+      "mapping": "`cna_crt_effect_create` and `cna_depth_effect_create` return ordinary owned `CNA_EffectHandle` values, so the whole `cna_effect_*` contract \u2014 clone, dispose, apply, type name, parameters \u2014 covers their inherited ShaderEffect behavior, and only their own properties get dedicated routes. `cna_ascii_post_process_effect_*` owns the ASCII effect as its own game-child handle because it is not a shader Effect: both canonical `Draw` overloads collapse into one call whose nullable destination rectangle selects between them. Every route is declared in every build and reports `CNA_RESULT_NOT_SUPPORTED` when the extension layer is absent, so no exported symbol appears or disappears with the build option",
+      "tests": "exact canonical defaults, native clamping through the C setters, every mode identity, non-finite and unknown-identity rejection, cross-type handle refusal, cell-size validation, a real ASCII draw with observed grid dimensions and destroy/lifetime paths on SDL_RENDERER with the extension layer; the complete unavailable contract on HEADLESS without it; strict-C `GraphicsExtSmoke.c` plus C/C++ handle assertions",
+      "status": "implemented",
+      "task": "CBIND-035F7"
     }
   ]
 }

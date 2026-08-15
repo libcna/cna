@@ -79,6 +79,7 @@ enum class ObjectKind : uint32_t {
     AnimationPlayer = 43,
     GraphicsDeviceEventRegistration = 44,
     OcclusionQuery = 45,
+    AsciiPostProcessEffect = 46,
     Test = UINT32_MAX
 };
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MS-PL
 
 #include "CNA/C/effects.h"
+#include "CNA/C/graphics_ext.h"
 #include "CnaCApiDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
@@ -6857,3 +6858,489 @@ CNA_Result cna_skinned_pbr_effect_copy_bone_transforms(
         return CNA_RESULT_SUCCESS;
     });
 }
+
+// ---------------------------------------------------------------------------------------------
+// CNA extended graphics layer: CRTEffect and DepthEffect are ordinary ShaderEffect descendants,
+// so they are created and observed through the same owned CNA_EffectHandle as every other effect.
+// Their declarations live in graphics_ext.h; without the extension layer the routes report the
+// same NOT_SUPPORTED result the rest of that family does, so the exported ABI never changes shape.
+// ---------------------------------------------------------------------------------------------
+
+#ifdef CNA_CNAEXT
+
+#include "CNA/Graphics/CRTEffect.hpp"
+#include "CNA/Graphics/DepthEffect.hpp"
+
+#include <cmath>
+
+namespace {
+
+template<typename TEffect>
+[[nodiscard]] CNA_Result GetExtensionEffect(
+    const CNA_EffectHandle effectHandle,
+    TEffect** const outEffect,
+    std::shared_ptr<EffectResource>* const outResource,
+    const char* const message)
+{
+    if (const CNA_Result result = GetEffect(effectHandle, outResource);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outEffect = dynamic_cast<TEffect*>((*outResource)->value.get());
+    if (*outEffect == nullptr) {
+        return Fail(CNA_RESULT_INVALID_HANDLE, CNA_ERROR_CATEGORY_HANDLE, message);
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] CNA_Result GetCrtEffect(
+    const CNA_EffectHandle effectHandle,
+    CNA::Graphics::CRTEffect** const outEffect,
+    std::shared_ptr<EffectResource>* const outResource)
+{
+    return GetExtensionEffect(
+        effectHandle, outEffect, outResource, "The Effect is not a CRTEffect.");
+}
+
+[[nodiscard]] CNA_Result GetDepthEffect(
+    const CNA_EffectHandle effectHandle,
+    CNA::Graphics::DepthEffect** const outEffect,
+    std::shared_ptr<EffectResource>* const outResource)
+{
+    return GetExtensionEffect(
+        effectHandle, outEffect, outResource, "The Effect is not a DepthEffect.");
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result CrtQuery(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue,
+    TCallable&& callable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outValue == nullptr) {
+            return InvalidArgument("The CRT effect output is null.");
+        }
+        CNA::Graphics::CRTEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetCrtEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outValue = std::forward<TCallable>(callable)(*effect);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+template<typename TCallable>
+[[nodiscard]] CNA_Result CrtCommand(
+    const CNA_EffectHandle effectHandle,
+    const float value,
+    TCallable&& callable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (!std::isfinite(value)) {
+            return InvalidArgument("The CRT effect value is not finite.");
+        }
+        CNA::Graphics::CRTEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetCrtEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::forward<TCallable>(callable)(*effect, value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+} // namespace
+
+CNA_Result cna_crt_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The CRTEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<CNA::Graphics::CRTEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_crt_effect_get_scanline_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CrtQuery(effectHandle, outValue, [](const CNA::Graphics::CRTEffect& effect) {
+        return effect.getScanlineIntensity();
+    });
+}
+
+CNA_Result cna_crt_effect_set_scanline_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CrtCommand(effectHandle, value, [](CNA::Graphics::CRTEffect& effect, const float v) {
+        effect.setScanlineIntensity(v);
+    });
+}
+
+CNA_Result cna_crt_effect_get_curvature(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CrtQuery(effectHandle, outValue, [](const CNA::Graphics::CRTEffect& effect) {
+        return effect.getCurvature();
+    });
+}
+
+CNA_Result cna_crt_effect_set_curvature(const CNA_EffectHandle effectHandle, const float value)
+{
+    return CrtCommand(effectHandle, value, [](CNA::Graphics::CRTEffect& effect, const float v) {
+        effect.setCurvature(v);
+    });
+}
+
+CNA_Result cna_crt_effect_get_vignette_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CrtQuery(effectHandle, outValue, [](const CNA::Graphics::CRTEffect& effect) {
+        return effect.getVignetteIntensity();
+    });
+}
+
+CNA_Result cna_crt_effect_set_vignette_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CrtCommand(effectHandle, value, [](CNA::Graphics::CRTEffect& effect, const float v) {
+        effect.setVignetteIntensity(v);
+    });
+}
+
+CNA_Result cna_crt_effect_get_mask_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    return CrtQuery(effectHandle, outValue, [](const CNA::Graphics::CRTEffect& effect) {
+        return effect.getMaskIntensity();
+    });
+}
+
+CNA_Result cna_crt_effect_set_mask_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    return CrtCommand(effectHandle, value, [](CNA::Graphics::CRTEffect& effect, const float v) {
+        effect.setMaskIntensity(v);
+    });
+}
+
+CNA_Result cna_crt_effect_get_mask_type(
+    const CNA_EffectHandle effectHandle,
+    CNA_CRTMaskType* const outMaskType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMaskType == nullptr) {
+            return InvalidArgument("The CRT mask-type output is null.");
+        }
+        CNA::Graphics::CRTEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetCrtEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outMaskType = static_cast<CNA_CRTMaskType>(effect->getMaskType());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_crt_effect_set_mask_type(
+    const CNA_EffectHandle effectHandle,
+    const CNA_CRTMaskType maskType)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (maskType > CNA_CRT_MASK_TYPE_SHADOW_MASK) {
+            return InvalidArgument("The CRT mask type is not recognized.");
+        }
+        CNA::Graphics::CRTEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetCrtEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        effect->setMaskType(static_cast<CNA::Graphics::CRTMaskType>(maskType));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outEffect == nullptr) {
+            return InvalidArgument("The DepthEffect output handle is null.");
+        }
+        *outEffect = CNA_INVALID_HANDLE;
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle, &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CreateEffectHandle(
+            std::make_shared<CNA::Graphics::DepthEffect>(*graphicsDevice->value),
+            graphicsDevice->parentGame,
+            outEffect);
+    });
+}
+
+CNA_Result cna_depth_effect_get_mode(
+    const CNA_EffectHandle effectHandle,
+    CNA_DepthEffectMode* const outMode)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMode == nullptr) {
+            return InvalidArgument("The depth-effect mode output is null.");
+        }
+        CNA::Graphics::DepthEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetDepthEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outMode = static_cast<CNA_DepthEffectMode>(effect->getMode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_effect_set_mode(
+    const CNA_EffectHandle effectHandle,
+    const CNA_DepthEffectMode mode)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (mode > CNA_DEPTH_EFFECT_MODE_PALETTE_16) {
+            return InvalidArgument("The depth-effect mode is not recognized.");
+        }
+        CNA::Graphics::DepthEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetDepthEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        effect->setMode(static_cast<CNA::Graphics::DepthEffectMode>(mode));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_effect_get_dither_mode(
+    const CNA_EffectHandle effectHandle,
+    CNA_DitherMode* const outDitherMode)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDitherMode == nullptr) {
+            return InvalidArgument("The depth-effect dither output is null.");
+        }
+        CNA::Graphics::DepthEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetDepthEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDitherMode = static_cast<CNA_DitherMode>(effect->getDitherMode());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_depth_effect_set_dither_mode(
+    const CNA_EffectHandle effectHandle,
+    const CNA_DitherMode ditherMode)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (ditherMode > CNA_DITHER_MODE_BAYER_8X8) {
+            return InvalidArgument("The dither mode is not recognized.");
+        }
+        CNA::Graphics::DepthEffect* effect = nullptr;
+        std::shared_ptr<EffectResource> resource;
+        if (const CNA_Result result = GetDepthEffect(effectHandle, &effect, &resource);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        effect->setDitherMode(static_cast<CNA::Graphics::DitherMode>(ditherMode));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+#else // CNA_CNAEXT
+
+namespace {
+
+[[nodiscard]] CNA_Result ExtensionEffectUnavailable()
+{
+    return Fail(
+        CNA_RESULT_NOT_SUPPORTED,
+        CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+        "This CNA build does not contain the extended graphics layer.");
+}
+
+} // namespace
+
+CNA_Result cna_crt_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    (void)graphicsDeviceHandle;
+    if (outEffect != nullptr) {
+        *outEffect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_get_scanline_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    (void)effectHandle;
+    (void)outValue;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_set_scanline_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    (void)effectHandle;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_get_curvature(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    (void)effectHandle;
+    (void)outValue;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_set_curvature(const CNA_EffectHandle effectHandle, const float value)
+{
+    (void)effectHandle;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_get_vignette_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    (void)effectHandle;
+    (void)outValue;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_set_vignette_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    (void)effectHandle;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_get_mask_intensity(
+    const CNA_EffectHandle effectHandle,
+    float* const outValue)
+{
+    (void)effectHandle;
+    (void)outValue;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_set_mask_intensity(
+    const CNA_EffectHandle effectHandle,
+    const float value)
+{
+    (void)effectHandle;
+    (void)value;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_get_mask_type(
+    const CNA_EffectHandle effectHandle,
+    CNA_CRTMaskType* const outMaskType)
+{
+    (void)effectHandle;
+    (void)outMaskType;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_crt_effect_set_mask_type(
+    const CNA_EffectHandle effectHandle,
+    const CNA_CRTMaskType maskType)
+{
+    (void)effectHandle;
+    (void)maskType;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_depth_effect_create(
+    const CNA_Handle graphicsDeviceHandle,
+    CNA_EffectHandle* const outEffect)
+{
+    (void)graphicsDeviceHandle;
+    if (outEffect != nullptr) {
+        *outEffect = CNA_INVALID_HANDLE;
+    }
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_depth_effect_get_mode(
+    const CNA_EffectHandle effectHandle,
+    CNA_DepthEffectMode* const outMode)
+{
+    (void)effectHandle;
+    (void)outMode;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_depth_effect_set_mode(
+    const CNA_EffectHandle effectHandle,
+    const CNA_DepthEffectMode mode)
+{
+    (void)effectHandle;
+    (void)mode;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_depth_effect_get_dither_mode(
+    const CNA_EffectHandle effectHandle,
+    CNA_DitherMode* const outDitherMode)
+{
+    (void)effectHandle;
+    (void)outDitherMode;
+    return ExtensionEffectUnavailable();
+}
+
+CNA_Result cna_depth_effect_set_dither_mode(
+    const CNA_EffectHandle effectHandle,
+    const CNA_DitherMode ditherMode)
+{
+    (void)effectHandle;
+    (void)ditherMode;
+    return ExtensionEffectUnavailable();
+}
+
+#endif // CNA_CNAEXT

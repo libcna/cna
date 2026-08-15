@@ -701,3 +701,29 @@ _Static_assert(sizeof(CNA_SpriteMeshEXT) == 64U &&
                    offsetof(CNA_SpriteMeshEXT, positions) == 16U &&
                    offsetof(CNA_SpriteMeshEXT, vertex_count) == 48U,
                "CNA_SpriteMeshEXT layout must remain stable");
+_Static_assert(sizeof(CNA_AsciiPostProcessEffectHandle) == 8U &&
+                   sizeof(CNA_AsciiQuantizeMode) == sizeof(uint32_t) &&
+                   sizeof(CNA_CRTMaskType) == sizeof(uint32_t) &&
+                   sizeof(CNA_DitherMode) == sizeof(uint32_t) &&
+                   sizeof(CNA_RenderQuality) == sizeof(uint32_t) &&
+                   sizeof(CNA_ShadowQuality) == sizeof(uint32_t) &&
+                   sizeof(CNA_TonemappingMode) == sizeof(uint32_t) &&
+                   sizeof(CNA_DepthEffectMode) == sizeof(uint32_t) &&
+                   CNA_CRT_MASK_TYPE_SHADOW_MASK == UINT32_C(2) &&
+                   CNA_DEPTH_EFFECT_MODE_PALETTE_16 == UINT32_C(6) &&
+                   CNA_SHADOW_QUALITY_ULTRA == UINT32_C(4),
+               "CNA graphics-extension identities must remain stable");
+_Static_assert(sizeof(CNA_PbrMaterial) == 72U && _Alignof(CNA_PbrMaterial) == 8U &&
+                   offsetof(CNA_PbrMaterial, albedo_color) == 40U &&
+                   offsetof(CNA_PbrMaterial, emissive_color) == 44U &&
+                   offsetof(CNA_PbrMaterial, metallic_factor) == 48U &&
+                   offsetof(CNA_PbrMaterial, alpha_blend_enabled) == 68U &&
+                   offsetof(CNA_PbrMaterial, reserved) == 69U,
+               "CNA_PbrMaterial layout must remain stable");
+_Static_assert(sizeof(CNA_RenderPipelineSettings) == 28U &&
+                   _Alignof(CNA_RenderPipelineSettings) == 4U &&
+                   offsetof(CNA_RenderPipelineSettings, tonemapping_mode) == 12U &&
+                   offsetof(CNA_RenderPipelineSettings, render_quality) == 16U &&
+                   offsetof(CNA_RenderPipelineSettings, hdr_enabled) == 24U &&
+                   offsetof(CNA_RenderPipelineSettings, shadows_enabled) == 27U,
+               "CNA_RenderPipelineSettings layout must remain stable");

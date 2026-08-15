@@ -21,6 +21,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiEffects.cpp
     src/CnaCApiGraphics.cpp
     src/CnaCApiGraphicsDevice.cpp
+    src/CnaCApiGraphicsExt.cpp
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
     src/CnaCApiGeometry.cpp
@@ -66,7 +67,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime)
+target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -182,6 +183,23 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_graphics_device_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_graphics_device_smoke)
     add_test(NAME CApi_GraphicsDeviceSmoke COMMAND cna_c_api_graphics_device_smoke)
+
+    add_executable(cna_c_api_graphics_ext_smoke
+        tests/pure_c/GraphicsExtSmoke.c
+    )
+    set_target_properties(cna_c_api_graphics_ext_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_graphics_ext_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_graphics_ext_smoke)
+    add_test(NAME CApi_GraphicsExtSmoke COMMAND cna_c_api_graphics_ext_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_GraphicsExtSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
 
     add_executable(cna_c_api_vector_smoke
         tests/pure_c/VectorSmoke.c

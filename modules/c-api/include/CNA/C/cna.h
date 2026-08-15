@@ -23,6 +23,7 @@
 #include "CNA/C/runtime.h"
 #include "CNA/C/graphics.h"
 #include "CNA/C/graphics_device.h"
+#include "CNA/C/graphics_ext.h"
 #include "CNA/C/graphics_resource.h"
 #include "CNA/C/texture.h"
 #include "CNA/C/graphics_state.h"
