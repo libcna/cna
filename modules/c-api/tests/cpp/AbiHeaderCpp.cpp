@@ -100,6 +100,8 @@ static_assert(sizeof(CNA_ModelMeshHandle) == 8U);
 static_assert(sizeof(CNA_ModelMeshCollectionHandle) == 8U);
 static_assert(sizeof(CNA_ModelEffectCollectionHandle) == 8U);
 static_assert(sizeof(CNA_ModelMeshTag) == 8U);
+static_assert(sizeof(CNA_ModelHandle) == 8U);
+static_assert(sizeof(CNA_ModelTag) == 8U);
 static_assert(sizeof(CNA_RendererInfo) == 32U);
 static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1));
 static_assert(CNA_GRAPHICS_RENDERER_PORTABLEGL == UINT32_C(46));

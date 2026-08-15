@@ -13,6 +13,7 @@
 #include "Microsoft/Xna/Framework/Graphics/ModelBoneCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelEffectCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMesh.hpp"
+#include "Microsoft/Xna/Framework/Graphics/Model.hpp"
 #include "Microsoft/Xna/Framework/Graphics/ModelMeshPart.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexBuffer.hpp"
 
@@ -46,6 +47,7 @@ using Microsoft::Xna::Framework::Graphics::ModelBoneCollection;
 using Microsoft::Xna::Framework::Graphics::ModelEffectCollection;
 using Microsoft::Xna::Framework::Graphics::ModelMesh;
 using Microsoft::Xna::Framework::Graphics::ModelMeshPart;
+using Microsoft::Xna::Framework::Graphics::Model;
 
 struct BoneNode final {
     std::shared_ptr<ModelBone> value;
@@ -60,6 +62,7 @@ struct BoneResource final {
 struct BoneCollectionResource final {
     std::shared_ptr<ModelBoneCollection> standalone;
     std::shared_ptr<BoneNode> parent;
+    std::vector<std::shared_ptr<BoneNode>> nodes;
 };
 
 struct PartRetainedSlot final {
@@ -152,6 +155,15 @@ struct MeshCollectionResource final {
 
 struct EffectCollectionResource final {
     std::shared_ptr<MeshResource> mesh;
+};
+
+struct ModelResource final {
+    std::shared_ptr<Model> value;
+    std::vector<std::shared_ptr<BoneNode>> bones;
+    std::vector<std::shared_ptr<MeshResource>> meshes;
+    std::shared_ptr<BoneNode> root;
+    CNA_ModelTag tag = 0U;
+    bool supportsThreeD = true;
 };
 
 [[nodiscard]] const std::vector<std::shared_ptr<PartResource>>& PartList(
@@ -263,19 +275,10 @@ MeshResource::~MeshResource()
             "The owned ModelBoneCollection handle could not be created.");
 }
 
-[[nodiscard]] const ModelBoneCollection& NativeCollection(
-    const BoneCollectionResource& collection)
+[[nodiscard]] const std::vector<std::shared_ptr<BoneNode>>& CollectionNodes(
+    const BoneCollectionResource& collection) noexcept
 {
-    return collection.parent != nullptr
-        ? collection.parent->value->getChildrenProperty()
-        : *collection.standalone;
-}
-
-[[nodiscard]] std::shared_ptr<BoneNode> CollectionNodeAt(
-    const BoneCollectionResource& collection,
-    const std::size_t index)
-{
-    return collection.parent->children[index];
+    return collection.parent != nullptr ? collection.parent->children : collection.nodes;
 }
 
 [[nodiscard]] CNA_Result CopyBoneName(
@@ -476,6 +479,34 @@ MeshResource::~MeshResource()
             result,
             ErrorCategoryForResult(result),
             "The owned ModelEffectCollection handle could not be created.");
+}
+
+[[nodiscard]] CNA_Result GetModel(
+    const CNA_ModelHandle handle,
+    std::shared_ptr<ModelResource>* const outModel)
+{
+    const CNA_Result result = GetRuntimeHandles().Get(
+        handle, ObjectKind::Model, outModel);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The Model handle is invalid for this call.");
+}
+
+[[nodiscard]] CNA_Result CreateModelHandle(
+    std::shared_ptr<ModelResource> model,
+    CNA_ModelHandle* const outModel)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::Model, std::move(model), outModel);
+    return result == CNA_RESULT_SUCCESS
+        ? CNA_RESULT_SUCCESS
+        : Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned Model handle could not be created.");
 }
 
 [[nodiscard]] auto FindMeshEffect(
@@ -840,6 +871,133 @@ void AddMeshEffect(
     return CreateMeshHandle(std::move(mesh), outMesh);
 }
 
+[[nodiscard]] CNA_Result CreateModel(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ModelBoneHandle* const boneHandles,
+    const uint64_t boneCount,
+    const CNA_ModelMeshHandle* const meshHandles,
+    const uint64_t meshCount,
+    const CNA_ModelBoneHandle* const meshParentHandles,
+    const uint64_t meshParentCount,
+    const uint64_t rootBoneIndex,
+    const bool explicitParents,
+    CNA_ModelHandle* const outModel)
+{
+    std::size_t ignoredBytes = 0U;
+    if (const CNA_Result result = CheckedElementByteCount(
+            boneHandles, boneCount, sizeof(*boneHandles), &ignoredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The Model bone-handle array is invalid or too large.");
+    }
+    if (const CNA_Result result = CheckedElementByteCount(
+            meshHandles, meshCount, sizeof(*meshHandles), &ignoredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The Model mesh-handle array is invalid or too large.");
+    }
+    if (const CNA_Result result = CheckedElementByteCount(
+            meshParentHandles, meshParentCount, sizeof(*meshParentHandles), &ignoredBytes);
+        result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result, ErrorCategoryForResult(result),
+            "The Model mesh-parent array is invalid or too large.");
+    }
+    if (meshParentCount != 0U && meshParentCount != meshCount) {
+        return InvalidArgument(
+            "The Model mesh-parent count must be zero or equal the mesh count.");
+    }
+    if (boneCount != 0U && rootBoneIndex >= boneCount) {
+        return InvalidArgument("The Model root-bone index is outside the valid range.");
+    }
+
+    std::shared_ptr<CNA::C::Detail::BorrowedGraphicsDevice> device;
+    if (const CNA_Result result = GetBorrowedGraphicsDevice(
+            graphicsDeviceHandle, &device);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+
+    auto model = std::make_shared<ModelResource>();
+    if (boneCount > model->bones.max_size() || meshCount > model->meshes.max_size()) {
+        return Fail(
+            CNA_RESULT_OVERFLOW,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The Model collection count is too large.");
+    }
+    model->bones.reserve(static_cast<std::size_t>(boneCount));
+    model->meshes.reserve(static_cast<std::size_t>(meshCount));
+    std::vector<ModelBone*> nativeBones;
+    std::vector<ModelMesh*> nativeMeshes;
+    std::vector<ModelBone*> nativeParents;
+    std::vector<std::shared_ptr<BoneNode>> parentNodes;
+    nativeBones.reserve(static_cast<std::size_t>(boneCount));
+    nativeMeshes.reserve(static_cast<std::size_t>(meshCount));
+    nativeParents.reserve(static_cast<std::size_t>(meshParentCount));
+    parentNodes.reserve(static_cast<std::size_t>(meshParentCount));
+
+    for (uint64_t index = 0U; index < boneCount; ++index) {
+        std::shared_ptr<BoneResource> bone;
+        if (const CNA_Result result = GetBone(boneHandles[index], &bone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        nativeBones.push_back(bone->node->value.get());
+        model->bones.push_back(bone->node);
+    }
+    for (uint64_t index = 0U; index < meshCount; ++index) {
+        std::shared_ptr<MeshResource> mesh;
+        if (const CNA_Result result = GetMesh(meshHandles[index], &mesh);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (mesh->parentGame != device->parentGame) {
+            return InvalidArgument(
+                "Every Model mesh must belong to the supplied graphics device.");
+        }
+        nativeMeshes.push_back(mesh->value.get());
+        model->meshes.push_back(std::move(mesh));
+    }
+    for (uint64_t index = 0U; index < meshParentCount; ++index) {
+        if (meshParentHandles[index] == CNA_INVALID_HANDLE) {
+            nativeParents.push_back(nullptr);
+            parentNodes.push_back(nullptr);
+            continue;
+        }
+        std::shared_ptr<BoneResource> bone;
+        if (const CNA_Result result = GetBone(meshParentHandles[index], &bone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        nativeParents.push_back(bone->node->value.get());
+        parentNodes.push_back(bone->node);
+    }
+
+    model->supportsThreeD = device->value->SupportsCapability(
+        CNA::GraphicsCapability::ThreeD);
+    model->value = explicitParents
+        ? std::make_shared<Model>(
+            device->value,
+            std::move(nativeBones),
+            std::move(nativeMeshes),
+            std::move(nativeParents),
+            static_cast<std::size_t>(rootBoneIndex))
+        : std::make_shared<Model>(
+            device->value, std::move(nativeBones), std::move(nativeMeshes));
+    if (!model->bones.empty()) {
+        model->root = model->bones[static_cast<std::size_t>(
+            explicitParents ? rootBoneIndex : 0U)];
+    }
+    if (meshParentCount != 0U) {
+        for (std::size_t index = 0U; index < model->meshes.size(); ++index) {
+            model->meshes[index]->parentBone = parentNodes[index];
+        }
+    }
+    return CreateModelHandle(std::move(model), outModel);
+}
+
 } // namespace
 
 CNA_Result cna_model_bone_create_default(CNA_ModelBoneHandle* const outBone)
@@ -1115,7 +1273,7 @@ CNA_Result cna_model_bone_collection_get_count(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outCount = static_cast<uint64_t>(NativeCollection(*collection).getCountProperty());
+        *outCount = static_cast<uint64_t>(CollectionNodes(*collection).size());
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -1135,14 +1293,12 @@ CNA_Result cna_model_bone_collection_get_at(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        const uint64_t count = static_cast<uint64_t>(
-            NativeCollection(*collection).getCountProperty());
-        if (index >= count || collection->parent == nullptr) {
+        const auto& nodes = CollectionNodes(*collection);
+        if (index >= nodes.size()) {
             return InvalidArgument("The ModelBoneCollection index is outside the valid range.");
         }
-        (void)NativeCollection(*collection)[static_cast<int>(index)];
         return CreateBoneHandle(
-            CollectionNodeAt(*collection, static_cast<std::size_t>(index)), outBone);
+            nodes[static_cast<std::size_t>(index)], outBone);
     });
 }
 
@@ -1171,19 +1327,9 @@ CNA_Result cna_model_bone_collection_find(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        ModelBone* native = nullptr;
-        if (!NativeCollection(*collection).TryGetValue(copiedName, native)) {
-            return CNA_RESULT_SUCCESS;
-        }
-        if (collection->parent == nullptr) {
-            return Fail(
-                CNA_RESULT_INTERNAL,
-                CNA_ERROR_CATEGORY_INTERNAL,
-                "An empty standalone ModelBoneCollection returned a bone.");
-        }
-        for (const std::shared_ptr<BoneNode>& child : collection->parent->children) {
-            if (child->value.get() == native) {
-                if (const CNA_Result result = CreateBoneHandle(child, outBone);
+        for (const std::shared_ptr<BoneNode>& node : CollectionNodes(*collection)) {
+            if (node->value->getNameProperty() == copiedName) {
+                if (const CNA_Result result = CreateBoneHandle(node, outBone);
                     result != CNA_RESULT_SUCCESS) {
                     return result;
                 }
@@ -1191,10 +1337,7 @@ CNA_Result cna_model_bone_collection_find(
                 return CNA_RESULT_SUCCESS;
             }
         }
-        return Fail(
-            CNA_RESULT_INTERNAL,
-            CNA_ERROR_CATEGORY_INTERNAL,
-            "The ModelBoneCollection sidecar is inconsistent with the native collection.");
+        return CNA_RESULT_SUCCESS;
     });
 }
 
@@ -1217,9 +1360,10 @@ CNA_Result cna_model_bone_collection_contains(
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
-        *outContains = NativeCollection(*collection).Contains(bone->node->value.get())
-            ? CNA_TRUE
-            : CNA_FALSE;
+        *outContains = std::find(
+            CollectionNodes(*collection).begin(),
+            CollectionNodes(*collection).end(),
+            bone->node) != CollectionNodes(*collection).end() ? CNA_TRUE : CNA_FALSE;
         return CNA_RESULT_SUCCESS;
     });
 }
@@ -2248,6 +2392,343 @@ CNA_Result cna_model_effect_collection_remove(
         }
         collection->mesh->value->getEffectsPropertyMutable().Remove(effect->value.get());
         RemoveFirstMeshEffect(*collection->mesh, effectHandle);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_create_default(CNA_ModelHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The Model output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        auto model = std::make_shared<ModelResource>();
+        model->value = std::make_shared<Model>();
+        return CreateModelHandle(std::move(model), outModel);
+    });
+}
+
+CNA_Result cna_model_create(
+    const CNA_Handle graphicsDevice,
+    const CNA_ModelBoneHandle* const bones,
+    const uint64_t boneCount,
+    const CNA_ModelMeshHandle* const meshes,
+    const uint64_t meshCount,
+    CNA_ModelHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The Model output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        return CreateModel(
+            graphicsDevice, bones, boneCount, meshes, meshCount,
+            nullptr, 0U, 0U, false, outModel);
+    });
+}
+
+CNA_Result cna_model_create_with_parents(
+    const CNA_Handle graphicsDevice,
+    const CNA_ModelBoneHandle* const bones,
+    const uint64_t boneCount,
+    const CNA_ModelMeshHandle* const meshes,
+    const uint64_t meshCount,
+    const CNA_ModelBoneHandle* const meshParents,
+    const uint64_t meshParentCount,
+    const uint64_t rootBoneIndex,
+    CNA_ModelHandle* const outModel)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outModel == nullptr) {
+            return InvalidArgument("The Model output handle is null.");
+        }
+        *outModel = CNA_INVALID_HANDLE;
+        return CreateModel(
+            graphicsDevice, bones, boneCount, meshes, meshCount,
+            meshParents, meshParentCount, rootBoneIndex, true, outModel);
+    });
+}
+
+CNA_Result cna_model_destroy(const CNA_ModelHandle modelHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const CNA_Result result = GetRuntimeHandles().Release(modelHandle);
+        return result == CNA_RESULT_SUCCESS
+            ? CNA_RESULT_SUCCESS
+            : Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned Model handle could not be released.");
+    });
+}
+
+CNA_Result cna_model_get_bones(
+    const CNA_ModelHandle modelHandle,
+    CNA_ModelBoneCollectionHandle* const outBones)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBones == nullptr) {
+            return InvalidArgument("The Model bone-collection output is null.");
+        }
+        *outBones = CNA_INVALID_HANDLE;
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto collection = std::make_shared<BoneCollectionResource>();
+        collection->nodes = model->bones;
+        return CreateCollectionHandle(std::move(collection), outBones);
+    });
+}
+
+CNA_Result cna_model_get_meshes(
+    const CNA_ModelHandle modelHandle,
+    CNA_ModelMeshCollectionHandle* const outMeshes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outMeshes == nullptr) {
+            return InvalidArgument("The Model mesh-collection output is null.");
+        }
+        *outMeshes = CNA_INVALID_HANDLE;
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto collection = std::make_shared<MeshCollectionResource>();
+        collection->meshes = model->meshes;
+        return CreateMeshCollectionHandle(std::move(collection), outMeshes);
+    });
+}
+
+CNA_Result cna_model_get_root(
+    const CNA_ModelHandle modelHandle,
+    CNA_Bool* const outHasRoot,
+    CNA_ModelBoneHandle* const outRoot)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHasRoot == nullptr || outRoot == nullptr) {
+            return InvalidArgument("The Model root outputs are null.");
+        }
+        *outHasRoot = CNA_FALSE;
+        *outRoot = CNA_INVALID_HANDLE;
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (model->root == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (const CNA_Result result = CreateBoneHandle(model->root, outRoot);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHasRoot = CNA_TRUE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_tag(
+    const CNA_ModelHandle modelHandle,
+    CNA_ModelTag* const outTag)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTag == nullptr) {
+            return InvalidArgument("The Model tag output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTag = model->tag;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_set_tag(
+    const CNA_ModelHandle modelHandle,
+    const CNA_ModelTag tag)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        model->tag = tag;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_set_owned_resources(
+    const CNA_ModelHandle modelHandle,
+    void* const context,
+    const CNA_ModelOwnedResourcesReleaseCallback release)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if ((context == nullptr) != (release == nullptr)) {
+            return InvalidArgument(
+                "Model owned resources require both context and release callback, or neither.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<void> owner;
+        if (context != nullptr) {
+            owner = std::shared_ptr<void>(
+                context,
+                [release](void* const value) noexcept { release(value); });
+        }
+        model->value->setOwnedResources(std::move(owner));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_get_bone_transform_count(
+    const CNA_ModelHandle modelHandle,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return InvalidArgument("The Model bone-transform count output is null.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(model->bones.size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_absolute_bone_transforms(
+    const CNA_ModelHandle modelHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The Model absolute-transform output is invalid.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(model->bones.size());
+        if (capacity < model->bones.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all absolute Model bone transforms.");
+        }
+        std::vector<Matrix> transforms(model->bones.size());
+        model->value->CopyAbsoluteBoneTransformsTo(transforms);
+        for (std::size_t index = 0U; index < transforms.size(); ++index) {
+            destination[index] = ToC(transforms[index]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_set_bone_transforms(
+    const CNA_ModelHandle modelHandle,
+    const CNA_Matrix* const source,
+    const uint64_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t byteCount = 0U;
+        if (const CNA_Result result = CheckedElementByteCount(
+                source, count, sizeof(*source), &byteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result, ErrorCategoryForResult(result),
+                "The Model source-transform array is invalid or too large.");
+        }
+        static_cast<void>(byteCount);
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (count < model->bones.size()) {
+            return InvalidArgument(
+                "The source array does not cover all Model bone transforms.");
+        }
+        std::vector<Matrix> transforms;
+        transforms.reserve(model->bones.size());
+        for (std::size_t index = 0U; index < model->bones.size(); ++index) {
+            transforms.push_back(ToNative(source[index]));
+        }
+        model->value->CopyBoneTransformsFrom(transforms);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_copy_bone_transforms(
+    const CNA_ModelHandle modelHandle,
+    CNA_Matrix* const destination,
+    const uint64_t capacity,
+    uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr || (destination == nullptr && capacity != 0U)) {
+            return InvalidArgument("The Model local-transform output is invalid.");
+        }
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(model->bones.size());
+        if (capacity < model->bones.size()) {
+            return Fail(
+                CNA_RESULT_BUFFER_TOO_SMALL,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The destination cannot hold all local Model bone transforms.");
+        }
+        std::vector<Matrix> transforms(model->bones.size());
+        model->value->CopyBoneTransformsTo(transforms);
+        for (std::size_t index = 0U; index < transforms.size(); ++index) {
+            destination[index] = ToC(transforms[index]);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_model_draw(
+    const CNA_ModelHandle modelHandle,
+    const CNA_Matrix world,
+    const CNA_Matrix view,
+    const CNA_Matrix projection)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<ModelResource> model;
+        if (const CNA_Result result = GetModel(modelHandle, &model);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!model->meshes.empty() && !model->supportsThreeD) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "Model drawing requires a renderer with 3D support.");
+        }
+        model->value->Draw(
+            ToNative(world), ToNative(view), ToNative(projection));
         return CNA_RESULT_SUCCESS;
     });
 }

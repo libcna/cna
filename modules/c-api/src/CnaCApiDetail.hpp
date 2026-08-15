@@ -65,6 +65,7 @@ enum class ObjectKind : uint32_t {
     ModelMesh = 36,
     ModelMeshCollection = 37,
     ModelEffectCollection = 38,
+    Model = 39,
     Test = UINT32_MAX
 };
 

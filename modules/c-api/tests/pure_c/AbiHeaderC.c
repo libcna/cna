@@ -128,6 +128,8 @@ _Static_assert(sizeof(CNA_ModelMeshHandle) == 8U &&
                    sizeof(CNA_ModelEffectCollectionHandle) == 8U &&
                    sizeof(CNA_ModelMeshTag) == 8U,
                "CNA model-mesh handles, collections and tag must remain stable");
+_Static_assert(sizeof(CNA_ModelHandle) == 8U && sizeof(CNA_ModelTag) == 8U,
+               "CNA model handle and tag must remain stable");
 _Static_assert(sizeof(CNA_RendererInfo) == 32U,
                "CNA_RendererInfo layout must remain stable");
 _Static_assert(CNA_GRAPHICS_RENDERER_SDL_RENDERER == UINT32_C(1) &&

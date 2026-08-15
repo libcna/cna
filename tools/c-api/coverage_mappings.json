@@ -406,6 +406,16 @@
       "task": "CBIND-035E3"
     },
     {
+      "id": "model-complete-contract",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/graphics/include/Microsoft/Xna/Framework/Graphics/Model\\.hpp$",
+      "kinds": ["class", "constructor", "destructor", "method", "operator", "field", "constant", "alias"],
+      "mapping": "owned stable `CNA_ModelHandle` with default, device aggregate and explicit mesh-parent/root constructors; retained immutable bone/mesh collection views, optional root, opaque 64-bit C tag, C context/release-callback ownership replacing `shared_ptr<void>`, count/copy local and absolute matrix operations, copied transform input and capability-gated Draw",
+      "tests": "default and both aggregate constructors, empty and retained bone/mesh views, arbitrary root and nullable mesh-parent selection, opaque tag, deterministic owned-context replacement/clear release, local set/copy and parent-composed absolute transforms with capacity atomicity, transitive lifetime after original handles, invalid array/count/root combinations, draw capability and wrong-thread/stale paths in strict-C `ModelSmoke.c` under HEADLESS and SDL_RENDERER plus ASan+UBSan; C/C++ assertions freeze handle and tag",
+      "status": "implemented",
+      "task": "CBIND-035E4"
+    },
+    {
       "id": "spritebatch-handle-type",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Graphics::SpriteBatch$",
       "kinds": ["class"],

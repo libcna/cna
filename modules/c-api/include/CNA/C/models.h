@@ -40,6 +40,18 @@ typedef CNA_Handle CNA_ModelEffectCollectionHandle;
 /** @brief C-owned opaque tag value associated with a model mesh. */
 typedef uint64_t CNA_ModelMeshTag;
 
+/** @brief Owned stable handle for a top-level model. */
+typedef CNA_Handle CNA_ModelHandle;
+
+/** @brief C-owned opaque tag value associated with a model. */
+typedef uint64_t CNA_ModelTag;
+
+/**
+ * @brief Releases caller state retained as a model-owned resource bundle.
+ * @param context Opaque caller context supplied during registration.
+ */
+typedef void (*CNA_ModelOwnedResourcesReleaseCallback)(void* context);
+
 /**
  * @brief Creates an owned default model bone.
  * @param out_bone Receives the owned bone handle.
@@ -634,6 +646,190 @@ CNA_C_API CNA_Result cna_model_effect_collection_add(
 CNA_C_API CNA_Result cna_model_effect_collection_remove(
     CNA_ModelEffectCollectionHandle collection,
     CNA_EffectHandle effect);
+
+/**
+ * @brief Creates an owned empty model independent of a graphics device.
+ * @param out_model Receives the owned model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_create_default(CNA_ModelHandle* out_model);
+
+/**
+ * @brief Creates a model retaining the supplied bones and same-device meshes.
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param bones Caller-owned bone-handle array, or null only for zero count.
+ * @param bone_count Number of handles in @p bones.
+ * @param meshes Caller-owned mesh-handle array, or null only for zero count.
+ * @param mesh_count Number of handles in @p meshes.
+ * @param out_model Receives the owned model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_create(
+    CNA_Handle graphics_device,
+    const CNA_ModelBoneHandle* bones,
+    uint64_t bone_count,
+    const CNA_ModelMeshHandle* meshes,
+    uint64_t mesh_count,
+    CNA_ModelHandle* out_model);
+
+/**
+ * @brief Creates a model with explicit mesh parents and root selection.
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param bones Caller-owned bone-handle array, or null only for zero count.
+ * @param bone_count Number of handles in @p bones.
+ * @param meshes Caller-owned mesh-handle array, or null only for zero count.
+ * @param mesh_count Number of handles in @p meshes.
+ * @param mesh_parents Optional parent handles; invalid entries represent null parents.
+ * @param mesh_parent_count Zero or exactly @p mesh_count.
+ * @param root_bone_index Root index when bones are non-empty.
+ * @param out_model Receives the owned model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_create_with_parents(
+    CNA_Handle graphics_device,
+    const CNA_ModelBoneHandle* bones,
+    uint64_t bone_count,
+    const CNA_ModelMeshHandle* meshes,
+    uint64_t mesh_count,
+    const CNA_ModelBoneHandle* mesh_parents,
+    uint64_t mesh_parent_count,
+    uint64_t root_bone_index,
+    CNA_ModelHandle* out_model);
+
+/**
+ * @brief Releases an owned model handle.
+ * @param model Model handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_destroy(CNA_ModelHandle model);
+
+/**
+ * @brief Gets an owned immutable view of the model bones.
+ * @param model Model handle.
+ * @param out_bones Receives the collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_bones(
+    CNA_ModelHandle model,
+    CNA_ModelBoneCollectionHandle* out_bones);
+
+/**
+ * @brief Gets an owned immutable view of the model meshes.
+ * @param model Model handle.
+ * @param out_meshes Receives the collection handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_meshes(
+    CNA_ModelHandle model,
+    CNA_ModelMeshCollectionHandle* out_meshes);
+
+/**
+ * @brief Gets an owned optional root-bone view.
+ * @param model Model handle.
+ * @param out_has_root Receives whether a root exists.
+ * @param out_root Receives the root handle, or the invalid handle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_root(
+    CNA_ModelHandle model,
+    CNA_Bool* out_has_root,
+    CNA_ModelBoneHandle* out_root);
+
+/**
+ * @brief Gets the C-owned opaque model tag.
+ * @param model Model handle.
+ * @param out_tag Receives the tag.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_tag(
+    CNA_ModelHandle model,
+    CNA_ModelTag* out_tag);
+
+/**
+ * @brief Sets the C-owned opaque model tag.
+ * @param model Model handle.
+ * @param tag Opaque tag value.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_set_tag(
+    CNA_ModelHandle model,
+    CNA_ModelTag tag);
+
+/**
+ * @brief Replaces the model-owned C resource bundle.
+ * @param model Model handle.
+ * @param context Opaque context retained until replacement or model destruction.
+ * @param release Required release callback when @p context is non-null; null clears the bundle.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_set_owned_resources(
+    CNA_ModelHandle model,
+    void* context,
+    CNA_ModelOwnedResourcesReleaseCallback release);
+
+/**
+ * @brief Gets the number of bone transforms used by bulk operations.
+ * @param model Model handle.
+ * @param out_count Receives the bone count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_get_bone_transform_count(
+    CNA_ModelHandle model,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies absolute bone transforms atomically.
+ * @param model Model handle.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination capacity in matrices.
+ * @param out_count Receives the required matrix count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_copy_absolute_bone_transforms(
+    CNA_ModelHandle model,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Copies local transforms from a caller array into all model bones.
+ * @param model Model handle.
+ * @param source Source matrix array.
+ * @param count Number of matrices; must cover every model bone.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_set_bone_transforms(
+    CNA_ModelHandle model,
+    const CNA_Matrix* source,
+    uint64_t count);
+
+/**
+ * @brief Copies local bone transforms atomically.
+ * @param model Model handle.
+ * @param destination Destination array, or null only for zero capacity.
+ * @param capacity Destination capacity in matrices.
+ * @param out_count Receives the required matrix count.
+ * @return A CNA result code.
+ */
+CNA_C_API CNA_Result cna_model_copy_bone_transforms(
+    CNA_ModelHandle model,
+    CNA_Matrix* destination,
+    uint64_t capacity,
+    uint64_t* out_count);
+
+/**
+ * @brief Draws every model mesh after applying world, view and projection matrices.
+ * @param model Model handle.
+ * @param world World transform.
+ * @param view View transform.
+ * @param projection Projection transform.
+ * @return A CNA result code, including explicit renderer limitations.
+ */
+CNA_C_API CNA_Result cna_model_draw(
+    CNA_ModelHandle model,
+    CNA_Matrix world,
+    CNA_Matrix view,
+    CNA_Matrix projection);
 
 #ifdef __cplusplus
 }

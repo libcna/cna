@@ -76,3 +76,26 @@ otherwise returns `CNA_RESULT_NOT_SUPPORTED` before native mutation. `ModelMeshS
 both constructors, all properties, both collections, duplicate effects, transitive lifetime,
 safe surviving parts, draw capability behavior and error/thread paths under HEADLESS and
 SDL_RENDERER, plus a focused ASan+UBSan run.
+
+## Top-level models
+
+`CNA_ModelHandle` owns either an empty standalone model or a device-associated aggregate that
+retains its stable bone nodes and same-device meshes. The simple constructor selects the first
+bone as root. The extended constructor accepts an arbitrary root index plus either no mesh-parent
+array or one nullable parent per mesh. Bone and mesh properties return owned immutable collection
+views whose aliases keep their elements alive after the original handles or model are released.
+
+The native `System::Object*` tag becomes a fixed 64-bit C tag. The CNA extension taking
+`std::shared_ptr<void>` is represented without a C++ ABI leak by an opaque C context and required
+release callback. Replacement, explicit clearing and final model destruction synchronously
+release exactly one retained context.
+
+Bulk transform APIs first report the bone count. Local and absolute copies are atomic on
+insufficient capacity, and local input is fully copied before mutating native bones. Absolute
+composition delegates to the native parent/index algorithm. Draw accepts copied world/view/
+projection matrices and returns `CNA_RESULT_NOT_SUPPORTED` before native mutation when a non-empty
+model targets a renderer without 3D support.
+
+`ModelSmoke.c` covers all constructors and properties, nullable root/parents, retained collections,
+owned-context releases, all transform routes and capacity failures, transitive lifetime, renderer
+draw behavior and thread/handle errors under HEADLESS and SDL_RENDERER plus ASan+UBSan.
