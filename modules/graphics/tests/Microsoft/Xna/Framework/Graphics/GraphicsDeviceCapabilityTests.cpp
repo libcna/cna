@@ -302,11 +302,9 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 
 // The oracle itself -- geometry, probes, colours, the Solid control and the single-draw renderer
 // -- lives in WireFrameTriangleOracle.hpp so WEBGPU-115's rejection suite measures the identical
-// fixture instead of a copy that can drift from this one. The CNA_WIREFRAME_* selection macros are
-// defined there too, for the same reason.
-#ifdef CNA_WIREFRAME_PIXEL_ORACLE
+// fixture instead of a copy that can drift from this one. The wireframe selection predicates are
+// evaluated there too, for the same reason.
 using namespace CnaTest::WireFrameOracle;   // NOLINT(google-build-using-namespace)
-#endif
 
 // ---------------------------------------------------------------------------
 // The capability report, per renderer. Each arm states what THIS renderer answers today; none of
@@ -352,8 +350,8 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
     // vertex input is inspected, so no polygon topology can reach a raster queue to be silently
     // filled solid. Same truthful-false shape as DIRECTX1 and Stub, and like Stub it has no pixel route
-    // to measure, which is why WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE
-    // undefined here.
+    // to measure, which is why WireFrameTriangleOracle.hpp keeps this renderer out of
+    // HasPixelOracle() here.
     EXPECT_FALSE(reported)
         << "Skia claims WireFrame support -- this raster renderer has no polygon fill mode and no "
            "3D draw route, so a true report cannot be backed by any rendering path";
@@ -362,8 +360,8 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
     // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
     // input is inspected, so no polygon topology can reach a raster queue to be silently filled
-    // solid. Like Skia, WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined
-    // here (no pixel route to measure).
+    // solid. Like Skia, WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle()
+    // (no pixel route to measure).
     EXPECT_FALSE(reported)
         << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
            "no 3D draw route, so a true report cannot be backed by any rendering path";
@@ -372,7 +370,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
     // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
     // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
-    // WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
     EXPECT_FALSE(reported)
         << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
@@ -387,7 +385,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // refusal obligation exists to stop a renderer from returning a frame that silently lies -- a
     // solid fill presented as a wireframe. Stub returns no frame at all, so it has the third shape
     // this file describes: an honest report with no pixel route to measure, which is why
-    // WireFrameTriangleOracle.hpp deliberately leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    // WireFrameTriangleOracle.hpp deliberately keeps this renderer out of HasPixelOracle().
     //
     // Stub is also stricter than Headless, which reaches the default arm below by INHERITING
     // IGraphicsRenderer's true. Stub overrides SupportsCapability to false precisely so a no-op
@@ -404,23 +402,24 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 #endif
 }
 
-#ifdef CNA_WIREFRAME_PIXEL_ORACLE
-
 // ---------------------------------------------------------------------------
 // POSITIVE CONTRACT -- renderers that genuinely rasterize a wireframe.
 // ---------------------------------------------------------------------------
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
-#if !defined(CNA_WIREFRAME_MEASURED)
-    GTEST_SKIP() << kRendererName
-                 << " has no runtime in this environment; the oracle compiles but cannot measure";
-#elif !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    // The rejecting renderer gets its own arm below; asserting the positive contract here would
-    // only duplicate that arm's failure mode with a worse diagnostic.
-    GTEST_SKIP() << kRendererName
-                 << " does not rasterize wireframe; see the deterministic-rejection arm";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured())
+        GTEST_SKIP() << RendererName()
+                     << " has no runtime in this environment; the oracle runs but cannot measure";
+    if (!RendersEdges())
+        // The rejecting renderer gets its own arm below; asserting the positive contract here would
+        // only duplicate that arm's failure mode with a worse diagnostic.
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize wireframe; see the deterministic-rejection arm";
     GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid", solid);
@@ -429,11 +428,11 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
 
     ExpectSolidTriangle(solid);
     ASSERT_TRUE(wire.rendered)
-        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
+        << RendererName() << " refused a WireFrame draw: " << wire.rejection;
 
     // 1. THE INTERIOR IS EMPTY. This is what separates a wireframe from a solid fill.
     EXPECT_EQ(0, wire.frame.LitIn(kInterior))
-        << kRendererName << " filled " << wire.frame.LitIn(kInterior)
+        << RendererName() << " filled " << wire.frame.LitIn(kInterior)
         << " interior pixels under FillMode::WireFrame -- that is a solid fill, not a wireframe ("
         << wire.frame.Describe() << ')';
 
@@ -442,38 +441,40 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     for (std::size_t i = 0; i < kEdgeProbes.size(); ++i)
     {
         EXPECT_GE(wire.frame.LitIn(kEdgeProbes[i]), 8)
-            << kRendererName << " edge " << kEdgeNames[i]
+            << RendererName() << " edge " << kEdgeNames[i]
             << " is missing from the wireframe (" << wire.frame.Describe() << ')';
         EXPECT_TRUE(Frame::NearInk(wire.frame.FirstLitIn(kEdgeProbes[i])))
-            << kRendererName << " edge " << kEdgeNames[i] << " is "
+            << RendererName() << " edge " << kEdgeNames[i] << " is "
             << Describe(wire.frame.FirstLitIn(kEdgeProbes[i])) << ", not the ink colour";
     }
 
     // 3. THE FRAME IS NOT THE CLEAR. A dropped draw lights nothing at all, which the edge probes
     //    already reject; this states the whole-frame form of it so the failure names the cause.
     EXPECT_GT(wire.frame.LitTotal(), 0)
-        << kRendererName << " rendered nothing at all under FillMode::WireFrame";
+        << RendererName() << " rendered nothing at all under FillMode::WireFrame";
 
     // 4. THE TWO MODES DIFFER BY AN ORDER OF MAGNITUDE. Edges of this triangle are ~600 pixels;
     //    its interior is 18176. A renderer that quietly promoted the wireframe to a solid fill --
     //    or that widened lines until they became one -- cannot satisfy this.
     EXPECT_LT(wire.frame.LitTotal() * 4, solid.frame.LitTotal())
-        << kRendererName << " WireFrame covered " << wire.frame.LitTotal()
+        << RendererName() << " WireFrame covered " << wire.frame.LitTotal()
         << " pixels against Solid's " << solid.frame.LitTotal()
         << " -- not a measurably smaller figure";
 
     // 5. NOTHING BUT INK AND CLEAR. A second draw, a retry, or a blend over the first would leave
     //    a third colour somewhere in the frame.
     EXPECT_TRUE(wire.frame.EveryLitPixelIsInk())
-        << kRendererName << " WireFrame produced a lit pixel that is neither ink nor clear";
-#endif
+        << RendererName() << " WireFrame produced a lit pixel that is neither ink nor clear";
 }
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasterizerState)
 {
-#if !defined(CNA_WIREFRAME_MEASURED) || !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    GTEST_SKIP() << kRendererName << " is not in the measured wireframe-rendering set";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured() || !RendersEdges())
+        GTEST_SKIP() << RendererName() << " is not in the measured wireframe-rendering set";
     GraphicsDevice gd;
     // WireFrame -> Solid -> WireFrame. A renderer that caches a pipeline, a polygon mode or an
     // expanded index buffer across state changes produces a different third frame; a renderer that
@@ -489,16 +490,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
     ASSERT_TRUE(third.rendered);
     ExpectSolidTriangle(solid);
 
-    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << kRendererName << ' ' << first.frame.Describe();
+    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << RendererName() << ' ' << first.frame.Describe();
     EXPECT_EQ(0, third.frame.LitIn(kInterior))
-        << kRendererName << " kept the Solid state after returning to WireFrame -- "
+        << RendererName() << " kept the Solid state after returning to WireFrame -- "
         << third.frame.Describe();
     EXPECT_TRUE(first.frame.pixels == third.frame.pixels)
-        << kRendererName << " did not reproduce its own wireframe after a Solid draw ("
+        << RendererName() << " did not reproduce its own wireframe after a Solid draw ("
         << first.frame.Describe() << " then " << third.frame.Describe() << ')';
     EXPECT_FALSE(first.frame.pixels == solid.frame.pixels)
-        << kRendererName << " produced identical frames for WireFrame and Solid";
-#endif
+        << RendererName() << " produced identical frames for WireFrame and Solid";
 }
 
 // ---------------------------------------------------------------------------
@@ -507,27 +507,32 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 {
-#ifndef CNA_WIREFRAME_MEASURED
-    GTEST_SKIP() << kRendererName << " has no runtime in this environment";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured())
+        GTEST_SKIP() << RendererName() << " has no runtime in this environment";
     GraphicsDevice gd;
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-before-recovery", wire);
-#ifdef CNA_WIREFRAME_REJECTED
-    // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that it
-    // left nothing behind for the next draw to trip over.
-    ASSERT_FALSE(wire.rendered)
-        << kRendererName << " accepted a WireFrame draw again -- " << wire.frame.Describe();
-    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
-#else
-    ASSERT_TRUE(wire.rendered)
-        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
-#endif
+    if (RejectsWireFrame())
+    {
+        // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that
+        // it left nothing behind for the next draw to trip over.
+        ASSERT_FALSE(wire.rendered)
+            << RendererName() << " accepted a WireFrame draw again -- " << wire.frame.Describe();
+        ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+    }
+    else
+    {
+        ASSERT_TRUE(wire.rendered)
+            << RendererName() << " refused a WireFrame draw: " << wire.rejection;
+    }
 
     const Result recovered = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-recovery", recovered);
     ExpectSolidTriangle(recovered);
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -536,9 +541,12 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRenderer)
 {
-#ifndef CNA_WIREFRAME_REJECTED
-    GTEST_SKIP() << kRendererName << " is not in the WireFrame-rejecting set";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!RejectsWireFrame())
+        GTEST_SKIP() << RendererName() << " is not in the WireFrame-rejecting set";
     // The whole point of the boundary is that the two frames are NOT the same picture and NOT both
     // produced: Solid renders exactly, WireFrame throws, and the target the refused draw was aimed
     // at still holds nothing but the clear colour.
@@ -550,31 +558,29 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRend
 
     ExpectSolidTriangle(solid);
     ASSERT_FALSE(wire.rendered)
-        << kRendererName << " accepted a WireFrame draw and produced " << wire.frame.Describe()
+        << RendererName() << " accepted a WireFrame draw and produced " << wire.frame.Describe()
         << ". If real wireframe rendering landed, move this renderer into "
-           "CNA_WIREFRAME_RENDERS_EDGES";
+           "the RendersEdges() set";
     // The message has to name the thing that was refused -- a bare "not supported" cannot be acted
     // on, and a message that names something else means a different guard fired.
     EXPECT_NE(std::string::npos, wire.rejection.find("WireFrame"))
-        << kRendererName << " refused the draw with a message that does not name FillMode::"
+        << RendererName() << " refused the draw with a message that does not name FillMode::"
         << "WireFrame: \"" << wire.rejection << '"';
     EXPECT_NE(std::string::npos, wire.rejection.find("SupportsCapability"))
-        << kRendererName << " refused the draw without pointing at the capability query: \""
+        << RendererName() << " refused the draw without pointing at the capability query: \""
         << wire.rejection << '"';
     ExpectClearOnly(wire.frame, "the refused WireFrame draw");
     EXPECT_FALSE(wire.frame.pixels == solid.frame.pixels)
-        << kRendererName << " produced the Solid picture for a refused WireFrame draw";
+        << RendererName() << " produced the Solid picture for a refused WireFrame draw";
 
     // The device survives the refusal: a second Solid draw renders exactly, on a new target.
     const Result again = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-after-refusal", again);
     ExpectSolidTriangle(again);
     EXPECT_TRUE(again.frame.pixels == solid.frame.pixels)
-        << kRendererName << " did not reproduce its own Solid frame after a refused WireFrame draw";
-#endif
+        << RendererName() << " did not reproduce its own Solid frame after a refused WireFrame draw";
 }
 
-#endif  // CNA_WIREFRAME_PIXEL_ORACLE
 
 // ---------------------------------------------------------------------------
 // HONEST SKIP + EXACT CARDINALITY -- Headless has no pixel route at all, and is the one renderer
