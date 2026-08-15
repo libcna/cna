@@ -617,3 +617,16 @@ static_assert(alignof(CNA_ContentReaderUsageInfo) == 8U);
 static_assert(offsetof(CNA_ContentReaderUsageInfo, is_registered) == 8U);
 static_assert(offsetof(CNA_ContentReaderUsageInfo, reserved) == 9U);
 static_assert(offsetof(CNA_ContentReaderUsageInfo, file_count) == 16U);
+static_assert(sizeof(CNA_ContentReaderHandle) == 8U);
+static_assert(sizeof(CNA_ContentTypeReaderHandle) == 8U);
+static_assert(sizeof(CNA_UnsupportedContentReaderReason) == sizeof(uint32_t));
+static_assert(CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE ==
+              UINT32_C(0));
+static_assert(sizeof(CNA_ContentReaderCreateInfo) == 48U);
+static_assert(alignof(CNA_ContentReaderCreateInfo) == 8U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, content_manager) == 8U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, stream) == 16U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, asset_name) == 24U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, version) == 40U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, platform) == 44U);
+static_assert(offsetof(CNA_ContentReaderCreateInfo, reserved) == 45U);

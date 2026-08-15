@@ -755,3 +755,18 @@ _Static_assert(sizeof(CNA_ContentReaderUsageInfo) == 24U &&
                    offsetof(CNA_ContentReaderUsageInfo, reserved) == 9U &&
                    offsetof(CNA_ContentReaderUsageInfo, file_count) == 16U,
                "CNA_ContentReaderUsageInfo layout must remain stable");
+_Static_assert(sizeof(CNA_ContentReaderHandle) == 8U &&
+                   sizeof(CNA_ContentTypeReaderHandle) == 8U &&
+                   sizeof(CNA_UnsupportedContentReaderReason) == sizeof(uint32_t) &&
+                   CNA_UNSUPPORTED_CONTENT_READER_REASON_COMPILED_PLATFORM_SHADER_BYTECODE ==
+                       UINT32_C(0),
+               "CNA content reader identities must remain stable");
+_Static_assert(sizeof(CNA_ContentReaderCreateInfo) == 48U &&
+                   _Alignof(CNA_ContentReaderCreateInfo) == 8U &&
+                   offsetof(CNA_ContentReaderCreateInfo, content_manager) == 8U &&
+                   offsetof(CNA_ContentReaderCreateInfo, stream) == 16U &&
+                   offsetof(CNA_ContentReaderCreateInfo, asset_name) == 24U &&
+                   offsetof(CNA_ContentReaderCreateInfo, version) == 40U &&
+                   offsetof(CNA_ContentReaderCreateInfo, platform) == 44U &&
+                   offsetof(CNA_ContentReaderCreateInfo, reserved) == 45U,
+               "CNA_ContentReaderCreateInfo layout must remain stable");

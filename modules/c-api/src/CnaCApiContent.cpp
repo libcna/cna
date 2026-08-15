@@ -2,6 +2,7 @@
 
 #include "CNA/C/content.h"
 #include "CnaCApiAudioDetail.hpp"
+#include "CnaCApiContentDetail.hpp"
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
@@ -10,6 +11,7 @@
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManager.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentManifestEntry.hpp"
+#include "Microsoft/Xna/Framework/Content/ResourceContentManager.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/TextureCube.hpp"
 
@@ -38,6 +40,7 @@ using Microsoft::Xna::Framework::Content::ContentLoadException;
 using Microsoft::Xna::Framework::Content::ContentManager;
 using Microsoft::Xna::Framework::Content::ContentManifestEntry;
 using Microsoft::Xna::Framework::Content::ContentManifestReaderUsage;
+using Microsoft::Xna::Framework::Content::ResourceContentManager;
 using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 using Microsoft::Xna::Framework::Graphics::Texture2D;
 using Microsoft::Xna::Framework::Graphics::TextureCube;
@@ -146,6 +149,28 @@ struct ContentManagerResource final {
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result BorrowContentManager(
+    const CNA_Handle handle,
+    BorrowedContentManager* const outContentManager)
+{
+    if (outContentManager == nullptr) {
+        return InvalidArgument("The borrowed ContentManager output is null.");
+    }
+    *outContentManager = BorrowedContentManager{};
+    std::shared_ptr<ContentManagerResource> contentManager;
+    if (const CNA_Result result = GetContentManager(handle, &contentManager);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    outContentManager->value = contentManager->value.get();
+    outContentManager->owner = contentManager;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_content_manager_create(
     const CNA_Handle graphicsDeviceHandle,
@@ -371,6 +396,72 @@ CNA_Result cna_content_manager_load_texture2d(
         } catch (const std::runtime_error& exception) {
             return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
         }
+    });
+}
+
+CNA_Result cna_content_manager_create_resource(
+    const CNA_Handle graphicsDeviceHandle,
+    const CNA_ContentManagerCreateInfo* const createInfo,
+    CNA_Handle* const outContentManager)
+{
+    return CallWithExceptionBarrier([&]() {
+        if (outContentManager == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The ContentManager output handle is null.");
+        }
+        *outContentManager = CNA_INVALID_HANDLE;
+        if (createInfo == nullptr ||
+            createInfo->struct_size < sizeof(CNA_ContentManagerCreateInfo) ||
+            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The ContentManager creation configuration is invalid.");
+        }
+
+        std::string rootDirectory;
+        if (const CNA_Result result = CopyStringView(
+                createInfo->root_directory,
+                true,
+                &rootDirectory);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The ContentManager root directory is not valid UTF-8.");
+        }
+
+        std::shared_ptr<BorrowedGraphicsDevice> graphicsDevice;
+        if (const CNA_Result result = GetBorrowedGraphicsDevice(
+                graphicsDeviceHandle,
+                &graphicsDevice);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        const std::shared_ptr<ContentManager> nativeManager =
+            std::make_shared<ResourceContentManager>(nullptr);
+        nativeManager->setRootDirectoryProperty(std::move(rootDirectory));
+        nativeManager->setGraphicsDevice(*graphicsDevice->value);
+        const auto resource = std::make_shared<ContentManagerResource>(
+            ContentManagerResource{
+                nativeManager,
+                graphicsDevice->parentGame,
+                graphicsDeviceHandle});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::ContentManager,
+            resource,
+            outContentManager);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned ContentManager handle could not be created.");
+        }
+        AddOwnedContentManager();
+        return CNA_RESULT_SUCCESS;
     });
 }
 

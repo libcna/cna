@@ -36,6 +36,7 @@
 #include "CNA/C/sprite_font.h"
 #include "CNA/C/input.h"
 #include "CNA/C/content.h"
+#include "CNA/C/content_readers.h"
 #include "CNA/C/storage.h"
 #include "CNA/C/audio.h"
 

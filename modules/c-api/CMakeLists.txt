@@ -15,6 +15,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiAudio.cpp
     src/CnaCApiColor.cpp
     src/CnaCApiContent.cpp
+    src/CnaCApiContentReaders.cpp
     src/CnaCApiCurve.cpp
     src/CnaCApiDetail.cpp
     src/CnaCApiDisplay.cpp
@@ -68,7 +69,7 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage)
+target_link_libraries(cna_c_api PRIVATE cna_runtime cna_graphics_ext cna_storage cna_content)
 
 install(TARGETS cna_c_api
     EXPORT CNACTargets
@@ -232,6 +233,21 @@ if(CNA_BUILD_TESTS)
     # build-tree location instead of writing into the developer's real user data directory.
     set_tests_properties(CApi_StorageSmoke PROPERTIES
         ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/storage-smoke-home"
+    )
+
+    add_executable(cna_c_api_content_reader_smoke
+        tests/pure_c/ContentReaderSmoke.c
+    )
+    set_target_properties(cna_c_api_content_reader_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_content_reader_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_content_reader_smoke)
+    add_test(NAME CApi_ContentReaderSmoke COMMAND cna_c_api_content_reader_smoke)
+    set_tests_properties(CApi_ContentReaderSmoke PROPERTIES
+        ENVIRONMENT "XDG_DATA_HOME=${CMAKE_CURRENT_BINARY_DIR}/content-reader-smoke-home"
     )
 
     add_executable(cna_c_api_vector_smoke
@@ -824,6 +840,7 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
+        ${PROJECT_SOURCE_DIR}/modules/content/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
         Threads::Threads
@@ -843,6 +860,7 @@ if(CNA_BUILD_TESTS)
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${PROJECT_SOURCE_DIR}/modules/graphics/include
         ${PROJECT_SOURCE_DIR}/modules/storage/include
+        ${PROJECT_SOURCE_DIR}/modules/content/include
     )
     # The storage exception is the one canonical type this test throws whose constructors are not
     # header-only, so proving its conversion needs the storage module on the link line.

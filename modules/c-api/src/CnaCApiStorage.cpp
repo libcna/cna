@@ -2,6 +2,7 @@
 
 #include "CNA/C/storage.h"
 #include "CnaCApiRuntimeDetail.hpp"
+#include "CnaCApiStorageDetail.hpp"
 
 #include "Microsoft/Xna/Framework/PlayerIndex.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageContainer.hpp"
@@ -96,6 +97,7 @@ struct StorageContainerResource final {
 struct StorageStreamResource final {
     std::unique_ptr<System::IO::Stream> value;
     std::shared_ptr<StorageContainerResource> container;
+    std::size_t activeBorrowCount = 0U;
 };
 
 // A subscription lives exactly as long as its registration handle. The container flavor holds a
@@ -559,6 +561,43 @@ private:
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result AcquireStorageStream(const CNA_Handle handle, BorrowedStorageStream* const outStream)
+{
+    if (outStream == nullptr) {
+        return InvalidArgument("The borrowed storage stream output is null.");
+    }
+    *outStream = BorrowedStorageStream{};
+    std::shared_ptr<StorageStreamResource> stream;
+    if (const CNA_Result result = GetStream(handle, &stream); result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    if (!stream->value->getCanReadProperty()) {
+        return Fail(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "The storage stream was not opened for reading.");
+    }
+    stream->activeBorrowCount += 1U;
+    outStream->value = stream->value.get();
+    outStream->owner = stream;
+    return CNA_RESULT_SUCCESS;
+}
+
+void ReleaseStorageStream(const BorrowedStorageStream& stream) noexcept
+{
+    if (stream.owner == nullptr) {
+        return;
+    }
+    const auto resource = std::static_pointer_cast<StorageStreamResource>(stream.owner);
+    if (resource->activeBorrowCount != 0U) {
+        resource->activeBorrowCount -= 1U;
+    }
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_storage_set_app_name_ext(const CNA_StringView appName)
 {
@@ -1576,6 +1615,10 @@ CNA_Result cna_storage_stream_close(const CNA_StorageStreamHandle streamHandle)
         if (const CNA_Result result = GetStream(streamHandle, &stream);
             result != CNA_RESULT_SUCCESS) {
             return result;
+        }
+        if (stream->activeBorrowCount != 0U) {
+            return InvalidState(
+                "Every reader borrowing this stream must be destroyed before it is closed.");
         }
         stream->value->Close();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(streamHandle);

@@ -2105,6 +2105,203 @@
       "tests": "`ContentSmoke.c` asserts the exact result, category and non-empty diagnostic after loading a deleted asset, and the same conversion for cube and sound assets that do not exist",
       "status": "implemented",
       "task": "CBIND-036B1"
+    },
+    {
+      "id": "content-reader-core",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader(?:::(?:ContentReader|getContentManagerProperty|getAssetNameProperty|getVersionProperty|getPlatformProperty|ReadMatrix|ReadQuaternion|ReadVector2|ReadVector3|ReadVector4|ReadColor|ReadBoundingSphere|InitializeTypeReaders|ReadSharedResources|CheckCollectionElementCount|CheckDecodedByteSize|ReadBytesExactOrThrow))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_ContentReaderHandle` created over an owned storage stream and an optional content-manager handle, plus asset-name count/copy, container version and platform, the six fixed-value reads and the bounding-sphere read into `CNA_*` PODs, the type-reader table and shared-resource passes, both bounds checks, and a capacity-checked exact-byte read. Neither `System::IO::Stream` nor `ContentManager` crosses the boundary: the reader borrows both through the adapter, the borrow blocks closing the stream, and the canonical disposal-recording callback and read limits keep their defaults because a C callback cannot receive a Sharp Runtime disposable",
+      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-reader-untyped-object",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::ReadObject$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_reader_read_object_tag` runs the same dispatch protocol and reports only whether a non-null object was produced. The canonical return is a type-erased object, which has no C representation, so the value itself cannot be handed back; the route exists so a C consumer can advance past an untyped field and observe its presence",
+      "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "partial",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-reader-typed-templates",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::(?:ReadExternalReference|ReadObject|ReadRawObject|ReadSharedResource|ReadAsset)$",
+      "signature_regex": "^template<.*$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: every one of these is a template over an arbitrary C++ type `T`, and C can neither name `T` nor receive a value of it. The C API instead exposes the fixed-value reads, the presence-only untyped read and the typed asset-load routes on the content manager",
+      "tests": "Doxygen declaration inventory; the non-template reads these back are covered by `ContentReaderSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-reader-record-disposable-alias",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentReader::RecordDisposableFn$",
+      "kinds": [
+        "alias"
+      ],
+      "mapping": "No C mapping: this delegate receives a `System::IDisposable` shared pointer, a Sharp Runtime object the C ABI may not expose. The adapter always uses the canonical default and never surfaces a disposal callback",
+      "tests": "Doxygen declaration inventory; no callable C operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-reader-detail-traits",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::Detail::IsDisposableSharedPtr(?:<.*>)?$",
+      "kinds": [
+        "struct"
+      ],
+      "mapping": "No C mapping: a compile-time trait the C++ reader templates dispatch on. It declares no runtime operation and has no value representation",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-base",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderBase(?:::(?:~ContentTypeReaderBase|getCanDeserializeIntoExistingObjectProperty|getTargetTypeNameProperty|getTypeVersionProperty|SupportsVersion|Initialize))?$",
+      "kinds": [
+        "class",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_ContentTypeReaderHandle` obtained from the registry or from the known-unsupported placeholder factory, with target type-name count/copy, type version, version-support and in-place-deserialization queries and the post-table initialization step. The canonical initialization parameter is a reader-manager instance whose registry is entirely static, so the adapter supplies one rather than exposing a stateless object",
+      "tests": "`ContentReaderSmoke.c` registry probing for an unregistered and a registered canonical name, reader creation, target type name count/copy, type version and both version-support answers, in-place deserialization capability, initialization, the canonical refusal a recognized-but-unsupported reader raises when run, placeholder creation including the rejected reason identity, and an observable clear/re-register round trip of the process-wide registry",
+      "status": "implemented",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-base-read-untyped",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderBase::ReadUntyped$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_content_type_reader_read_untyped` runs the reader against a content reader and reports only whether an object was produced. The canonical operation both takes and returns a type-erased object, neither of which has a C representation, so the route always passes \"no existing instance\" and cannot hand the value back",
+      "tests": "`ContentReaderSmoke.c` registry probing for an unregistered and a registered canonical name, reader creation, target type name count/copy, type version and both version-support answers, in-place deserialization capability, initialization, the canonical refusal a recognized-but-unsupported reader raises when run, placeholder creation including the rejected reason identity, and an observable clear/re-register round trip of the process-wide registry",
+      "status": "partial",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-base-protected-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderBase::ContentTypeReaderBase$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: a protected constructor whose only purpose is to let a C++ subclass name its target type. C cannot subclass, and instances reach C through the registry and the placeholder factory instead",
+      "tests": "Doxygen declaration inventory; no C-constructible public operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-template",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReader(?:::(?:ContentTypeReader|Read|ReadUntyped))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "No C mapping: a class template over the asset type it produces, whose read operation is pure virtual and typed on that parameter. Implementing one is a C++-only extension point; C consumes the readers it produces through the typed content-manager load routes",
+      "tests": "Doxygen declaration inventory; the concrete base-class surface is covered by `ContentReaderSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-manager",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager(?:::(?:ClearTypeCreators|CreateReader|IsRegistered))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "`cna_content_type_reader_manager_clear_type_creators`, `_get_is_registered` and `_create_reader`. The canonical members are static, so the C routes are free functions and no manager handle is invented for an object that holds no state; an unregistered name is reported as `CNA_RESULT_NOT_SUPPORTED` rather than as a null handle",
+      "tests": "`ContentReaderSmoke.c` registry probing for an unregistered and a registered canonical name, reader creation, target type name count/copy, type version and both version-support answers, in-place deserialization capability, initialization, the canonical refusal a recognized-but-unsupported reader raises when run, placeholder creation including the rejected reason identity, and an observable clear/re-register round trip of the process-wide registry",
+      "status": "implemented",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "content-type-reader-manager-factory",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ContentTypeReaderManager::(?:ReaderFactory|AddTypeCreator)$",
+      "kinds": [
+        "alias",
+        "method"
+      ],
+      "mapping": "No C mapping: registering a factory requires a callback that constructs a C++ reader object, which C cannot produce. The C API exposes the built-in registrations through `cna_content_register_known_unsupported_xnb_readers` and `cna_content_manager_register_builtin_loaders` instead of an untyped factory hook",
+      "tests": "Doxygen declaration inventory; the registrations these back are observed through `cna_content_type_reader_manager_get_is_registered` in `ContentReaderSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "known-unsupported-content-type-reader",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/KnownUnsupportedContentTypeReader\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "enum",
+        "enum-value",
+        "function"
+      ],
+      "mapping": "`CNA_UnsupportedContentReaderReason` at its canonical ordinal, `cna_known_unsupported_content_type_reader_create` for the placeholder itself, `cna_content_register_known_unsupported_xnb_readers` for the process-wide registration, and the shared `cna_content_type_reader_*` operations. The placeholder's read always refuses, so its C route is a complete mapping rather than a lossy one: the canonical diagnostic reaches the caller as `CNA_RESULT_IO`",
+      "tests": "`ContentReaderSmoke.c` registry probing for an unregistered and a registered canonical name, reader creation, target type name count/copy, type version and both version-support answers, in-place deserialization capability, initialization, the canonical refusal a recognized-but-unsupported reader raises when run, placeholder creation including the rejected reason identity, and an observable clear/re-register round trip of the process-wide registry",
+      "status": "implemented",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "loose-file-content-type-reader",
+      "qualified_name_regex": ".*",
+      "header_regex": "^modules/content/include/Microsoft/Xna/Framework/Content/LooseFileContentTypeReader\\.hpp$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "No C mapping: a class template over the asset type it produces, with a pure virtual read that takes a path and the owning manager and returns a value of that type. C can neither implement nor instantiate it; the readers CNA registers through it are consumed from C through the typed content-manager load routes",
+      "tests": "Doxygen declaration inventory; the built-in readers this backs are exercised by the typed load routes in `ContentSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "resource-content-manager-type",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ResourceContentManager(?:::~ResourceContentManager)?$",
+      "kinds": [
+        "class",
+        "destructor"
+      ],
+      "mapping": "`cna_content_manager_create_resource` returns the same owned content-manager handle as the loose-file manager, so every other `cna_content_manager_*` operation including `cna_content_manager_destroy` applies unchanged",
+      "tests": "`ContentSmoke.c` creates a resource-backed manager, asserts it answers the shared manager operations and destroys it in parent order",
+      "status": "implemented",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "resource-content-manager-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ResourceContentManager::ResourceContentManager$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_content_manager_create_resource`, reachable only with a null service provider for the same hard ABI reason as the base manager's service-provider constructors",
+      "tests": "`ContentSmoke.c` creation and shared-operation coverage; presence of a service provider is asserted to be `CNA_FALSE`",
+      "status": "partial",
+      "task": "CBIND-036B2"
+    },
+    {
+      "id": "resource-content-manager-open-stream",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Content::ResourceContentManager::OpenStream$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: a protected virtual customization point for C++ subclasses that returns a Sharp Runtime stream, and whose canonical implementation is a declared placeholder that always throws. C cannot subclass and never receives a native stream",
+      "tests": "Doxygen declaration inventory; no C-callable public operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-036B2"
     }
   ]
 }

@@ -17,11 +17,12 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > SpriteBatch text, occlusion queries and the complete extended graphics layer. `CBIND-036A` adds
 > the complete `storage` module: owned storage devices, containers and file streams, count/copy
 > directory and file listings, and synchronous equivalents of the canonical fake-async selector and
-> container pairs that still invoke the completion callback. `CBIND-036B1` then completes the
-> content-manager half of the `content` module: asset-path/cache-key queries, loader registration,
-> graphics-device get/set, manifest and `.xnb` reader-usage snapshots, and typed Texture2D,
-> TextureCube and SoundEffect load routes. The generated
-> inventory currently records 3,545 implemented, 25 partial, 2,768 planned and 77
+> container pairs that still invoke the completion callback. `CBIND-036B` then completes the whole
+> `content` module: asset-path/cache-key queries, loader registration, graphics-device get/set,
+> manifest and `.xnb` reader-usage snapshots, typed Texture2D, TextureCube and SoundEffect load
+> routes, and the compiled-asset reader pipeline with its owned readers, type readers and
+> process-wide registry. The generated
+> inventory currently records 3,582 implemented, 28 partial, 2,704 planned and 101
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

@@ -12,9 +12,11 @@
 #include "Microsoft/Xna/Framework/Graphics/DeviceNotResetException.hpp"
 #include "Microsoft/Xna/Framework/Graphics/NoSuitableGraphicsDeviceException.hpp"
 
-// A disconnected storage device is a state failure rather than a generic internal one. Catching it
-// needs only the type's weakly emitted RTTI, not its out-of-line constructors, so this stays a
-// compile-time dependency and adds no link edge to any translation unit that never throws one.
+// A failed asset load and a disconnected storage device are I/O and state failures rather than
+// generic internal ones. Catching either needs only the type's weakly emitted RTTI, not its
+// out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
+// translation unit that never throws one.
+#include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
 #include "System/ArgumentException.hpp"
@@ -92,6 +94,8 @@ enum class ObjectKind : uint32_t {
     StorageStream = 49,
     StorageDeviceEventRegistration = 50,
     StorageContainerEventRegistration = 51,
+    ContentReader = 52,
+    ContentTypeReader = 53,
     Test = UINT32_MAX
 };
 
@@ -138,6 +142,8 @@ template<typename TCallable>
     } catch (const std::filesystem::filesystem_error& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (const System::IO::IOException& exception) {
+        return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
+    } catch (const Microsoft::Xna::Framework::Content::ContentLoadException& exception) {
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (
         const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {

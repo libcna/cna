@@ -224,9 +224,23 @@
 > `not-applicable` because C cannot name an arbitrary C++ type — the C API adds a typed route per
 > asset type instead of an invented untyped registration. The manifest scans a whole directory tree,
 > so `ContentSmoke.c` builds its own content root through the storage API rather than pointing the
-> root at the working directory. The inventory is now 3,545 implemented, 25 partial, 2,768 planned
-> and 77 N/A; all three trees stay green at 48/48. CBIND-036B2 (XNB reader pipeline, 64 rows) is
-> next.
+> root at the working directory.
+>
+> CBIND-036B2 then closes the reader half and with it parent CBIND-036B. An owned
+> `CNA_ContentReaderHandle` is built over an owned storage stream plus an optional manager handle,
+> both borrowed through new adapter records so neither `System::IO::Stream` nor `ContentManager`
+> crosses the ABI. Two lifetime rules come straight from the canonical types: the borrow blocks
+> closing the stream, and destroying the reader closes it, because the canonical reader derives
+> from a binary reader that owns its stream by default. Type erasure is where the mapping stops,
+> and the inventory says so instead of inventing an untyped operation: the two untyped read routes
+> are `partial` because a type-erased C++ object has no C representation, and every typed reader
+> template, `LooseFileContentTypeReader<T>` and factory registration is `not-applicable`.
+> `ContentLoadException` gained a central boundary conversion to `CNA_RESULT_IO`, which is what
+> made the reader's own limit and truncation failures land correctly. `ContentReaderSmoke.c` builds
+> a compiled-asset fixture through the storage API and asserts the whole protocol byte-exactly. The
+> inventory is now 3,582 implemented, 28 partial, 2,704 planned and 101 N/A, with no planned
+> `content` or `storage` row left; all three trees are green at 49/49. CBIND-036C (network
+> identities, values and packet transfer, 98 rows) is next.
 
 ## ELEVEN-LANE RENDERER INTEGRATION ON `11branches` (2026-08-11)
 

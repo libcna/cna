@@ -114,6 +114,25 @@ CNA_C_API CNA_Result cna_content_manager_load_texture2d(
     CNA_Handle* out_texture);
 
 /**
+ * @brief Creates an owned resource-backed content manager.
+ *
+ * @param graphics_device Callback-scoped borrowed graphics-device handle.
+ * @param create_info Versioned creation configuration.
+ * @param out_content_manager Receives an owned content-manager handle on success.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * This maps the canonical `ResourceContentManager`, which reads assets embedded in the
+ * application rather than from loose files. It is created with a null service provider for the
+ * same reason as `cna_content_manager_create`, and the resulting handle uses every other
+ * `cna_content_manager_*` operation unchanged. The canonical embedded-resource stream is a
+ * declared placeholder in CNA, so an embedded asset load fails rather than returning data.
+ */
+CNA_C_API CNA_Result cna_content_manager_create_resource(
+    CNA_Handle graphics_device,
+    const CNA_ContentManagerCreateInfo* create_info,
+    CNA_Handle* out_content_manager);
+
+/**
  * @brief Loads a WAV asset as an owned sound effect.
  *
  * @param content_manager Owned content-manager handle.

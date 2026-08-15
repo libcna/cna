@@ -31,7 +31,9 @@ bones/hierarchies, model mesh parts and game-child meshes with retained resource
 live effect/part views, mesh snapshots and top-level models with copied bone transforms, complete
 morph-target descriptors/data, blending, track evaluation and retained mesh-part upload, plus
 point-in-time keyboard, mouse, gamepad and touch snapshots. An
-owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and typed Color Texture2D, TextureCube and SoundEffect load routes; owned
+owned `ContentManager` adds UTF-8 root/path/key and cache control, built-in loader registration, graphics-device get/set, manifest and reader-usage snapshots and typed Color Texture2D, TextureCube and SoundEffect load routes,
+with an owned compiled-asset reader over a storage stream and the process-wide type-reader
+registry alongside it; owned
 PCM16 sound effects add explicit instance playback/control plus a real native playback-availability
 probe. The complete storage module adds owned storage devices, containers and file streams with
 count/copy directory and file listings and synchronous equivalents of the canonical fake-async
@@ -100,7 +102,7 @@ The exact modules and headers are defined in the implementation plan. The curren
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
-`storage.h` and `audio.h`;
+`content_readers.h`, `storage.h` and `audio.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations

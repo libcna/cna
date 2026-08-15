@@ -9,10 +9,13 @@ pointer, path object or stream object.
 
 Alongside loading, the manager exposes its resolved asset path and normalized cache key, built-in
 loader registration, service-provider presence, graphics-device get/set and the content manifest
-and `.xnb` reader-usage snapshots. The XNB reader pipeline itself — `ContentReader`,
-`ContentTypeReader`, `ContentTypeReaderManager`, `LooseFileContentTypeReader`,
-`KnownUnsupportedContentTypeReader` and `ResourceContentManager` — is not part of this contract
-yet.
+and `.xnb` reader-usage snapshots. `cna_content_manager_create_resource` produces the same owned
+handle backed by the canonical `ResourceContentManager`.
+
+The compiled-asset reader pipeline is covered too, in `CNA/C/content_readers.h`: an owned
+`CNA_ContentReaderHandle` over a storage stream, an owned `CNA_ContentTypeReaderHandle`, and the
+process-wide type-reader registry. See *The compiled-asset reader pipeline* below for what that
+surface can and cannot express.
 
 `cna_content_manager_create` accepts the callback-scoped graphics-device handle so the resulting
 manager is tied to the same active game and device. Creation therefore occurs during a lifecycle
@@ -99,3 +102,52 @@ service-provider constructors are reachable from C only with a null provider.
 `cna_content_manager_get_has_service_provider` therefore reports presence only, and always
 `CNA_FALSE` for a manager created through this API; a C-created manager resolves GPU work through
 the graphics device set on it instead.
+
+## The compiled-asset reader pipeline
+
+`cna_content_reader_create` builds an owned reader over an owned, readable `CNA_StorageStreamHandle`
+and an optional content-manager handle — the canonical reader accepts a null manager, and a C
+consumer that only reads fixed values never needs one. The reader then offers the canonical fixed
+reads (matrix, quaternion, the three vector widths, color, bounding sphere), the type-reader-table
+and shared-resource passes, both bounds checks and a capacity-checked exact-byte read.
+
+Two lifetime rules follow from the canonical types rather than from the binding:
+
+- the reader borrows the stream, so `cna_storage_stream_close` is refused with
+  `CNA_RESULT_INVALID_STATE` while a reader is alive; and
+- destroying the reader **closes** that stream, matching the binary-reader contract the canonical
+  reader derives from. The stream handle stays valid and is still released with
+  `cna_storage_stream_close`, which is idempotent; a second reader over the same file needs a
+  freshly opened stream.
+
+`cna_content_reader_read_bytes_exact` checks the destination capacity before it touches the stream,
+so a `CNA_RESULT_BUFFER_TOO_SMALL` refusal consumes nothing and the caller does not have to seek
+back.
+
+### Type readers and the registry
+
+The canonical `ContentTypeReaderManager` is entirely static, so its C routes are free functions and
+no handle is invented for an object that holds no state. `cna_content_type_reader_manager_create_reader`
+reports an unregistered canonical name as `CNA_RESULT_NOT_SUPPORTED` rather than returning a null
+handle. `cna_content_type_reader_manager_clear_type_creators` empties the process-wide registry and
+is genuinely destructive; `cna_content_register_known_unsupported_xnb_readers` restores the
+placeholder registrations.
+
+An owned `CNA_ContentTypeReaderHandle` exposes the target type name, the type version, both
+version-support answers, the in-place-deserialization capability and the post-table initialization
+step.
+
+### Where type erasure stops
+
+`cna_content_reader_read_object_tag` and `cna_content_type_reader_read_untyped` run the canonical
+operations and report only whether an object was produced. The canonical return type is a
+type-erased C++ object, and C has no representation for it, so the value cannot be handed back. A
+placeholder reader for a recognized-but-unsupported asset type is the one case where nothing is
+lost: it always refuses, and its canonical diagnostic reaches the caller as `CNA_RESULT_IO`.
+
+Everything else in the pipeline is a C++-only extension point and has no C route at all: the typed
+`ReadObject<T>` / `ReadRawObject<T>` / `ReadSharedResource<T>` / `ReadAsset<T>` /
+`ReadExternalReference<T>` templates, `ContentTypeReader<T>`, `LooseFileContentTypeReader<T>`, and
+factory registration through `AddTypeCreator`. Each needs C to name an arbitrary C++ type or to
+produce a C++ object, so the C API adds a typed load route per asset type instead of an untyped
+registration hook.

@@ -436,6 +436,43 @@ static int validate_typed_loads(const CNA_Handle manager)
             CNA_RESULT_INVALID_ARGUMENT;
 }
 
+static int validate_resource_manager(const CNA_Handle graphics_device)
+{
+    const CNA_StringView root = {".", UINT64_C(1)};
+    CNA_ContentManagerCreateInfo create_info = {
+        sizeof(CNA_ContentManagerCreateInfo), UINT32_C(1), root, UINT64_C(0)
+    };
+    CNA_Handle manager = CNA_INVALID_HANDLE;
+    CNA_Handle rejected = UINT64_C(5);
+    CNA_Handle device = CNA_INVALID_HANDLE;
+    CNA_Bool has_service_provider = CNA_TRUE;
+    uint64_t bytes = 0U;
+
+    create_info.reserved = UINT64_C(1);
+    if (cna_content_manager_create_resource(graphics_device, &create_info, &rejected) !=
+            CNA_RESULT_INVALID_ARGUMENT ||
+        rejected != CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    create_info.reserved = UINT64_C(0);
+    if (cna_content_manager_create_resource(graphics_device, &create_info, &manager) !=
+            CNA_RESULT_SUCCESS ||
+        manager == CNA_INVALID_HANDLE) {
+        return 0;
+    }
+    /* A resource-backed manager answers every shared content-manager operation unchanged. */
+    const int ok =
+        cna_content_manager_get_root_directory_size(manager, &bytes) == CNA_RESULT_SUCCESS &&
+        bytes == UINT64_C(1) &&
+        cna_content_manager_get_has_service_provider(manager, &has_service_provider) ==
+            CNA_RESULT_SUCCESS &&
+        has_service_provider == CNA_FALSE &&
+        cna_content_manager_get_graphics_device(manager, &device) == CNA_RESULT_SUCCESS &&
+        device == graphics_device &&
+        cna_content_manager_unload(manager) == CNA_RESULT_SUCCESS;
+    return cna_content_manager_destroy(manager) == CNA_RESULT_SUCCESS && ok;
+}
+
 static CNA_Result on_load(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -548,7 +585,8 @@ static CNA_Result on_load(
         return CNA_RESULT_INVALID_STATE;
     }
 
-    if (!validate_paths_and_device(state->content_manager, graphics_device)) {
+    if (!validate_paths_and_device(state->content_manager, graphics_device) ||
+        !validate_resource_manager(graphics_device)) {
         return CNA_RESULT_INVALID_STATE;
     }
 

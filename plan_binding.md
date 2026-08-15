@@ -1,6 +1,6 @@
 # CNA Native C Binding / Stable C ABI — Implementation Plan
 
-> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A and CBIND-036B1 under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
+> **Status: IMPLEMENTATION AUTHORIZED — B0–B5 complete; B6 complete through CBIND-035 (all slices) plus CBIND-036A and CBIND-036B under HEADLESS, SDL_RENDERER and SOFTWARE (2026-08-15).** This document is
 > the plan for a native C API, implemented inside the main CNA repository. It is intentionally
 > not a plan for C#, .NET, JavaScript/TypeScript, Rust, Python, Java, Zig, Go, Swift, or any other
 > language-specific binding. Such work must not begin, nor be planned here, without a new explicit
@@ -95,6 +95,7 @@ modules/c-api/
 │   ├── graphics.h            # graphics/device/2D resources and batches
 │   ├── input.h               # snapshot input APIs
 │   ├── content.h             # content/root-directory APIs
+│   ├── content_readers.h     # compiled-asset readers and the type-reader registry
 │   ├── storage.h             # storage devices, containers and file streams
 │   └── audio.h               # only after its explicit phase is approved
 ├── src/
@@ -325,7 +326,7 @@ buffers exist before the session and gamer objects that consume them.
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-036A | 42 | Complete storage devices, containers and file streams | ✅ | `storage.h` and `CnaCApiStorage.cpp` map every `storage` row: owned `CNA_StorageDeviceHandle`, `CNA_StorageContainerHandle` and `CNA_StorageStreamHandle` families that nest strictly and refuse destruction while a child is live; free/total space, connection state, both events (the static `DeviceChanged` without a device handle, per-instance `Disposing` through one), container display/type-name count-copy, directory and file create/exists/delete, both listing overloads as count plus indexed copy with an empty pattern selecting the no-argument overload, `CreateFile` and all three `OpenFile` overloads, and container deletion keeping the canonical containment guard. All four `BeginShowSelector`/`EndShowSelector` pairs and `BeginOpenContainer`/`EndOpenContainer` collapse into single synchronous calls that still invoke the canonical completion callback, so no `System::IAsyncResult` or invented operation handle exists in C. `System::IO::Stream` stays behind the adapter; wider-than-`Int32` counts are refused rather than truncated and stream capabilities are queried, not inferred. `filesystem_error`, `System::IO::IOException` and `StorageDeviceNotConnectedException` gained boundary conversions to `CNA_RESULT_IO`, `CNA_RESULT_IO` and `CNA_RESULT_INVALID_STATE`, each proven in `cna_c_api_boundary_detail_test`. Strict-C `StorageSmoke.c` plus C/C++ ABI assertions run green in all three trees (48/48). The snapshot is now 3,518 implemented, 23 partial, 2,801 planned and 73 not applicable, with no planned `storage` row left. |
-| CBIND-036B | 97 | Complete content readers, managers and manifests | 🟨 | Map `ContentReader`, the remaining `ContentManager` rows, `ContentTypeReader`/`ContentTypeReaderManager`, `ContentManifestEntry`, `ResourceContentManager`, `LooseFileContentTypeReader`, `KnownUnsupportedContentTypeReader` and `ContentLoadException` without exposing C++ type-reader templates, streams or containers. Decomposed into CBIND-036B1–B2 below. |
+| CBIND-036B | 97 | Complete content readers, managers and manifests | ✅ | Map `ContentReader`, the remaining `ContentManager` rows, `ContentTypeReader`/`ContentTypeReaderManager`, `ContentManifestEntry`, `ResourceContentManager`, `LooseFileContentTypeReader`, `KnownUnsupportedContentTypeReader` and `ContentLoadException` without exposing C++ type-reader templates, streams or containers. Decomposed into CBIND-036B1–B2 below. |
 | CBIND-036C | 98 | Complete network identities, values and packet transfer | ⬜ | Map all five network identity enumerations, `NetworkSessionProperties`, `QualityOfService`, `NetworkSessionJoinException`, and both `PacketReader`/`PacketWriter` through fixed values, validated handles and bulk byte transfers. |
 | CBIND-036D | 65 | Complete network gamers, machines and events | ⬜ | Map `NetworkGamer`, `LocalNetworkGamer`, `NetworkMachine` and all seven network event-argument types through stable handles, copied payloads and owned callback registrations. |
 | CBIND-036E | 104 | Complete network sessions and discovery | ⬜ | Map `NetworkSession`, `AvailableNetworkSession` and `AvailableNetworkSessionCollection`, including creation/find/join, session state and every session event, through owned handles, count/copy collections and documented asynchronous-operation conversion. |
@@ -339,7 +340,7 @@ first because the reader side needs its stream and type-reader contracts already
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
 | CBIND-036B1 | 40 | Complete the content manager, manifest values and load failures | ✅ | `content.h` and `CnaCApiContent.cpp` map every `ContentManager.hpp`, `ContentManifestEntry.hpp` and `ContentLoadException.hpp` row: resolved asset path and normalized cache key count/copy, built-in loader registration, service-provider presence, graphics-device get/set validated by borrowed-handle re-validation and pointer identity, the manifest and `.xnb` reader-usage snapshots as fixed PODs plus count/indexed copy, and typed `Load<Texture2D>`, `Load<TextureCube>` and `Load<SoundEffect>` routes returning independently owned handles. `System::IServiceProvider` stays a hard ABI boundary, so the two service-provider constructors and `getServiceProviderProperty` remain documented `partial`; `RegisterTypeReader<T>`, `RegisterCnjLoader<T>`, `CnjLoaderFn<T>` and the `log` alias are `not-applicable` because C cannot name an arbitrary C++ type. `ContentSmoke.c` builds its own content root through the storage API so the manifest scan is deterministic, and runs green in all three trees (48/48). |
-| CBIND-036B2 | 64 | Complete the XNB reader pipeline | ⬜ | Map `ContentReader`, `ContentTypeReader`/`ContentTypeReaderBase`, `ContentTypeReaderManager`, `LooseFileContentTypeReader`, `KnownUnsupportedContentTypeReader` and `ResourceContentManager`. Decide and document, per declaration, which of the template/`std::any`/stream-facing members can carry a C-native equivalent and which are inherently C++-only extension points, and give every concrete non-template reader operation a tested C route. |
+| CBIND-036B2 | 64 | Complete the XNB reader pipeline | ✅ | `content_readers.h` and `CnaCApiContentReaders.cpp` map every remaining `content` row. An owned `CNA_ContentReaderHandle` is built over an owned storage stream plus an optional manager handle, both borrowed through new adapter records so neither `System::IO::Stream` nor `ContentManager` crosses the ABI; the borrow blocks closing the stream, and destroying the reader closes it exactly as the canonical binary-reader base does. The reader exposes asset name/version/platform, all six fixed-value reads plus the bounding sphere, the type-reader-table and shared-resource passes, both bounds checks and a capacity-checked exact-byte read that consumes nothing when it refuses. An owned `CNA_ContentTypeReaderHandle` comes from the static registry or from the known-unsupported placeholder factory and carries the target type name, type version, version support, in-place-deserialization capability and initialization; the registry itself is three free functions because the canonical manager holds no state. Type erasure is where the mapping stops and that is recorded, not papered over: the two untyped read routes are `partial` because a type-erased C++ object has no C representation, and the typed `ReadObject<T>`/`ReadRawObject<T>`/`ReadSharedResource<T>`/`ReadAsset<T>`/`ReadExternalReference<T>` templates, `ContentTypeReader<T>`, `LooseFileContentTypeReader<T>`, `AddTypeCreator` and the protected/detail declarations are `not-applicable`. `ContentLoadException` gained a central boundary conversion to `CNA_RESULT_IO`. Strict-C `ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and runs green in all three trees (49/49). The `content` module now has no planned row left. |
 
 #### CBIND-035F device and draw-submission implementation slices
 
@@ -616,18 +617,24 @@ built-in loader registration, service-provider presence, graphics-device get/set
 TextureCube and SoundEffect load routes. `System::IServiceProvider` stays a hard ABI boundary and
 the `Load<T>`/`RegisterTypeReader<T>`/`RegisterCnjLoader<T>` templates are recorded as
 inexpressible in C rather than given an invented untyped operation. The snapshot is now 3,545
-implemented, 25 partial, 2,768 planned and 77 not applicable; CBIND-036B2, the XNB reader pipeline,
-is next.
+implemented, 25 partial, 2,768 planned and 77 not applicable. CBIND-036B2 then closes the reader
+half and with it parent CBIND-036B: an owned reader over an owned storage stream, an owned type
+reader from the static registry or the known-unsupported placeholder factory, and the registry
+itself. Type erasure is where the mapping stops, and that is recorded rather than papered over --
+the two untyped read routes are `partial` because a type-erased C++ object has no C representation,
+and every typed reader template, `LooseFileContentTypeReader<T>` and factory registration is
+`not-applicable`. The snapshot is now 3,582 implemented, 28 partial, 2,704 planned and 101 not
+applicable, with no planned `content` or `storage` row left; CBIND-036C network identities, values
+and packet transfer is next.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
-- Branch: `feature/binding`; CBIND-036B1 is the final task completed in this handoff (parent
-  CBIND-035 was closed by CBIND-035G; CBIND-036A closed the storage slice).
-- Next task: `CBIND-036B2` complete the XNB reader pipeline (64 planned rows: `ContentReader`,
-  `ContentTypeReader`, `ContentTypeReaderManager`, `LooseFileContentTypeReader`,
-  `KnownUnsupportedContentTypeReader`, `ResourceContentManager`). Do not reopen closed CBIND-035,
-  CBIND-036A or CBIND-036B1 slices without a concrete demonstrated defect.
-- Verification baseline: three trees each run the same 48 C API tests green — HEADLESS,
+- Branch: `feature/binding`; CBIND-036B2 is the final task completed in this handoff and closes
+  parent CBIND-036B (parent CBIND-035 was closed by CBIND-035G; CBIND-036A closed storage).
+- Next task: `CBIND-036C` complete network identities, values and packet transfer (98 planned
+  rows). Do not reopen closed CBIND-035, CBIND-036A or CBIND-036B slices without a concrete
+  demonstrated defect.
+- Verification baseline: three trees each run the same 49 C API tests green — HEADLESS,
   SDL_RENDERER, and `cmake-build-binding-software` (`-DCNA_GRAPHICS_RENDERER=SOFTWARE`), which is
   the only one that can supply real 3D pixel evidence. Never branch a test on a renderer identity:
   probe the capability or the actual result, so a new backend needs no test edits. The
@@ -635,8 +642,8 @@ is next.
   same strict-C source covers both extension-layer states. SDL tests
   and any windowed command must run only with `SDL_VIDEODRIVER=dummy`. Focused sanitizer commands
   use `ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1`.
-- Coverage baseline after CBIND-036B1: 414 headers / 6,415 symbols; 3,545 implemented, 25 partial,
-  2,768 planned and 77 not applicable. Regenerate/check with
+- Coverage baseline after CBIND-036B2: 414 headers / 6,415 symbols; 3,582 implemented, 28 partial,
+  2,704 planned and 101 not applicable. Regenerate/check with
   `python3 tools/c-api/generate_coverage_inventory.py --write|--check`.
 - `analysis_binding.md` and `analysis_binding_sharp_runtime.md` are strictly read-only. Only the C
   binding is in scope; do not plan or implement C# or other language bindings.
