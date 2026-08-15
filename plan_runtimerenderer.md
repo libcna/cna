@@ -799,7 +799,7 @@ Each set is its own task because each will surface its own third-party integrati
 | RTR-P10-3 | ✅ | `OPENGLES3 + VULKAN` — the `OpenGL`/`Vulkan` window-flag conflict (design decision 8) proven end to end, including the refusal path with a caller-supplied window. |
 | RTR-P10-4 | ✅ | `OPENGLES3 + VULKAN + SOFTWARE + HEADLESS + STUB` — the realistic Linux "everything native" set. |
 | RTR-P10-5 | ✅ | `+ SDL_GPU`. |
-| RTR-P10-6 | ⬜ | `+ SKIA` — first heavy external artifact in a multi build. |
+| RTR-P10-6 | ✅ | `+ SKIA` — first heavy external artifact in a multi build. |
 | RTR-P10-7 | ✅ | `+ BLEND2D`. |
 | RTR-P10-8 | ✅ | `+ OPENVG` — ShivaVG's own GL context alongside another GL renderer in the same binary. |
 | RTR-P10-9 | ⬜ | `+ BGFX` — its runtime `ResolveRendererType()` must not fight CNA's own selection. |
