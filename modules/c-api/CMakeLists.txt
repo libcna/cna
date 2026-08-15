@@ -961,6 +961,23 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_sensor_events_smoke
+        tests/pure_c/SensorEventsSmoke.c
+    )
+    set_target_properties(cna_c_api_sensor_events_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_sensor_events_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_sensor_events_smoke)
+    add_test(NAME CApi_SensorEventsSmoke COMMAND cna_c_api_sensor_events_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_SensorEventsSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_test(NAME CApi_VideoSmoke COMMAND cna_c_api_video_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_VideoSmoke PROPERTIES

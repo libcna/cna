@@ -1229,3 +1229,13 @@ _Static_assert(sizeof(CNA_MotionReading) == 184U &&
                    offsetof(CNA_MotionReading, device_rotation_rate) == 156U &&
                    offsetof(CNA_MotionReading, gravity) == 168U,
                "CNA_MotionReading layout must remain stable");
+
+/* The legacy reading event carries the same acceleration as three doubles rather than a vector,
+   which is why it is a value of its own and not a CNA_AccelerometerReading. */
+_Static_assert(sizeof(CNA_AccelerometerReadingEventInfo) == 48U &&
+                   _Alignof(CNA_AccelerometerReadingEventInfo) == 8U &&
+                   offsetof(CNA_AccelerometerReadingEventInfo, timestamp) == 8U &&
+                   offsetof(CNA_AccelerometerReadingEventInfo, x) == 24U &&
+                   offsetof(CNA_AccelerometerReadingEventInfo, y) == 32U &&
+                   offsetof(CNA_AccelerometerReadingEventInfo, z) == 40U,
+               "CNA_AccelerometerReadingEventInfo layout must remain stable");

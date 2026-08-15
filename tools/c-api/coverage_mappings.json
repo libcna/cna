@@ -4544,7 +4544,7 @@
     },
     {
       "id": "sensor-protected-dispose",
-      "qualified_name_regex": "^Microsoft::Devices::Sensors::(SensorBase|Accelerometer|Gyroscope)::Dispose$",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::(SensorBase|Accelerometer|Gyroscope|Compass|Motion)::Dispose$",
       "signature_regex": "\\(bool disposing\\).*",
       "kinds": [
         "method"
@@ -4553,6 +4553,87 @@
       "tests": "Doxygen declaration inventory; the observable disposal behavior is covered in `SensorDeviceSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037D2a"
+    },
+    {
+      "id": "sensor-accelerometer-legacy-event",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Accelerometer::ReadingChanged$",
+      "kinds": [
+        "event"
+      ],
+      "mapping": "`cna_accelerometer_subscribe_reading_changed`, releasing through the shared `cna_sensor_unsubscribe_ext`. The canonical event is obsolete and superseded by the current-value one, so it is mapped for completeness rather than recommended, and it is the one sensor event that delivers a **description of its own** instead of a reading — the canonical argument type carries the acceleration as three separate components, not a vector. It is raised only for a valid reading, and always after the current-value handlers, an order this ABI reports rather than reserves the right to change",
+      "tests": "`SensorEventsSmoke.c` subscribes to both accelerometer events at once, injects one synthetic reading and asserts the canonical order — current value first, legacy second — that the description carries the converted g value and a real timestamp, that detaching the legacy registration leaves the other attached, and that subscribing on a released sensor is refused",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
+    },
+    {
+      "id": "sensor-reading-event-arguments",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::AccelerometerReadingEventArgs(::(AccelerometerReadingEventArgs|getXProperty|getYProperty|getZProperty|getTimestampProperty|operator==|operator!=|ToString|GetHashCode|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "operator"
+      ],
+      "mapping": "a fixed 48-byte `CNA_AccelerometerReadingEventInfo` delivered by `cna_accelerometer_subscribe_reading_changed`, with `cna_accelerometer_reading_event_info_init` for the canonical default, `_init_from_values` in the canonical argument order — components first, timestamp last, the opposite of the reading value's own constructor — plus `_equals`, `_get_hash_code`, the text count/copy pair and a type-name pair that takes no value. It is a value of its own rather than a `CNA_AccelerometerReading` because the canonical type carries the acceleration as three separate `double` components. The canonical `!=` is the comparison negated and needs no route",
+      "tests": "`SensorEventsSmoke.c` asserts the canonical default, round-trips every constructor argument, separates equality on a component and independently on the timestamp the text omits, proves equal descriptions hash equal, checks the exact text and type name, covers the buffer-too-small case with no partial write, and covers the invalid-structure and null-argument refusals. The layout is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
+    },
+    {
+      "id": "sensor-calibration-event-arguments",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::CalibrationEventArgs(::(CalibrationEventArgs|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "no value at all: the canonical argument carries no data, so the calibration callback receives only the caller context and `CNA_SensorEventCallback` — the same signature the ABI already uses for a data-free sensor event — is what the compass and motion subscriptions take. An empty structure would be an ABI liability in C for nothing gained. Only the name survives as a value-free `cna_calibration_event_info_get_type_name_size`/`_copy_type_name` pair; C never constructs the canonical object",
+      "tests": "`SensorEventsSmoke.c` checks the exact type name and its buffer-too-small and null refusals, and both sensors' calibration events are raised through their test backends and observed by a context-only handler",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
+    },
+    {
+      "id": "sensor-reading-event-arguments-template",
+      "qualified_name_regex": "^(template<typename T> Microsoft::Devices::Sensors::SensorReadingEventArgs|Microsoft::Devices::Sensors::SensorReadingEventArgs(::(SensorReadingEventArgs|getSensorReadingProperty|setSensorReadingProperty))?)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "flattened away: the canonical wrapper is a class template holding nothing but one reading, so every current-value subscription — `cna_accelerometer_subscribe_current_value_changed` and its gyroscope, compass and motion counterparts — delivers the **reading itself**, one C callback type per instantiation. Naming the wrapper in C would add a type whose only content the callback already has. Its constructors and publishing setters exist so a sensor can fill the wrapper in, which C never does: it receives readings, it does not raise them",
+      "tests": "all four subscriptions are exercised on live sensors — `SensorDeviceSmoke.c` for the accelerometer and gyroscope, `SensorEventsSmoke.c` for the compass and motion — each asserting the callback receives the injected reading's own fields",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
+    },
+    {
+      "id": "sensor-compass",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Compass(::(Compass|~Compass|getIsSupportedProperty|getStateProperty|Start|Stop|GetTypeName|Calibrate|SetBackendForTesting))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "event"
+      ],
+      "mapping": "an owned `CNA_CompassHandle` with `cna_compass_create`, the static support probe, the state query, start/stop, dispose, release, the reading and calibration subscriptions and a type-name pair — the same shape the motion sensors settled. **The canonical support answer is `false` on every platform but one**, so the unsupported refusal is the branch that runs everywhere this ABI is verified; that is the sensor's real availability, not a gap. The canonical backend hook takes a caller-implemented object C cannot write, so this ABI supplies the backend and exposes the switch as `cna_compass_set_test_backend_ext`, with `_inject_synthetic_update_ext` and `_inject_calibration_request_ext` driving it. Without them not one line past the unsupported refusal would ever run here",
+      "tests": "`SensorEventsSmoke.c` covers the type name, the unsupported start failure and its recorded error identifier, the refused current value, a backend that reports the sensor unsupported still refusing to start, then the whole supported path: start, a reading reaching both the callback and the current value, the calibration event, the detaching registration, the interval round trip, stop moving the state to disabled and ending delivery, the refusal to swap a backend while acquisition runs, the refused second disposal, every post-disposal and stale-handle refusal, and the canonical limit of ten simultaneous instances refusing the eleventh",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
+    },
+    {
+      "id": "sensor-motion",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::Motion(::(Motion|~Motion|getIsSupportedProperty|getStateProperty|getIsAttitudeNorthReferencedProperty|Start|Stop|GetTypeName|Calibrate|SetBackendForTesting))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "method",
+        "event"
+      ],
+      "mapping": "an owned `CNA_MotionHandle` with the same shape as the compass, plus `cna_motion_get_is_attitude_north_referenced_ext` for the canonical extension that says whether the active attitude source has an absolute yaw reference. **Its default is deliberately vacuous and documented as such**: with no backend, or before acquisition starts, the answer is `CNA_TRUE`, meaning nothing is drifting yet rather than north is known. The test backend `cna_motion_set_test_backend_ext` installs takes that claim as its third argument, so a C consumer can see the drift-prone answer too",
+      "tests": "`SensorEventsSmoke.c` covers the type name, the vacuous north-referenced default, the unsupported start refusal, then the supported path through the installed backend: a backend admitting the drift-prone source, start, a fused reading with its nested attitude reaching both the callback and the current value, the calibration event, the interval round trip, stop ending delivery, the refused second disposal and the stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037D2b"
     }
   ]
 }

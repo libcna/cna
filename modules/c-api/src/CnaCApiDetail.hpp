@@ -137,6 +137,8 @@ enum class ObjectKind : uint32_t {
     Accelerometer = 91,
     Gyroscope = 92,
     SensorEventRegistration = 93,
+    Compass = 94,
+    Motion = 95,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

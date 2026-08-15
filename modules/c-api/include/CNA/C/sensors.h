@@ -1442,6 +1442,662 @@ CNA_C_API CNA_Result cna_gyroscope_copy_type_name(
  */
 CNA_C_API CNA_Result cna_gyroscope_destroy(CNA_GyroscopeHandle sensor);
 
+/* ---- Legacy accelerometer reading event ---- */
+
+/**
+ * @brief The payload of the canonical legacy accelerometer reading event.
+ *
+ * The canonical event-argument type predates the reading values above and carries the same
+ * acceleration as three separate `double` components rather than a vector, which is why this is a
+ * value of its own instead of a `CNA_AccelerometerReading`. Only this event delivers it.
+ */
+typedef struct CNA_AccelerometerReadingEventInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief When the reading was taken. */
+    CNA_DateTimeOffset timestamp;
+
+    /** @brief Acceleration along the X axis, in g. */
+    double x;
+
+    /** @brief Acceleration along the Y axis, in g. */
+    double y;
+
+    /** @brief Acceleration along the Z axis, in g. */
+    double z;
+} CNA_AccelerometerReadingEventInfo;
+
+/**
+ * @brief Initializes a legacy reading description to the canonical default.
+ *
+ * @param out_info Receives a zeroed description with a default timestamp.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_init(
+    CNA_AccelerometerReadingEventInfo* out_info);
+
+/**
+ * @brief Initializes a legacy reading description from its canonical constructor arguments.
+ *
+ * @param x Acceleration along the X axis, in g.
+ * @param y Acceleration along the Y axis, in g.
+ * @param z Acceleration along the Z axis, in g.
+ * @param timestamp When the reading was taken.
+ * @param out_info Receives the description.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * The argument order is the canonical one — the components first, the timestamp last — which is the
+ * opposite of `cna_accelerometer_reading_init_from_values`. Neither order was normalized.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_init_from_values(
+    double x,
+    double y,
+    double z,
+    CNA_DateTimeOffset timestamp,
+    CNA_AccelerometerReadingEventInfo* out_info);
+
+/**
+ * @brief Compares two legacy reading descriptions for canonical equality.
+ *
+ * @param left First description.
+ * @param right Second description.
+ * @param out_equal Receives `CNA_TRUE` when all three components and the timestamp match.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null or invalid input.
+ *
+ * The canonical inequality operator is this comparison negated and has no route of its own.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_equals(
+    const CNA_AccelerometerReadingEventInfo* left,
+    const CNA_AccelerometerReadingEventInfo* right,
+    CNA_Bool* out_equal);
+
+/**
+ * @brief Returns the canonical hash of a legacy reading description.
+ *
+ * @param info The description.
+ * @param out_hash Receives the hash.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null or invalid input.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_get_hash_code(
+    const CNA_AccelerometerReadingEventInfo* info,
+    uint64_t* out_hash);
+
+/**
+ * @brief Returns the byte count of a legacy reading description's canonical text.
+ *
+ * @param info The description.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null or invalid input.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_get_string_size(
+    const CNA_AccelerometerReadingEventInfo* info,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a legacy reading description's canonical text.
+ *
+ * @param info The description.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**, or
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ *
+ * The canonical text names the three components and omits the timestamp equality compares.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_copy_string(
+    const CNA_AccelerometerReadingEventInfo* info,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of the legacy reading event type's .NET type name.
+ *
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_get_type_name_size(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the legacy reading event type's fully-qualified .NET type name.
+ *
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**, or
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_accelerometer_reading_event_info_copy_type_name(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of the calibration event type's .NET type name.
+ *
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * The canonical calibration event argument carries no data at all, so it has no value in this ABI —
+ * only its name, and a callback that receives nothing but the caller context.
+ */
+CNA_C_API CNA_Result cna_calibration_event_info_get_type_name_size(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the calibration event type's fully-qualified .NET type name.
+ *
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**, or
+ *         `CNA_RESULT_INVALID_ARGUMENT`.
+ */
+CNA_C_API CNA_Result cna_calibration_event_info_copy_type_name(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Handler invoked with a legacy accelerometer reading description.
+ *
+ * @param info The description, borrowed for the duration of the call.
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_AccelerometerReadingEventCallback)(
+    const CNA_AccelerometerReadingEventInfo* info,
+    void* context);
+
+/**
+ * @brief Subscribes to the canonical legacy reading event of an accelerometer.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked for each accepted reading.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical event is obsolete and superseded by
+ * `cna_accelerometer_subscribe_current_value_changed`, which is why it delivers a description of its
+ * own rather than a reading. Both are raised for the same reading, and the canonical order is fixed:
+ * the current-value handlers run first, this one second. Unlike the current-value event, this one is
+ * raised **only** when the reading is valid.
+ */
+CNA_C_API CNA_Result cna_accelerometer_subscribe_reading_changed(
+    CNA_AccelerometerHandle sensor,
+    CNA_AccelerometerReadingEventCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+/* ---- Compass ---- */
+
+/** @brief Owned handle to one compass sensor. */
+typedef CNA_Handle CNA_CompassHandle;
+
+/**
+ * @brief Handler invoked with a new compass reading.
+ *
+ * @param reading The reading, borrowed for the duration of the call.
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_CompassReadingCallback)(
+    const CNA_CompassReading* reading,
+    void* context);
+
+/**
+ * @brief Reports whether this device supports a compass.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_supported Receives `CNA_TRUE` when the sensor is supported.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical implementation answers `CNA_TRUE` on one platform only, so every verification tree —
+ * and every desktop consumer — sees `CNA_FALSE` here. That is the sensor's real availability, not a
+ * gap in this ABI.
+ */
+CNA_C_API CNA_Result cna_compass_get_is_supported(CNA_Handle game, CNA_Bool* out_supported);
+
+/**
+ * @brief Creates a compass sensor.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_sensor Receives an owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the canonical limit of ten
+ *         simultaneous instances is already reached, or a documented argument/handle/thread failure.
+ *
+ * Creation succeeds even where the sensor is unsupported; the state reports which case it is.
+ */
+CNA_C_API CNA_Result cna_compass_create(CNA_Handle game, CNA_CompassHandle* out_sensor);
+
+/**
+ * @brief Returns the sensor's current state.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_state Receives one `CNA_SENSOR_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_get_state(CNA_CompassHandle sensor, CNA_SensorState* out_state);
+
+/**
+ * @brief Starts data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed,
+ *         acquisition is already started, or the platform has no compass — the canonical failure
+ *         carries an error id, readable with `cna_sensors_get_last_error_id_ext`.
+ */
+CNA_C_API CNA_Result cna_compass_start(CNA_CompassHandle sensor);
+
+/**
+ * @brief Stops data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed.
+ *
+ * Stopping a sensor that never started is an ordinary success that still moves the state to
+ * disabled, which is the canonical contract rather than an oversight.
+ */
+CNA_C_API CNA_Result cna_compass_stop(CNA_CompassHandle sensor);
+
+/**
+ * @brief Disposes the sensor without releasing its handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor was already disposed.
+ *
+ * As with every sensor in this ABI, a second disposal is refused rather than ignored.
+ */
+CNA_C_API CNA_Result cna_compass_dispose(CNA_CompassHandle sensor);
+
+/**
+ * @brief Returns the most recent reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_reading Receives the reading.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported or
+ *         disposed, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_get_current_value(
+    CNA_CompassHandle sensor,
+    CNA_CompassReading* out_reading);
+
+/**
+ * @brief Reports whether the sensor has produced a reading yet.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_valid Receives `CNA_TRUE` once a reading has arrived.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_get_is_data_valid(CNA_CompassHandle sensor, CNA_Bool* out_valid);
+
+/**
+ * @brief Returns the requested interval between updates, in 100-nanosecond ticks.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_ticks Receives the interval.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_get_time_between_updates_ticks(
+    CNA_CompassHandle sensor,
+    int64_t* out_ticks);
+
+/**
+ * @brief Requests a new interval between updates, in 100-nanosecond ticks.
+ *
+ * @param sensor Owned sensor handle.
+ * @param ticks Requested interval.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_set_time_between_updates_ticks(
+    CNA_CompassHandle sensor,
+    int64_t ticks);
+
+/**
+ * @brief Subscribes to the sensor's reading event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked for each accepted reading.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_subscribe_current_value_changed(
+    CNA_CompassHandle sensor,
+    CNA_CompassReadingCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to the sensor's calibration-needed event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked when the sensor reports that it needs calibrating.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical event argument carries no data, so the handler receives only its context.
+ */
+CNA_C_API CNA_Result cna_compass_subscribe_calibrate(
+    CNA_CompassHandle sensor,
+    CNA_SensorEventCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Installs or removes this ABI's own compass backend for testing.
+ *
+ * @param sensor Owned sensor handle.
+ * @param installed `CNA_TRUE` to install the test backend, `CNA_FALSE` to restore the platform one.
+ * @param supported Whether the installed backend reports the sensor as supported; ignored when
+ *        @p installed is `CNA_FALSE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when acquisition is currently started, or
+ *         a documented argument/handle/thread failure.
+ *
+ * The canonical hook takes a caller-implemented backend object, which C cannot write, so this ABI
+ * supplies the backend and exposes only the switch. Without it there is no compass on any
+ * verification machine and no way to reach a single line past the unsupported refusal.
+ */
+CNA_C_API CNA_Result cna_compass_set_test_backend_ext(
+    CNA_CompassHandle sensor,
+    CNA_Bool installed,
+    CNA_Bool supported);
+
+/**
+ * @brief Delivers a reading through the installed test backend.
+ *
+ * @param sensor Owned sensor handle.
+ * @param reading The reading to deliver.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no test backend is installed or
+ *         acquisition is not started, or a documented argument/handle/thread failure.
+ *
+ * The reading travels the canonical delivery path, so it publishes the current value, marks the data
+ * valid and raises the reading event exactly as a real sensor would.
+ */
+CNA_C_API CNA_Result cna_compass_inject_synthetic_update_ext(
+    CNA_CompassHandle sensor,
+    const CNA_CompassReading* reading);
+
+/**
+ * @brief Reports a calibration need through the installed test backend.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no test backend is installed or
+ *         acquisition is not started, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_inject_calibration_request_ext(CNA_CompassHandle sensor);
+
+/**
+ * @brief Returns the byte count of the sensor's .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_get_type_name_size(CNA_CompassHandle sensor, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the sensor's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_compass_copy_type_name(
+    CNA_CompassHandle sensor,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a sensor handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ *
+ * Releasing disposes the sensor if it has not been disposed already, which is what the canonical
+ * destructor does.
+ */
+CNA_C_API CNA_Result cna_compass_destroy(CNA_CompassHandle sensor);
+
+/* ---- Motion ---- */
+
+/** @brief Owned handle to one fused motion sensor. */
+typedef CNA_Handle CNA_MotionHandle;
+
+/**
+ * @brief Handler invoked with a new fused motion reading.
+ *
+ * @param reading The reading, borrowed for the duration of the call.
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_MotionReadingCallback)(
+    const CNA_MotionReading* reading,
+    void* context);
+
+/**
+ * @brief Reports whether this device supports fused motion sensing.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_supported Receives `CNA_TRUE` when the sensor is supported.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_is_supported(CNA_Handle game, CNA_Bool* out_supported);
+
+/**
+ * @brief Creates a fused motion sensor.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_sensor Receives an owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the canonical limit of ten
+ *         simultaneous instances is already reached, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_create(CNA_Handle game, CNA_MotionHandle* out_sensor);
+
+/**
+ * @brief Returns the sensor's current state.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_state Receives one `CNA_SENSOR_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_state(CNA_MotionHandle sensor, CNA_SensorState* out_state);
+
+/**
+ * @brief Reports whether the active attitude source is referenced to north.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_north_referenced Receives `CNA_TRUE` when the yaw has an absolute reference.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A canonical extension, and one whose default is deliberately vacuous: with no backend or before
+ * acquisition starts the answer is `CNA_TRUE`, which means "nothing is drifting yet", not "north is
+ * known". It is only informative once a started backend answers for itself.
+ */
+CNA_C_API CNA_Result cna_motion_get_is_attitude_north_referenced_ext(
+    CNA_MotionHandle sensor,
+    CNA_Bool* out_north_referenced);
+
+/**
+ * @brief Starts data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed,
+ *         acquisition is already started, or the platform has no fused motion sensing — the
+ *         canonical failure carries an error id, readable with `cna_sensors_get_last_error_id_ext`.
+ */
+CNA_C_API CNA_Result cna_motion_start(CNA_MotionHandle sensor);
+
+/**
+ * @brief Stops data acquisition.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor has been disposed.
+ */
+CNA_C_API CNA_Result cna_motion_stop(CNA_MotionHandle sensor);
+
+/**
+ * @brief Disposes the sensor without releasing its handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when the sensor was already disposed.
+ */
+CNA_C_API CNA_Result cna_motion_dispose(CNA_MotionHandle sensor);
+
+/**
+ * @brief Returns the most recent reading.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_reading Receives the reading.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the sensor is unsupported or
+ *         disposed, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_current_value(
+    CNA_MotionHandle sensor,
+    CNA_MotionReading* out_reading);
+
+/**
+ * @brief Reports whether the sensor has produced a reading yet.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_valid Receives `CNA_TRUE` once a reading has arrived.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_is_data_valid(CNA_MotionHandle sensor, CNA_Bool* out_valid);
+
+/**
+ * @brief Returns the requested interval between updates, in 100-nanosecond ticks.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_ticks Receives the interval.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_time_between_updates_ticks(
+    CNA_MotionHandle sensor,
+    int64_t* out_ticks);
+
+/**
+ * @brief Requests a new interval between updates, in 100-nanosecond ticks.
+ *
+ * @param sensor Owned sensor handle.
+ * @param ticks Requested interval.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_set_time_between_updates_ticks(
+    CNA_MotionHandle sensor,
+    int64_t ticks);
+
+/**
+ * @brief Subscribes to the sensor's reading event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked for each accepted reading.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_subscribe_current_value_changed(
+    CNA_MotionHandle sensor,
+    CNA_MotionReadingCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Subscribes to the sensor's calibration-needed event.
+ *
+ * @param sensor Owned sensor handle.
+ * @param callback Handler invoked when the fused sensor's magnetometer needs calibrating.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_subscribe_calibrate(
+    CNA_MotionHandle sensor,
+    CNA_SensorEventCallback callback,
+    void* context,
+    CNA_SensorEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Installs or removes this ABI's own motion backend for testing.
+ *
+ * @param sensor Owned sensor handle.
+ * @param installed `CNA_TRUE` to install the test backend, `CNA_FALSE` to restore the platform one.
+ * @param supported Whether the installed backend reports the sensor as supported; ignored when
+ *        @p installed is `CNA_FALSE`.
+ * @param north_referenced Whether the installed backend claims a north-referenced attitude source;
+ *        ignored when @p installed is `CNA_FALSE`.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when acquisition is currently started, or
+ *         a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_set_test_backend_ext(
+    CNA_MotionHandle sensor,
+    CNA_Bool installed,
+    CNA_Bool supported,
+    CNA_Bool north_referenced);
+
+/**
+ * @brief Delivers a reading through the installed test backend.
+ *
+ * @param sensor Owned sensor handle.
+ * @param reading The reading to deliver.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no test backend is installed or
+ *         acquisition is not started, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_inject_synthetic_update_ext(
+    CNA_MotionHandle sensor,
+    const CNA_MotionReading* reading);
+
+/**
+ * @brief Reports a calibration need through the installed test backend.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no test backend is installed or
+ *         acquisition is not started, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_inject_calibration_request_ext(CNA_MotionHandle sensor);
+
+/**
+ * @brief Returns the byte count of the sensor's .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_get_type_name_size(CNA_MotionHandle sensor, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the sensor's fully-qualified .NET type name.
+ *
+ * @param sensor Owned sensor handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_copy_type_name(
+    CNA_MotionHandle sensor,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a sensor handle.
+ *
+ * @param sensor Owned sensor handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_motion_destroy(CNA_MotionHandle sensor);
+
 #ifdef __cplusplus
 }
 #endif

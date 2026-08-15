@@ -847,3 +847,6 @@ static_assert(offsetof(CNA_AttitudeReading, rotation_matrix) == 52U);
 static_assert(sizeof(CNA_CompassReading) == 64U);
 static_assert(sizeof(CNA_MotionReading) == 184U);
 static_assert(offsetof(CNA_MotionReading, gravity) == 168U);
+static_assert(sizeof(CNA_AccelerometerReadingEventInfo) == 48U);
+static_assert(alignof(CNA_AccelerometerReadingEventInfo) == 8U);
+static_assert(offsetof(CNA_AccelerometerReadingEventInfo, x) == 24U);

@@ -71,3 +71,43 @@ comes back in the canonical unit: inject 9.80665 m/s² into an accelerometer and
 A sensor failure carries an **error identifier** the message does not spell out. The exception
 firewall records it per thread, readable with `cna_sensors_get_last_error_id_ext` — the same
 treatment a network join failure already gets. Read it immediately after the failing call.
+
+## The compass, fused motion and the reading events
+
+Both remaining sensors are the same owned handle as the motion sensors, with two additions.
+
+**The canonical compass supports one platform, and it is not any platform this ABI is verified on.**
+Its unsupported refusal is therefore the branch a desktop consumer will actually hit — a real answer
+about the device, not a hole in the binding. The same is true of fused motion. To reach anything past
+that refusal, this ABI supplies its own backend: `cna_<sensor>_set_test_backend_ext` installs it,
+`_inject_synthetic_update_ext` delivers a reading through the canonical path, and
+`_inject_calibration_request_ext` raises the calibration event. The canonical hook takes a
+caller-implemented backend object, which C cannot write; the switch is what C gets instead. Swapping
+a backend while acquisition is running is refused, so a started session can never lose the object
+delivering its readings.
+
+`cna_motion_get_is_attitude_north_referenced_ext` answers whether the yaw has an absolute reference.
+**Its default is vacuous on purpose**: with no backend, or before starting, it answers `CNA_TRUE`,
+which means "nothing is drifting yet", not "north is known". Only a started backend's own answer is
+informative, which is why the test backend takes that claim as an argument.
+
+Two canonical limits are reported rather than smoothed. Ten simultaneous instances of a sensor is the
+canonical ceiling, and the eleventh creation fails rather than degrading. Stopping a sensor that
+never started still succeeds and still moves the state to disabled.
+
+### Event arguments
+
+Three canonical event-argument types resolve three different ways, and the difference is the payload:
+
+- `SensorReadingEventArgs<T>` is a class template wrapping one reading and nothing else, so it is
+  **flattened**: every current-value callback delivers the reading itself.
+- The calibration argument carries **no data at all**, so it becomes a callback with no payload —
+  `CNA_SensorEventCallback`, context only. Only its type name survives, as a value-free route pair.
+- The legacy accelerometer reading argument carries the acceleration as **three separate components**
+  rather than a vector, so it is a value of its own, `CNA_AccelerometerReadingEventInfo`, with the
+  full set of value routes.
+
+`cna_accelerometer_subscribe_reading_changed` is the obsolete counterpart of the current-value
+subscription, mapped for completeness. Both fire for one reading and the canonical order is fixed —
+current value first, legacy second — which this ABI reports rather than reserves the right to change.
+Unlike the current-value event, the legacy one is raised only when the reading is valid.

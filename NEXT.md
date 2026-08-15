@@ -701,9 +701,37 @@
 > as the network join error does — recorded per thread by the barrier, read with
 > `cna_sensors_get_last_error_id_ext`. The inventory is now 4,904 implemented, 30 partial, 1,282
 > planned and 199 N/A; all four trees green at 60/60, ASan+UBSan with leak detection clean.
-> **Next: CBIND-037D2b**, the remaining 46 sensor rows — `Compass`, `Motion`, the reading
-> event-argument types, `CalibrationEventArgs`, and `Accelerometer::ReadingChanged`, the obsolete
-> legacy event deliberately left for the slice that maps the type it delivers.
+> CBIND-037D2b then closes the sensor namespace with those 46 rows. The three canonical
+> event-argument types resolve three different ways, and the deciding question is the payload:
+> `SensorReadingEventArgs<T>` is a class template wrapping one reading and nothing else, so it is
+> **flattened** — every current-value callback delivers the reading itself; `CalibrationEventArgs`
+> carries **no data at all**, so it becomes a callback with no payload and a value-free type-name
+> pair, because an empty structure would be an ABI liability in C for nothing gained; and the legacy
+> `AccelerometerReadingEventArgs` carries the acceleration as **three separate components** rather
+> than a vector, so it earns a real 48-byte value with the full set of value routes.
+> `cna_accelerometer_subscribe_reading_changed` maps the obsolete event that delivers it, and the
+> canonical firing order — current value first, legacy second, and the legacy one only for a valid
+> reading — is asserted rather than left to chance.
+>
+> `Compass` and `Motion` are unsupported on **every platform this ABI is verified on** (the canonical
+> implementation is real on Android only), so the unsupported refusal is the path a desktop consumer
+> actually hits — the device's real answer, not a gap in the binding. To reach anything past it, this
+> ABI supplies its own backend: `cna_<sensor>_set_test_backend_ext` installs it and the two injection
+> routes drive it, because the canonical hook takes a caller-implemented C++ object C cannot write.
+> Three canonical limits are reported rather than smoothed: the eleventh simultaneous instance of a
+> sensor is refused, a backend cannot be swapped while acquisition runs, and
+> `cna_motion_get_is_attitude_north_referenced_ext` answers a **vacuous** `CNA_TRUE` before a backend
+> starts — "nothing is drifting yet", not "north is known". The inventory is now 4,948 implemented,
+> 30 partial, 1,236 planned and 201 N/A, with `Microsoft::Devices::Sensors` fully mapped; all four
+> trees green at 61/61, ASan+UBSan with leak detection clean.
+> **Next: CBIND-037D3**, the 69-row vibrate-controller and `CNA::Devices` system-services slice.
+>
+> Discovered while reading the canonical source, not fixed here: `AccelerometerReadingEventArgs.hpp`'s
+> class comment says the type "is not raised by that implementation", but
+> `Accelerometer::DispatchSensorReading()` does raise `ReadingChanged` with it — the comment predates
+> the wiring and contradicts the event's own doc comment two headers away. It is a canonical
+> devices-module doc fix, not a C API change, so it belongs to a devices task rather than to this
+> slice.
 >
 > Discovered while writing the docs, not fixed here: the *Intentionally unavailable in 0.1* list at
 > the end of `docs/c-api/FEATURE_MATRIX.md` is stale — it still names occlusion queries, Texture3D /

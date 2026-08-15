@@ -67,8 +67,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > motion sensors that produce them — owned handles carrying the support probe, state, start/stop,
 > current value, data validity, update interval, reading callback, the sensor error identifier of
 > the last failure, and the canonical test-support surface that lets a machine with no sensors
-> reach the supported path at all. The
-> generated inventory currently records 4,904 implemented, 30 partial, 1,282 planned and 199
+> reach the supported path at all, and `CBIND-037D2b` closes the sensor namespace with `Compass`,
+> `Motion` and the three event-argument types, this ABI's own installable sensor backend, and the
+> legacy accelerometer reading event. The
+> generated inventory currently records 4,948 implemented, 30 partial, 1,236 planned and 201
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and
