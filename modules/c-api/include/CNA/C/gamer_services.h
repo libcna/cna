@@ -752,6 +752,1067 @@ CNA_C_API CNA_Result cna_gamer_set_signed_in_gamers_ext(
  */
 CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_count(int32_t* out_count);
 
+/* ---- Gamers, their values and their collections ---- */
+
+/** @brief Owned handle for a gamer that is not the local signed-in gamer. */
+typedef CNA_Handle CNA_GamerHandle;
+
+/** @brief Owned handle for a gamer profile. */
+typedef CNA_Handle CNA_GamerProfileHandle;
+
+/** @brief Owned handle for a collection of gamers. */
+typedef CNA_Handle CNA_GamerCollectionHandle;
+
+/** @brief Owned handle for a cursor over a gamer collection. */
+typedef CNA_Handle CNA_GamerEnumeratorHandle;
+
+/**
+ * @brief What a gamer is currently doing, as the presence service would report it.
+ */
+typedef struct CNA_GamerPresence {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_GAMER_PRESENCE_MODE_*` identities. */
+    CNA_GamerPresenceMode presence_mode;
+
+    /** @brief Number the presence mode displays, where the mode uses one. */
+    int32_t presence_value;
+} CNA_GamerPresence;
+
+/**
+ * @brief What a gamer is permitted to do.
+ *
+ * Three privileges are graded and four are yes-or-no, which is the canonical shape rather than a
+ * simplification: communication, profile viewing and user-created content each answer *how widely*
+ * they are allowed.
+ */
+typedef struct CNA_GamerPrivileges {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief How widely this gamer may communicate. */
+    CNA_GamerPrivilegeSetting allow_communication;
+
+    /** @brief How widely this gamer's profile may be viewed. */
+    CNA_GamerPrivilegeSetting allow_profile_viewing;
+
+    /** @brief How widely this gamer may see user-created content. */
+    CNA_GamerPrivilegeSetting allow_user_created_content;
+
+    /** @brief Non-zero when this gamer may join online sessions. */
+    CNA_Bool allow_online_sessions;
+
+    /** @brief Non-zero when this gamer may use premium content. */
+    CNA_Bool allow_premium_content;
+
+    /** @brief Non-zero when this gamer may purchase content. */
+    CNA_Bool allow_purchase_content;
+
+    /** @brief Non-zero when this gamer may trade content. */
+    CNA_Bool allow_trade_content;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[4];
+} CNA_GamerPrivileges;
+
+/**
+ * @brief The numeric part of a gamer profile.
+ *
+ * The profile's two strings are count/copy routes rather than fields, because they are owned by the
+ * profile and no fixed size would be honest.
+ */
+typedef struct CNA_GamerProfileInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief The gamer's accumulated score. */
+    int32_t gamer_score;
+
+    /** @brief One of the `CNA_GAMER_ZONE_*` identities. */
+    CNA_GamerZone gamer_zone;
+
+    /** @brief How many titles this gamer has played. */
+    int32_t titles_played;
+
+    /** @brief How many achievements this gamer has earned in total. */
+    int32_t total_achievements;
+
+    /** @brief The gamer's reputation. */
+    float reputation;
+
+    /** @brief Non-zero once the profile has been disposed. */
+    CNA_Bool is_disposed;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[3];
+} CNA_GamerProfileInfo;
+
+/**
+ * @brief Everything a friend's entry reports about that friendship.
+ *
+ * Twelve independent predicates, answered from one observation so a caller cannot see a combination
+ * that never existed.
+ */
+typedef struct CNA_FriendGamerInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Non-zero when this friend has sent the local gamer a friend request. */
+    CNA_Bool friend_request_received_from;
+
+    /** @brief Non-zero when the local gamer has sent this friend a friend request. */
+    CNA_Bool friend_request_sent_to;
+
+    /** @brief Non-zero when this friend has voice hardware. */
+    CNA_Bool has_voice;
+
+    /** @brief Non-zero when this friend accepted a game invitation. */
+    CNA_Bool invite_accepted;
+
+    /** @brief Non-zero when this friend has sent a game invitation. */
+    CNA_Bool invite_received_from;
+
+    /** @brief Non-zero when this friend declined a game invitation. */
+    CNA_Bool invite_rejected;
+
+    /** @brief Non-zero when a game invitation has been sent to this friend. */
+    CNA_Bool invite_sent_to;
+
+    /** @brief Non-zero when this friend is away. */
+    CNA_Bool is_away;
+
+    /** @brief Non-zero when this friend is busy. */
+    CNA_Bool is_busy;
+
+    /** @brief Non-zero when this friend's session can be joined. */
+    CNA_Bool is_joinable;
+
+    /** @brief Non-zero when this friend is online. */
+    CNA_Bool is_online;
+
+    /** @brief Non-zero when this friend is playing. */
+    CNA_Bool is_playing;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[4];
+} CNA_FriendGamerInfo;
+
+/**
+ * @brief Description of a gamer signing in or out.
+ */
+typedef struct CNA_SignedInGamerEventInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Reserved; must be zero. */
+    uint32_t reserved;
+
+    /** @brief Borrowed gamer handle, valid only for the duration of the callback. */
+    CNA_SignedInGamerHandle gamer;
+} CNA_SignedInGamerEventInfo;
+
+/**
+ * @brief Callback receiving a gamer sign-in or sign-out.
+ *
+ * @param context Caller context supplied at subscription.
+ * @param info Description of the gamer, valid only for the duration of this call.
+ */
+typedef void (*CNA_SignedInGamerEventCallback)(
+    void* context,
+    const CNA_SignedInGamerEventInfo* info);
+
+/**
+ * @brief Callback invoked when a gamer operation completes.
+ *
+ * @param context Caller context supplied when the operation began.
+ *
+ * The callback receives only the caller's context: no operation object crosses this ABI, so there is
+ * nothing else to hand back.
+ */
+typedef void (*CNA_GamerAsyncCallback)(void* context);
+
+/**
+ * @brief Initializes a presence value to its canonical default.
+ *
+ * @param out_presence Receives a presence with no mode set and a zero value.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_gamer_presence_init(CNA_GamerPresence* out_presence);
+
+/**
+ * @brief Releases a gamer handle.
+ *
+ * @param gamer Owned gamer handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_destroy(CNA_GamerHandle gamer);
+
+/**
+ * @brief Reports the byte length of a gamer's display name.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Every `cna_gamer_*` route accepts either handle kind, because the canonical surface belongs to the
+ * gamer base a signed-in gamer and a friend both derive from.
+ */
+CNA_C_API CNA_Result cna_gamer_get_display_name_size(CNA_GamerHandle gamer, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a gamer's display name.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_copy_display_name(
+    CNA_GamerHandle gamer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Sets a gamer's display name.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param display_name New display name, copied during the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_set_display_name(
+    CNA_GamerHandle gamer,
+    CNA_StringView display_name);
+
+/**
+ * @brief Reports the byte length of a gamer's gamertag.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_get_gamertag_size(CNA_GamerHandle gamer, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a gamer's gamertag.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_copy_gamertag(
+    CNA_GamerHandle gamer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of a gamer's text form.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A gamer's text form is its display name, not its gamertag.
+ */
+CNA_C_API CNA_Result cna_gamer_get_text_size(CNA_GamerHandle gamer, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a gamer's text form.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_copy_text(
+    CNA_GamerHandle gamer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a gamer has been disposed.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_is_disposed Receives non-zero when the gamer has been disposed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_get_is_disposed(CNA_GamerHandle gamer, CNA_Bool* out_is_disposed);
+
+/**
+ * @brief Reads the caller-owned tag attached to a gamer.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_tag Receives the tag, zero if none was set.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical tag holds any boxed value at all. A C caller gets a 64-bit integer it owns the
+ * meaning of, which is the same choice the graphics resources already made — a pointer-sized value
+ * a caller can key its own table with, rather than an opaque box C cannot open.
+ */
+CNA_C_API CNA_Result cna_gamer_get_tag(CNA_GamerHandle gamer, uint64_t* out_tag);
+
+/**
+ * @brief Attaches a caller-owned tag to a gamer.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param tag Value to store.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_set_tag(CNA_GamerHandle gamer, uint64_t tag);
+
+/**
+ * @brief Reads a gamer's profile.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param out_profile Receives an owned profile handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_get_profile(
+    CNA_GamerHandle gamer,
+    CNA_GamerProfileHandle* out_profile);
+
+/**
+ * @brief Reads a gamer's profile and reports completion through a callback.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_profile Receives an owned profile handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **This is one synchronous call that still invokes the callback**, which is what the canonical
+ * begin/end pair already does — the canonical operation completes before `Begin` returns. The two
+ * canonical halves are one route here because no operation object crosses this ABI.
+ */
+CNA_C_API CNA_Result cna_gamer_begin_get_profile(
+    CNA_GamerHandle gamer,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_GamerProfileHandle* out_profile);
+
+/**
+ * @brief Looks a gamer up by gamertag.
+ *
+ * @param gamertag Gamertag to look up, borrowed for the duration of the call.
+ * @param out_gamer Receives an owned gamer handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or `CNA_RESULT_INVALID_ARGUMENT` for a null
+ *         output.
+ *
+ * **No runtime this ABI builds on can look a gamer up by tag**, so the honest answer is a refusal
+ * rather than an empty result. The route exists because the canonical API does, and because the
+ * answer may differ on a platform that has a directory service.
+ */
+CNA_C_API CNA_Result cna_gamer_get_from_gamertag(
+    CNA_StringView gamertag,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Looks a gamer up by gamertag and reports completion through a callback.
+ *
+ * @param gamertag Gamertag to look up, borrowed for the duration of the call.
+ * @param callback Callback invoked once the lookup completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_gamer Receives an owned gamer handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return The same answers as @ref cna_gamer_get_from_gamertag. The callback does not run when the
+ *         lookup is refused.
+ */
+CNA_C_API CNA_Result cna_gamer_begin_get_from_gamertag(
+    CNA_StringView gamertag,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Reports the byte length of a partner token.
+ *
+ * @param audience_uri Audience the token is for, borrowed for the duration of the call.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or `CNA_RESULT_INVALID_ARGUMENT` for a null
+ *         output.
+ *
+ * **No runtime this ABI builds on issues partner tokens**, so both routes refuse rather than answer
+ * an empty token.
+ */
+CNA_C_API CNA_Result cna_gamer_get_partner_token_size(
+    CNA_StringView audience_uri,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a partner token.
+ *
+ * @param audience_uri Audience the token is for, borrowed for the duration of the call.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes.
+ * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or `CNA_RESULT_INVALID_ARGUMENT` for an
+ *         invalid output.
+ */
+CNA_C_API CNA_Result cna_gamer_copy_partner_token(
+    CNA_StringView audience_uri,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Requests a partner token and reports completion through a callback.
+ *
+ * @param audience_uri Audience the token is for, borrowed for the duration of the call.
+ * @param callback Callback invoked once the request completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes.
+ * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime. The callback does not run when the request is
+ *         refused.
+ */
+CNA_C_API CNA_Result cna_gamer_begin_get_partner_token(
+    CNA_StringView audience_uri,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reads the signed-in gamer at a player index.
+ *
+ * @param player_index One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param out_has_gamer Receives non-zero when a gamer is signed in at that index.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
+ *        exactly as the caller set it otherwise.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * Availability is separate from the answer: no gamer at that index is an ordinary success with the
+ * flag clear, not a failure.
+ *
+ * **The lookup is positional.** The canonical indexer reads the signed-in collection at that index
+ * rather than searching for the gamer whose own player index matches, so a single signed-in gamer
+ * answers at `CNA_PLAYER_INDEX_ONE` whatever player index it was created with. That is the canonical
+ * behavior, reported rather than corrected.
+ */
+CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
+    CNA_PlayerIndex player_index,
+    CNA_Bool* out_has_gamer,
+    CNA_SignedInGamerHandle* out_gamer);
+
+/**
+ * @brief Reports whether a signed-in gamer is a guest.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_is_guest Receives non-zero for a guest.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_is_guest(
+    CNA_SignedInGamerHandle gamer,
+    CNA_Bool* out_is_guest);
+
+/**
+ * @brief Reports whether a signed-in gamer is signed in to the online service.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_is_signed_in_to_live Receives non-zero when signed in to the online service.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_is_signed_in_to_live(
+    CNA_SignedInGamerHandle gamer,
+    CNA_Bool* out_is_signed_in_to_live);
+
+/**
+ * @brief Reads a signed-in gamer's party size.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_party_size Receives the party size.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_party_size(
+    CNA_SignedInGamerHandle gamer,
+    int32_t* out_party_size);
+
+/**
+ * @brief Sets a signed-in gamer's party size.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param party_size New party size.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_set_party_size(
+    CNA_SignedInGamerHandle gamer,
+    int32_t party_size);
+
+/**
+ * @brief Reads which player a signed-in gamer is.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_player_index Receives one of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_player_index(
+    CNA_SignedInGamerHandle gamer,
+    CNA_PlayerIndex* out_player_index);
+
+/**
+ * @brief Reads a signed-in gamer's presence.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_presence Caller-initialized structure receiving the presence.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_presence(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GamerPresence* out_presence);
+
+/**
+ * @brief Writes a signed-in gamer's presence.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param presence Presence to publish.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical API hands out a mutable presence object rather than taking a new one; writing the
+ * whole value back is the C form of the same thing.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_set_presence(
+    CNA_SignedInGamerHandle gamer,
+    const CNA_GamerPresence* presence);
+
+/**
+ * @brief Sets a signed-in gamer's presence from a free-text mode.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param mode Mode text, borrowed for the duration of the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT, and **currently a no-op**: the canonical extension accepts the text and stores nothing.
+ * The route exists so the surface is complete and so the behavior is recorded rather than guessed.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_set_presence_mode_string_ext(
+    CNA_SignedInGamerHandle gamer,
+    CNA_StringView mode);
+
+/**
+ * @brief Reads a signed-in gamer's privileges.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_privileges Caller-initialized structure receiving the privileges.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_privileges(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GamerPrivileges* out_privileges);
+
+/**
+ * @brief Reports whether another gamer is a friend of a signed-in gamer.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param other Owned gamer or signed-in gamer handle to test.
+ * @param out_is_friend Receives non-zero when the two are friends.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **On this runtime the answer is always negative**, because no friend list exists to consult. That
+ * is the real answer rather than a gap in the binding.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_is_friend(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GamerHandle other,
+    CNA_Bool* out_is_friend);
+
+/**
+ * @brief Reports whether a capture device belongs to a signed-in gamer's headset.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param microphone_index Zero-based microphone index, as `cna_microphone_get_count` enumerates.
+ * @param out_is_headset Receives non-zero when that microphone is a headset.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown index, or a documented
+ *         handle/thread failure.
+ *
+ * The microphone is addressed by index for the same reason the capture surface is: the canonical
+ * list hands out pointers the runtime owns and never transfers.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_is_headset(
+    CNA_SignedInGamerHandle gamer,
+    uint64_t microphone_index,
+    CNA_Bool* out_is_headset);
+
+/**
+ * @brief Reads a signed-in gamer's friends.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_friends Receives an owned collection handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **On this runtime the collection is always empty**, because there is no friend service. An empty
+ * collection is the real answer, and it is a success rather than a refusal.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_friends(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GamerCollectionHandle* out_friends);
+
+/**
+ * @brief Awards an achievement to a signed-in gamer.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param achievement_key Achievement key, borrowed for the duration of the call.
+ * @return `CNA_RESULT_SUCCESS`, or a documented argument/handle/thread/IO failure.
+ *
+ * This **persists locally**: an achievement earned in one process run is still earned in the next.
+ * The canonical API carries no catalog metadata here — only the key, the fact of earning it and when.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_award_achievement(
+    CNA_SignedInGamerHandle gamer,
+    CNA_StringView achievement_key);
+
+/**
+ * @brief Awards an achievement and reports completion through a callback.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param achievement_key Achievement key, borrowed for the duration of the call.
+ * @param callback Callback invoked once the award completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @return The same answers as @ref cna_signed_in_gamer_award_achievement.
+ *
+ * One synchronous call that still invokes the callback, like every other fake-async pair here.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_begin_award_achievement(
+    CNA_SignedInGamerHandle gamer,
+    CNA_StringView achievement_key,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Subscribes to gamers signing in.
+ *
+ * @param callback Callback invoked synchronously when a gamer signs in.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle, released with
+ *        `cna_gamer_unsubscribe_ext`.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure. A refused call routes the
+ *         output handle to `CNA_INVALID_HANDLE` before it validates anything else.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_subscribe_signed_in_ext(
+    CNA_SignedInGamerEventCallback callback,
+    void* context,
+    CNA_Handle* out_registration);
+
+/**
+ * @brief Subscribes to gamers signing out.
+ *
+ * @param callback Callback invoked synchronously when a gamer signs out.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle, released with
+ *        `cna_gamer_unsubscribe_ext`.
+ * @return The same answers as @ref cna_signed_in_gamer_subscribe_signed_in_ext.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_subscribe_signed_out_ext(
+    CNA_SignedInGamerEventCallback callback,
+    void* context,
+    CNA_Handle* out_registration);
+
+/**
+ * @brief Releases a gamer-services event registration.
+ *
+ * @param registration Owned registration handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_unsubscribe_ext(CNA_Handle registration);
+
+/**
+ * @brief Reads the numeric part of a gamer profile.
+ *
+ * @param profile Owned profile handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_get_info(
+    CNA_GamerProfileHandle profile,
+    CNA_GamerProfileInfo* out_info);
+
+/**
+ * @brief Reports the byte length of a profile's motto.
+ *
+ * @param profile Owned profile handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_get_motto_size(
+    CNA_GamerProfileHandle profile,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a profile's motto.
+ *
+ * @param profile Owned profile handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_copy_motto(
+    CNA_GamerProfileHandle profile,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of a profile's region name.
+ *
+ * @param profile Owned profile handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical property is a region object; C receives its name, which is the part of it a caller
+ * can act on without a second type crossing the ABI.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_get_region_name_size(
+    CNA_GamerProfileHandle profile,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a profile's region name.
+ *
+ * @param profile Owned profile handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_copy_region_name(
+    CNA_GamerProfileHandle profile,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a profile carries a gamer picture, and how large it is.
+ *
+ * @param profile Owned profile handle.
+ * @param out_has_picture Receives non-zero when a picture is available.
+ * @param out_bytes Receives the picture size in bytes, zero when there is none.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **No runtime this ABI builds on carries gamer pictures**, so the flag is always clear. Availability
+ * is separate from the answer: no picture is an ordinary success, not a failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_get_picture_size(
+    CNA_GamerProfileHandle profile,
+    CNA_Bool* out_has_picture,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Releases a gamer profile.
+ *
+ * @param profile Owned profile handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_profile_destroy(CNA_GamerProfileHandle profile);
+
+/**
+ * @brief Reads everything a friend's entry reports.
+ *
+ * @param gamer Owned gamer handle that names a friend.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the handle is not a friend, or a
+ *         documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_friend_gamer_get_info(
+    CNA_GamerHandle gamer,
+    CNA_FriendGamerInfo* out_info);
+
+/**
+ * @brief Reports the byte length of a friend's presence text.
+ *
+ * @param gamer Owned gamer handle that names a friend.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the handle is not a friend, or a
+ *         documented argument/handle/thread failure.
+ *
+ * A friend's presence is **free text**, while a signed-in gamer's is a mode and a value. That
+ * asymmetry is canonical and is preserved rather than evened out.
+ */
+CNA_C_API CNA_Result cna_friend_gamer_get_presence_size(
+    CNA_GamerHandle gamer,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a friend's presence text.
+ *
+ * @param gamer Owned gamer handle that names a friend.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
+ *         `CNA_RESULT_INVALID_STATE` when the handle is not a friend, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_friend_gamer_copy_presence(
+    CNA_GamerHandle gamer,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports how many gamers a collection holds.
+ *
+ * @param collection Owned collection handle.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_get_count(
+    CNA_GamerCollectionHandle collection,
+    int32_t* out_count);
+
+/**
+ * @brief Reads the gamer at an index.
+ *
+ * @param collection Owned collection handle.
+ * @param index Zero-based index.
+ * @param out_gamer Receives a borrowed gamer handle valid while the collection lives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection,
+ *         or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_get_at(
+    CNA_GamerCollectionHandle collection,
+    int32_t index,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Reports where a gamer sits in a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param gamer Owned or borrowed gamer handle to look for.
+ * @param out_index Receives the index, or -1 when the gamer is not present.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_index_of(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle gamer,
+    int32_t* out_index);
+
+/**
+ * @brief Reports whether a collection holds a gamer.
+ *
+ * @param collection Owned collection handle.
+ * @param gamer Owned or borrowed gamer handle to look for.
+ * @param out_contains Receives non-zero when the gamer is present.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_contains(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle gamer,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Copies a collection's gamers into a caller array.
+ *
+ * @param collection Owned collection handle.
+ * @param destination Array receiving borrowed gamer handles; may be null when @p capacity is zero.
+ * @param capacity Destination capacity in handles.
+ * @param index Index within @p destination to start writing at.
+ * @param out_count Receives the number of gamers whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_copy_to(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle* destination,
+    uint64_t capacity,
+    int32_t index,
+    uint64_t* out_count);
+
+/**
+ * @brief Adds a gamer to a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param gamer Owned or borrowed gamer handle to add.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The collection holds the gamer without taking ownership of it, which is what the canonical
+ * collection does; the caller keeps the handle alive.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_add(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle gamer);
+
+/**
+ * @brief Removes a gamer from a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param gamer Owned or borrowed gamer handle to remove.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Removing a gamer the collection does not hold is a no-op that reports success, which is what the
+ * canonical operation does — it answers nothing at all.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_remove(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerHandle gamer);
+
+/**
+ * @brief Empties a collection.
+ *
+ * @param collection Owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_clear(CNA_GamerCollectionHandle collection);
+
+/**
+ * @brief Opens a cursor over a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param out_enumerator Receives an owned enumerator handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The cursor is the C form of the canonical iteration. The canonical `begin`/`end` pair has no C
+ * form at all — a C++ iterator is not expressible here — so this and the index routes are how a C
+ * caller walks a collection.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_create_enumerator(
+    CNA_GamerCollectionHandle collection,
+    CNA_GamerEnumeratorHandle* out_enumerator);
+
+/**
+ * @brief Advances a cursor.
+ *
+ * @param enumerator Owned enumerator handle.
+ * @param out_has_current Receives non-zero when the cursor now names a gamer.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A cursor starts before the first element, so this must be called once before the first read.
+ */
+CNA_C_API CNA_Result cna_gamer_enumerator_move_next(
+    CNA_GamerEnumeratorHandle enumerator,
+    CNA_Bool* out_has_current);
+
+/**
+ * @brief Reads the gamer a cursor names.
+ *
+ * @param enumerator Owned enumerator handle.
+ * @param out_gamer Receives a borrowed gamer handle valid while the collection lives.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the cursor names nothing, or a
+ *         documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_enumerator_get_current(
+    CNA_GamerEnumeratorHandle enumerator,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Returns a cursor to before the first element.
+ *
+ * @param enumerator Owned enumerator handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_enumerator_reset(CNA_GamerEnumeratorHandle enumerator);
+
+/**
+ * @brief Releases a cursor.
+ *
+ * @param enumerator Owned enumerator handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_enumerator_destroy(CNA_GamerEnumeratorHandle enumerator);
+
+/**
+ * @brief Reports whether a friend collection has been disposed.
+ *
+ * @param collection Owned collection handle.
+ * @param out_is_disposed Receives non-zero when the collection has been disposed.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when the handle does not name a friend
+ *         collection, or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_friend_collection_get_is_disposed(
+    CNA_GamerCollectionHandle collection,
+    CNA_Bool* out_is_disposed);
+
+/**
+ * @brief Creates a friend entry.
+ *
+ * @param gamertag Gamertag, copied during the call.
+ * @param display_name Display name, copied during the call.
+ * @param is_online Non-zero when the friend is online.
+ * @param is_playing Non-zero when the friend is playing.
+ * @param is_away Non-zero when the friend is away.
+ * @param is_busy Non-zero when the friend is busy.
+ * @param friend_request_sent_to Non-zero when the local gamer has requested this friendship.
+ * @param friend_request_received_from Non-zero when this friend has requested the friendship.
+ * @param out_gamer Receives an owned gamer handle naming a friend.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * CNAEXT: the canonical factory exists so a platform layer can publish a friend list. No runtime this
+ * ABI builds on has a friend service, so this is also the only way a C caller obtains a friend to
+ * exercise the friend surface against.
+ */
+CNA_C_API CNA_Result cna_friend_gamer_create_ext(
+    CNA_StringView gamertag,
+    CNA_StringView display_name,
+    CNA_Bool is_online,
+    CNA_Bool is_playing,
+    CNA_Bool is_away,
+    CNA_Bool is_busy,
+    CNA_Bool friend_request_sent_to,
+    CNA_Bool friend_request_received_from,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Creates a friend collection from friend handles.
+ *
+ * @param friends Array of @p count gamer handles naming friends, borrowed for the duration of the
+ *        call; may be null when @p count is zero.
+ * @param count Number of friends.
+ * @param out_collection Receives an owned collection handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when a handle does not name a friend, or
+ *         a documented argument/thread failure.
+ *
+ * CNAEXT, and the counterpart of `cna_friend_gamer_create_ext`. The collection keeps every friend
+ * handle alive for as long as it holds it, because the canonical collection stores pointers it does
+ * not own.
+ */
+CNA_C_API CNA_Result cna_friend_collection_create_ext(
+    const CNA_GamerHandle* friends,
+    uint64_t count,
+    CNA_GamerCollectionHandle* out_collection);
+
+/**
+ * @brief Disposes a collection and releases its handle.
+ *
+ * @param collection Owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_collection_destroy(CNA_GamerCollectionHandle collection);
+
 #ifdef __cplusplus
 }
 #endif

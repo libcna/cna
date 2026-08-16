@@ -162,6 +162,11 @@ enum class ObjectKind : uint32_t {
     WaveBank = 105,
     SoundBank = 106,
     Cue = 107,
+    Gamer = 108,
+    GamerProfile = 109,
+    GamerCollection = 110,
+    GamerEnumerator = 111,
+    GamerEventRegistration = 112,
     Test = UINT32_MAX
 };
 

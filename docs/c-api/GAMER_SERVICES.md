@@ -80,3 +80,76 @@ share one exception hierarchy. The join arm and the not-available arm both sit b
 base; get that wrong and an absent network becomes indistinguishable from a network operation that
 failed while connected, and a join failure loses the join-error code it carries. The boundary test
 throws all three and asserts they stay distinguishable.
+
+## The gamer, and what a C caller can hold of one
+
+Every `cna_gamer_*` route accepts **either handle kind** — a gamer or a signed-in gamer — because the
+canonical surface belongs to the base both derive from. That is why the test drives the same routes
+twice, once through each.
+
+A gamer's **tag** is a caller-owned 64-bit value, not the canonical boxed one. C cannot open a box, so
+what it gets is a pointer-sized integer it owns the meaning of — the same choice the graphics
+resources already made. A tag this ABI never wrote reads back as zero rather than as a reinterpreted
+value.
+
+### Asynchronous routes are one call that still runs the callback
+
+The canonical API pairs `GetX` with `BeginGetX`/`EndGetX`, and every one of those operations here
+**completes before `Begin` returns**. So each pair is one C route that produces the answer and then
+invokes the completion callback, and the callback receives only the caller's context: no operation
+object crosses this ABI. Passing a null callback is fine when the caller only wants the answer.
+
+Two of those operations cannot succeed at all: **looking a gamer up by tag and requesting a partner
+token both answer `CNA_RESULT_NOT_SUPPORTED`**, because the canonical implementations refuse outright
+on every runtime this ABI builds on. The refusal is the answer rather than a gap, and the callback
+does not run when the operation is refused.
+
+### Values, and one object that earns a handle
+
+Presence and privileges are fixed values read from a gamer. Presence is written back **whole**,
+because the canonical API hands out a mutable object rather than taking a new one. The privileges keep
+the canonical shape rather than flattening it: three of the seven are graded — communication, profile
+viewing and user-created content each answer *how widely* — and four are yes-or-no.
+`cna_signed_in_gamer_set_presence_mode_string_ext` is the exception that carries no information: the
+canonical extension accepts the text and **stores nothing**, and the test asserts the structured
+presence is unchanged afterwards so the no-op is visible rather than assumed.
+
+A **profile** earns a handle, because it is disposable and carries a stream. Its numbers are one
+snapshot; its motto and its region *name* are count/copy pairs. The gamer picture follows the
+availability-separate-from-the-answer rule and is never present here: a clear flag and a zero size,
+reported as an ordinary success.
+
+### Friends, and the collection that holds them
+
+A friend is a gamer handle with a friend behind it, so the base routes work on one and the friend-only
+routes refuse an ordinary gamer. Its twelve predicates are one snapshot. **A friend's presence is free
+text while a signed-in gamer's is a mode and a value** — a canonical asymmetry, preserved rather than
+evened out.
+
+No runtime this ABI builds on has a friend service, so `cna_signed_in_gamer_get_friends` answers an
+**empty collection**, which is a success and not a refusal, and `cna_signed_in_gamer_is_friend` always
+answers negatively. `cna_friend_gamer_create_ext` and `cna_friend_collection_create_ext` map the
+canonical factories and are also the only way a C caller obtains a friend to exercise the surface
+against — the same shape the sensors' test backends already use.
+
+A collection **keeps every gamer handle it holds alive**, because the canonical collection stores
+pointers it does not own, and an index or a cursor hands back the same handle the caller published
+rather than a new view of it. The canonical `begin`/`end` pair has **no C form at all** — a C++
+iterator has no fixed size, no stable representation and no way to be compared from C — so
+`cna_gamer_enumerator_*` and the index routes are how a C caller walks a collection. Removing a gamer
+the collection does not hold is a no-op that reports success, which is what the canonical operation
+does.
+
+The signed-in collection is **process-wide and gets no handle**, the same rule the display metrics,
+the component collection and the game window already follow. Its player-index lookup is
+**positional**: it reads the collection at that index rather than searching for the gamer whose own
+player index matches, so one published gamer answers at `CNA_PLAYER_INDEX_ONE` whatever index it was
+created with.
+
+### Two things with no C form at all
+
+`Gamer::GamerAction` is the canonical asynchronous-result object, and no operation object crosses this
+ABI — every begin/end pair is one synchronous route, so there is nothing to hold between two halves
+that no longer exist. And the protected members of `Gamer` and `GamerCollection` are unmappable for
+the reason already settled for sensors and windows: **a protected member is mappable only when this
+ABI supplies a derived class to hang it on**, and it supplies none here.

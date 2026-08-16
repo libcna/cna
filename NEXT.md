@@ -1041,16 +1041,42 @@
 > When adding a firewall arm, check what already derives from the type being caught. The inventory is
 > now 5,702 implemented, 32 partial, 394 planned and 287 N/A; all four trees green at 72/72,
 > ASan+UBSan clean.
-> **Next: CBIND-037G4**, the gamer and its collections (129 rows) — the first gamer-services slice
-> that needs real objects rather than values, and the one that has to decide how the template
-> `GamerCollection<T>` maps.
+> CBIND-037G4 then completes the gamer, its collections and its per-gamer surfaces, 124 rows.
+> **Every `cna_gamer_*` route accepts either handle kind** — a gamer or a signed-in gamer — because
+> the canonical surface belongs to the base both derive from; the test drives it twice, once through
+> each. The `GamerCollection<T>` question is answered `implemented` rather than `partial`: the
+> template's rows are mapped once through the instantiation this ABI creates, a friend collection.
 >
-> **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
+> **The asynchronous shape is now settled for the rest of the campaign.** Each canonical begin/end
+> pair becomes one route that produces the answer and then invokes a completion callback, because the
+> canonical operations complete before `Begin` returns and no operation object crosses this ABI. A
+> null callback is accepted. Two operations cannot succeed at all — the gamertag lookup and the
+> partner token always answer `NOT_SUPPORTED` — and the callback does not run when an operation is
+> refused.
+>
+> Four canonical facts are reported rather than smoothed, and each was found by testing rather than
+> assumed: a friend's presence is **free text** while a signed-in gamer's is a mode and a value; the
+> signed-in collection's player-index lookup is **positional**, reading the collection at that index
+> rather than searching for the gamer whose own index matches; `SetPresenceModeStringEXT` **stores
+> nothing**; and `GetFriends` answers an **empty collection**, a success rather than a refusal.
+>
+> Seventeen rows are not-applicable, and two of the three reasons are new: `GamerAction` because no
+> operation object crosses this ABI, and `begin`/`end` because **a C++ iterator is not expressible
+> across a C ABI at all** — it has no fixed size, no stable representation and no way to be compared
+> from C. The third is the established one: a protected member is mappable only when this ABI supplies
+> a derived class to hang it on. The inventory is now 5,808 implemented, 32 partial, 270 planned and
+> 305 N/A; all four trees green at 73/73, ASan+UBSan clean.
+> **Next: CBIND-037G5**, the guide, its dispatcher and its component (58 rows) — reuse the settled
+> asynchronous shape, but check first whether any guide operation genuinely defers rather than
+> completing before `Begin` returns.
+>
+> **State at this handoff.** Twenty-five slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (665) is all
-> that remains in the whole campaign.** All four verification trees are green at 70/70 with the
-> coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (270) is all
+> that remains in the whole campaign**, in three slices: the guide, achievements and leaderboards,
+> and the avatars. All four verification trees are green at 73/73 with the coverage gate current, and
+> the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

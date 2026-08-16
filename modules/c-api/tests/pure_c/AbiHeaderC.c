@@ -280,6 +280,25 @@ _Static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dop
                    offsetof(CNA_AudioEmitter, up) == 36U &&
                    offsetof(CNA_AudioEmitter, velocity) == 48U,
                "CNA_AudioEmitter layout must remain stable");
+_Static_assert(sizeof(CNA_GamerPresence) == 16U &&
+                  offsetof(CNA_GamerPresence, presence_mode) == 8U &&
+                  offsetof(CNA_GamerPresence, presence_value) == 12U,
+             "CNA_GamerPresence layout must remain stable");
+_Static_assert(sizeof(CNA_GamerPrivileges) == 28U &&
+                  offsetof(CNA_GamerPrivileges, allow_communication) == 8U &&
+                  offsetof(CNA_GamerPrivileges, allow_online_sessions) == 20U,
+             "CNA_GamerPrivileges layout must remain stable");
+_Static_assert(sizeof(CNA_GamerProfileInfo) == 32U &&
+                  offsetof(CNA_GamerProfileInfo, gamer_score) == 8U &&
+                  offsetof(CNA_GamerProfileInfo, is_disposed) == 28U,
+             "CNA_GamerProfileInfo layout must remain stable");
+_Static_assert(sizeof(CNA_FriendGamerInfo) == 24U &&
+                  offsetof(CNA_FriendGamerInfo, friend_request_received_from) == 8U &&
+                  offsetof(CNA_FriendGamerInfo, is_playing) == 19U,
+             "CNA_FriendGamerInfo layout must remain stable");
+_Static_assert(sizeof(CNA_SignedInGamerEventInfo) == 24U &&
+                  offsetof(CNA_SignedInGamerEventInfo, gamer) == 16U,
+             "CNA_SignedInGamerEventInfo layout must remain stable");
 _Static_assert(sizeof(CNA_AvatarBodyType) == sizeof(uint32_t) &&
                   CNA_AVATAR_BODY_TYPE_FEMALE == UINT32_C(0) &&
                   CNA_AVATAR_BODY_TYPE_MALE == UINT32_C(1) &&

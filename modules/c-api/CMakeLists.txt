@@ -28,6 +28,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiGraphicsResource.cpp
     src/CnaCApiGraphicsState.cpp
     src/CnaCApiGamerServices.cpp
+    src/CnaCApiGamers.cpp
     src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
     src/CnaCApiSpriteFont.cpp
@@ -1020,6 +1021,18 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_avatar_identities_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_avatar_identities_smoke)
     add_test(NAME CApi_AvatarIdentitiesSmoke COMMAND cna_c_api_avatar_identities_smoke)
+
+    add_executable(cna_c_api_gamers_smoke
+        tests/pure_c/GamersSmoke.c
+    )
+    set_target_properties(cna_c_api_gamers_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_gamers_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_gamers_smoke)
+    add_test(NAME CApi_GamersSmoke COMMAND cna_c_api_gamers_smoke)
 
     add_executable(cna_c_api_gamer_identities_smoke
         tests/pure_c/GamerIdentitiesSmoke.c

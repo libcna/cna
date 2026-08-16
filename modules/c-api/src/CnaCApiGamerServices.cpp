@@ -133,6 +133,24 @@ CNA_Result BorrowSignedInGamer(const CNA_Handle handle, SignedInGamer** const ou
     return CNA_RESULT_SUCCESS;
 }
 
+CNA_Result TryBorrowSignedInGamerQuietly(
+    const CNA_Handle handle,
+    SignedInGamer** const outGamer) noexcept
+{
+    if (outGamer == nullptr) {
+        return CNA_RESULT_INVALID_ARGUMENT;
+    }
+    *outGamer = nullptr;
+    std::shared_ptr<SignedInGamerResource> gamer;
+    if (const CNA_Result result =
+            GetRuntimeHandles().Get(handle, ObjectKind::SignedInGamer, &gamer);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outGamer = gamer->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
 CNA_Result CreateBorrowedSignedInGamer(SignedInGamer* const value, CNA_Handle* const outGamer)
 {
     if (outGamer == nullptr) {

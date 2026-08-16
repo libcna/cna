@@ -25,6 +25,13 @@ namespace CNA::C::Detail {
 
 [[nodiscard]] CNA_Result ReleaseBorrowedSignedInGamer(CNA_Handle handle);
 
+// Every `cna_gamer_*` route accepts either handle kind, because the canonical surface belongs to the
+// gamer base. This reports a kind mismatch **without recording a diagnostic**, so the caller can try
+// the other kind next and only the final failure is what a caller reads back.
+[[nodiscard]] CNA_Result TryBorrowSignedInGamerQuietly(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::GamerServices::SignedInGamer** outGamer) noexcept;
+
 } // namespace CNA::C::Detail
 
 #endif
