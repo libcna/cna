@@ -202,3 +202,31 @@ it.
 `cna_game_component_*` route accepts it. It is the first canonical component this ABI publishes —
 every other one is derived from a caller's callback set — so its initialize and update behavior belong
 to the runtime rather than to C.
+
+## Achievements: a value, a collection of copies, and something that persists
+
+An achievement is an **owned handle over a value**. Its numbers and flags are one snapshot; its key,
+name, description and how-to-earn text are count/copy pairs. `cna_achievement_equals` is the single
+route behind both canonical equality operators, and achievements compare **by value across every
+field** rather than by identity — which is exactly what makes a handle a collection answered
+comparable with one the caller built.
+
+The collection **copies what it is given**, so releasing a source handle afterwards changes nothing
+in it, and **both indexers answer a copy rather than a view**: the canonical reference points into
+storage that a later insert or remove would invalidate, and copying a value loses nothing. Both
+canonical indexers are mapped — by position and by key. Removal here **answers whether anything was
+found**, unlike the gamer collection's, because the canonical operation does. `begin`/`end` have no C
+form for the reason already settled: a C++ iterator is not expressible across a C ABI.
+
+Two absences differ, and the difference is reported rather than flattened. The **gamer picture** is
+*absent* — a clear flag and a zero size, an ordinary success. The **achievement picture** is
+*unimplemented* — the canonical accessor says so outright, so `cna_achievement_get_picture_size`
+answers `CNA_RESULT_NOT_SUPPORTED`. A caller can tell "there is none" from "this runtime cannot".
+
+`cna_signed_in_gamer_get_achievements` is the one gamer-services read on this runtime that finds real
+data: it answers what `cna_signed_in_gamer_award_achievement` **persisted**, so an achievement earned
+in one process run is still there in the next. Each entry carries only a key, an earned flag and a
+timestamp — no catalog exists here to supply a name, a description or a score, and the binding says so
+rather than inventing them. The asynchronous form is one synchronous call that still invokes the
+callback, because the canonical read marks itself complete before `Begin` returns precisely so a game
+does not spin waiting for work that is already done.

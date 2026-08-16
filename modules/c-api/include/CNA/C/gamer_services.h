@@ -2426,6 +2426,462 @@ CNA_C_API CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_up
  */
 CNA_C_API CNA_Result cna_gamer_services_component_create(CNA_Handle game, CNA_Handle* out_component);
 
+/* ---- Achievements ---- */
+
+/** @brief Owned handle for one achievement. */
+typedef CNA_Handle CNA_AchievementHandle;
+
+/** @brief Owned handle for a collection of achievements. */
+typedef CNA_Handle CNA_AchievementCollectionHandle;
+
+/**
+ * @brief Everything an achievement reports that is not text.
+ */
+typedef struct CNA_AchievementInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Score this achievement is worth. */
+    int32_t gamer_score;
+
+    /** @brief Non-zero when the achievement is shown before it has been earned. */
+    CNA_Bool display_before_earned;
+
+    /** @brief Non-zero when the achievement was earned while online. */
+    CNA_Bool earned_online;
+
+    /** @brief Non-zero once the achievement has been earned. */
+    CNA_Bool is_earned;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved;
+
+    /** @brief When the achievement was earned, in 100-nanosecond ticks. */
+    int64_t earned_date_time_ticks;
+} CNA_AchievementInfo;
+
+/**
+ * @brief Creates an achievement.
+ *
+ * @param key Stable key the service identifies the achievement by, copied during the call.
+ * @param name Display name, copied during the call.
+ * @param description Description, copied during the call.
+ * @param display_before_earned Non-zero to show the achievement before it is earned.
+ * @param is_earned Non-zero when it has been earned.
+ * @param earned_date_time_ticks When it was earned, in 100-nanosecond ticks.
+ * @param out_achievement Receives an owned achievement handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * CNAEXT: the canonical factory exists so a platform layer can publish an achievement catalog. It is
+ * also how a C caller builds a collection to work with, since nothing here downloads one.
+ */
+CNA_C_API CNA_Result cna_achievement_create_ext(
+    CNA_StringView key,
+    CNA_StringView name,
+    CNA_StringView description,
+    CNA_Bool display_before_earned,
+    CNA_Bool is_earned,
+    int64_t earned_date_time_ticks,
+    CNA_AchievementHandle* out_achievement);
+
+/**
+ * @brief Releases an achievement handle.
+ *
+ * @param achievement Owned achievement handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_destroy(CNA_AchievementHandle achievement);
+
+/**
+ * @brief Reads everything an achievement reports that is not text.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_get_info(
+    CNA_AchievementHandle achievement,
+    CNA_AchievementInfo* out_info);
+
+/**
+ * @brief Reports the byte length of an achievement's key.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_get_key_size(
+    CNA_AchievementHandle achievement,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies an achievement's key.
+ *
+ * @param achievement Owned achievement handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_copy_key(
+    CNA_AchievementHandle achievement,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of an achievement's display name.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_get_name_size(
+    CNA_AchievementHandle achievement,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies an achievement's display name.
+ *
+ * @param achievement Owned achievement handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return The same answers as @ref cna_achievement_copy_key.
+ */
+CNA_C_API CNA_Result cna_achievement_copy_name(
+    CNA_AchievementHandle achievement,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of an achievement's description.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_get_description_size(
+    CNA_AchievementHandle achievement,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies an achievement's description.
+ *
+ * @param achievement Owned achievement handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return The same answers as @ref cna_achievement_copy_key.
+ */
+CNA_C_API CNA_Result cna_achievement_copy_description(
+    CNA_AchievementHandle achievement,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of an achievement's how-to-earn text.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_get_how_to_earn_size(
+    CNA_AchievementHandle achievement,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies an achievement's how-to-earn text.
+ *
+ * @param achievement Owned achievement handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return The same answers as @ref cna_achievement_copy_key.
+ */
+CNA_C_API CNA_Result cna_achievement_copy_how_to_earn(
+    CNA_AchievementHandle achievement,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the size of an achievement's picture.
+ *
+ * @param achievement Owned achievement handle.
+ * @param out_bytes Receives the picture size in bytes.
+ * @return `CNA_RESULT_NOT_SUPPORTED` on this runtime, or a documented argument/handle/thread
+ *         failure.
+ *
+ * **No runtime this ABI builds on carries achievement pictures**: the canonical accessor is not
+ * implemented and says so, and this route reports that rather than answering an empty picture. That
+ * is a different answer from the gamer picture, which is *absent* rather than unimplemented.
+ */
+CNA_C_API CNA_Result cna_achievement_get_picture_size(
+    CNA_AchievementHandle achievement,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether two achievements are equal.
+ *
+ * @param achievement Owned achievement handle.
+ * @param other Owned achievement handle to compare with.
+ * @param out_equals Receives non-zero when the two are equal.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Achievements compare **by value across every field**, not by identity, which is what makes a handle
+ * answered by a collection comparable with one a caller built. This one route is what both canonical
+ * equality operators map to; inequality is its negation.
+ */
+CNA_C_API CNA_Result cna_achievement_equals(
+    CNA_AchievementHandle achievement,
+    CNA_AchievementHandle other,
+    CNA_Bool* out_equals);
+
+/**
+ * @brief Creates a collection from achievement handles.
+ *
+ * @param achievements Array of @p count achievement handles, borrowed for the duration of the call;
+ *        may be null when @p count is zero.
+ * @param count Number of achievements.
+ * @param out_collection Receives an owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT. **The collection copies each achievement**, so the caller's handles stay its own and
+ * releasing one afterwards does not disturb the collection.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_create_ext(
+    const CNA_AchievementHandle* achievements,
+    uint64_t count,
+    CNA_AchievementCollectionHandle* out_collection);
+
+/**
+ * @brief Disposes a collection and releases its handle.
+ *
+ * @param collection Owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_destroy(
+    CNA_AchievementCollectionHandle collection);
+
+/**
+ * @brief Reports how many achievements a collection holds.
+ *
+ * @param collection Owned collection handle.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_get_count(
+    CNA_AchievementCollectionHandle collection,
+    int32_t* out_count);
+
+/**
+ * @brief Reports whether a collection has been disposed.
+ *
+ * @param collection Owned collection handle.
+ * @param out_is_disposed Receives non-zero when it has.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_get_is_disposed(
+    CNA_AchievementCollectionHandle collection,
+    CNA_Bool* out_is_disposed);
+
+/**
+ * @brief Reports whether a collection refuses to be modified.
+ *
+ * @param collection Owned collection handle.
+ * @param out_is_read_only Receives non-zero when it is read-only.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_get_is_read_only(
+    CNA_AchievementCollectionHandle collection,
+    CNA_Bool* out_is_read_only);
+
+/**
+ * @brief Reads the achievement at an index.
+ *
+ * @param collection Owned collection handle.
+ * @param index Zero-based index.
+ * @param out_achievement Receives an owned achievement handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection, or
+ *         a documented handle/thread failure.
+ *
+ * **The handle is a copy, not a view into the collection.** The canonical indexer answers a reference
+ * into storage that inserting or removing would invalidate; an achievement is a value, so copying it
+ * is safe and loses nothing — equality is by value, so the copy still compares equal to what the
+ * collection holds.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_get_at(
+    CNA_AchievementCollectionHandle collection,
+    int32_t index,
+    CNA_AchievementHandle* out_achievement);
+
+/**
+ * @brief Reads the achievement with a key.
+ *
+ * @param collection Owned collection handle.
+ * @param key Achievement key, borrowed for the duration of the call.
+ * @param out_achievement Receives an owned achievement handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` when no achievement has that key, or a
+ *         documented handle/thread failure.
+ *
+ * The handle is a copy, for the same reason the index route's is.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_get_by_key(
+    CNA_AchievementCollectionHandle collection,
+    CNA_StringView key,
+    CNA_AchievementHandle* out_achievement);
+
+/**
+ * @brief Reports where an achievement sits in a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param achievement Owned achievement handle to look for.
+ * @param out_index Receives the index, or -1 when it is not present.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_index_of(
+    CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle achievement,
+    int32_t* out_index);
+
+/**
+ * @brief Reports whether a collection holds an achievement.
+ *
+ * @param collection Owned collection handle.
+ * @param achievement Owned achievement handle to look for.
+ * @param out_contains Receives non-zero when it is present.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_contains(
+    CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle achievement,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Appends an achievement to a collection.
+ *
+ * @param collection Owned collection handle.
+ * @param achievement Owned achievement handle to copy in.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_add(
+    CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle achievement);
+
+/**
+ * @brief Inserts an achievement at an index.
+ *
+ * @param collection Owned collection handle.
+ * @param index Index to insert at.
+ * @param achievement Owned achievement handle to copy in.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_insert(
+    CNA_AchievementCollectionHandle collection,
+    int32_t index,
+    CNA_AchievementHandle achievement);
+
+/**
+ * @brief Removes the achievement at an index.
+ *
+ * @param collection Owned collection handle.
+ * @param index Index to remove.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the collection, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_remove_at(
+    CNA_AchievementCollectionHandle collection,
+    int32_t index);
+
+/**
+ * @brief Removes an achievement equal to the one given.
+ *
+ * @param collection Owned collection handle.
+ * @param achievement Owned achievement handle to remove.
+ * @param out_removed Receives non-zero when one was found and removed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Unlike the gamer collection's remove, this one **answers whether anything was removed**, because
+ * the canonical operation does.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_remove(
+    CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle achievement,
+    CNA_Bool* out_removed);
+
+/**
+ * @brief Empties a collection.
+ *
+ * @param collection Owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_clear(
+    CNA_AchievementCollectionHandle collection);
+
+/**
+ * @brief Copies a collection's achievements into a caller array.
+ *
+ * @param collection Owned collection handle.
+ * @param destination Array receiving owned achievement handles; may be null when @p capacity is
+ *        zero. Every handle written is the caller's to release.
+ * @param capacity Destination capacity in handles.
+ * @param index Index within @p destination to start writing at.
+ * @param out_count Receives the number of achievements whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_achievement_collection_copy_to(
+    CNA_AchievementCollectionHandle collection,
+    CNA_AchievementHandle* destination,
+    uint64_t capacity,
+    int32_t index,
+    uint64_t* out_count);
+
+/**
+ * @brief Reads a signed-in gamer's earned achievements.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_achievements Receives an owned collection handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/IO failure.
+ *
+ * This reads what `cna_signed_in_gamer_award_achievement` persisted, so an achievement earned in one
+ * process run is still there in the next. The achievements it answers carry **only a key, an earned
+ * flag and a timestamp**: no catalog exists here to supply a name, a description or a score.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_achievements(
+    CNA_SignedInGamerHandle gamer,
+    CNA_AchievementCollectionHandle* out_achievements);
+
+/**
+ * @brief Reads a signed-in gamer's earned achievements and reports completion through a callback.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_achievements Receives an owned collection handle.
+ * @return The same answers as @ref cna_signed_in_gamer_get_achievements.
+ *
+ * One synchronous call that still invokes the callback: the canonical read marks itself complete
+ * before `Begin` returns, precisely so a game does not spin waiting for work that is already done.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_begin_get_achievements(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_AchievementCollectionHandle* out_achievements);
+
 #ifdef __cplusplus
 }
 #endif

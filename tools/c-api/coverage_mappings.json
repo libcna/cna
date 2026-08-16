@@ -5874,6 +5874,54 @@
       "tests": "`GuideSmoke.c` creates one from a game, drives it through an ordinary component route to prove the handle is not a special kind, and releases it",
       "status": "implemented",
       "task": "CBIND-037G5"
+    },
+    {
+      "id": "achievement",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Achievement(::(get[A-Za-z]+Property|GetPicture|operator==|operator!=|CreateInternal))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned achievement handle. The numbers and flags are one `CNA_AchievementInfo` snapshot; the key, name, description and how-to-earn text are count/copy pairs. `cna_achievement_equals` is the single route behind both canonical equality operators, and achievements compare **by value across every field** rather than by identity -- which is what makes a handle answered by a collection comparable with one a caller built. `cna_achievement_create_ext` maps the canonical factory and is also how a C caller obtains a catalog, since nothing here downloads one",
+      "tests": "`AchievementsSmoke.c` builds two equal achievements and one different, asserts equality is by value, reads every string and the snapshot, refuses a structure with the wrong version and a too-small buffer, and asserts the picture route reports the canonical **not-implemented** refusal rather than an empty picture",
+      "status": "implemented",
+      "task": "CBIND-037G6a"
+    },
+    {
+      "id": "achievement-collection",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AchievementCollection(::(getCountProperty|getIsDisposedProperty|getIsReadOnlyProperty|operator\\[\\]|Dispose|IndexOf|Insert|RemoveAt|Add|Remove|Clear|Contains|CopyTo|CreateInternal))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned collection handle with `cna_achievement_collection_*` routes. Both canonical indexers are mapped -- by position and by key -- and **each answers a copy, not a view**: the canonical reference points into storage that a later insert or remove would invalidate, and an achievement is a value, so copying loses nothing. The collection copies what it is given, so releasing the caller's handle afterwards changes nothing in it. Unlike the gamer collection, removal **answers whether anything was found**, because the canonical operation does",
+      "tests": "`AchievementsSmoke.c` builds a two-entry collection, releases a source handle and asserts the collection is unchanged, reads by index and by key and asserts a copy still compares equal to what is held, pins the canonical range refusals for both indexers and for insert and remove-at, drives add/insert/remove/remove-at/clear against the count, and copies out with an offset and with a too-small buffer",
+      "status": "implemented",
+      "task": "CBIND-037G6a"
+    },
+    {
+      "id": "achievement-collection-iterators",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AchievementCollection::(begin|end)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no C form, for the reason already settled for `GamerCollection`: a C++ iterator has no fixed size, no stable representation and no way to be compared from C. The index routes and the key lookup are how a C caller walks this collection",
+      "tests": "not applicable; the index and key routes are tested in their place",
+      "status": "not-applicable",
+      "task": "CBIND-037G6a"
+    },
+    {
+      "id": "signed-in-gamer-achievement-reads",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::SignedInGamer::(GetAchievements|BeginGetAchievements|EndGetAchievements)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_signed_in_gamer_get_achievements` and `cna_signed_in_gamer_begin_get_achievements`, the second being one synchronous call that still invokes the callback -- the canonical read marks itself complete before `Begin` returns, precisely so a game does not spin waiting for work that is already done. What it answers is what `cna_signed_in_gamer_award_achievement` **persisted**, so an achievement earned in one process run is still there in the next; each entry carries only a key, an earned flag and a timestamp, because no catalog exists here to supply a name, a description or a score",
+      "tests": "`AchievementsSmoke.c` awards an achievement, reads it back by key and asserts it is earned with an empty name and a real timestamp, and asserts the asynchronous form runs its callback exactly once and answers the same collection",
+      "status": "implemented",
+      "task": "CBIND-037G6a"
     }
   ]
 }

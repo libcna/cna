@@ -201,6 +201,11 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
                   offsetof(CNA_AudioEmitter, up) == 36U &&
                   offsetof(CNA_AudioEmitter, velocity) == 48U,
               "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_AchievementInfo) == 24U &&
+                 offsetof(CNA_AchievementInfo, gamer_score) == 8U &&
+                 offsetof(CNA_AchievementInfo, is_earned) == 14U &&
+                 offsetof(CNA_AchievementInfo, earned_date_time_ticks) == 16U,
+            "CNA_AchievementInfo layout must remain stable");
 static_assert(sizeof(CNA_GamerPresence) == 16U &&
                  offsetof(CNA_GamerPresence, presence_mode) == 8U &&
                  offsetof(CNA_GamerPresence, presence_value) == 12U,

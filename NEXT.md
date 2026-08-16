@@ -1097,15 +1097,32 @@
 > is already answered too — `LeaderboardReader::Read` spins on `GamerServicesDispatcher::UpdateAsync`
 > until its own `BeginRead` completes, so a leaderboard read is the **deferred** shape, and the
 > synchronous overloads are routes that pump the dispatcher themselves.
-> **Next: CBIND-037G6a**, achievements (35 rows).
+> CBIND-037G6a then completes achievements, 35 rows — and it is the one gamer-services surface that
+> finds **real data** anywhere, because `CBIND-037G4`'s award persists locally and this read answers
+> what it wrote. Each entry carries only a key, an earned flag and a timestamp: no catalog exists here
+> to supply a name, a description or a score, and the binding says so rather than inventing them.
 >
-> **State at this handoff.** Twenty-six slices are committed on `feature/binding` since
+> Three things are worth carrying forward. An achievement is a **value behind a handle**, so equality
+> is by value across every field and a collection can hand back a **copy** rather than a view — the
+> canonical reference points into storage a later insert or remove would invalidate, and a value loses
+> nothing by being copied. **Two absences are kept distinct**: the gamer picture is *absent* (a clear
+> flag, an ordinary success) while the achievement picture is *unimplemented* (`NOT_SUPPORTED`), so a
+> caller can tell "there is none" from "this runtime cannot" — worth checking which of the two any new
+> missing thing is. And a C trap worth remembering: **`text_is(copy(...), size, ...)` is unsequenced**
+> — C does not order a call against the output it wrote when both are arguments of the same
+> expression, so a comparison against a size the call itself sets has to be sequenced explicitly. That
+> cost one debugging round here. The inventory is now 5,899 implemented, 32 partial, 177 planned and
+> 307 N/A; all four trees green at 75/75, ASan+UBSan clean.
+> **Next: CBIND-037G6b**, property storage and game defaults (50 rows) — the design question is how a
+> C caller reads a variant it did not write.
+>
+> **State at this handoff.** Twenty-seven slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (212) is all
-> that remains in the whole campaign**, in two slices: achievements and leaderboards, and the avatars.
-> All four verification trees are green at 74/74 with the coverage gate current, and the ASan tree
-> runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (177) is all
+> that remains in the whole campaign**, in three slices: property storage, leaderboards, and the
+> avatars. All four verification trees are green at 75/75 with the coverage gate current, and the ASan
+> tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >
