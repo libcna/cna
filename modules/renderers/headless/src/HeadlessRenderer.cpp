@@ -523,10 +523,12 @@ namespace CNA::Internal::Renderers::Headless
 
     void HeadlessRenderer::GetViewportSize(int& width, int& height)
     {
-        if (currentRenderTarget_ != nullptr)
+        // Target zero, not "the" target: with several bound, XNA requires them all to share a
+        // size, and the viewport follows the first exactly as it does on a real renderer.
+        if (!boundRenderTargets_.empty())
         {
-            width = currentRenderTarget_->GetWidth();
-            height = currentRenderTarget_->GetHeight();
+            width = boundRenderTargets_.front()->GetWidth();
+            height = boundRenderTargets_.front()->GetHeight();
             return;
         }
         width = virtualWidth_ > 0 ? virtualWidth_ : 1024;
@@ -594,13 +596,23 @@ namespace CNA::Internal::Renderers::Headless
         return std::make_unique<HeadlessRenderTargetRenderer>(state_, w, h, depthFormat, mipMap, multiSampleCount);
     }
 
+    void HeadlessRenderer::UnbindAllRenderTargets()
+    {
+        for (HeadlessRenderTargetRenderer* target : boundRenderTargets_)
+        {
+            target->UnbindAsRenderTarget();
+        }
+        boundRenderTargets_.clear();
+    }
+
     void HeadlessRenderer::SetRenderTarget2D(IRenderTargetRenderer* rt)
     {
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->UnbindAsRenderTarget();
-        currentRenderTarget_ = static_cast<HeadlessRenderTargetRenderer*>(rt);
-        if (currentRenderTarget_ != nullptr)
-            currentRenderTarget_->BindAsRenderTarget();
+        UnbindAllRenderTargets();
+        if (auto* target = static_cast<HeadlessRenderTargetRenderer*>(rt); target != nullptr)
+        {
+            target->BindAsRenderTarget();
+            boundRenderTargets_.push_back(target);
+        }
     }
 
     std::unique_ptr<IRenderTargetCubeRenderer> HeadlessRenderer::CreateRenderTargetCube(
@@ -622,15 +634,43 @@ namespace CNA::Internal::Renderers::Headless
             SetRenderTarget2D(nullptr);
             return;
         }
-        if (count > 1)
-            throw std::runtime_error(
-                "HeadlessRenderer does not execute multiple simultaneous render targets.");
+        // A cube face is bound through its own entry point, which owns the whole binding: a cube
+        // face has no meaningful "and also these other targets" on any renderer, so mixing one
+        // into a multi-target set is rejected rather than silently binding the face alone.
         if (renderTargets[0].IsRenderTargetCubeFace())
-            SetRenderTargetCubeFace(
-                renderTargets[0].GetRenderTargetCube(),
-                renderTargets[0].GetCubeFace());
-        else
-            SetRenderTarget2D(renderTargets[0].GetRenderTarget2D());
+        {
+            if (count > 1)
+            {
+                throw std::runtime_error(
+                    "HeadlessRenderer cannot bind a cube face alongside other render targets.");
+            }
+            SetRenderTargetCubeFace(renderTargets[0].GetRenderTargetCube(),
+                                    renderTargets[0].GetCubeFace());
+            return;
+        }
+
+        // Bound as a set rather than one at a time: SetRenderTarget2D unbinds everything first,
+        // so calling it in a loop would leave only the last target bound -- which is exactly the
+        // "silently rendered to one of them" failure a refusal was previously guarding against.
+        UnbindAllRenderTargets();
+        for (int i = 0; i < count; ++i)
+        {
+            if (renderTargets[i].IsRenderTargetCubeFace())
+            {
+                UnbindAllRenderTargets();
+                throw std::runtime_error(
+                    "HeadlessRenderer cannot bind a cube face alongside other render targets.");
+            }
+
+            auto* target = static_cast<HeadlessRenderTargetRenderer*>(
+                renderTargets[i].GetRenderTarget2D());
+            if (target == nullptr)
+            {
+                continue;
+            }
+            target->BindAsRenderTarget();
+            boundRenderTargets_.push_back(target);
+        }
     }
 
     std::unique_ptr<IEffectRenderer> HeadlessRenderer::CreateEffectRenderer(const std::string& vertSrc,
@@ -997,7 +1037,12 @@ namespace CNA::Internal::Renderers::Headless
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Headless { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Headless::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Headless::HeadlessRenderer>(args.virtualWidth, args.virtualHeight);
     }

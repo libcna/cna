@@ -9,6 +9,11 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "System/NotSupportedException.hpp"
 
 #include "CNA/GraphicsCapability.hpp"
@@ -146,7 +151,7 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 }
 
 
-// REMED-GFX-135: does THIS build's renderer actually store a cube face? SDL_Renderer, ASCII, Canvas
+// REMED-GFX-135: does THIS build's renderer actually store a cube face? Native 2D, ASCII, Canvas
 // and DIRECTX3 create no cube resource at all and Headless stores no pixel data by design, so
 // TextureCube::SetData -- and therefore every content path that uploads a cube -- now refuses
 // deterministically instead of accepting the data and discarding it. Same constant and same
@@ -155,21 +160,19 @@ TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATexture2DFixtu
 // tests/Microsoft/Xna/Framework/Graphics/TextureCubeTests.cpp for the full contract).
 // PortableGL keeps the same nullptr CreateTextureCube default -- no cube resource exists there
 // either (docs/portablegl-renderer.md).
-#if defined(CNA_RENDERER_SDL_RENDERER) || \
-    defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_HTML_DOM) || \
-    defined(CNA_RENDERER_FREEDIRECT) || defined(CNA_RENDERER_HEADLESS) || \
-    defined(CNA_RENDERER_GDI) || defined(CNA_RENDERER_OPENVG) || \
-    defined(CNA_RENDERER_PORTABLEGL)
-constexpr bool kCubeStorageSupported = false;
-#else
-constexpr bool kCubeStorageSupported = true;
-#endif
+// plan_runtimerenderer.md RTR-P9-11: evaluated at runtime, so this describes the ACTIVE
+// renderer rather than the build default.
+[[nodiscard]] inline bool CubeStorageSupported()
+{
+    return !CNA_RENDERER_IS(SdlRenderer, Canvas, HtmlDom, FreeDirect, Headless, Gdi,
+                            OpenVg, PortableGL, TinyGL);
+}
 
 TEST_F(XnbBuiltInReaderRegistrationTest, FreshContentManagerLoadsATextureCubeFixtureWithNoOtherSetup)
 {
     ContentManager cm(nullptr, kUncompressedDir);
     cm.setGraphicsDevice(gd);
-    if (!kCubeStorageSupported)
+    if (!CubeStorageSupported())
     {
         EXPECT_THROW((void)cm.Load<TextureCube>("SampleCube64DXT1Mips"),
                      System::NotSupportedException);

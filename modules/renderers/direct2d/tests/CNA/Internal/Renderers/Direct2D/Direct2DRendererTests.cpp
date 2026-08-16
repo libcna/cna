@@ -7,7 +7,11 @@
 #include <limits>
 #include <vector>
 
-#if defined(CNA_RENDERER_DIRECT2D)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_DIRECT2D is defined project-wide.
+#if defined(CNA_RENDERER_DIRECT2D) || defined(CNA_RENDERER_PRESENT_DIRECT2D)
 #include "CNA/Internal/Renderers/Direct2D/Direct2DRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 

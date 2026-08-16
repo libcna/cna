@@ -2,8 +2,9 @@
 
 ## Project Overview
 
-**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on SDL3 and a pluggable graphics renderer
-layer. It is a framework/runtime and abstraction layer — not a game — designed to preserve XNA-style APIs
+**CNA** is a C++ reimplementation of the XNA 4.0 programming model, built on a CNA-owned platform abstraction
+(SDL3 is the default implementation) and a pluggable graphics renderer layer. It is a framework/runtime and
+abstraction layer — not a game — designed to preserve XNA-style APIs
 (`Microsoft::Xna::Framework`) while using modern C++23 internals.
 
 ### Source Reference
@@ -395,6 +396,33 @@ After making changes:
 2. Report: changed files, added stubs, missing dependencies, intentional deviations, build result, remaining errors.
 
 Default debug build dir: `cmake-build-debug/`. Vulkan build dir: `cmake-build-vulkan/`.
+Multi-renderer build dir: `cmake-build-multi/` (see below).
+
+### Runtime renderer selection (second build mode)
+
+Compile-time renderer selection (`-DCNA_GRAPHICS_RENDERER=<X>`) remains the default and recommended
+mode, and is unchanged in every respect.
+
+A second, opt-in mode compiles several renderers into one binary and chooses between them at
+runtime through `CNA::GraphicsRendererSelection`:
+
+```bash
+cmake -S . -B cmake-build-multi -G Ninja \
+      -DCNA_GRAPHICS_RENDERER=HEADLESS \
+      -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB"
+```
+
+`CNA_GRAPHICS_RENDERER` keeps its meaning as the **default** renderer and must be a member of the
+list. Only the default's `CNA_RENDERER_<X>` macro is defined project-wide; each family's own macro
+is private to its target, which is what keeps the existing renderer-gated tests and examples
+meaningful — they describe the default.
+
+Unbuildable combinations are rejected at configure time with a reason
+(`cmake/RendererCombinations.cmake`). See `docs/runtime-renderer-selection.md` and
+`plan_runtimerenderer.md`.
+
+`cmake-build-multi/` is the one addition to the build-directory list above; it is not a per-ticket
+directory and is shared by all multi-renderer work.
 
 ### Build locations & caching (mandatory)
 
@@ -450,13 +478,48 @@ individual task. Do not push unless the user explicitly asks to push.
 | Renderer implementations   | `modules/renderers/<family>/{src,include}/…`                    | Hidden from XNA API            |
 | CNA utilities/extensions  | `modules/core/include/CNA/…`, `modules/*-ext/…`                 | CNAEXT helpers, logging, etc.   |
 
+## Platform Boundary
+
+Platform, renderer and audio selection are three independent CMake axes:
+
+- `CNA_PLATFORM` selects windowing, events, input and host services (`SDL3`, `HEADLESS`, or
+  `TERMINAL`; SDL2/SDL12 are reserved but not implemented).
+- `CNA_GRAPHICS_RENDERER` selects the renderer.
+- `CNA_AUDIO_PLATFORM` selects playback/capture (`SDL3` or `NULL`).
+
+New production code must use `CNA::Platform::IPlatform` and its narrow services. Do **not** include
+SDL or call an `SDL_*`/`MIX_*` function outside these intentional native edges:
+
+- `modules/platform/src/Sdl3/`;
+- `modules/audio/src/Platform/Sdl3/` and the mixer implementation isolated inside audio;
+- renderer families `sdl-renderer`, `sdl-gpu`, `fna3d`, and `freedirect`.
+
+A genuinely SDL3-specific test belongs with the SDL3 platform implementation. Consumer tests use
+canned platform services or the parameterized conformance suite, not native event injection.
+Capabilities are promises: unsupported behavior refuses explicitly, and a service is non-null
+exactly when its presence capability is true. Poll events and update input once per frame; never
+put platform calls in a draw/audio/input inner loop.
+
+Run the boundary gates after relevant changes:
+
+```bash
+python3 tools/platform/sdl_inventory.py --check
+python3 tools/platform/sdl_classify.py --check
+python3 tools/platform/renderer_sdl_audit.py --check
+python3 tools/platform/sdl_ratchet.py --check
+python3 tools/platform/hot_path_lint.py
+```
+
+See `docs/platform-abstraction.md` for the contract and implementation checklist. The migration
+task/evidence log is `plan_platform.md`.
+
 Renderer selection is compile-time via `CNA_GRAPHICS_RENDERER` CMake option
 (`SDL_RENDERER` | `OPENGLES2` | `OPENGLES3` | `OPENGL33` | `WEBGL1` | `WEBGL2` | `BGFX` | `VULKAN` | `WEBGPU` |
 `MAGNUM` | `HEADLESS` | `SOFTWARE` | `STUB` | `DIRECTX11` | `DIRECTX12` | `DIRECT2D` | `CANVAS` |
 `HTML_DOM` | `SKIA` | `FREEDIRECT` | `DIRECTX9` | `DIRECTX1` | `DIRECTX2` | `DIRECTX3` | `DIRECTX5` | `DIRECTX6` |
 `DIRECTX7` | `DIRECTX8` | `DIRECTX10` | `SDL_GPU` | `OPENGLES1` | `OPENGL4` | `OPENGL1` | `OPENGL2` |
 `WICKED` | `SOKOL` | `DILIGENT` | `GLIDE` | `GDI` | `LLGL` | `METAL` | `BLEND2D` | `FNA3D` |
-`SVG_DOM` | `OPENVG` | `PORTABLEGL`). These are exactly 46
+`SVG_DOM` | `OPENVG` | `PORTABLEGL` | `TINYGL`). These are exactly 47
 public identities; EasyGL remains an internal implementation shared by five GL profiles. The former
 `ASCII` renderer identity was removed in favor of a renderer-neutral post-process effect,
 `CNA::Graphics::AsciiPostProcessEffect` (`modules/graphics-ext/`) -- see `docs/ascii-post-process-effect.md`.
@@ -468,6 +531,10 @@ is experimental and has a functional native
 `DILIGENT` is experimental too, and is the one renderer whose native API is chosen at **runtime**
 (DiligentCore is itself an abstraction over D3D11/D3D12/Vulkan/OpenGL/Metal) — see
 `plan_diligent.md` and `docs/diligent-renderer.md`.
+`TINYGL` is the fixed-function CPU OpenGL renderer (C-Chads/tinygl) -- the fixed-function
+counterpart to `PORTABLEGL`'s shader-era CPU OpenGL. Its transparency is a 1-bit colour-key cutout,
+not alpha blending, and it has no stencil, scissor, render targets or shaders of any kind; see
+`docs/tinygl-renderer.md` and `plan_tinygl.md` for the full boundary.
 `SKIA` is a separate experimental CPU-raster 2D renderer backed by a pinned external Skia artifact;
 it does not delegate rendering to EasyGL and does not advertise 3D/depth/MSAA/MRT capabilities.
 Use `plan_skia.md`, `NEXT_skia.md`, `docs/skia-renderer.md`, and

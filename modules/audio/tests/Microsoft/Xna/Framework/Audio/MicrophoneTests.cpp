@@ -63,27 +63,43 @@ namespace
     }();
 }
 
-// ===================== Static discovery (SDL dummy driver always reports one device) =====================
+// ===================== Static discovery through the selected recording capability =====================
 
-TEST(MicrophoneTest, AllIsNonEmptyUnderDummyAudioDriver)
+TEST(MicrophoneTest, AllReflectsTheSelectedRecordingCapability)
 {
+#if defined(CNA_AUDIO_PLATFORM_SDL3)
     // The SDL "dummy" driver (forced above) always exposes exactly one recording device, so
     // real enumeration never sees zero microphones here, unlike a genuine headless machine.
     EXPECT_FALSE(Microphone::getAllProperty().empty());
+#elif defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
+    // SDL2 and NULL currently advertise no recording provider and must never fall back to SDL3.
+    EXPECT_TRUE(Microphone::getAllProperty().empty());
+#else
+#error "CNA audio platform selection did not define an implementation"
+#endif
 }
 
 TEST(MicrophoneTest, DefaultDeviceEntryIsNamedDefaultDevice)
 {
     const auto& all = Microphone::getAllProperty();
+#if defined(CNA_AUDIO_PLATFORM_SDL2) || defined(CNA_AUDIO_PLATFORM_NULL)
+    GTEST_SKIP() << "selected audio backend has no recording capability";
+#endif
     ASSERT_FALSE(all.empty());
     EXPECT_EQ(all[0]->Name, "Default Device");
 }
 
-TEST(MicrophoneTest, DefaultPropertyIsFirstEntryOfAll)
+TEST(MicrophoneTest, DefaultPropertyIsFirstEntryOrNullWhenRecordingIsUnsupported)
 {
     const auto& all = Microphone::getAllProperty();
-    ASSERT_FALSE(all.empty());
-    EXPECT_EQ(Microphone::getDefaultProperty(), all[0]);
+    if (all.empty())
+    {
+        EXPECT_EQ(Microphone::getDefaultProperty(), nullptr);
+    }
+    else
+    {
+        EXPECT_EQ(Microphone::getDefaultProperty(), all[0]);
+    }
 }
 
 // ===================== Name / state =====================
@@ -312,7 +328,7 @@ TEST(MicrophoneTest, CheckBufferDoesNotThrowWithNoSubscribers)
 // enough time -> eventually fires" (positive path only, needs the dummy driver and up to 2s of
 // polling). Neither deterministically proves BufferReady stays silent when queued duration is
 // below BufferDuration -- this isolated (never Start()ed) instance always has GetQueuedBytes()==0
-// (captureStream_ is null), so the comparison genuinely runs and must evaluate false.
+// (its capture session is null), so the comparison genuinely runs and must evaluate false.
 TEST(MicrophoneTest, CheckBufferDoesNotRaiseWhenQueuedDurationIsBelowBufferDuration)
 {
     Microphone mic = MakeMic();
@@ -411,8 +427,8 @@ TEST_F(MicrophoneCaptureTest, GetDataReturnsNonZeroBytesAfterCapture)
 }
 
 // P10-MIC-004: GetData() after a real Start()-then-Stop() cycle must behave exactly like "never
-// started" (return 0, leave the caller's buffer untouched, MC-3) -- Stop() closes
-// captureStream_, a genuinely different history than
+// started" (return 0, leave the caller's buffer untouched, MC-3) -- Stop() closes the capture
+// session, a genuinely different history than
 // GetDataLeavesBufferUntouchedWhenNoDataAvailable (which never opens a stream at all), even
 // though both currently land on the same null-stream code path afterward.
 TEST_F(MicrophoneCaptureTest, GetDataAfterStopReturnsZeroAndLeavesBufferUntouched)

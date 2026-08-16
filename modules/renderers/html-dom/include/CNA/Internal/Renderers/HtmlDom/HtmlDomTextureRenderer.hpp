@@ -54,9 +54,6 @@ namespace CNA::Internal::Renderers::HtmlDom
         /** @brief Returns the texture height in pixels. */
         [[nodiscard]] int GetHeight() const override { return height_; }
 
-        /** @brief Always null -- this renderer has no `SDL_Texture` anywhere in it. */
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
-
         /**
          * @brief Replaces the whole level-0 image and invalidates every cached variant URL.
          *
@@ -74,7 +71,7 @@ namespace CNA::Internal::Renderers::HtmlDom
          * @param levelH Height at that level, in pixels.
          * @throws std::runtime_error for any level above 0 -- neither CSS backgrounds nor this
          *         renderer's texture canvases have a mip chain or per-level LOD selection, the same
-         *         boundary `CANVAS` and `SDL_RENDERER` draw.
+         *         boundary `CANVAS` and the native 2D renderer draw.
          */
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
 

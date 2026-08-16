@@ -8,7 +8,11 @@
 // modules/renderers/canvas/tests/... 's own header comment).
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_OPENVG)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_OPENVG is defined project-wide.
+#if defined(CNA_RENDERER_OPENVG) || defined(CNA_RENDERER_PRESENT_OPENVG)
 #include "CNA/Internal/Renderers/OpenVg/OpenVgRenderer.hpp"
 
 using namespace CNA::Internal::Renderers::OpenVg;
@@ -43,4 +47,4 @@ TEST(OpenVgBlendStateMapping, ArbitraryCustomBlendStateThrows)
 {
     EXPECT_THROW(BlendStateToVgBlendMode(2, 2, 3, 3, 0, 0), std::runtime_error);
 }
-#endif // CNA_RENDERER_OPENVG
+#endif // CNA_RENDERER_OPENVG / CNA_RENDERER_PRESENT_OPENVG

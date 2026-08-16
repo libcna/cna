@@ -10,7 +10,7 @@
 #include "CNA/LogCategory.hpp"
 #include "CNA/LogLevel.hpp"
 #include "CNA/Logger.hpp"
-#include "CNA/Platform.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #include <array>
 #include <cstring>
@@ -496,10 +496,10 @@ CNA_Result cna_platform_get_current(CNA_Platform* const outPlatform)
             return InvalidArgument("The platform output is null.");
         }
         switch (CNA::getCurrentPlatform()) {
-            case CNA::Platform::Desktop: *outPlatform = CNA_PLATFORM_DESKTOP; break;
-            case CNA::Platform::Android: *outPlatform = CNA_PLATFORM_ANDROID; break;
-            case CNA::Platform::iOS: *outPlatform = CNA_PLATFORM_IOS; break;
-            case CNA::Platform::Web: *outPlatform = CNA_PLATFORM_WEB; break;
+            case CNA::TargetPlatform::Desktop: *outPlatform = CNA_PLATFORM_DESKTOP; break;
+            case CNA::TargetPlatform::Android: *outPlatform = CNA_PLATFORM_ANDROID; break;
+            case CNA::TargetPlatform::iOS: *outPlatform = CNA_PLATFORM_IOS; break;
+            case CNA::TargetPlatform::Web: *outPlatform = CNA_PLATFORM_WEB; break;
         }
         return CNA_RESULT_SUCCESS;
     });

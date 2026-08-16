@@ -241,6 +241,37 @@ and corrected or confirmed as expected C++ adaptations.
 
 ---
 
+## CNAEXT: runtime graphics renderer selection
+
+Not XNA 4.0 API — XNA had exactly one renderer and no notion of choosing between several, so this
+whole surface is a CNA extension (`plan_runtimerenderer.md`).
+
+| API | Status | Tests |
+|---|---|---|
+| `CNA::GraphicsRendererSelection::SetPreferred(GraphicsRendererType)` | ✅ | latch, unavailable-renderer refusal, precedence |
+| `CNA::GraphicsRendererSelection::SetPreferred(std::string_view)` | ✅ | canonical + case-insensitive names, unknown-name rejection |
+| `CNA::GraphicsRendererSelection::GetSelected()` | ✅ | default, env var, explicit call, does-not-latch |
+| `CNA::GraphicsRendererSelection::GetActive()` | ✅ | equals selected, diverges after substitution, throws before creation |
+| `CNA::GraphicsRendererSelection::IsLatched()` | ✅ | latches on success only, survives device destruction |
+| `CNA::GraphicsRendererSelection::GetAvailable()` / `IsAvailable()` | ✅ | matches the compiled-in registry |
+| `CNA::GraphicsRendererSelection::SetFallbackChain(span)` | ✅ | ordering, dedup, absent entries permitted |
+| `CNA::GraphicsRendererSelection::EnableAutomaticFallback(bool)` | ✅ | covers every compiled-in renderer, disable restores single attempt |
+| `CNA::GraphicsRendererSelection::IsFallbackEnabled()` | ✅ | off by default |
+| `CNA::GraphicsRendererSelection::GetFallbackHistory()` | ✅ | empty on first-attempt success, ordered otherwise, reason + message |
+| `CNA::GraphicsRendererSelection::ResetForTestingEXT()` | ✅ | test-only; documented as not part of the supported API |
+| `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` | ✅ | report the device's real renderer (no longer `constexpr` — see below) |
+| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | all 46 identities, distinct, non-placeholder |
+| `CNA::tryParseGraphicsRendererName()` | ✅ | round-trips every identity, case-insensitive |
+
+**Intentional deviation.** `GraphicsDevice::GetGraphicsRendererType()` and
+`GetGraphicsRendererName()` were `constexpr` and ignored `this`, returning the compile-time
+identity. They are now real accessors returning the renderer *that device* is using, and the
+`constexpr` was dropped: a compile-time answer cannot describe a runtime choice. Callers who want
+the build's compile-time identity still have `CNA::getCurrentGraphicsRendererType()`, which remains
+a constant expression in both build modes.
+
+---
+
 ## `Microsoft::Xna::Framework::Graphics`
 
 Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloads added as stubs.
@@ -1529,7 +1560,7 @@ see that file for full per-task detail and any accepted deviations from FNA.
 | Keys (enum) | ✅ | N/A | Complete; pure value enum; underlying type explicit `int` (task 767, cosmetic) |
 | KeyState (enum) | ✅ | N/A | Complete; pure value enum |
 | Mouse | ✅ | Real | `SetPosition`, `IsRelativeMouseModeEXT`, `ClickedEXT` all wired to real SDL3 mouse state (Phase I4, tasks 745–749). Known deviation: `SetPosition`'s `SDL_WarpMouseInWindow` target has no inverse logical→window coordinate transform, so it is off by the scale factor on a letterboxed/scaled window (documented in-source in `Mouse.cpp`; needs a graphics-layer addition, out of scope for this branch). |
-| MouseCursor | ✅ | Real | MonoGame-derived `NOXNA` extension — no `MouseCursor` type exists in FNA or XNA 4.0. **Status decision (Task 754): kept**, not dropped — it is the standard way MonoGame/FNA-family games set custom and stock OS cursors, and CNA's `Mouse::SetCursor(MouseCursor&)` already depends on it. CHECKLIST-compliant as of Phase I4 tasks 750-753 (correct SPDX, full `NOXNA` tagging, `FromTexture2D`, `Dispose`/`IDisposable`, lazy stock-cursor construction, `WaitCursor`→`WaitArrow` rename). No separate `Handle` property was added: the existing `NOXNA GetSDLCursor() const` (returning `SDL_Cursor*`) already serves as MonoGame's `IntPtr Handle` equivalent — a second handle accessor returning the same pointer reinterpreted as a generic integer would be pure duplication with no current consumer. |
+| MouseCursor | ✅ | Real | MonoGame-derived `NOXNA` extension — no `MouseCursor` type exists in FNA or XNA 4.0. **Status decision (Task 754): kept**, not dropped — it is the standard way MonoGame/FNA-family games set custom and stock OS cursors, and CNA's `Mouse::SetCursor(MouseCursor&)` already depends on it. CHECKLIST-compliant as of Phase I4 tasks 750-753 (correct SPDX, full `NOXNA` tagging, `FromTexture2D`, `Dispose`/`IDisposable`, lazy stock-cursor construction, `WaitCursor`→`WaitArrow` rename). PLAT-81 later removed the CNA-only raw `SDL_Cursor*` constructor/accessor: the value now stores a platform-neutral stock shape or owned RGBA pixels, and the selected `IPlatformMouse` owns native cursor creation. No generic `Handle` property is exposed because there is no backend-neutral handle contract or consumer. |
 | MouseState | ✅ | Real | Populated from real SDL3 mouse position/button/scroll-wheel state. |
 | TextInputEXT | ✅ | Real | Wired to `SDL_EVENT_TEXT_INPUT`/`SDL_EVENT_TEXT_EDITING`, `SDL_StartTextInput`/`StopTextInput`, `SDL_SetTextInputArea` (Phase I1, tasks 700–708). `TextInput` callback is `charcs`/`char16_t` — one UTF-16 code unit per call (astral code points as surrogate pairs), matching FNA's `Action<char>` (task 806). `TextEditing` stays a UTF-8 `std::string` (a separate documented deviation). |
 

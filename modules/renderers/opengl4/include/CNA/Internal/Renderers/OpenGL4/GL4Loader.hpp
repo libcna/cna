@@ -5,11 +5,11 @@
 // profile functions this renderer actually calls. Deliberately NOT a vendored third-party loader
 // (no glad/GLEW dependency added to the tree) -- mirrors this project's existing "zero new
 // third-party dependency" preference for a from-scratch native renderer (see plan_sdlgpu.md's own
-// "Why an SDL GPU renderer" rationale). The handful of pre-1.2 entry points (glClear, glViewport,
+// "Why a GPU renderer" rationale). The handful of pre-1.2 entry points (glClear, glViewport,
 // glGenTextures, glTexImage2D, glReadPixels, ...) are declared by the platform's own <GL/gl.h> (or
 // macOS/<OpenGL/gl.h>) and are linked directly against libGL/OpenGL.framework -- only functions
 // introduced by GL 1.2+ (buffers, VAOs, shaders/programs, GL_TEXTURE0+, separate blend
-// funcs/equations, mipmap generation) need a runtime SDL_GL_GetProcAddress() lookup, done once by
+// funcs/equations, mipmap generation) need a runtime platform GL lookup, done once by
 // LoadGL4Functions() right after the GL context is made current.
 //
 // Every loaded entry point is named gl4_<realName> (e.g. gl4_glCreateShader) rather than shadowing
@@ -365,9 +365,7 @@ namespace CNA::Internal::Renderers::OpenGL4::GL4
     extern PFNGL4DRAWELEMENTSINSTANCEDPROC       gl4_glDrawElementsInstanced;
     extern PFNGL4VERTEXATTRIBDIVISORPROC         gl4_glVertexAttribDivisor;
 
-    /// Function-pointer-getter type matching SDL_GL_GetProcAddress's own signature
-    /// (`SDL_FunctionPointer SDL_GL_GetProcAddress(const char*)`), kept generic here so this
-    /// header has no SDL dependency of its own.
+    /// Generic function-pointer-getter type matching the platform GL service callback.
     using GetProcAddressFn = void* (*)(const char* name);
 
     /**

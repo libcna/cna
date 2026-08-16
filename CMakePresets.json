@@ -1,6 +1,10 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "web",
@@ -8,68 +12,124 @@
       "description": "Builds house3d_demo as a self-contained HTML page via Emscripten. Requires EMSDK to be active (source emsdk_env.sh). Run with: emcmake cmake --preset web",
       "binaryDir": "${sourceDir}/cmake-build-web",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":        "Release",
-        "CNA_GRAPHICS_RENDERER":    "WEBGL2",
-        "CNA_RENDERER_WEBGL2":      "ON",
-        "CNA_BUILD_TESTS":         "OFF",
-        "CNA_BUILD_EXAMPLES":      "ON",
-        "EASYGL_BUILD_EXAMPLES":   "OFF",
-        "EASYGL_BUILD_TESTS":      "OFF"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CNA_GRAPHICS_RENDERER": "WEBGL2",
+        "CNA_RENDERER_WEBGL2": "ON",
+        "CNA_BUILD_TESTS": "OFF",
+        "CNA_BUILD_EXAMPLES": "ON",
+        "EASYGL_BUILD_EXAMPLES": "OFF",
+        "EASYGL_BUILD_TESTS": "OFF"
       }
     },
     {
       "name": "devices-asan",
       "displayName": "AddressSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with AddressSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that. REMED-BUILD-011: CNA_DEVICES=ON is required here — without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with AddressSanitizer. Verified working in plan_devices_phase8.md Task P8-4 \u2014 detects use-after-free/heap-corruption bugs (e.g. the Task P8-1 self-destroy-during-callback fix). Does not detect data races; use devices-tsan for that. REMED-BUILD-011: CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-asan",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_RENDERER":      "OPENGLES3",
-        "CNA_BUILD_TESTS":           "ON",
-        "CNA_DEVICES":               "ON",
-        "CMAKE_CXX_FLAGS":           "-fsanitize=address -fno-omit-frame-pointer -g -O0",
-        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=address"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "OPENGLES3",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_DEVICES": "ON",
+        "CMAKE_CXX_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g -O0",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address"
       }
     },
     {
       "name": "devices-tsan",
       "displayName": "ThreadSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with ThreadSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) — out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating. REMED-BUILD-011: CNA_DEVICES=ON is required here — without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with ThreadSanitizer. Verified working in plan_devices_phase8.md Task P8-4 \u2014 the tool that actually detects data races (ASan does not). As of Task P8-2, running the Devices-only test suite under this preset reports exactly one pre-existing, unrelated race in sharp-runtime's TimeSpan copy constructor (a debug copy_count counter) \u2014 out of scope for Microsoft::Devices work; any *new* race reported here is worth investigating. REMED-BUILD-011: CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-tsan",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_RENDERER":      "OPENGLES3",
-        "CNA_BUILD_TESTS":           "ON",
-        "CNA_DEVICES":               "ON",
-        "CMAKE_CXX_FLAGS":           "-fsanitize=thread -fno-omit-frame-pointer -g -O1",
-        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=thread"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "OPENGLES3",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_DEVICES": "ON",
+        "CMAKE_CXX_FLAGS": "-fsanitize=thread -fno-omit-frame-pointer -g -O1",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
       }
     },
     {
       "name": "devices-ubsan",
       "displayName": "UndefinedBehaviorSanitizer (Microsoft::Devices hardening, OPENGLES3)",
-      "description": "Debug + OPENGLES3 + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in plan_devices_phase8.md Task P8-4 — the full Devices-only suite reports zero issues under this preset. REMED-BUILD-011: CNA_DEVICES=ON is required here — without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
+      "description": "Debug + OPENGLES3 + tests, instrumented with UndefinedBehaviorSanitizer. Verified working in plan_devices_phase8.md Task P8-4 \u2014 the full Devices-only suite reports zero issues under this preset. REMED-BUILD-011: CNA_DEVICES=ON is required here \u2014 without it, the entire CNA::Devices surface (FileDialog/MessageBox/Clipboard/SystemTray/...) this preset's own name and description promise compiles out silently.",
       "binaryDir": "${sourceDir}/cmake-build-devices-ubsan",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":          "Debug",
-        "CNA_GRAPHICS_RENDERER":      "OPENGLES3",
-        "CNA_BUILD_TESTS":           "ON",
-        "CNA_DEVICES":               "ON",
-        "CMAKE_CXX_FLAGS":           "-fsanitize=undefined -fno-omit-frame-pointer -g -O1",
-        "CMAKE_EXE_LINKER_FLAGS":    "-fsanitize=undefined"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "OPENGLES3",
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_DEVICES": "ON",
+        "CMAKE_CXX_FLAGS": "-fsanitize=undefined -fno-omit-frame-pointer -g -O1",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=undefined"
+      }
+    },
+    {
+      "name": "macos",
+      "displayName": "macOS (SDL_RENDERER, Release)",
+      "description": "plan_apple.md APPLE-1: native macOS desktop build. Requires the sibling sharp-runtime checkout and initialized submodules; the first configure builds SDL3/SDL3_image/SDL3_mixer into .sdl-prebuilt-Darwin-<arch>/ (several minutes) and every later configure reuses it. The deployment target defaults to CNA_MACOS_DEPLOYMENT_TARGET (13.3); executables stay plain binaries unless CNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON. For the native Metal renderer use -DCNA_GRAPHICS_RENDERER=METAL instead, and read docs/metal-renderer.md first.",
+      "binaryDir": "${sourceDir}/cmake-build-macos",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":      "Release",
+        "CNA_GRAPHICS_RENDERER": "SDL_RENDERER",
+        "CNA_BUILD_TESTS":       "ON",
+        "CNA_BUILD_EXAMPLES":    "ON"
+      }
+    },
+    {
+      "name": "ios",
+      "displayName": "iOS device (arm64, SDL_RENDERER, final-link smoke app)",
+      "description": "plan_apple.md APPLE-2/APPLE-13: cross-compiles CNA and final-links cna_ios_smoke.app for arm64 iPhone/iPad on a macOS host with Xcode. Tests/examples are off because their harnesses assume a desktop process/filesystem. The app is not run on a physical device; see docs/apple-platforms.md. Add -G Xcode and -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID> to sign and deploy.",
+      "binaryDir": "${sourceDir}/cmake-build-ios",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":      "Release",
+        "CNA_IOS_SIMULATOR":     "OFF",
+        "CNA_GRAPHICS_RENDERER": "SDL_RENDERER",
+        "CNA_BUILD_TESTS":       "OFF",
+        "CNA_BUILD_EXAMPLES":    "OFF",
+        "CNA_ENABLE_NET":        "OFF"
+      }
+    },
+    {
+      "name": "ios-simulator",
+      "displayName": "iOS simulator (host arch, SDL_RENDERER, smoke app)",
+      "description": "plan_apple.md APPLE-2/APPLE-13: the simulator counterpart of the 'ios' preset. It final-links cna_ios_smoke.app; Apple CI installs and launches that app for one framework frame. Kept in its own build directory because device and simulator binaries are not interchangeable even at the same architecture, which is also why the vendored SDL install root is keyed by sysroot.",
+      "binaryDir": "${sourceDir}/cmake-build-ios-sim",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/ios.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE":      "Release",
+        "CNA_IOS_SIMULATOR":     "ON",
+        "CNA_GRAPHICS_RENDERER": "SDL_RENDERER",
+        "CNA_BUILD_TESTS":       "OFF",
+        "CNA_BUILD_EXAMPLES":    "OFF",
+        "CNA_ENABLE_NET":        "OFF"
       }
     },
     {
       "name": "tests",
       "displayName": "Native desktop tests (OpenGL ES renderer, Debug)",
-      "description": "P9-BUILD-002: native (non-Emscripten) debug build with CNA_BUILD_TESTS/CNA_BUILD_EXAMPLES on, for running CnaTests (including all Audio suites) locally. Requires 'git submodule update --init --recursive' first (third_party/SDL, third_party/SDL_image, third_party/SDL_mixer, vendor/googletest) -- see NEXTaudio.md §7 / plan_audio.md Phase 9 P9-BUILD for the full dependency story. First configure builds SDL3/SDL3_image/SDL3_mixer from source into .sdl-prebuilt/ (several minutes); every later configure/build reuses that cache. Run: cmake --preset tests && cmake --build --preset tests --target CnaTests && SDL_AUDIODRIVER=dummy ./cmake-build-tests/CnaTests -- running the CnaTests binary directly (not `ctest`) is the authoritative way to run the suite: `ctest` discovers and runs each gtest case as its own short-lived process, which both spuriously reports every unbuilt display-dependent graphics smoke-test executable as failed and races several tests that share hardcoded /tmp fixture paths across processes -- neither is a real bug in the tests themselves, see plan_audio.md P9-BUILD-007.",
+      "description": "P9-BUILD-002: native (non-Emscripten) debug build with CNA_BUILD_TESTS/CNA_BUILD_EXAMPLES on, for running CnaTests (including all Audio suites) locally. Requires 'git submodule update --init --recursive' first (third_party/SDL, third_party/SDL_image, third_party/SDL_mixer, vendor/googletest) -- see NEXTaudio.md \u00a77 / plan_audio.md Phase 9 P9-BUILD for the full dependency story. First configure builds SDL3/SDL3_image/SDL3_mixer from source into .sdl-prebuilt/ (several minutes); every later configure/build reuses that cache. Run: cmake --preset tests && cmake --build --preset tests --target CnaTests && SDL_AUDIODRIVER=dummy ./cmake-build-tests/CnaTests -- running the CnaTests binary directly (not `ctest`) is the authoritative way to run the suite: `ctest` discovers and runs each gtest case as its own short-lived process, which both spuriously reports every unbuilt display-dependent graphics smoke-test executable as failed and races several tests that share hardcoded /tmp fixture paths across processes -- neither is a real bug in the tests themselves, see plan_audio.md P9-BUILD-007.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/cmake-build-tests",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE":     "Debug",
+        "CMAKE_BUILD_TYPE": "Debug",
         "CNA_GRAPHICS_RENDERER": "OPENGLES3",
-        "CNA_BUILD_TESTS":      "ON",
-        "CNA_BUILD_EXAMPLES":   "ON"
+        "CNA_BUILD_TESTS": "ON",
+        "CNA_BUILD_EXAMPLES": "ON"
+      }
+    },
+    {
+      "name": "multi-renderer",
+      "displayName": "Multi-renderer (HEADLESS + SOFTWARE + STUB)",
+      "description": "plan_runtimerenderer.md reference multi-renderer set: no window, no GPU dependency, no third-party closure, so it runs anywhere including CI with no display server. The renderer is chosen at runtime via CNA::GraphicsRendererSelection.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/cmake-build-multi",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CNA_GRAPHICS_RENDERER": "HEADLESS",
+        "CNA_GRAPHICS_RENDERERS": "HEADLESS;SOFTWARE;STUB",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "ccache",
+        "CMAKE_C_COMPILER_LAUNCHER": "ccache"
       }
     }
   ],
@@ -78,31 +138,41 @@
       "name": "web",
       "displayName": "Build house3d_demo for web",
       "configurePreset": "web",
-      "targets": ["cna_house3d_demo"]
+      "targets": [
+        "cna_house3d_demo"
+      ]
     },
     {
       "name": "devices-asan",
       "displayName": "Build CnaTests under AddressSanitizer",
       "configurePreset": "devices-asan",
-      "targets": ["CnaTests"]
+      "targets": [
+        "CnaTests"
+      ]
     },
     {
       "name": "devices-tsan",
       "displayName": "Build CnaTests under ThreadSanitizer",
       "configurePreset": "devices-tsan",
-      "targets": ["CnaTests"]
+      "targets": [
+        "CnaTests"
+      ]
     },
     {
       "name": "devices-ubsan",
       "displayName": "Build CnaTests under UndefinedBehaviorSanitizer",
       "configurePreset": "devices-ubsan",
-      "targets": ["CnaTests"]
+      "targets": [
+        "CnaTests"
+      ]
     },
     {
       "name": "tests",
       "displayName": "Build CnaTests (native desktop, OpenGL ES)",
       "configurePreset": "tests",
-      "targets": ["CnaTests"]
+      "targets": [
+        "CnaTests"
+      ]
     }
   ]
 }

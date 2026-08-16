@@ -101,8 +101,8 @@ protected:
         }
         else if (frame_ == 2)
         {
-            SDL_SetWindowSize(renderer.GetWindowInternal(), 640, 240);
-            SDL_SyncWindow(renderer.GetWindowInternal());
+            SDL_SetWindowSize(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()), 640, 240);
+            SDL_SyncWindow(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()));
         }
         else if (frame_ == 3)
         {

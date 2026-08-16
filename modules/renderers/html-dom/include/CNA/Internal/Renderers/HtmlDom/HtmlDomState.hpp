@@ -150,7 +150,7 @@ namespace CNA::Internal::Renderers::HtmlDom
      *
      * plan_html_dom.md HTMLDOM-102: RasterizerState.ScissorTestEnable was previously never read by
      * this renderer at all -- SetScissorRect's clip-path/Canvas2D clip applied unconditionally,
-     * matching SDL_RENDERER's own omission but not real XNA fidelity (SDL_RENDERER itself never
+     * matching the native 2D renderer's omission but not real XNA fidelity (that renderer never
      * overrides ApplyRasterizerState either, so it has no enable bit to read in the first place;
      * HTML_DOM now does). Kept as plain C++ state -- the same shape GetCurrentCompositeOpEXT/
      * SetCurrentCompositeOpEXT already use for BlendState -- so it stays unit-testable outside a

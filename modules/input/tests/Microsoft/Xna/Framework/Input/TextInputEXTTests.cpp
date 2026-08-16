@@ -2,13 +2,16 @@
 #include <gtest/gtest.h>
 
 #include "CNA/Input/TextInputType.hpp"
+#include "CNA/Platform/PlatformException.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
 #include "Microsoft/Xna/Framework/Input/TextInputEXT.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
 
-#include <SDL3/SDL.h>
-
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace Microsoft::Xna::Framework::Input;
@@ -16,20 +19,111 @@ using Microsoft::Xna::Framework::Rectangle;
 
 namespace
 {
+    class CannedTextInput final : public CNA::Platform::IPlatformTextInput
+    {
+    public:
+        int startCalls = 0;
+        int stopCalls = 0;
+        int areaCalls = 0;
+        CNA::Platform::WindowId lastWindow = 0;
+        CNA::Platform::TextInputType lastType = CNA::Platform::TextInputType::Default;
+        CNA::Platform::TextInputArea lastArea{};
+        bool active = false;
+        bool screenKeyboardShown = false;
+        bool failCommands = false;
+
+        void Start(const CNA::Platform::WindowId window,
+                   const CNA::Platform::TextInputType type) override
+        {
+            FailIfRequested();
+            ++startCalls;
+            lastWindow = window;
+            lastType = type;
+            active = true;
+        }
+
+        void Stop(const CNA::Platform::WindowId window) override
+        {
+            FailIfRequested();
+            ++stopCalls;
+            lastWindow = window;
+            active = false;
+        }
+
+        [[nodiscard]] bool IsActive(const CNA::Platform::WindowId window) const override
+        {
+            return active && window == lastWindow;
+        }
+
+        [[nodiscard]] bool IsScreenKeyboardShown(
+            const CNA::Platform::WindowId window) const override
+        {
+            return screenKeyboardShown && window == lastWindow;
+        }
+
+        void SetInputArea(const CNA::Platform::WindowId window,
+                          const CNA::Platform::TextInputArea& area) override
+        {
+            FailIfRequested();
+            ++areaCalls;
+            lastWindow = window;
+            lastArea = area;
+        }
+
+    private:
+        void FailIfRequested() const
+        {
+            if (failCommands)
+            {
+                throw CNA::Platform::PlatformException("CannedTextInput", "requested failure");
+            }
+        }
+    };
+
+    class CannedTextInputPlatform final
+        : public CNA::Platform::Testing::PlatformTestDecorator
+    {
+    public:
+        bool serviceAvailable = true;
+
+        [[nodiscard]] CNA::Platform::IPlatformTextInput* GetTextInput() override
+        {
+            return serviceAvailable ? &textInput : nullptr;
+        }
+
+        CannedTextInput textInput;
+    };
+
     // TextInputEXT is a static class with global state. Reset it around every test so
-    // cases do not leak subscribers or a stale window handle into one another.
+    // cases do not leak subscribers or a stale window identity into one another. The canned
+    // platform makes lifecycle coverage deterministic on SDL3, headless and terminal builds.
     class TextInputEXTTest : public ::testing::Test
     {
     protected:
-        void SetUp() override { Reset(); }
-        void TearDown() override { Reset(); }
+        static constexpr std::uintptr_t Handle = 0xC0FFEEu;
+        static constexpr CNA::Platform::WindowId Window = 37;
 
-        static void Reset()
+        CannedTextInputPlatform platform;
+        std::unique_ptr<CNA::Platform::Testing::ScopedCurrentPlatform> installed;
+
+        void SetUp() override
         {
-            TextInputEXT::TextInput = nullptr;
-            TextInputEXT::TextEditing = nullptr;
-            TextInputEXT::TextEditingCandidatesEXT = nullptr;
-            TextInputEXT::setWindowHandleProperty(0);
+            TextInputEXT::ResetForTests();
+            installed =
+                std::make_unique<CNA::Platform::Testing::ScopedCurrentPlatform>(platform);
+        }
+
+        void TearDown() override
+        {
+            installed.reset();
+            TextInputEXT::ResetForTests();
+        }
+
+        static void PublishWindow(const std::uintptr_t handle = Handle,
+                                  const CNA::Platform::WindowId window = Window)
+        {
+            TextInputEXT::setWindowHandleProperty(handle);
+            TextInputEXT::INTERNAL_setWindowId(window);
         }
     };
 }
@@ -171,9 +265,8 @@ TEST_F(TextInputEXTTest, TextEditingCandidatesWithoutSubscriberIsSafe)
     EXPECT_NO_THROW(TextInputEXT::INTERNAL_OnTextEditingCandidates({}, -1, false));
 }
 
-// TextInputEXT::ResetForTests documents that it resets "callbacks, window handle" — verify the
-// callback lists are actually cleared, not just the window handle (already covered separately by
-// ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded).
+// TextInputEXT::ResetForTests documents that it resets callbacks and window identity — verify the
+// callback lists are actually cleared, not just the handle/id pair.
 TEST_F(TextInputEXTTest, ResetForTestsClearsAllSubscriberLists)
 {
     bool textInputCalled = false;
@@ -206,26 +299,26 @@ TEST_F(TextInputEXTTest, WindowHandlePropertyRoundTrips)
     EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
 }
 
-// P8-005(c): the framework never leaves a stale window handle behind — ResetForTests clears it to 0, so
-// after a reset every window-dependent call takes the null-guarded no-op path instead of dereferencing a
-// possibly-freed SDL_Window*. (A non-null stale handle is the caller's contract: CNA cannot validate an
-// arbitrary pointer without handing it to SDL, so it only guards handle == 0; the framework-managed
-// lifecycle avoids that by clearing the handle on reset.)
+// P8-005(c): the framework never leaves stale window identity behind. ResetForTests clears both
+// halves, so a later raw handle cannot accidentally inherit the previous platform window id.
 TEST_F(TextInputEXTTest, ResetForTestsClearsWindowHandleSoLaterCallsAreNullGuarded)
 {
-    TextInputEXT::setWindowHandleProperty(0xDEADBEEFu); // a handle that must never be dereferenced
+    PublishWindow();
     TextInputEXT::ResetForTests();
     EXPECT_EQ(TextInputEXT::getWindowHandleProperty(), std::uintptr_t{0});
 
-    // With the handle cleared, these are safe no-ops (the bogus handle is never passed to SDL).
+    // Re-publishing only a raw handle must not retain the old id or reach the service.
+    TextInputEXT::setWindowHandleProperty(Handle);
     EXPECT_NO_THROW(TextInputEXT::StartTextInput());
     EXPECT_NO_THROW(TextInputEXT::StopTextInput());
     EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+    EXPECT_EQ(platform.textInput.startCalls, 0);
+    EXPECT_EQ(platform.textInput.stopCalls, 0);
 }
 
 TEST_F(TextInputEXTTest, IsTextInputActiveIsFalseWithoutWindow)
 {
-    // No window handle -> the null guard returns false without touching SDL.
+    // No published window id -> false without touching the platform service.
     EXPECT_FALSE(TextInputEXT::IsTextInputActive());
 }
 
@@ -237,7 +330,7 @@ TEST_F(TextInputEXTTest, IsScreenKeyboardShownIsFalseWithoutWindow)
 
 TEST_F(TextInputEXTTest, StartStopAndSetRectangleWithoutWindowAreSafeNoOps)
 {
-    // With no window handle every call is null-guarded, so none reach SDL.
+    // With no window identity every call is null-guarded, so none reach the service.
     EXPECT_NO_THROW(TextInputEXT::StartTextInput());
     EXPECT_NO_THROW(TextInputEXT::StopTextInput());
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 10, 10)));
@@ -258,9 +351,8 @@ TEST_F(TextInputEXTTest, StartTextInputWithTypeWithoutWindowIsSafeNoOpForEveryTy
     EXPECT_FALSE(TextInputEXT::IsTextInputActive());
 }
 
-// P7-009(c): SetInputRectangle must not crash on zero-size or negative rectangle values. With no window
-// the null guard makes every call a safe no-op; when a window exists the geometry is passed straight to
-// SDL, which tolerates degenerate rects.
+// P7-009(c): SetInputRectangle must not crash on zero-size or negative rectangle values. With no
+// window the null guard makes every call a safe no-op.
 TEST_F(TextInputEXTTest, SetInputRectangleWithZeroOrNegativeValuesIsSafe)
 {
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(0, 0, 0, 0)));
@@ -268,87 +360,95 @@ TEST_F(TextInputEXTTest, SetInputRectangleWithZeroOrNegativeValuesIsSafe)
     EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(-10, -20, -30, -40)));
 }
 
-TEST_F(TextInputEXTTest, StartStopAndIsActiveRoundTripThroughRealWindow)
+TEST_F(TextInputEXTTest, PlainStartStopAndActiveStateUseThePlatformService)
 {
-    // Task 809: verify the real SDL path (not just the no-window null guards). Mirrors the
-    // MouseInputTests real-hidden-window pattern (SDL_INIT_VIDEO + GTEST_SKIP on failure).
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
-
-    SDL_Window* window = SDL_CreateWindow("TextInputEXTTests", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
-
-    TextInputEXT::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
-
-    // Some platforms (e.g. certain Wayland/IME setups) may not toggle SDL_TextInputActive on a
-    // hidden window; skip rather than fail if StartTextInput doesn't take effect here, so this
-    // stays a genuine real-path check without becoming environment-flaky.
+    PublishWindow();
     TextInputEXT::StartTextInput();
-    if (!TextInputEXT::IsTextInputActive())
-    {
-        SDL_DestroyWindow(window);
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_StartTextInput did not activate text input on a hidden window in this environment";
-    }
-
+    EXPECT_EQ(platform.textInput.startCalls, 1);
+    EXPECT_EQ(platform.textInput.lastWindow, Window);
+    EXPECT_EQ(platform.textInput.lastType, CNA::Platform::TextInputType::Default);
     EXPECT_TRUE(TextInputEXT::IsTextInputActive());
 
-    // SetInputRectangle must reach SDL without error while text input is active.
-    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(4, 4, 32, 16)));
-
     TextInputEXT::StopTextInput();
+    EXPECT_EQ(platform.textInput.stopCalls, 1);
+    EXPECT_EQ(platform.textInput.lastWindow, Window);
     EXPECT_FALSE(TextInputEXT::IsTextInputActive());
-
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
-// N-014b: the type-hinted start reaches the real SDL_StartTextInputWithProperties path (not just the
-// no-window guard) and activates text input the same way StartTextInput does, for every hint value.
-TEST_F(TextInputEXTTest, StartTextInputWithTypeRoundTripsThroughRealWindowForEveryType)
+TEST_F(TextInputEXTTest, ScreenKeyboardQueriesOnlyThePublishedWindowPair)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    PublishWindow();
+    platform.textInput.lastWindow = Window;
+    platform.textInput.screenKeyboardShown = true;
 
-    SDL_Window* window = SDL_CreateWindow("TextInputEXTTests", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!window)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
+    EXPECT_TRUE(TextInputEXT::IsScreenKeyboardShown());
+    EXPECT_TRUE(TextInputEXT::IsScreenKeyboardShown(Handle));
+    EXPECT_FALSE(TextInputEXT::IsScreenKeyboardShown(Handle + 1));
+    EXPECT_FALSE(TextInputEXT::IsScreenKeyboardShown(0));
+}
 
-    TextInputEXT::setWindowHandleProperty(reinterpret_cast<std::uintptr_t>(window));
+TEST_F(TextInputEXTTest, SetRectangleForwardsEveryCoordinateAndFnasZeroCursorOffset)
+{
+    PublishWindow();
+    TextInputEXT::SetInputRectangle(Rectangle(-10, 20, 300, 40));
 
+    ASSERT_EQ(platform.textInput.areaCalls, 1);
+    EXPECT_EQ(platform.textInput.lastWindow, Window);
+    EXPECT_EQ(platform.textInput.lastArea.x, -10);
+    EXPECT_EQ(platform.textInput.lastArea.y, 20);
+    EXPECT_EQ(platform.textInput.lastArea.width, 300);
+    EXPECT_EQ(platform.textInput.lastArea.height, 40);
+    EXPECT_EQ(platform.textInput.lastArea.cursorOffset, 0);
+}
+
+TEST_F(TextInputEXTTest, EveryExtensionTypeMapsToThePortableContract)
+{
     using CNA::Input::TextInputTypeEXT;
-    for (const TextInputTypeEXT type : {
-             TextInputTypeEXT::Text, TextInputTypeEXT::TextName, TextInputTypeEXT::TextEmail,
-             TextInputTypeEXT::TextUsername, TextInputTypeEXT::TextPasswordHidden,
-             TextInputTypeEXT::TextPasswordVisible, TextInputTypeEXT::Number,
-             TextInputTypeEXT::NumberPasswordHidden, TextInputTypeEXT::NumberPasswordVisible })
-    {
-        TextInputEXT::StartTextInputWithTypeEXT(type);
-        if (!TextInputEXT::IsTextInputActive())
-        {
-            // Mirrors StartStopAndIsActiveRoundTripThroughRealWindow: some platforms/IME setups may
-            // not toggle SDL_TextInputActive on a hidden window; skip rather than fail.
-            SDL_DestroyWindow(window);
-            SDL_QuitSubSystem(SDL_INIT_VIDEO);
-            GTEST_SKIP() << "SDL_StartTextInputWithProperties did not activate text input on a "
-                            "hidden window in this environment";
-        }
-        EXPECT_TRUE(TextInputEXT::IsTextInputActive());
-        TextInputEXT::StopTextInput();
-        EXPECT_FALSE(TextInputEXT::IsTextInputActive());
-    }
+    using CNA::Platform::TextInputType;
+    const std::array mappings{
+        std::pair{TextInputTypeEXT::Text, TextInputType::Text},
+        std::pair{TextInputTypeEXT::TextName, TextInputType::TextName},
+        std::pair{TextInputTypeEXT::TextEmail, TextInputType::TextEmail},
+        std::pair{TextInputTypeEXT::TextUsername, TextInputType::TextUsername},
+        std::pair{TextInputTypeEXT::TextPasswordHidden, TextInputType::TextPasswordHidden},
+        std::pair{TextInputTypeEXT::TextPasswordVisible, TextInputType::TextPasswordVisible},
+        std::pair{TextInputTypeEXT::Number, TextInputType::Number},
+        std::pair{TextInputTypeEXT::NumberPasswordHidden, TextInputType::NumberPasswordHidden},
+        std::pair{TextInputTypeEXT::NumberPasswordVisible, TextInputType::NumberPasswordVisible},
+    };
 
-    SDL_DestroyWindow(window);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    PublishWindow();
+    for (const auto& [extension, expected] : mappings)
+    {
+        TextInputEXT::StartTextInputWithTypeEXT(extension);
+        EXPECT_EQ(platform.textInput.lastWindow, Window);
+        EXPECT_EQ(platform.textInput.lastType, expected);
+    }
+    EXPECT_EQ(platform.textInput.startCalls, static_cast<int>(mappings.size()));
+}
+
+TEST_F(TextInputEXTTest, MissingServiceMakesEveryLifecycleCallSafe)
+{
+    PublishWindow();
+    platform.serviceAvailable = false;
+
+    EXPECT_NO_THROW(TextInputEXT::StartTextInput());
+    EXPECT_NO_THROW(TextInputEXT::StartTextInputWithTypeEXT(
+        CNA::Input::TextInputTypeEXT::TextEmail));
+    EXPECT_NO_THROW(TextInputEXT::StopTextInput());
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(1, 2, 3, 4)));
+    EXPECT_FALSE(TextInputEXT::IsTextInputActive());
+    EXPECT_FALSE(TextInputEXT::IsScreenKeyboardShown());
+}
+
+TEST_F(TextInputEXTTest, VoidExtensionMethodsPreserveTheirNoThrowFailureContract)
+{
+    PublishWindow();
+    platform.textInput.failCommands = true;
+
+    EXPECT_NO_THROW(TextInputEXT::StartTextInput());
+    EXPECT_NO_THROW(TextInputEXT::StartTextInputWithTypeEXT(
+        CNA::Input::TextInputTypeEXT::Number));
+    EXPECT_NO_THROW(TextInputEXT::StopTextInput());
+    EXPECT_NO_THROW(TextInputEXT::SetInputRectangle(Rectangle(1, 2, 3, 4)));
 }

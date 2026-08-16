@@ -12,6 +12,8 @@
 
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
 #include "Microsoft/Xna/Framework/Graphics/CubeMapFace.hpp"
 #include "Microsoft/Xna/Framework/Graphics/DepthFormat.hpp"
 #include "Microsoft/Xna/Framework/Graphics/RenderTargetUsage.hpp"
@@ -164,7 +166,7 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 // EasyGL is the one renderer that overrides it with a real upload into the shared GL cube texture.
 //
 // Constructing a RenderTargetCube can legitimately fail on a renderer that has no cube-map render
-// target at all (Software, SDL_Renderer, ASCII, Canvas, DIRECTX3 keep CreateRenderTargetCube's nullptr
+// target at all (Software, native 2D, ASCII, Canvas, DIRECTX3 keep CreateRenderTargetCube's nullptr
 // default); that is not what is under test, so it is skipped rather than asserted either way.
 // -----------------------------------------------------------------------
 
@@ -180,37 +182,37 @@ TEST(RenderTargetUsageTest, DefaultIsDiscardContents)
 
 namespace
 {
+    using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
+
     using Microsoft::Xna::Framework::Color;
     using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
     using Microsoft::Xna::Framework::Graphics::RenderTargetCube;
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_MAGNUM)
-    /// EasyGLRenderTargetCubeRenderer::SetData is a real glTexSubImage2D upload into the shared cube
-    /// texture, and MagnumRenderTargetCubeRenderer::SetData is the same upload expressed through
-    /// Magnum's CubeMapTexture::setSubImage -- in both the framebuffer's colour attachment IS an
-    /// ordinary GL cube texture, so an upload reaches it directly.
-    /// REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
-    /// REMED-GFX-134), so this test can only assert that the upload is accepted -- the byte-exact
-    /// content assertion for the identical `set_sub_image_2d` path lives on the plain cube in
-    /// modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
-    constexpr bool kRenderTargetCubeAcceptsSetData = true;
-#elif defined(CNA_RENDERER_OPENGL4)
-    /// OpenGL4RenderTargetCubeRenderer::SetData is the same real glTexSubImage2D upload shape as
-    /// EasyGL's above -- and unlike EasyGL this renderer also implements the per-face+level FBO
-    /// readback, so the byte-exact round trip is asserted directly by its own
-    /// OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
-    constexpr bool kRenderTargetCubeAcceptsSetData = true;
-#elif defined(CNA_RENDERER_WICKED)
-    /// WickedRenderTargetCubeRenderer::SetData is a real staged upload into the rendered cube's
-    /// colour array (UploadTextureRegion, plan_wicked.md WICKED-55/79), and the renderer also
-    /// implements the per-face readback, so the byte-exact round trip is asserted by the shared
-    /// TextureCube/RenderTargetCube suites. A multisampled cube still refuses -- resolving into
-    /// one face needs a per-face resolve subresource this renderer does not create.
-    constexpr bool kRenderTargetCubeAcceptsSetData = true;
-#else
-    constexpr bool kRenderTargetCubeAcceptsSetData = false;
-#endif
+    /// plan_runtimerenderer.md RTR-P9-5: which renderers accept a RenderTargetCube SetData upload,
+    /// asked of the ACTIVE renderer. Each arm's reasoning is preserved with its renderer:
+    ///
+    ///   EasyGL / Magnum -- SetData is a real glTexSubImage2D upload into the shared cube texture
+    ///     (Magnum expresses the same upload through CubeMapTexture::setSubImage), so the
+    ///     framebuffer's colour attachment IS an ordinary GL cube texture and an upload reaches it
+    ///     directly. REMED-GFX-130 left RenderTargetCube READBACK unimplemented here (tracked as
+    ///     REMED-GFX-134), so this suite can only assert that the upload is accepted -- the
+    ///     byte-exact content assertion for the identical `set_sub_image_2d` path lives on the
+    ///     plain cube in
+    ///     modules/graphics/examples/texturecube_texture3d_setdata_contract_test.cpp.
+    ///   OpenGL4 -- the same real upload shape, and unlike EasyGL it also implements the
+    ///     per-face+level FBO readback, so the byte-exact round trip is asserted directly by its
+    ///     own OpenGL4_RenderTargetCube CTest (plan_opengl4.md GL4-15).
+    ///   Wicked -- a real staged upload into the rendered cube's colour array (UploadTextureRegion,
+    ///     plan_wicked.md WICKED-55/79), with the per-face readback implemented, so the byte-exact
+    ///     round trip is asserted by the shared TextureCube/RenderTargetCube suites. A
+    ///     multisampled cube still refuses: resolving into one face needs a per-face resolve
+    ///     subresource this renderer does not create.
+    [[nodiscard]] inline bool RenderTargetCubeAcceptsSetData()
+    {
+        return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2,
+                               Magnum, OpenGL4, Wicked);
+    }
 }
 
 TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilentlyDiscardsIt)
@@ -230,7 +232,7 @@ TEST(RenderTargetCubeSetDataContractTest, StoresTheFaceOrRefusesButNeverSilently
     }
 
     std::vector<Color> face(16, Color(64, 128, 192, 255));
-    if (kRenderTargetCubeAcceptsSetData)
+    if (RenderTargetCubeAcceptsSetData())
         EXPECT_NO_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16));
     else
         EXPECT_THROW(rt->SetData(CubeMapFace::PositiveX, face.data(), 16),

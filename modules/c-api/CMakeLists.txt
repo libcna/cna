@@ -99,7 +99,10 @@ target_include_directories(cna_c_api
 # Keep the initial ABI substrate narrowly linked to the canonical core module. Each later C API
 # family adds the exact CNA module it adapts; linking the whole aggregate before a graphics/runtime
 # adapter exists needlessly builds every renderer-facing archive.
-target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
+# cna_platform joined the closure with the platform-separation merge: the exception barrier
+# catches CNA::Platform::PlatformException so a platform refusal reaches a caller as
+# CNA_RESULT_PLATFORM instead of falling through to CNA_RESULT_INTERNAL.
+target_link_libraries(cna_c_api PRIVATE cna_core cna_platform cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
 
 # Every rule below names the same component, so `cmake --install . --component CNACApi` stages the
 # C ABI and nothing else. Without it the smallest possible install is the whole project -- 113 MB of

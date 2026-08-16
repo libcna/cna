@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,083 | A C route exists and is tested. |
+| Fully mapped | 6,113 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 320 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 314 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -56,7 +56,7 @@ A deleted copy constructor or assignment operator has no behavior to expose. Its
 
 An iterator has no fixed size, no stable representation and no C spelling. Every collection this ABI exposes is iterated as a count plus indexed access, or through an explicit enumerator handle where the canonical type has one.
 
-### Protected members with no derived class to hang them on — 78 symbols
+### Protected members with no derived class to hang them on — 75 symbols
 
 A protected member is mappable only when this ABI supplies a derived class that would override it. Where it does -- a game component's hooks -- the member is mapped; where the derived class is the caller's C++ code, there is nothing for C to override.
 
@@ -67,10 +67,6 @@ C cannot name a C++ type, so a generic operation cannot be called from C at all.
 ### Values that are Sharp Runtime objects — 3 symbols
 
 Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md.
-
-### Raw native backend pointers — 3 symbols
-
-A route that accepts or returns an SDL pointer would make the caller's program depend on CNA's backend choice, which is the one thing this ABI exists to prevent.
 
 ### Friendship declarations — 6 symbols
 

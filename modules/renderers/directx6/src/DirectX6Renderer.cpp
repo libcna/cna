@@ -1,4 +1,5 @@
 #include "CNA/Internal/Renderers/DirectX6/DirectX6Renderer.hpp"
+#include "CNA/Internal/Renderers/Common/PlatformRendererSurfaceState.hpp"
 
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
 
@@ -67,7 +68,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // be R=0x00ff0000/G=0x0000ff00/B=0x000000ff, i.e. byte order (B,G,R,X) in memory, NOT the
         // (R,G,B,A) byte order every WriteSurfacePixels/FillSurfaceColor/CompositeQuad call in this
         // file assumed (matching every other CNA renderer's own ImageData::pixels convention,
-        // SDL_PIXELFORMAT_RGBA32 -- see plan_freedirect.md design decision 4). Both sides of every
+        // the engine's canonical RGBA32 byte layout). Both sides of every
         // round-trip through this renderer's OWN surfaces stayed internally consistent (which is why
         // DirectX6_Smoke/DirectX6_Blend/etc.'s Clear()+GetBackBufferData() checks all still passed), but a
         // real IDirectDrawSurface::Blt() between two DIFFERENTLY-formatted surfaces performs genuine
@@ -252,16 +253,18 @@ namespace CNA::Internal::Renderers::DirectX6
 
         // Real letterbox scale+offset transform between physical window pixels and logical
         // (virtual) game pixels (uniform scale to fit, centered) -- computed fresh from the real
-        // physical SDL_Window size on every call, shared by Present() (the on-screen Blt
+        // physical drawable size in the current surface snapshot, shared by Present() (the on-screen Blt
         // destination) and TransformWindowToLogical/TransformLogicalToWindow, so those three are
         // always mutually consistent and a resize/SetVirtualResolution change is correct on the
         // very next call, unlike DIRECTX3's own documented stale-scale limitation (plan_freedirect.md DX3-16).
-        bool ComputeLetterbox(SDL_Window* window, int logicalWidth, int logicalHeight,
+        bool ComputeLetterbox(const PlatformRendererSurfaceState& surface,
+                              int logicalWidth, int logicalHeight,
                               float& scale, float& offsetX, float& offsetY)
         {
-            if (!window || logicalWidth <= 0 || logicalHeight <= 0) return false;
-            int physW = 0, physH = 0;
-            SDL_GetWindowSize(window, &physW, &physH);
+            if (logicalWidth <= 0 || logicalHeight <= 0) return false;
+            const auto drawableSize = surface.GetDrawableSize();
+            const int physW = drawableSize.width;
+            const int physH = drawableSize.height;
             if (physW <= 0 || physH <= 0) return false;
 
             scale = std::min(static_cast<float>(physW) / static_cast<float>(logicalWidth),
@@ -304,7 +307,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // 6/7) ----
 
         // Matches every other CNA renderer's Blend-enum-ordinal mapping (e.g.
-        // SdlRenderer::ToSdlBlendFactor): One=0, Zero=1, SourceColor=2,
+        // the common Blend enum): One=0, Zero=1, SourceColor=2,
         // InverseSourceColor=3, SourceAlpha=4, InverseSourceAlpha=5, DestinationColor=6,
         // InverseDestinationColor=7, DestinationAlpha=8, InverseDestinationAlpha=9.
         enum class DirectX6BlendMode { Opaque, AlphaBlend, NonPremultiplied, Additive };
@@ -692,12 +695,12 @@ namespace CNA::Internal::Renderers::DirectX6
 
     struct DirectX6Renderer::Impl
     {
-        // NOTE: SDL_Window is NOT owned by the renderer -- same convention as every other
-        // window-based CNA renderer (GraphicsDevice/platform layer owns it).
-        SDL_Window* window = nullptr;
-        // Design decision 3: the real Win32 HWND behind `window`, obtained once at construction --
-        // needed directly (not just via reinterpret_cast, unlike DIRECTX3's free-direct hack) for
-        // Present()'s GetClientRect/ClientToScreen calls.
+        explicit Impl(const RendererSurfaceInfo& surfaceInfo)
+            : surface(surfaceInfo, "DirectX6Renderer")
+        {
+        }
+
+        PlatformRendererSurfaceState surface;
         HWND hwnd = nullptr;
 
         // plan_dx5.md design decision 2: IDirectDraw4, not v1 -- upgraded via QueryInterface
@@ -921,19 +924,14 @@ namespace CNA::Internal::Renderers::DirectX6
     };
 
     DirectX6Renderer::DirectX6Renderer(const GraphicsRendererCreateArgs& args)
-        : impl_(std::make_unique<Impl>())
+        : impl_(std::make_unique<Impl>(args.surface))
     {
-        if (!args.window) throw std::runtime_error("DirectX6Renderer initialized with null window.");
-        impl_->window = args.window;
         impl_->presentationMode = args.presentationMode;
 
-        // Design decision 3: a real Win32 HWND, obtained the same way DirectX9Renderer.cpp does
-        // -- CNA's MinGW/Wine SDL3 build uses its genuine win32 video renderer, so this is a real
-        // window handle, never free-direct's reinterpret_cast<HWND>(sdlWindow) hack DIRECTX3 needs.
-        impl_->hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-            SDL_GetWindowProperties(impl_->window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-        if (!impl_->hwnd)
-            throw std::runtime_error("DirectX6Renderer: could not obtain a real HWND from the SDL window.");
+        CNA::Platform::Win32NativeWindow nativeWindow;
+        if (!CNA::Platform::TryGetWin32(impl_->surface.GetNativeHandle(), nativeWindow))
+            throw std::runtime_error("DirectX6Renderer requires a Win32 native window.");
+        impl_->hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
         // plan_dx5.md design decision 2, spike-confirmed (DX5-0a): DirectDrawCreate only ever
         // hands back a v1 IDirectDraw object -- this renderer immediately upgrades it to
@@ -985,7 +983,7 @@ namespace CNA::Internal::Renderers::DirectX6
         // fresh every call, so a resize/SetVirtualResolution change is correct on the very next
         // Present(), unlike DIRECTX3's own documented stale-scale limitation.
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
         {
             scale = 1.0f;
             offsetX = 0.0f;
@@ -1038,19 +1036,19 @@ namespace CNA::Internal::Renderers::DirectX6
         // bookkeeping stays consistent with what the game requested.
     }
 
-    SDL_Window* DirectX6Renderer::GetWindowInternal() const
+    void DirectX6Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
     {
-        return impl_->window;
+        impl_->surface.Update(surface);
     }
 
     bool DirectX6Renderer::TransformWindowToLogical(float windowX, float windowY,
                                                        float& logX, float& logY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
             return false;
-        logX = (windowX - offsetX) / scale;
-        logY = (windowY - offsetY) / scale;
+        logX = (impl_->surface.WindowToDrawable(windowX) - offsetX) / scale;
+        logY = (impl_->surface.WindowToDrawable(windowY) - offsetY) / scale;
         return true;
     }
 
@@ -1058,10 +1056,10 @@ namespace CNA::Internal::Renderers::DirectX6
                                                        float& windowX, float& windowY) const
     {
         float scale = 1.0f, offsetX = 0.0f, offsetY = 0.0f;
-        if (!ComputeLetterbox(impl_->window, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
+        if (!ComputeLetterbox(impl_->surface, impl_->logicalWidth, impl_->logicalHeight, scale, offsetX, offsetY))
             return false;
-        windowX = logX * scale + offsetX;
-        windowY = logY * scale + offsetY;
+        windowX = impl_->surface.DrawableToWindow(logX * scale + offsetX);
+        windowY = impl_->surface.DrawableToWindow(logY * scale + offsetY);
         return true;
     }
 
@@ -1584,7 +1582,6 @@ namespace CNA::Internal::Renderers::DirectX6
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -1593,7 +1590,7 @@ namespace CNA::Internal::Renderers::DirectX6
 
         // No native mip chain on IDirectDrawSurface -- level 0 is unaffected (always routed
         // through UpdatePixels by Texture2D::SetData), level>0 throws honestly rather than
-        // silently discarding the upload, matching SDL_RENDERER/DIRECTX3's own precedent.
+        // silently discarding the upload, matching the other 2D backends' precedent.
         void UpdatePixelsLevel(int level, const uint8_t*, int, int) override
         {
             ThrowMipLevelUnsupported(level);
@@ -1630,7 +1627,6 @@ namespace CNA::Internal::Renderers::DirectX6
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const uint8_t* rgba, int stride) override
         {
@@ -1662,7 +1658,7 @@ namespace CNA::Internal::Renderers::DirectX6
         [[nodiscard]] int GetMultiSampleCount() const override { return multiSampleCount_; }
 
         // IDirectDrawSurface has no depth-buffer concept at all, regardless of what DepthFormat
-        // was requested -- always false, same reasoning SDL_RENDERER/DIRECTX3 already use.
+        // was requested -- always false, as in the other depth-less 2D backends.
         [[nodiscard]] bool HasRealDepthBuffer(bool /*depthFormatWasRequested*/) const override
         {
             return false;
@@ -2252,7 +2248,12 @@ namespace CNA::Internal::Renderers::DirectX6
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECTX6
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace DirectX6 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> DirectX6::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<DirectX6::DirectX6Renderer>(args);
     }

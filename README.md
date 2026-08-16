@@ -13,7 +13,7 @@ It is a framework/runtime and abstraction layer—not a game—designed to prese
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ctest --test-dir build --output-on-failure
 ```
 
@@ -84,9 +84,9 @@ ctest --test-dir build --output-on-failure
 - CNAEXT extensions beyond stock XNA: `TextInputEXT` (IME composition), rumble/trigger-rumble/light-bar/
   gyro/accelerometer on `GamePad`, raw `CNA::Input::Joysticks` (distinct from `GamePad`'s mapped view),
   device-level `CNA::Input::Sensors`/`Power`, and `CNA::Input::Haptics` for standalone haptic devices.
-- Single SDL event funnel (`SdlInputBridge::ProcessEvent`), renderer-agnostic — Input behavior is
-  identical across all 4 graphics renderers (EasyGL/Vulkan/bgfx/SDL_RENDERER), verified by the
-  `CnaTests` input suite.
+- Single platform-event funnel (`IPlatform::PollEvents` → `PlatformInputBridge::ProcessEvent`),
+  renderer-agnostic and independent of the selected native event source. SDL3 translation stays
+  inside its platform implementation; the `CnaTests` input suite verifies the shared state path.
 
 ### Rendering
 
@@ -104,6 +104,11 @@ ctest --test-dir build --output-on-failure
 - **Web (Emscripten) and Android (NDK) targets are implemented and verified**, not just
   architecturally planned — see section 7 (Networking, Services & Avatar) below for real
   cross-platform `Net` verification on both.
+- **macOS** has a native CI build/test gate; **iOS/iPadOS** is experimental platform support.
+  The Apple workflow final-links an actual `.app` for device and simulator and launches a
+  one-frame `Game` smoke application in the simulator. There is still no physical-device,
+  pixel, touch, audio, storage or performance evidence. The boundary is stated per claim in
+  [`docs/apple-platforms.md`](docs/apple-platforms.md).
 
 ### Performance / C++ Advantages
 
@@ -166,6 +171,19 @@ EasyGL, Vulkan, Skia, and the other selected paths.
 ## 6. 🔌 Renderer System
 
 CNA exposes **46 public renderer identities** through `CNA_GRAPHICS_RENDERER` (choose one per build
+
+Renderers are normally chosen at **compile time**, one per build. CNA can also be built with
+several renderers and the concrete one chosen at **runtime**, before the game starts:
+
+```cpp
+#include "CNA/GraphicsRendererSelection.hpp"
+
+CNA::GraphicsRendererSelection::SetPreferred(CNA::GraphicsRendererType::Vulkan);
+```
+
+A renderer that is unavailable or fails to start is an **error** by default — CNA never silently
+substitutes another. An opt-in fallback chain is available when a game wants one. See
+[docs/runtime-renderer-selection.md](docs/runtime-renderer-selection.md).
 configuration). The canonical registration, implementation-sharing, capability, and platform-gate
 inventory is [`docs/renderer-registry.md`](docs/renderer-registry.md).
 
@@ -363,7 +381,7 @@ After that, no system SDL packages are required.
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build -DCNA_GRAPHICS_RENDERER=OPENGLES3
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 ### Build (Linux — SDL_RENDERER renderer)
@@ -371,7 +389,7 @@ cmake --build build --target CNA CnaTests
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build-sdlrenderer -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-sdlrenderer --target CNA CnaTests
+cmake --build build-sdlrenderer --target CnaTests
 ```
 
 ### Build (Windows — SDL_RENDERER renderer, vendored SDL)
@@ -383,7 +401,7 @@ binaries or `CMAKE_PREFIX_PATH` needed.
 ```bash
 git submodule update --init --recursive
 cmake -S . -B build-win -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-win --target CNA CnaTests
+cmake --build build-win --target CnaTests
 ```
 
 ### Build (Linux → Windows cross-compilation with MinGW-w64)
@@ -396,7 +414,39 @@ git submodule update --init --recursive
 cmake -S . -B build-windows \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build-windows --target CNA CnaTests
+cmake --build build-windows --target CnaTests
+```
+
+### Build (macOS)
+
+```bash
+brew install ccache ffmpeg
+git submodule update --init
+
+cmake -S . -B cmake-build-macos -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+cmake --build cmake-build-macos --target CnaTests --parallel 4
+```
+
+`METAL` is available here as well (`-DCNA_GRAPHICS_RENDERER=METAL`); its own supported contract is
+narrower than "it builds" — see [`docs/metal-renderer.md`](docs/metal-renderer.md).
+
+### Build (macOS → iOS / iPadOS cross-compilation)
+
+Requires a macOS host with Xcode. This produces a final-linked `cna_ios_smoke.app` for a device
+or simulator; the Apple workflow also launches its one-frame `Game` path in the simulator. This
+is not evidence for a physical device or correct pixels/input/audio/storage — see
+[`docs/apple-platforms.md`](docs/apple-platforms.md) for the exact boundary.
+
+```bash
+cmake -S . -B cmake-build-ios \
+      -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+      -DCNA_GRAPHICS_RENDERER=SDL_RENDERER \
+      -DCNA_BUILD_TESTS=OFF -DCNA_BUILD_EXAMPLES=OFF
+cmake --build cmake-build-ios --parallel 4
+
+# Simulator: add -DCNA_IOS_SIMULATOR=ON (use a separate build directory).
+# Device deployment needs the Xcode generator and a team id:
+#   -G Xcode -DCNA_APPLE_DEVELOPMENT_TEAM=<TEAMID>
 ```
 
 ### Optional: use system-installed SDL
@@ -406,7 +456,7 @@ vendored submodules, pass `-DCNA_USE_SYSTEM_SDL=ON`:
 
 ```bash
 cmake -S . -B build -DCNA_USE_SYSTEM_SDL=ON -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
-cmake --build build --target CNA CnaTests
+cmake --build build --target CnaTests
 ```
 
 This calls `find_package(SDL3 REQUIRED)`, `find_package(SDL3_image REQUIRED)`,
@@ -457,7 +507,7 @@ cmake -S . -B cmake-build-d3d9 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D9 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d9 --target CNA
+cmake --build cmake-build-d3d9 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop, in a prefix separate from D3D11's own
@@ -484,7 +534,7 @@ cmake -S . -B cmake-build-d3d11 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D11 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d11 --target CNA
+cmake --build cmake-build-d3d11 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + DXVK dev-loop (`docs/directx11-renderer.md` has full setup
@@ -513,7 +563,7 @@ cmake -S . -B cmake-build-d3d12 \
       -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/mingw-w64.cmake \
       -DCNA_GRAPHICS_RENDERER=D3D12 \
       -DCNA_BUILD_TESTS=ON
-cmake --build cmake-build-d3d12 --target CNA
+cmake --build cmake-build-d3d12 --target CnaTests --parallel 4
 ```
 
 Running the resulting `.exe`s needs a Wine + vkd3d-proton dev-loop, in a prefix separate from

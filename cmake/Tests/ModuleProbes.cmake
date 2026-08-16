@@ -118,7 +118,13 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     # renderer SDK: the whole probe closure must stay free of every native graphics library.
     # The same must hold for the content pipeline (no renderer/native SDK through the type
     # readers) and for both extension modules.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND Python3_Interpreter_FOUND)
+    # plan_runtimerenderer.md RTR-P9-21: deliberately ALSO requires single-renderer mode. This
+    # asserts the probe closure links no native graphics SDK at all, which is a true statement about
+    # a HEADLESS-only build and a FALSE one about a multi-renderer build that happens to default to
+    # HEADLESS -- such a binary legitimately links Vulkan, Skia or whatever else it was built with.
+    # Converting this to list membership would have made it fail for a correct build.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "HEADLESS" AND NOT CNA_MULTI_RENDERER
+            AND Python3_Interpreter_FOUND)
         set(_cna_native_sdk_forbid
             "vulkan|libGL|GLES|EGL|d3d|dxgi|ddraw|d2d1|bgfx|wgpu|webgpu|glide|gdi32|[Mm]agnum|[Dd]iligent|LLGL|skia|sokol|[Ww]icked|shaderc")
         foreach(_cna_sdkfree_probe IN ITEMS probe_graphics probe_content probe_graphics_ext probe_devices_ext)
@@ -139,7 +145,10 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
     endif()
 
     # VULKAN closure: the selected renderer's native SDK and nothing from any other family.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN" AND Python3_Interpreter_FOUND)
+    # Same reasoning as the HEADLESS closure above: "the selected renderer's SDK and nothing from
+    # any other family" is only a meaningful claim when exactly one renderer is compiled in.
+    if(CNA_GRAPHICS_RENDERER STREQUAL "VULKAN" AND NOT CNA_MULTI_RENDERER
+            AND Python3_Interpreter_FOUND)
         add_test(NAME ModuleLinkClosure_VulkanRendererClosure
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_module_link_closure.py"
@@ -254,5 +263,27 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
                     --compiler "${CMAKE_C_COMPILER}"
                     ${_abi_baseline_flags})
         endif()
+
+        # plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
+        # decisions stay behind descriptors or virtuals, and every renderer family keeps exactly
+        # one descriptor translation unit.
+        add_test(NAME RuntimeRendererDiscipline
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_renderer_discipline.py")
+
+        # plan_runtimerenderer.md RTR-P6-19/P12-15: keep the configure-time combination
+        # restrictions synchronized with their public documentation.
+        add_test(NAME RendererCombinationRegistry
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_combinations.py")
+
+        # plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
+        # scalar that families read out of a global. The rule it enforces cannot be checked by
+        # building: in a single-renderer build a wrong read gives the right answer, because the
+        # default is the only renderer there is. Only a multi-renderer build would notice, and
+        # only for the families that build there -- so the invariant is checked directly instead.
+        add_test(NAME RendererTargetDiscipline
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_target_discipline.py")
     endif()
 endif()

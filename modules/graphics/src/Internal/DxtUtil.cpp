@@ -2,6 +2,7 @@
 #include "CNA/Internal/Graphics/DxtUtil.hpp"
 
 #include <stdexcept>
+#include <string>
 
 namespace CNA::Internal::Graphics
 {

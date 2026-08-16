@@ -1,6 +1,6 @@
 #pragma once
 
-// plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer. 2D-only, like SDL_RENDERER/DIRECTX3 --
+// plan_dx1.md: real DirectX 1 (DirectDraw v1) graphics renderer. 2D-only --
 // every 3D entry point throws (Phase O7). Unlike DIRECTX3 (which fronts the ../free-direct sibling
 // reimplementation), this renderer talks to a REAL Windows ddraw.h, using only v1 COM interfaces
 // (IDirectDraw/IDirectDrawSurface/DDSURFACEDESC -- never IDirectDraw2+/Surface2+/DDSURFACEDESC2,
@@ -14,7 +14,6 @@
 // Impl pimpl below.
 
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
-#include <SDL3/SDL.h>
 #include <memory>
 
 namespace CNA::Internal::Renderers::DirectX1
@@ -23,8 +22,8 @@ namespace CNA::Internal::Renderers::DirectX1
      * DIRECTX1 graphics renderer (plan_dx1.md): a CPU 2D compositor that uses a REAL
      * IDirectDraw/IDirectDrawSurface (v1 only) as its pixel storage/present mechanism. Real device/
      * window bring-up (Phase O2): DirectDrawCreate -> SetCooperativeLevel(DDSCL_NORMAL, against a
-     * real Win32 HWND obtained from CNA's own already-existing SDL_Window via
-     * SDL_PROP_WINDOW_WIN32_HWND_POINTER) -> primary CreateSurface. No SetDisplayMode call is ever
+     * real Win32 HWND supplied in RendererSurfaceInfo) -> primary CreateSurface. No SetDisplayMode
+     * call is ever
      * made: windowed (DDSCL_NORMAL) DirectDraw never needs one (confirmed both by reading ddraw.h
      * and empirically at the DX1-0 spike). The DX1-0 spike also found that, with no SetDisplayMode
      * call, the primary surface real Wine ddraw.dll hands back is desktop-sized (the real historical
@@ -68,13 +67,9 @@ namespace CNA::Internal::Renderers::DirectX1
         void ReadBackbuffer(int x, int y, int w, int h, uint8_t* pixels) override;
         void SetVirtualResolution(int width, int height) override;
         void SetPresentationMode(int mode) override;
-        SDL_Window* GetWindowInternal() const override;
-        // No real IDirectDraw-owned SDL_Renderer exists here at all (this renderer never creates
-        // one, unlike SDL_RENDERER) -- always nullptr, same as every other non-SDL_Renderer-based
-        // renderer.
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         // A real letterbox scale+offset transform (uniform scale to fit, centered), recomputed from
-        // the real physical SDL_Window size on every call -- shares the exact math Present() itself
+        // the current physical drawable size -- shares the exact math Present() itself
         // uses (ComputeLetterbox), so these two are always consistent with what's actually on
         // screen.
         bool TransformWindowToLogical(float windowX, float windowY,
@@ -95,7 +90,7 @@ namespace CNA::Internal::Renderers::DirectX1
                                                                     int multiSampleCount) override;
         void SetRenderTarget2D(IRenderTargetRenderer* rt) override;
         // DirectDraw has no multi-render-target concept -- throws for count > 1, same conclusion
-        // SDL_RENDERER/CANVAS/DIRECTX3 already reached.
+        // the other 2D backends already reached.
         void SetRenderTargets(const RenderTargetBindingDescriptor* renderTargets, int count) override;
 
         // ---- IGraphicsRenderer: real (Phase O4/O5) ----

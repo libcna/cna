@@ -1,5 +1,48 @@
 # NEXT.md
 
+## Reading order after the 2026-08-16 merge of `next`
+
+> Two campaigns meet in this file. The **platform separation** block immediately below is a
+> standing, repo-wide rule that now governs code written on this branch as well. The **C binding**
+> campaign that follows it is closed as far as its own plan goes, and is kept as the record of how
+> the C ABI came to be.
+>
+> **The merge left one thing open, and it is deliberate.** Three integration findings came out of
+> it, all fixed here: `next` renamed `CNA/Platform.hpp` to `CNA/TargetPlatform.hpp` (the name
+> `CNA::Platform` now belongs to the new module) and the C API followed; the exception barrier
+> learned `CNA::Platform::PlatformException`, so a platform refusal reaches a caller as
+> `CNA_RESULT_PLATFORM` instead of falling through to `CNA_RESULT_INTERNAL`; and installing a mouse
+> cursor became a **capability** — SDL under the dummy video driver cannot create a system cursor,
+> so the test now accepts a deterministic refusal, which is this campaign's own rule. Four coverage
+> rules describing declarations that took raw `SDL_Cursor*`/`SDL_Haptic*` pointers were deleted,
+> because the platform separation removed exactly those declarations.
+>
+> What is **not** fixed here is `CBIND-047`: the merge grew the tracked public surface by 1,327
+> declarations and left **1,303 unmapped**, 1,196 of them in `modules/platform`. The release gate
+> reads **not ready** as a result, and that is the gate working. The first question is whether
+> `CNA::Platform` is in the C ABI's scope at all — it is a substrate the C API sits on top of, not a
+> surface it exposes — and that is the owner's to answer, not an implementer's to settle by editing
+> an exclusion list.
+
+> **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
+> authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
+> guide, and `NEXT_platform.md` carries detailed continuity notes.
+>
+> Platform, graphics and audio are independent build choices:
+> `CNA_PLATFORM={SDL3,HEADLESS,TERMINAL}`, `CNA_GRAPHICS_RENDERER=<renderer>`, and
+> `CNA_AUDIO_PLATFORM={SDL3,NULL}`. `CNA_PLATFORM` selects window/events/input/host services; it
+> does not imply a renderer or audio backend.
+>
+> **New production code must not include SDL or call `SDL_*`/`MIX_*` outside the platform SDL3
+> implementation, the isolated SDL3/audio mixer implementation, and the four audited renderer
+> exceptions (`sdl-renderer`, `sdl-gpu`, `fna3d`, `freedirect`).** Use `IPlatform` services,
+> explicit capabilities/refusals, batched events and cached input snapshots. Run the inventory,
+> classification, renderer-audit, ratchet and hot-path gates from `tools/platform/`.
+>
+> Existing reusable builds are `cmake-build-debug` (SDL3 default), `cmake-build-headless`, and
+> `cmake-build-terminal`; do not create another full tree without a distinct configuration need.
+> `CNA_DEVICES` defaults to OFF, so a devices change must be compiled with it explicitly enabled.
+
 ## C BINDING / C ABI — CBIND-035 CLOSED (2026-08-15)
 
 > `plan_binding.md` is the single implementation plan for CNA's native C API. It was derived from

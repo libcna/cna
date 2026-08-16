@@ -3221,18 +3221,6 @@
       "task": "CBIND-037B4c"
     },
     {
-      "id": "mouse-cursor-sdl-constructor",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::MouseCursor$",
-      "signature_regex": "^\\(SDL_Cursor \\*sdlCursor, bool owning=false\\)$",
-      "kinds": [
-        "constructor"
-      ],
-      "mapping": "No C mapping: this constructor adopts a raw `SDL_Cursor*`, a native backend pointer that must never cross the ABI. C creates cursors through the default constructor, the texture factory or the stock accessor",
-      "tests": "Doxygen declaration inventory; the three C-reachable creation paths are covered by `InputSnapshotsSmoke.c`",
-      "status": "not-applicable",
-      "task": "CBIND-037B4c"
-    },
-    {
       "id": "mouse-cursor-moves",
       "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::(?:MouseCursor|operator=)$",
       "signature_regex": "^\\(MouseCursor &&other\\)( noexcept)?$",
@@ -3242,17 +3230,6 @@
       ],
       "mapping": "No C mapping: a handle is the only name C has for a cursor, so there is no second name to move from. The canonical move operations exist so the C++ factory can return by value, which the C factory expresses by handing back an owned handle instead",
       "tests": "Doxygen declaration inventory; ownership transfer is covered by the create/destroy round trips in `InputSnapshotsSmoke.c`",
-      "status": "not-applicable",
-      "task": "CBIND-037B4c"
-    },
-    {
-      "id": "mouse-cursor-sdl-accessor",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::MouseCursor::GetSDLCursor$",
-      "kinds": [
-        "method"
-      ],
-      "mapping": "No C mapping: it returns a raw `SDL_Cursor*`. Exposing it would put a native backend pointer in the ABI and let a C consumer outlive or double-free the cursor behind the handle",
-      "tests": "Doxygen declaration inventory; every operation a C consumer needs is reachable through the handle",
       "status": "not-applicable",
       "task": "CBIND-037B4c"
     },
@@ -3763,18 +3740,6 @@
       "mapping": "an owned `CNA_HapticDeviceHandle`. The canonical destructor becomes `cna_haptic_device_destroy` and `Dispose` its own idempotent route, so a caller can close the device without giving up the handle — the same split `MouseCursor` uses. A closed device is not an error state: every route on it succeeds and answers `CNA_FALSE`, zero or -1 through its output, which is what makes the family usable with no force-feedback hardware. Two canonical pass-throughs are preserved: the rumble strength, the gain and the autocenter are handed to the platform unvalidated, and freeing an unknown effect identifier is a successful no-op because the canonical operation reports nothing. `RunEffectEXT`'s defaulted iteration count is passed explicitly, since C has no defaulted arguments",
       "tests": "`HapticsSmoke.c` drives every route on a closed device and on any real device the machine supplies, asserts the -1 effect identifier and the false answers a closed device must give, proves disposal is idempotent and leaves the handle usable, and covers double release, a never-created handle and every null-output refusal, under HEADLESS, SDL_RENDERER and SOFTWARE plus ASan+UBSan with leak detection on",
       "status": "implemented",
-      "task": "CBIND-037B6"
-    },
-    {
-      "id": "haptic-device-native-constructor",
-      "qualified_name_regex": "^CNA::Input::HapticDevice::HapticDevice$",
-      "signature_regex": "^\\(SDL_Haptic \\*handle\\)$",
-      "kinds": [
-        "constructor"
-      ],
-      "mapping": "No C mapping: this constructor adopts a raw `SDL_Haptic*`, a native backend pointer that must never cross the ABI. C obtains devices through the three `cna_haptics_open*` routes, which is the same set of devices the canonical factories can produce",
-      "tests": "Doxygen declaration inventory; all three C-reachable open paths are covered by `HapticsSmoke.c`",
-      "status": "not-applicable",
       "task": "CBIND-037B6"
     },
     {
@@ -4551,18 +4516,6 @@
       "status": "implemented",
       "task": "CBIND-037D2a",
       "signature_regex": "(?!\\(bool disposing\\)).*"
-    },
-    {
-      "id": "sensor-device-internals",
-      "qualified_name_regex": "^Microsoft::Devices::Sensors::(Detail::SdlSensorSubsystem|(Accelerometer|Gyroscope)::SdlSensorSubsystem< (Accelerometer|Gyroscope) >)$",
-      "kinds": [
-        "class",
-        "method"
-      ],
-      "mapping": "No C mapping: the platform subsystem rows are friendship declarations granting the internal SDL sensor subsystem access to private state, and the protected disposal overload exists for the class hierarchy. Neither is a callable public member",
-      "tests": "Doxygen declaration inventory; no callable native operation exists",
-      "status": "not-applicable",
-      "task": "CBIND-037D2a"
     },
     {
       "id": "sensor-failed-exceptions",

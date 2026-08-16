@@ -14,7 +14,7 @@ typedef uint32_t CNA_GraphicsRendererType;
 
 /** @brief Indicates an unknown renderer identity. */
 #define CNA_GRAPHICS_RENDERER_UNKNOWN UINT32_C(0)
-/** @brief Identifies the SDL_Renderer backend. */
+/** @brief Identifies SDL's own 2D renderer backend. */
 #define CNA_GRAPHICS_RENDERER_SDL_RENDERER UINT32_C(1)
 /** @brief Identifies the OpenGL ES 2 backend. */
 #define CNA_GRAPHICS_RENDERER_OPENGLES2 UINT32_C(2)

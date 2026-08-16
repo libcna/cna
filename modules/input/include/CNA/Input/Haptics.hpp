@@ -11,14 +11,13 @@
 namespace CNA::Input
 {
     /**
-     * @brief CNAEXT — force-feedback (haptic) device enumeration and opening, backed by SDL3's
-     *        `SDL_haptic` API.
+     * @brief CNAEXT — force-feedback device enumeration and opening through the selected platform.
      *
      * XNA 4.0 has no force-feedback API beyond `GamePad::SetVibration`'s simple dual-motor rumble.
-     * This CNA extension exposes SDL3's richer model: device enumeration, opening a device standalone
-     * or from an already-connected joystick/mouse, and (via the returned `HapticDevice`) the full
-     * effect-building/playback lifecycle. Real actuation requires physical force-feedback hardware
-     * (a wheel or joystick with actuators) — most gamepads only support simple rumble, not this API.
+     * This CNA extension exposes platform-owned standalone enumeration and simple rumble. The SDL3
+     * implementation additionally preserves the shipped full effect-building/playback lifecycle
+     * through `HapticDevice`. Real actuation requires physical force-feedback hardware (a wheel or
+     * joystick with actuators) — most gamepads only support simple rumble, not arbitrary effects.
      */
     CNAEXT class Haptics
     {
@@ -45,7 +44,7 @@ namespace CNA::Input
          * The common case for wheels/HOTAS setups: pair with `CNA::Input::Joysticks`'s enumeration to
          * find the joystick id first.
          *
-         * @param joystickId The SDL joystick instance id (from `Joysticks::GetJoysticksEXT()`).
+         * @param joystickId The platform device id from `Joysticks::GetJoysticksEXT()`.
          * @return The opened device; `IsOpenEXT()` is false if the joystick is not connected, has no
          *         haptic capability, or opening failed.
          */
@@ -60,7 +59,7 @@ namespace CNA::Input
 
         /**
          * @brief Returns true if the given connected raw joystick has haptic capability.
-         * @param joystickId The SDL joystick instance id.
+         * @param joystickId The platform device id reported by raw-joystick enumeration.
          */
         CNAEXT [[nodiscard]] static bool IsJoystickHapticEXT(std::uint32_t joystickId);
 

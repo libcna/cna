@@ -3,6 +3,7 @@
 # or FetchContent is needed, unlike VULKAN/WEBGPU/BGFX.
 cna_add_renderer()
 target_link_libraries(${RENDERER_TARGET} PRIVATE SDL3::SDL3)
+set_property(TARGET ${RENDERER_TARGET} PROPERTY REQUIRES_PLATFORM SDL3)
 
 # plan_sdlgpu.md SDLGPU-42/43: SdlGpuEffectRenderer needs a REAL runtime GLSL->SPIR-V compile
 # for arbitrary user ShaderEffect source (SDL_gpu only accepts precompiled bytecode) -- unlike

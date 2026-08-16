@@ -1,9 +1,14 @@
 #include "CNA/Internal/Renderers/OpenGL1/OpenGL1Renderer.hpp"
-#include <SDL3/SDL.h>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
-#include <SDL3/SDL_opengl.h>
+#if defined(__APPLE__)
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#else
+#include <GL/gl.h>
+#include <GL/glext.h>
+#endif
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -13,6 +18,15 @@
 using namespace CNA::Internal::Renderers;
 namespace CNA::Internal::Renderers::OpenGL1 {
 namespace {
+CNA::Platform::GlContextDescription RequestedContext(const int multiSampleCount)
+{
+ CNA::Platform::GlContextDescription description;
+ description.majorVersion=1;description.minorVersion=1;
+ description.profile=CNA::Platform::GlProfile::Compatibility;
+ description.depthBits=24;description.stencilBits=8;description.doubleBuffer=true;
+ if(multiSampleCount>1){description.multisampleBuffers=1;description.multisampleSamples=multiSampleCount;}
+ return description;
+}
 GLenum Prim(PrimitiveType p){switch(p){case PrimitiveType::TriangleList:return GL_TRIANGLES;case PrimitiveType::TriangleStrip:return GL_TRIANGLE_STRIP;case PrimitiveType::LineList:return GL_LINES;case PrimitiveType::LineStrip:return GL_LINE_STRIP;default:return GL_POINTS;}}
 int VertCount(PrimitiveType p,int n){switch(p){case PrimitiveType::TriangleList:return n*3;case PrimitiveType::TriangleStrip:return n+2;case PrimitiveType::LineList:return n*2;case PrimitiveType::LineStrip:return n+1;default:return n;}}
 GLenum Cmp(int v){static const GLenum a[]={GL_ALWAYS,GL_NEVER,GL_LESS,GL_LEQUAL,GL_EQUAL,GL_GEQUAL,GL_GREATER,GL_NOTEQUAL};return (v>=0&&v<8)?a[v]:GL_ALWAYS;}
@@ -56,8 +70,8 @@ void Color4(const Color&c){glColor4ub((GLubyte)c.getRProperty(),(GLubyte)c.getGP
 // plan_opengl1.md phase 3: ARB_multitexture/core-1.3 entry points for DualTextureEffect's
 // second texture unit -- glActiveTexture/glMultiTexCoord2f are not part of the GL 1.1 core
 // export table (notably on Windows' frozen opengl32.dll), so they need portable loading via
-// SDL_GL_GetProcAddress, same reasoning as OpenGL1RenderTargetRenderer's FBO functions. Locally
-// named typedefs (not the PFNGL...PROC ones SDL3's own GL headers declare) to sidestep any
+// the platform GL loader, same reasoning as OpenGL1RenderTargetRenderer's FBO functions. Locally
+// named typedefs (not the PFNGL...PROC ones the system GL headers declare) to sidestep any
 // ambiguity in whether those are visible as typedefs vs. direct GL_VERSION_1_3 function
 // declarations depending on this platform's exact header configuration.
 typedef void (APIENTRY *CnaPFNGLACTIVETEXTUREPROC)(GLenum texture);
@@ -65,8 +79,8 @@ typedef void (APIENTRY *CnaPFNGLMULTITEXCOORD2FPROC)(GLenum target,GLfloat s,GLf
 CnaPFNGLACTIVETEXTUREPROC glActiveTexture_=nullptr;
 CnaPFNGLMULTITEXCOORD2FPROC glMultiTexCoord2f_=nullptr;
 bool TryLoadMultitextureFunctions(){
- glActiveTexture_=reinterpret_cast<CnaPFNGLACTIVETEXTUREPROC>(SDL_GL_GetProcAddress("glActiveTexture"));
- glMultiTexCoord2f_=reinterpret_cast<CnaPFNGLMULTITEXCOORD2FPROC>(SDL_GL_GetProcAddress("glMultiTexCoord2f"));
+ glActiveTexture_=reinterpret_cast<CnaPFNGLACTIVETEXTUREPROC>(LoadPlatformGlProcAddress("glActiveTexture"));
+ glMultiTexCoord2f_=reinterpret_cast<CnaPFNGLMULTITEXCOORD2FPROC>(LoadPlatformGlProcAddress("glMultiTexCoord2f"));
  return glActiveTexture_&&glMultiTexCoord2f_;
 }
 // plan_opengl1.md phase 6: glGenerateMipmap is part of the same ARB_framebuffer_object/core-3.0
@@ -87,15 +101,15 @@ CnaPFNGLBLENDCOLORPROC glBlendColor_=nullptr;
 CnaPFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate_=nullptr;
 CnaPFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate_=nullptr;
 bool TryLoadBlendFunctions(){
- glBlendColor_=reinterpret_cast<CnaPFNGLBLENDCOLORPROC>(SDL_GL_GetProcAddress("glBlendColor"));
- glBlendFuncSeparate_=reinterpret_cast<CnaPFNGLBLENDFUNCSEPARATEPROC>(SDL_GL_GetProcAddress("glBlendFuncSeparate"));
- glBlendEquationSeparate_=reinterpret_cast<CnaPFNGLBLENDEQUATIONSEPARATEPROC>(SDL_GL_GetProcAddress("glBlendEquationSeparate"));
+ glBlendColor_=reinterpret_cast<CnaPFNGLBLENDCOLORPROC>(LoadPlatformGlProcAddress("glBlendColor"));
+ glBlendFuncSeparate_=reinterpret_cast<CnaPFNGLBLENDFUNCSEPARATEPROC>(LoadPlatformGlProcAddress("glBlendFuncSeparate"));
+ glBlendEquationSeparate_=reinterpret_cast<CnaPFNGLBLENDEQUATIONSEPARATEPROC>(LoadPlatformGlProcAddress("glBlendEquationSeparate"));
  return glBlendColor_&&glBlendFuncSeparate_&&glBlendEquationSeparate_;
 }
 typedef void (APIENTRY *CnaPFNGLGENERATEMIPMAPPROC)(GLenum target);
 CnaPFNGLGENERATEMIPMAPPROC glGenerateMipmap_=nullptr;
 bool TryLoadGenerateMipmapFunction(){
- glGenerateMipmap_=reinterpret_cast<CnaPFNGLGENERATEMIPMAPPROC>(SDL_GL_GetProcAddress("glGenerateMipmap"));
+ glGenerateMipmap_=reinterpret_cast<CnaPFNGLGENERATEMIPMAPPROC>(LoadPlatformGlProcAddress("glGenerateMipmap"));
  return glGenerateMipmap_!=nullptr;
 }
 // CPU box-filter fallback for drivers with neither glGenerateMipmap nor GL_GENERATE_MIPMAP/
@@ -221,16 +235,18 @@ bool OpenGL1TextureCubeRenderer::SetData(int face,int level,int x,int y,int w,in
 // face/level image -- no sub-rectangle readback exists at the GL API level -- so the requested
 // [x,y,w,h] box is copied out of a full-image temporary rather than read directly.
 bool OpenGL1TextureCubeRenderer::GetData(int face,int level,int x,int y,int w,int h,void*data,int /*dataLength*/)const{if(face<0||face>=6||level<0||!data||w<=0||h<=0)return false;glBindTexture(GL_TEXTURE_CUBE_MAP,id_);int levelSize=size_;for(int i=0;i<level;i++)levelSize=std::max(1,levelSize/2);std::vector<uint8_t>full((size_t)levelSize*levelSize*4);glPixelStorei(GL_PACK_ALIGNMENT,1);glGetTexImage(GL_TEXTURE_CUBE_MAP_POSITIVE_X+face,level,GL_RGBA,GL_UNSIGNED_BYTE,full.data());uint8_t*dest=static_cast<uint8_t*>(data);for(int row=0;row<h;++row)std::memcpy(dest+(size_t)row*w*4,full.data()+((size_t)(y+row)*levelSize+x)*4,(size_t)w*4);return true;}
-// plan_opengl1.md item 22: SDL_GL_MULTISAMPLEBUFFERS/SAMPLES only report what the driver
-// GENUINELY granted for the visual the current GL context is bound to -- GLX can silently clamp
-// or altogether refuse the request GraphicsDevice.cpp made before SDL_CreateWindow(), so this is
+// plan_opengl1.md item 22: the granted multisample attributes report what the driver genuinely
+// provided for the visual the current GL context is bound to -- GLX can silently clamp
+// or altogether refuse the request GraphicsDevice made before window creation, so this is
 // read back empirically rather than trusted from GraphicsRendererCreateArgs::multiSampleCount.
 void OpenGL1Renderer::DetectMultiSampleCount(){
-int msBuffers=0,msSamples=0;SDL_GL_GetAttribute(SDL_GL_MULTISAMPLEBUFFERS,&msBuffers);SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES,&msSamples);
-multiSampleCount_=(msBuffers>0&&msSamples>1)?msSamples:0;
+const auto granted=platformContext_->GetAttributes();
+multiSampleCount_=(granted.multisampleBuffers>0&&granted.multisampleSamples>1)?granted.multisampleSamples:0;
 if(multiSampleCount_>1)glEnable(GL_MULTISAMPLE);
 }
-OpenGL1Renderer::OpenGL1Renderer(const GraphicsRendererCreateArgs&a):presentationMode_(static_cast<int>(a.presentationMode)),window_(a.window),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){if(!window_)throw std::runtime_error("OPENGL1 requires SDL window");SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE,8);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);glContext_=SDL_GL_CreateContext(window_);if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed: ")+SDL_GetError());SDL_GL_MakeCurrent(window_,glContext_);SDL_GL_SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
+OpenGL1Renderer::OpenGL1Renderer(const GraphicsRendererCreateArgs&a):
+ presentationMode_(static_cast<int>(a.presentationMode)),platformContext_(std::make_unique<PlatformGlContextOwner>(RequirePlatformGlContext(a.glContext,"OPENGL1"),RequirePlatformGlWindow(a.surface,"OPENGL1"),RequestedContext(a.multiSampleCount))),
+ surface_(a.surface),virtualWidth_(a.virtualWidth),virtualHeight_(a.virtualHeight),contextRecoveryEnabled_(a.contextRecoveryEnabled){platformContext_->SetSwapInterval(a.swapInterval);caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
 std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.versionMinor
  <<"; framebuffer object: "<<(caps_.framebufferObject?"yes":"no")
  <<"; multitexture: "<<(caps_.multitexture?"yes":"no")
@@ -239,32 +255,33 @@ std::cout<<"CNA: OpenGL1 capabilities -- GL "<<caps_.versionMajor<<"."<<caps_.ve
  <<"; anisotropic filtering: "<<(caps_.anisotropicFiltering?("supported, up to "+std::to_string((int)caps_.maxAnisotropy)+"x"):std::string("not supported"))
  <<"; MSAA: "<<(multiSampleCount_>1?(std::to_string(multiSampleCount_)+"x"):std::string("no"))
  <<std::endl;
-glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsRenderer::RegisterForWindow(window_,this);}
-OpenGL1Renderer::~OpenGL1Renderer(){IGraphicsRenderer::UnregisterForWindow(window_);if(glContext_)SDL_GL_DestroyContext(glContext_);}void OpenGL1Renderer::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1Renderer::Present(){SDL_GL_SwapWindow(window_);}void OpenGL1Renderer::GetViewportSize(int&w,int&h){SDL_GetWindowSizeInPixels(window_,&w,&h);}void OpenGL1Renderer::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1Renderer::SetPresentationMode(int mode){presentationMode_=mode;}
+glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);IGraphicsRenderer::RegisterForWindow(a.surface.windowId,this);}
+OpenGL1Renderer::~OpenGL1Renderer(){IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());}
+void OpenGL1Renderer::Clear(float r,float g,float b,float a){glClearColor(r,g,b,a);glClear(GL_COLOR_BUFFER_BIT);}void OpenGL1Renderer::Present(){platformContext_->SwapBuffers();}void OpenGL1Renderer::GetViewportSize(int&w,int&h){surface_.GetDrawableSize(w,h);}void OpenGL1Renderer::OnSurfaceChanged(const RendererSurfaceInfo&s){surface_.Update(s);}void OpenGL1Renderer::SetVirtualResolution(int w,int h){virtualWidth_=w;virtualHeight_=h;}void OpenGL1Renderer::SetPresentationMode(int mode){presentationMode_=mode;}
 // plan_opengl1.md item 13 (EasyGL parity): see EffectiveWidth()/EffectiveHeight()'s own doc
 // comment in the header for the full rationale of which modes recompute and which don't.
 void OpenGL1Renderer::ComputeLogicalSize(int&outW,int&outH)const{
 if(presentationMode_!=4){outW=virtualWidth_;outH=virtualHeight_;return;} // Only FixedHeightDynamicWidth recomputes.
-int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);
+int physW=0,physH=0;surface_.GetDrawableSize(physW,physH);
 if(physW<=0||physH<=0||virtualHeight_<=0){outW=virtualWidth_;outH=virtualHeight_;return;}
 outH=virtualHeight_;
 outW=(int)(((long long)physW*virtualHeight_+physH/2)/physH); // round(physW*preferredH/physH)
 }
 bool OpenGL1Renderer::TransformWindowToLogical(float windowX,float windowY,float&logX,float&logY)const{
 if(presentationMode_!=4)return false;
-int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);int logW,logH;ComputeLogicalSize(logW,logH);
+int physW=0,physH=0;surface_.GetDrawableSize(physW,physH);int logW,logH;ComputeLogicalSize(logW,logH);
 if(physH<=0||logH<=0)return false;
 const float scale=(float)logH/(float)physH; // uniform -- see the header's own doc comment for why width/height scale are identical here.
-logX=windowX*scale;logY=windowY*scale;return true;
+logX=surface_.WindowToDrawable(windowX)*scale;logY=surface_.WindowToDrawable(windowY)*scale;return true;
 }
 bool OpenGL1Renderer::TransformLogicalToWindow(float logX,float logY,float&windowX,float&windowY)const{
 if(presentationMode_!=4)return false;
-int physW=0,physH=0;SDL_GetWindowSizeInPixels(window_,&physW,&physH);int logW,logH;ComputeLogicalSize(logW,logH);
+int physW=0,physH=0;surface_.GetDrawableSize(physW,physH);int logW,logH;ComputeLogicalSize(logW,logH);
 if(logH<=0||physH<=0)return false;
 const float scale=(float)physH/(float)logH;
-windowX=logX*scale;windowY=logY*scale;return true;
+windowX=surface_.DrawableToWindow(logX*scale);windowY=surface_.DrawableToWindow(logY*scale);return true;
 }
-void OpenGL1Renderer::SetSwapInterval(int interval){SDL_GL_SetSwapInterval(interval);}
+void OpenGL1Renderer::SetSwapInterval(int interval){platformContext_->SetSwapInterval(interval);}
 void OpenGL1Renderer::ReadBackbuffer(int x,int y,int w,int h,uint8_t*pixels){int W,H;GetViewportSize(W,H);glReadBuffer(GL_BACK);glPixelStorei(GL_PACK_ALIGNMENT,1);const int glY=H-y-h;glReadPixels(x,glY,w,h,GL_RGBA,GL_UNSIGNED_BYTE,pixels);const int rowBytes=w*4;std::vector<uint8_t>tmp(rowBytes);for(int i=0;i<h/2;++i){uint8_t*top=pixels+i*rowBytes;uint8_t*bot=pixels+(h-1-i)*rowBytes;std::copy(top,top+rowBytes,tmp.data());std::copy(bot,bot+rowBytes,top);std::copy(tmp.begin(),tmp.end(),bot);}}
 std::unique_ptr<ITextureRenderer>OpenGL1Renderer::CreateTexture(const ImageData&d){return std::make_unique<OpenGL1TextureRenderer>(d,RegistryIfEnabled(),caps_.generateMipmap);}std::unique_ptr<ISpriteBatchRenderer>OpenGL1Renderer::CreateSpriteBatch(){return std::make_unique<OpenGL1SpriteBatchRenderer>(*this);}std::unique_ptr<IVertexBufferRenderer>OpenGL1Renderer::CreateVertexBuffer(int c){return std::make_unique<OpenGL1VertexBufferRenderer>(c);}std::unique_ptr<IIndexBufferRenderer>OpenGL1Renderer::CreateIndexBuffer16(int){return std::make_unique<OpenGL1IndexBufferRenderer>(false);}std::unique_ptr<IIndexBufferRenderer>OpenGL1Renderer::CreateIndexBuffer32(int){return std::make_unique<OpenGL1IndexBufferRenderer>(true);}
 std::unique_ptr<IRenderTargetRenderer>OpenGL1Renderer::CreateRenderTarget2D(int w,int h,int depthFormat,bool,bool mipMap,int multiSampleCount){if(!caps_.framebufferObject)return nullptr;try{return std::make_unique<OpenGL1RenderTargetRenderer>(w,h,depthFormat,mipMap,multiSampleCount,RegistryIfEnabled());}catch(const std::exception&){return nullptr;}}
@@ -279,10 +296,7 @@ void OpenGL1Renderer::SetContextRecoveryEnabled(bool enabled){contextRecoveryEna
 void OpenGL1Renderer::DebugSimulateContextLoss(){
 std::cout<<"CNA: OpenGL1 simulating desktop GL context loss + immediate recreate"<<std::endl;
 registry_.NotifyContextLost();
-if(glContext_){SDL_GL_MakeCurrent(window_,nullptr);SDL_GL_DestroyContext(glContext_);glContext_=nullptr;}
-glContext_=SDL_GL_CreateContext(window_);
-if(!glContext_)throw std::runtime_error(std::string("OPENGL1 SDL_GL_CreateContext failed during debug context loss: ")+SDL_GetError());
-SDL_GL_MakeCurrent(window_,glContext_);
+platformContext_->Recreate();
 caps_=DetectOpenGL1Capabilities();if(caps_.framebufferObject)caps_.framebufferObject=TryLoadOpenGL1FramebufferObjectFunctions();if(caps_.multitexture)caps_.multitexture=TryLoadMultitextureFunctions();if(caps_.generateMipmap)TryLoadGenerateMipmapFunction();if(caps_.occlusionQuery)caps_.occlusionQuery=TryLoadOpenGL1OcclusionQueryFunctions();if(caps_.extendedBlend)caps_.extendedBlend=TryLoadBlendFunctions();DetectMultiSampleCount();
 glEnable(GL_TEXTURE_2D);glEnable(GL_DEPTH_TEST);glDepthFunc(GL_LEQUAL);glShadeModel(GL_SMOOTH);glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 registry_.NotifyContextRestored();
@@ -545,5 +559,18 @@ if(dynamic_cast<const IRenderTargetRenderer*>(&t))std::swap(v0,v1);
 glPushMatrix();glTranslatef((float)d.X,(float)d.Y,z);glRotatef(rot*57.2957795f,0,0,1);glTranslatef(-o.X,-o.Y,0);Color4(c);glBegin(GL_QUADS);glTexCoord2f(u0,v0);glVertex2f(0,0);glTexCoord2f(u1,v0);glVertex2f((float)d.Width,0);glTexCoord2f(u1,v1);glVertex2f((float)d.Width,(float)d.Height);glTexCoord2f(u0,v1);glVertex2f(0,(float)d.Height);glEnd();glPopMatrix();}
 }
 #ifdef CNA_RENDERER_OPENGL1
-namespace CNA::Internal::Renderers {std::unique_ptr<IGraphicsRenderer>CreateGraphicsRenderer(const GraphicsRendererCreateArgs&args){return std::make_unique<OpenGL1::OpenGL1Renderer>(args);}}
+namespace CNA::Internal::Renderers
+{
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGL1
+    {
+        std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(
+            const GraphicsRendererCreateArgs& args)
+        {
+            return std::make_unique<OpenGL1Renderer>(args);
+        }
+    }
+}
 #endif

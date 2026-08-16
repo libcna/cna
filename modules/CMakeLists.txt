@@ -11,7 +11,11 @@
 # silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
 # native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
 # clarity/documentation even though it's now redundant with WIN32. ---
-if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID)
+# iOS joins that list for the same reason as the MinGW cross-build: pkg-config on a macOS host
+# resolves to Homebrew's *macOS* FFmpeg, whose headers and dylibs would poison an iOS
+# cross-compile (and fail the link with "built for macOS"). macOS itself keeps FFmpeg -- that is a
+# native build against exactly the libraries pkg-config reports.
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)
@@ -60,7 +64,6 @@ set(CNA_DRACO_AVAILABLE ${CNA_DRACO_AVAILABLE} PARENT_SCOPE)
 add_library(cna_build_flags INTERFACE)
 add_library(CNA::BuildFlags ALIAS cna_build_flags)
 target_compile_definitions(cna_build_flags INTERFACE
-        SOUND_ENABLED
         XNA5
         ${CNA_RENDERER_DEFINE}
         $<$<BOOL:${CNA_CNAEXT}>:CNA_CNAEXT>
@@ -68,6 +71,13 @@ target_compile_definitions(cna_build_flags INTERFACE
         $<$<BOOL:${CNA_DRACO_AVAILABLE}>:CNA_DRACO_AVAILABLE>
         $<$<BOOL:${CNA_FFMPEG_AVAILABLE}>:CNA_FFMPEG_AVAILABLE>
 )
+
+# The current high-level mixer is SDL3_mixer based.  Do not advertise sound support in a
+# configuration which deliberately selected a non-SDL3 audio transport: that would compile
+# the XNA facade against an implementation which cannot exist in the resulting binary.
+if(CNA_AUDIO_PLATFORM STREQUAL "SDL3")
+    target_compile_definitions(cna_build_flags INTERFACE SOUND_ENABLED)
+endif()
 
 # Defines one CNA module: a STATIC library named cna_<name> with alias CNA::<Alias>, the
 # shared public build surface, and the calling module's own public include/ root. No module
@@ -92,6 +102,9 @@ set(CNA_GRAPHICS_EXAMPLES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/graphics/examples")
 # not-yet-defined target names at generate time, so cycles and forward references are fine.
 add_subdirectory(core)
 add_subdirectory(math)
+# The platform contract (plan_platform.md): composed before the subsystems that will consume
+# it, so the read order matches the dependency direction even though CMake does not require it.
+add_subdirectory(platform)
 add_subdirectory(graphics)
 add_subdirectory(input)
 add_subdirectory(audio)
@@ -136,6 +149,7 @@ target_link_libraries(CNA INTERFACE
         cna_graphics_core
         cna_core
         cna_math
+        cna_platform
         cna_build_flags
         ${RENDERER_TARGET}
 )
@@ -157,14 +171,14 @@ endif()
 # moved into their owning modules (module-examples campaign): a module may own
 # modules/<name>/examples/, and example TUs outside every declared module still fail.
 set(_cna_framework_modules
-    c-api core math runtime graphics input audio media content storage
+    c-api core math platform runtime graphics input audio media content storage
     devices devices-ext graphics-ext gamer-services net)
 set(_cna_renderer_modules
     bgfx blend2d canvas diligent direct2d directx1 directx2 directx3 directx5 directx6
     directx7 directx8 directx9 directx10 directx11 directx12
     easygl fna3d freedirect gdi glide headless html-dom llgl magnum metal opengl1
     opengl2 opengl4 opengles1 openvg portablegl sdl-gpu sdl-renderer skia software sokol
-    stub svg-dom vulkan
+    stub svg-dom tinygl vulkan
     webgpu wicked common/d3d)
 file(GLOB_RECURSE _cna_all_module_tus RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
     CONFIGURE_DEPENDS "*.cpp" "*.mm")

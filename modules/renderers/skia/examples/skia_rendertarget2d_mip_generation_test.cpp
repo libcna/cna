@@ -152,7 +152,7 @@ namespace
     public:
         [[nodiscard]] int GetWidth() const override { return 7; }
         [[nodiscard]] int GetHeight() const override { return 5; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindAsRenderTarget() override {}
         void UnbindAsRenderTarget() override {}
     };

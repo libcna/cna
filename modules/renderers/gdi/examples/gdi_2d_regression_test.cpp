@@ -3,6 +3,7 @@
 
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/NotSupportedException.hpp"
 
@@ -696,11 +697,11 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.window = window;
+        args.surface.windowId = SDL_GetWindowID(window);
         args.virtualWidth = 32;
         args.virtualHeight = 32;
         args.presentationMode = CnaPresentationMode::Stretch;
-        std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
+        std::unique_ptr<IGraphicsRenderer> renderer = Gdi::CreateGraphicsRenderer(args);
 
         if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
         {

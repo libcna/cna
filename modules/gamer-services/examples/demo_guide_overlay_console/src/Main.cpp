@@ -139,7 +139,7 @@ namespace
         if (before == after)
         {
             // Confirmed by direct SDL probe before writing this: IsScreenSaverEnabled/
-            // SetIsScreenSaverEnabledProperty wrap real SDL_ScreenSaverEnabled()/SDL_Enable/
+            // SetIsScreenSaverEnabledProperty wraps the real platform screen-saver controls.
             // DisableScreenSaver(), which only take effect once SDL's video subsystem is
             // initialized - this demo intentionally has none (matching the plan's own "no
             // graphics needed" scope for this console-only demo), so no change is expected here.

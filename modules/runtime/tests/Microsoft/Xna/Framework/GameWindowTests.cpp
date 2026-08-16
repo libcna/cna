@@ -1,37 +1,59 @@
 // SPDX-License-Identifier: MS-PL
 #include <gtest/gtest.h>
 
-#include <SDL3/SDL.h>
-
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <utility>
+
 using namespace Microsoft::Xna::Framework;
 
-TEST(GameWindowTest, SetAndGetTitle_UsingSdlWindow)
+namespace
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    CNA::Platform::WindowDescription MakeDescription(const std::string& title)
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        CNA::Platform::WindowDescription description;
+        description.title = title;
+        description.width = 64;
+        description.height = 64;
+        description.visible = false;
+        return description;
     }
 
-    SDL_Window* nativeWindow = SDL_CreateWindow("initial-title", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!nativeWindow)
+    struct BorrowedHeadlessGameWindow
     {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
+        explicit BorrowedHeadlessGameWindow(const std::string& title)
+            : platform(CNA::Platform::PlatformFactory::Create("Headless"))
+            , platformWindow(platform->CreateWindow(MakeDescription(title)))
+            , window(platformWindow.get())
+        {
+        }
 
-    GameWindow window(nativeWindow);
+        std::unique_ptr<CNA::Platform::IPlatform> platform;
+        std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow;
+        GameWindow window;
+    };
+}
 
-    window.setTitleProperty("new-title");
-    EXPECT_EQ(window.getTitleProperty(), "new-title");
+TEST(GameWindowTest, SetAndGetTitleUsingPlatformWindow)
+{
+    BorrowedHeadlessGameWindow fixture("initial-title");
 
-    window.setTitleProperty("");
-    EXPECT_EQ(window.getTitleProperty(), "");
+    fixture.window.setTitleProperty("new-title");
+    EXPECT_EQ(fixture.window.getTitleProperty(), "new-title");
+    EXPECT_EQ(fixture.platformWindow->GetTitle(), "new-title");
 
-    SDL_DestroyWindow(nativeWindow);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    fixture.window.setTitleProperty("");
+    EXPECT_EQ(fixture.window.getTitleProperty(), "");
+    EXPECT_EQ(fixture.platformWindow->GetTitle(), "");
 }
 
 TEST(GameWindowTest, NullWindow_IsSafeAndReturnsEmptyTitle)
@@ -58,6 +80,42 @@ TEST(GameWindowTest, NullWindow_HandleIsNullptr)
 {
     GameWindow window;
     EXPECT_EQ(window.getHandleProperty(), 0);
+}
+
+TEST(GameWindowTest, NullWindow_NativeHandleIsUnknownAndEmpty)
+{
+    const GameWindow window;
+    const CNA::Platform::NativeWindowHandle handle = window.GetNativeWindowHandleEXT();
+
+    EXPECT_EQ(handle.system, CNA::Platform::NativeWindowSystem::Unknown);
+    EXPECT_EQ(handle.display, nullptr);
+    EXPECT_EQ(handle.window, nullptr);
+    EXPECT_EQ(handle.surface, nullptr);
+    EXPECT_EQ(handle.windowId, 0u);
+}
+
+TEST(GameWindowTest, NativeHandleComesFromTheBorrowedPlatformWindow)
+{
+    BorrowedHeadlessGameWindow fixture("native-handle");
+
+    const CNA::Platform::NativeWindowHandle handle = fixture.window.GetNativeWindowHandleEXT();
+    EXPECT_EQ(handle.system, CNA::Platform::NativeWindowSystem::Headless);
+}
+
+TEST(GameWindowTest, DestroyingTheWrapperDoesNotDestroyTheBorrowedPlatformWindow)
+{
+    const std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    const std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(MakeDescription("caller-owned"));
+
+    {
+        const GameWindow window(platformWindow.get());
+        EXPECT_EQ(window.getTitleProperty(), "caller-owned");
+    }
+
+    EXPECT_NO_THROW(platformWindow->SetTitle("still-alive"));
+    EXPECT_EQ(platformWindow->GetTitle(), "still-alive");
 }
 
 TEST(GameWindowTest, NullWindow_ScreenDeviceNameIsEmpty)
@@ -116,31 +174,187 @@ TEST(GameWindowTest, NullWindow_RestoreEXTIsSafe)
     EXPECT_NO_THROW(window.RestoreEXT());
 }
 
-TEST(GameWindowTest, MinimizeAndRestoreEXT_UsingSdlWindow)
+TEST(GameWindowTest, MinimizeAndRestoreEXTUsingPlatformWindow)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
-    {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
-    }
+    BorrowedHeadlessGameWindow fixture("minimize-restore-test");
 
-    SDL_Window* nativeWindow = SDL_CreateWindow("minimize-restore-test", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!nativeWindow)
-    {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
-    }
+    EXPECT_NO_THROW(fixture.window.MinimizeEXT());
+    EXPECT_TRUE(fixture.platformWindow->IsMinimized());
 
-    GameWindow window(nativeWindow);
-
-    EXPECT_NO_THROW(window.MinimizeEXT());
-    EXPECT_NO_THROW(window.RestoreEXT());
-
-    SDL_DestroyWindow(nativeWindow);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_NO_THROW(fixture.window.RestoreEXT());
+    EXPECT_FALSE(fixture.platformWindow->IsMinimized());
 }
 
 TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
 {
     GameWindow window;
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
+}
+
+// plan_apple.md APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
+// and the channel into the operating system on iOS/Android. These cases pin down both halves --
+// the fallback rule that is platform-independent, and the forwarding to the platform window that
+// is what makes the declaration mean anything on a mobile target.
+namespace
+{
+    // SetSupportedOrientations is protected (XNA declares it protected internal on GameWindow);
+    // GraphicsDeviceManager reaches it as a friend, a test reaches it by deriving.
+    class TestableGameWindow : public GameWindow
+    {
+    public:
+        using GameWindow::GameWindow;
+        using GameWindow::SetSupportedOrientations;
+    };
+
+    // Records what GameWindow forwards, so the mapping can be asserted without a real display and
+    // without naming the native hint the platform ultimately sets.
+    class OrientationRecordingWindow final : public CNA::Platform::IPlatformWindow
+    {
+    public:
+        explicit OrientationRecordingWindow(CNA::Platform::IPlatformWindow* inner) : inner_(inner) {}
+
+        [[nodiscard]] CNA::Platform::WindowId GetId() const override { return inner_->GetId(); }
+        [[nodiscard]] CNA::Platform::NativeWindowHandle GetNativeHandle() const override
+        {
+            return inner_->GetNativeHandle();
+        }
+        [[nodiscard]] std::string GetTitle() const override { return inner_->GetTitle(); }
+        void SetTitle(const std::string& title) override { inner_->SetTitle(title); }
+        [[nodiscard]] CNA::Platform::WindowBounds GetClientBounds() const override
+        {
+            return inner_->GetClientBounds();
+        }
+        [[nodiscard]] CNA::Platform::WindowSize GetPixelSize() const override
+        {
+            return inner_->GetPixelSize();
+        }
+        void SetSize(const int width, const int height) override { inner_->SetSize(width, height); }
+        [[nodiscard]] float GetDisplayScale() const override { return inner_->GetDisplayScale(); }
+        [[nodiscard]] bool IsResizable() const override { return inner_->IsResizable(); }
+        void SetResizable(const bool resizable) override { inner_->SetResizable(resizable); }
+        [[nodiscard]] bool IsBorderless() const override { return inner_->IsBorderless(); }
+        void SetBorderless(const bool borderless) override { inner_->SetBorderless(borderless); }
+        void SetFullscreenMode(const CNA::Platform::WindowFullscreenMode mode) override
+        {
+            inner_->SetFullscreenMode(mode);
+        }
+        [[nodiscard]] CNA::Platform::WindowFullscreenMode GetFullscreenMode() const override
+        {
+            return inner_->GetFullscreenMode();
+        }
+        void Show() override { inner_->Show(); }
+        void Hide() override { inner_->Hide(); }
+        void Minimize() override { inner_->Minimize(); }
+        void Maximize() override { inner_->Maximize(); }
+        void Restore() override { inner_->Restore(); }
+        void Sync() override { inner_->Sync(); }
+        [[nodiscard]] bool HasFocus() const override { return inner_->HasFocus(); }
+        [[nodiscard]] bool IsMinimized() const override { return inner_->IsMinimized(); }
+        [[nodiscard]] std::string GetDisplayName() const override { return inner_->GetDisplayName(); }
+
+        void SetSupportedOrientations(const CNA::Platform::ScreenOrientation orientations) override
+        {
+            received = orientations;
+            ++callCount;
+        }
+
+        CNA::Platform::ScreenOrientation received = CNA::Platform::ScreenOrientation::None;
+        int callCount = 0;
+
+    private:
+        CNA::Platform::IPlatformWindow* inner_;
+    };
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_LeavesTheDefaultOrientationAlone)
+{
+    // DisplayOrientation::Default means "no orientation asserted" and counts as supported
+    // whatever the supported set is, so narrowing the set does not force a concrete orientation
+    // onto a window that never had one.
+    TestableGameWindow window;
+
+    window.SetSupportedOrientations(DisplayOrientation::Portrait);
+    EXPECT_EQ(DisplayOrientation::Default, window.getCurrentOrientationProperty());
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_FallsBackWhenTheCurrentOneStopsBeingSupported)
+{
+    // A concrete current orientation only comes from real window bounds, so this case needs a
+    // window: 128x64 is landscape, which is in GameWindow's default supported set.
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    CNA::Platform::WindowDescription description = MakeDescription("orientation");
+    description.width = 128;
+    description.height = 64;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(description);
+
+    TestableGameWindow window(platformWindow.get());
+    ASSERT_EQ(DisplayOrientation::LandscapeLeft, window.getCurrentOrientationProperty());
+
+    window.SetSupportedOrientations(DisplayOrientation::Portrait);
+    EXPECT_EQ(DisplayOrientation::Portrait, window.getCurrentOrientationProperty());
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_ForwardsTheRequestedSetToThePlatformWindow)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    std::unique_ptr<CNA::Platform::IPlatformWindow> inner =
+        platform->CreateWindow(MakeDescription("orientation-forwarding"));
+    OrientationRecordingWindow recording(inner.get());
+
+    TestableGameWindow window(&recording);
+    window.SetSupportedOrientations(
+        DisplayOrientation::Portrait | DisplayOrientation::LandscapeLeft);
+
+    EXPECT_EQ(1, recording.callCount);
+    EXPECT_TRUE(HasOrientation(recording.received, CNA::Platform::ScreenOrientation::Portrait));
+    EXPECT_TRUE(
+        HasOrientation(recording.received, CNA::Platform::ScreenOrientation::LandscapeLeft));
+    EXPECT_FALSE(
+        HasOrientation(recording.received, CNA::Platform::ScreenOrientation::LandscapeRight));
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_DefaultClearsThePlatformPreference)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    std::unique_ptr<CNA::Platform::IPlatformWindow> inner =
+        platform->CreateWindow(MakeDescription("orientation-default"));
+    OrientationRecordingWindow recording(inner.get());
+
+    TestableGameWindow window(&recording);
+    window.SetSupportedOrientations(DisplayOrientation::Default);
+
+    EXPECT_EQ(1, recording.callCount);
+    EXPECT_EQ(CNA::Platform::ScreenOrientation::None, recording.received);
+}
+
+
+TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
+{
+    Game game;
+    GameWindow& window = game.getWindowProperty();
+    if (window.GetNativeWindowHandleEXT().system == CNA::Platform::NativeWindowSystem::Unknown)
+    {
+        GTEST_SKIP() << "The selected renderer intentionally creates no platform window.";
+    }
+
+    EXPECT_EQ(window.getTitleProperty(), "Game");
+    EXPECT_TRUE(window.getAllowUserResizingProperty());
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 800, 480));
+
+    window.setTitleProperty("platform-window");
+    EXPECT_EQ(window.getTitleProperty(), "platform-window");
+    window.setAllowUserResizingProperty(false);
+    EXPECT_FALSE(window.getAllowUserResizingProperty());
+    window.setIsBorderlessEXTProperty(true);
+    EXPECT_TRUE(window.getIsBorderlessEXTProperty());
+
+    window.BeginScreenDeviceChange(false);
+    window.EndScreenDeviceChange("virtual-display", 320, 240);
+    EXPECT_EQ(window.getClientBoundsProperty(), Rectangle(0, 0, 320, 240));
+    EXPECT_NO_THROW(window.MinimizeEXT());
+    EXPECT_NO_THROW(window.RestoreEXT());
 }

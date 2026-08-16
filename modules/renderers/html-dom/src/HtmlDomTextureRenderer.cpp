@@ -498,7 +498,7 @@ namespace CNA::Internal::Renderers::HtmlDom
                 "HTML_DOM renderer: mip-level texture upload (level " + std::to_string(level) +
                 ") is not yet implemented. Neither CSS background painting nor this renderer's "
                 "texture canvases have a mip chain or per-level LOD selection -- the same boundary "
-                "CANVAS and SDL_RENDERER draw. Use Texture2D::SetData(level=0, ...).");
+                "CANVAS and the native 2D renderer draw. Use Texture2D::SetData(level=0, ...).");
         if (levelW != width_ || levelH != height_)
             throw System::ArgumentOutOfRangeException(
                 "levelSize", std::to_string(levelW) + "x" + std::to_string(levelH),

@@ -11,6 +11,8 @@
 #include "Microsoft/Xna/Framework/Graphics/SpriteBatch.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Input/Keyboard.hpp"
+#include "Microsoft/Xna/Framework/Input/Keys.hpp"
 
 class Game1 : public Microsoft::Xna::Framework::Game {
 public:

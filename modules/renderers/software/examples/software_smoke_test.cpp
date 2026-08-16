@@ -64,7 +64,7 @@ protected:
 
         // Check A: no real window/video subsystem anywhere.
         check(SDL_WasInit(SDL_INIT_VIDEO) == 0, "SDL_INIT_VIDEO was never initialized under the Software renderer");
-        check(renderer.GetWindowInternal() == nullptr, "GraphicsDevice has no real window under the Software renderer");
+        check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) == nullptr, "GraphicsDevice has no real window under the Software renderer");
 
         // Check B: real, correct pixel readback after Clear().
         {

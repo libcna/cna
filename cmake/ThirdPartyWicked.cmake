@@ -14,7 +14,7 @@
 # full clone is measured in gigabytes -- silently triggering that from a plain configure would be a
 # surprise, so it must be asked for by name.
 #
-# Both paths require the SDL3 platform patch below; see cna_wicked_check_sdl3_support().
+# Both paths require the CNA native-window patch below; see cna_wicked_check_platform_support().
 
 include_guard(GLOBAL)
 
@@ -22,51 +22,67 @@ set(CNA_WICKED_COMMIT "27c0df160d738925474a2181d3f88bfd59edaefe"
     CACHE STRING "Pinned Wicked Engine revision used by CNA")
 set(CNA_WICKED_ROOT "" CACHE PATH "Root of a local Wicked Engine checkout")
 option(CNA_WICKED_AUTO_FETCH "Clone the pinned Wicked Engine revision when CNA_WICKED_ROOT is empty" OFF)
-option(CNA_WICKED_APPLY_SDL3_PATCH "Apply cmake/patches/wicked-sdl3-platform.patch to the resolved Wicked Engine checkout when it is not already SDL3-aware" ON)
+option(CNA_WICKED_APPLY_PLATFORM_PATCH "Apply CNA's native-window platform patch to the resolved Wicked Engine checkout" ON)
 option(CNA_WICKED_APPLY_TEARDOWN_PATCH "Apply cmake/patches/wicked-device-teardown.patch to the resolved Wicked Engine checkout when its Vulkan device still leaks at destruction" ON)
 option(CNA_WICKED_APPLY_STAGING_FOOTPRINT_PATCH "Apply cmake/patches/wicked-staging-footprint.patch to the resolved Wicked Engine checkout when its Vulkan UPLOAD/READBACK staging buffers are still allocated smaller than their mapped-layout footprint" ON)
 
-set(CNA_WICKED_SDL3_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-sdl3-platform.patch"
-    CACHE FILEPATH "SDL3 platform patch applied to Wicked Engine")
+set(CNA_WICKED_PLATFORM_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-cna-platform.patch"
+    CACHE FILEPATH "Native-window platform patch applied to Wicked Engine")
+set(CNA_WICKED_LEGACY_SDL3_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-sdl3-platform-legacy.patch"
+    CACHE FILEPATH "Legacy patch reversed when upgrading an already-patched checkout")
 set(CNA_WICKED_TEARDOWN_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-device-teardown.patch"
     CACHE FILEPATH "Vulkan device teardown patch applied to Wicked Engine")
 set(CNA_WICKED_STAGING_FOOTPRINT_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/wicked-staging-footprint.patch"
     CACHE FILEPATH "Vulkan staging-buffer footprint patch applied to Wicked Engine")
 
-# Wicked Engine's Unix platform layer is SDL2-only upstream: wiPlatform.h calls SDL2 window
-# functions unconditionally under PLATFORM_LINUX, and GraphicsDevice_Vulkan::CreateSwapChain has a
-# hard `#error PLATFORM NOT SUPPORTED` when neither _WIN32 nor SDL2 is defined. CNA is SDL3-only
-# and hands the renderer an SDL3 window, and SDL2 and SDL3 cannot be loaded into one process (they
-# export the same symbol names with different ABIs), so the patch adds a parallel SDL3 branch
-# everywhere the SDL2 one exists (plan_wicked.md design decision 2).
-function(cna_wicked_check_sdl3_support _root)
+# Wicked Engine's Unix platform layer is SDL2-only upstream. CNA supplies an immutable native
+# window snapshot instead; the patch adds that narrow X11/Vulkan bridge and selects Wicked's
+# existing no-backend audio stubs, avoiding both the SDL2 and FAudio dependencies.
+function(cna_wicked_check_platform_support _root)
     file(READ "${_root}/WickedEngine/wiPlatform.h" _platform_header)
-    if(_platform_header MATCHES "SDL3")
+    if(_platform_header MATCHES "WICKED_CNA_PLATFORM")
         return()
     endif()
 
-    if(NOT CNA_WICKED_APPLY_SDL3_PATCH)
+    if(NOT CNA_WICKED_APPLY_PLATFORM_PATCH)
         message(FATAL_ERROR
-            "CNA Wicked: the Wicked Engine checkout at '${_root}' has no SDL3 platform support and "
-            "CNA_WICKED_APPLY_SDL3_PATCH=OFF. Apply ${CNA_WICKED_SDL3_PATCH} manually "
+            "CNA Wicked: the checkout at '${_root}' has no CNA native-window support and "
+            "CNA_WICKED_APPLY_PLATFORM_PATCH=OFF. Apply ${CNA_WICKED_PLATFORM_PATCH} manually "
             "(git -C ${_root} apply <patch>) or re-enable the option.")
     endif()
 
     find_package(Git QUIET)
     if(NOT GIT_FOUND)
         message(FATAL_ERROR
-            "CNA Wicked: git is required to apply ${CNA_WICKED_SDL3_PATCH} to '${_root}'.")
+            "CNA Wicked: git is required to apply ${CNA_WICKED_PLATFORM_PATCH} to '${_root}'.")
     endif()
 
-    message(STATUS "CNA Wicked: applying SDL3 platform patch to ${_root}")
+    # Older CNA configurations permanently applied the former SDL3 bridge to the external
+    # checkout. Return that exact patch first so the new patch always targets the pinned upstream
+    # tree instead of depending on which CNA version configured it last.
+    if(_platform_header MATCHES "SDL3")
+        message(STATUS "CNA Wicked: removing legacy SDL3 platform patch from ${_root}")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" apply --reverse --whitespace=nowarn
+                    "${CNA_WICKED_LEGACY_SDL3_PATCH}"
+            WORKING_DIRECTORY "${_root}"
+            RESULT_VARIABLE _legacy_result
+            ERROR_VARIABLE _legacy_error)
+        if(NOT _legacy_result EQUAL 0)
+            message(FATAL_ERROR
+                "CNA Wicked: failed to reverse ${CNA_WICKED_LEGACY_SDL3_PATCH}:\n${_legacy_error}")
+        endif()
+    endif()
+
+    message(STATUS "CNA Wicked: applying native-window platform patch to ${_root}")
     execute_process(
-        COMMAND "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${CNA_WICKED_SDL3_PATCH}"
+        COMMAND "${GIT_EXECUTABLE}" apply --whitespace=nowarn "${CNA_WICKED_PLATFORM_PATCH}"
         WORKING_DIRECTORY "${_root}"
         RESULT_VARIABLE _patch_result
         ERROR_VARIABLE _patch_error)
     if(NOT _patch_result EQUAL 0)
         message(FATAL_ERROR
-            "CNA Wicked: failed to apply ${CNA_WICKED_SDL3_PATCH} to '${_root}':\n${_patch_error}\n"
+            "CNA Wicked: failed to apply ${CNA_WICKED_PLATFORM_PATCH} to '${_root}':\n${_patch_error}\n"
             "The patch is authored against Wicked Engine ${CNA_WICKED_COMMIT}; a different revision "
             "may need it rebasing.")
     endif()
@@ -194,8 +210,8 @@ function(cna_configure_wicked)
     endif()
 
     if(NOT WIN32)
-        cna_wicked_check_sdl3_support("${_root}")
-        set(WICKED_USE_SDL3 ON CACHE BOOL "" FORCE)
+        cna_wicked_check_platform_support("${_root}")
+        set(WICKED_USE_CNA_PLATFORM ON CACHE BOOL "" FORCE)
     endif()
     # Platform-independent: the Vulkan device is the one this renderer selects everywhere
     # (WICKED-60 keeps D3D12 unselectable), so its teardown fix applies on every platform.

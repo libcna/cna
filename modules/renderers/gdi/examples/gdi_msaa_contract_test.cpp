@@ -4,6 +4,7 @@
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -267,11 +268,11 @@ int main()
     try
     {
         GraphicsRendererCreateArgs args;
-        args.window = window;
+        args.surface.windowId = SDL_GetWindowID(window);
         args.virtualWidth = kWidth;
         args.virtualHeight = kHeight;
         args.presentationMode = CnaPresentationMode::Stretch;
-        std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
+        std::unique_ptr<IGraphicsRenderer> renderer = Gdi::CreateGraphicsRenderer(args);
 
         if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi)
         {

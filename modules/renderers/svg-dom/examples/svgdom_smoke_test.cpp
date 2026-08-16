@@ -217,10 +217,10 @@ protected:
 
         if (frame_ == 1)
         {
-            check(renderer.GetWindowInternal() != nullptr,
+            check(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty()) != nullptr,
                   "GraphicsDevice has a real SDL_Window under the SVG_DOM renderer");
-            check(renderer.GetRendererInternal() == nullptr,
-                  "GetRendererInternal() is null -- no SDL_Renderer exists on this renderer");
+            check(SDL_GetRenderer(reinterpret_cast<SDL_Window*>(getWindowProperty().getHandleProperty())) == nullptr,
+                  "SDL_GetRenderer(window) is null -- no SDL_Renderer exists on this renderer");
             check(JsSurfaceExists() == 1, "a real <svg id=\"cna-svg-dom-root\"> surface was created");
             check(JsInputSurfacePreserved() == 1,
                   "the transparent SDL canvas remains the input target while SVG ignores pointer events");

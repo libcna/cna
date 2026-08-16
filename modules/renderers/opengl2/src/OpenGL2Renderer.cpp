@@ -11,18 +11,24 @@
 // GL_GLEXT_PROTOTYPES's plain `extern`/GLAPI declarations (used on every other platform below)
 // only link because Linux/Mesa/GLX -- and macOS/other desktop GL ICDs -- export these symbols
 // directly for static linking; that is a convenience specific to those platforms' GL loader
-// model, not something Windows' opengl32.dll provides. SDL_GL_GetProcAddress() wraps
-// wglGetProcAddress portably; see LoadWin32GLExtensions() below, called once after context
+// model, not something Windows' opengl32.dll provides. The platform GL resolver wraps the native
+// entry-point lookup portably; see LoadWin32GLExtensions() below, called once after context
 // creation. Deliberately NOT build/link-verified against a real Windows toolchain -- none is
 // available in this project's own dev/CI sandbox -- but every function pointer below uses the
-// STANDARD Khronos PFNGLxxxPROC typedef from glext.h (bundled as SDL3/SDL_opengl_glext.h,
-// included transitively by SDL_opengl.h below), not a hand-rolled signature, specifically to
+// STANDARD Khronos PFNGLxxxPROC typedef from glext.h, not a hand-rolled signature, specifically to
 // minimize the chance of a silent type mismatch that only a real compile could otherwise catch.
-#if defined(_WIN32)
-#include <SDL3/SDL_opengl.h>
+#if defined(__APPLE__)
+#define GL_GLEXT_PROTOTYPES 1
+#include <OpenGL/gl.h>
+#include <OpenGL/glext.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#include <GL/gl.h>
+#include <GL/glext.h>
 #else
 #define GL_GLEXT_PROTOTYPES 1
-#include <SDL3/SDL_opengl.h>
+#include <GL/gl.h>
+#include <GL/glext.h>
 #endif
 
 #include <algorithm>
@@ -34,6 +40,21 @@
 
 namespace CNA::Internal::Renderers::OpenGL2
 {
+    namespace
+    {
+        CNA::Platform::GlContextDescription RequestedContext()
+        {
+            CNA::Platform::GlContextDescription description;
+            description.majorVersion = 2;
+            description.minorVersion = 1;
+            description.profile = CNA::Platform::GlProfile::Compatibility;
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            return description;
+        }
+    }
+
     // plan_opengl2.md (context-loss recovery): mirrors easy-gl's RecoverableResource.hpp exactly
     // (release_gl_handle_only()/recreate_gl_resource()), reimplemented locally rather than
     // depending on EasyGL/easy-gl. Defined here (not inside the anonymous namespace below) so it
@@ -131,12 +152,12 @@ namespace CNA::Internal::Renderers::OpenGL2
         PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer = nullptr;
         PFNGLDRAWBUFFERSPROC glDrawBuffers = nullptr;
 
-        // Called once, right after SDL_GL_MakeCurrent() in the constructor -- every function
+        // Called once, right after the platform context becomes current -- every function
         // pointer above must be resolved before ensurePrograms() (or any other GL call in this
         // file beyond GL 1.1) runs.
         void LoadWin32GLExtensions()
         {
-#define CNA_LOAD_GL(name) name = reinterpret_cast<decltype(name)>(SDL_GL_GetProcAddress(#name))
+#define CNA_LOAD_GL(name) name = reinterpret_cast<decltype(name)>(LoadPlatformGlProcAddress(#name))
             CNA_LOAD_GL(glActiveTexture);
             CNA_LOAD_GL(glBlendFuncSeparate);
             CNA_LOAD_GL(glBlendEquationSeparate);
@@ -210,7 +231,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         // GL 2.0/2.1 CORE calls, which link directly via GL_GLEXT_PROTOTYPES's extern declarations
         // on Linux/macOS (see the file-header comment) -- true ARB extension entry points are not
         // reliably direct-linkable on any platform, Windows included, so these are always resolved
-        // at runtime via SDL_GL_GetProcAddress() regardless of platform (LoadInstancingExtensions(),
+        // at runtime via the platform GL resolver regardless of platform (LoadInstancingExtensions(),
         // called unconditionally from the constructor, unlike LoadWin32GLExtensions() above which
         // is Windows-only). Null after loading means the driver genuinely lacks the extension --
         // every call site below must check before use (see SupportsCapability(Instancing) and
@@ -221,9 +242,9 @@ namespace CNA::Internal::Renderers::OpenGL2
         void LoadInstancingExtensions()
         {
             glDrawElementsInstancedARB = reinterpret_cast<PFNGLDRAWELEMENTSINSTANCEDARBPROC>(
-                SDL_GL_GetProcAddress("glDrawElementsInstancedARB"));
+                LoadPlatformGlProcAddress("glDrawElementsInstancedARB"));
             glVertexAttribDivisorARB = reinterpret_cast<PFNGLVERTEXATTRIBDIVISORARBPROC>(
-                SDL_GL_GetProcAddress("glVertexAttribDivisorARB"));
+                LoadPlatformGlProcAddress("glVertexAttribDivisorARB"));
         }
 
         GLuint CompileShader(GLenum type, const char* src)
@@ -938,7 +959,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
-            SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
             void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, id); }
 
             void ShareCpuPixels(std::shared_ptr<std::vector<uint8_t>> pixels) override
@@ -1135,7 +1156,7 @@ namespace CNA::Internal::Renderers::OpenGL2
 
             int GetWidth() const override { return w; }
             int GetHeight() const override { return h; }
-            SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
             void BindGL(int /*unit*/) const override { glBindTexture(GL_TEXTURE_2D, colorTex); }
             unsigned int GetColorGLHandle() const override { return colorTex; }
             int GetMultiSampleCount() const override { return multiSampleCount; }
@@ -1424,7 +1445,7 @@ namespace CNA::Internal::Renderers::OpenGL2
                 glGenTextures(1, &id);
                 glBindTexture(GL_TEXTURE_3D, id);
                 // Task (plan_opengl2.md follow-up, session 8): real FNA3D_Driver_OpenGL.c
-                // OPENGL_CreateTexture3D confirms depth halves per level (SDL_max(depth >> i, 1))
+                // OPENGL_CreateTexture3D confirms depth halves per level (max(depth >> i, 1))
                 // exactly like width/height, even though Texture3D.cpp's own CalculateMipLevels
                 // (matching Texture3D.cs's LevelCount formula) deliberately excludes depth from the
                 // LEVEL COUNT itself -- those are two separate facts, both honored here.
@@ -2029,31 +2050,22 @@ namespace CNA::Internal::Renderers::OpenGL2
         };
     }
 
-    OpenGL2Renderer::OpenGL2Renderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                     CnaPresentationMode presentationMode, bool contextRecoveryEnabled,
-                                                     int swapInterval)
-        : window_(window), virtualWidth_(virtualWidth), virtualHeight_(virtualHeight), presentationMode_(presentationMode)
-        , contextRecoveryEnabled_(contextRecoveryEnabled)
+    OpenGL2Renderer::OpenGL2Renderer(const GraphicsRendererCreateArgs& args)
+        : platformContext_(std::make_unique<PlatformGlContextOwner>(
+              RequirePlatformGlContext(args.glContext, "OPENGL2"),
+              RequirePlatformGlWindow(args.surface, "OPENGL2"), RequestedContext()))
+        , surface_(args.surface)
+        , swapInterval_(args.swapInterval)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , contextRecoveryEnabled_(args.contextRecoveryEnabled)
     {
-        if (!window_)
-            throw std::runtime_error("OPENGL2 renderer: null SDL window");
-
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-
-        context_ = SDL_GL_CreateContext(window_);
-        if (!context_)
-            throw std::runtime_error(std::string("OPENGL2 SDL_GL_CreateContext failed: ") + SDL_GetError());
-
-        SDL_GL_MakeCurrent(window_, context_);
 #if defined(_WIN32)
         LoadWin32GLExtensions();
 #endif
         LoadInstancingExtensions();
-        SetSwapInterval(swapInterval);
+        SetSwapInterval(args.swapInterval);
         ensurePrograms();
 
         // Sane default until the first real GraphicsDevice.BlendState reaches ApplyBlendState()
@@ -2061,10 +2073,12 @@ namespace CNA::Internal::Renderers::OpenGL2
         glEnable(GL_BLEND);
         glBlendFuncSeparate(GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
         glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     OpenGL2Renderer::~OpenGL2Renderer()
     {
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         if (colorProgram_) glDeleteProgram(colorProgram_);
         if (texturedProgram_) glDeleteProgram(texturedProgram_);
         if (dualTextureProgram_) glDeleteProgram(dualTextureProgram_);
@@ -2077,7 +2091,6 @@ namespace CNA::Internal::Renderers::OpenGL2
         if (defaultWhiteTextureCube_) glDeleteTextures(1, &defaultWhiteTextureCube_);
         if (defaultFlatNormalTexture2D_) glDeleteTextures(1, &defaultFlatNormalTexture2D_);
         if (mrtFboReady_) glDeleteFramebuffers(1, &mrtFbo_);
-        if (context_) SDL_GL_DestroyContext(context_);
     }
 
     namespace
@@ -2475,7 +2488,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
-    void OpenGL2Renderer::Present() { SDL_GL_SwapWindow(window_); }
+    void OpenGL2Renderer::Present() { platformContext_->SwapBuffers(); }
 
     // Mirrors SdlGpuRenderer::ComputeLogicalViewport's algorithm exactly -- see this
     // renderer's own LogicalViewport doc comment for field meanings and the "why this renderer,
@@ -2485,7 +2498,7 @@ namespace CNA::Internal::Renderers::OpenGL2
     OpenGL2Renderer::LogicalViewport OpenGL2Renderer::ComputeLogicalViewport() const
     {
         int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        surface_.GetDrawableSize(physW, physH);
 
         LogicalViewport viewport{};
         viewport.width = static_cast<float>(std::max(0, physW));
@@ -2548,6 +2561,11 @@ namespace CNA::Internal::Renderers::OpenGL2
         height = static_cast<int>(std::lround(viewport.height));
     }
 
+    void OpenGL2Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
+    }
+
     void OpenGL2Renderer::SetVirtualResolution(int width, int height)
     {
         virtualWidth_ = width;
@@ -2555,7 +2573,7 @@ namespace CNA::Internal::Renderers::OpenGL2
     }
 
     void OpenGL2Renderer::SetPresentationMode(int mode) { presentationMode_ = static_cast<CnaPresentationMode>(mode); }
-    void OpenGL2Renderer::SetSwapInterval(int interval) { swapInterval_ = interval; SDL_GL_SetSwapInterval(interval); }
+    void OpenGL2Renderer::SetSwapInterval(int interval) { swapInterval_ = interval; platformContext_->SetSwapInterval(interval); }
 
     void OpenGL2Renderer::RegisterRecoverable(RecoverableResource* resource)
     {
@@ -2588,21 +2606,12 @@ namespace CNA::Internal::Renderers::OpenGL2
         mrtFboReady_ = false;
         mrtFbo_ = 0;
 
-        // 2. Destroy and recreate the SDL GL context.
-        if (context_)
-        {
-            SDL_GL_MakeCurrent(window_, nullptr);
-            SDL_GL_DestroyContext(context_);
-            context_ = nullptr;
-        }
-        context_ = SDL_GL_CreateContext(window_);
-        if (!context_)
-            throw std::runtime_error(std::string("OPENGL2: SDL_GL_CreateContext failed during debug context loss: ") + SDL_GetError());
-        SDL_GL_MakeCurrent(window_, context_);
+        // 2. Destroy and recreate the platform GL context.
+        platformContext_->Recreate();
 
         // 3. Reload GL function pointers (matches LoadWin32GLExtensions()/LoadInstancingExtensions()'s
         // own constructor-time call, since a fresh context has no previously-resolved proc
-        // addresses -- reassigning these to nullptr first isn't needed, SDL_GL_GetProcAddress is
+        // addresses -- reassigning these to nullptr first isn't needed; the platform resolver is
         // safe to call again and simply re-resolves the same (or now-current-context) addresses).
 #if defined(_WIN32)
         LoadWin32GLExtensions();
@@ -2946,7 +2955,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         if (fbH == 0)
         {
             int windowWidth = 0;
-            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+            surface_.GetDrawableSize(windowWidth, fbH);
         }
 
         // While a flipped 2D render target is bound its storage is already top-down (see
@@ -3736,7 +3745,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         if (fbH == 0)
         {
             int windowWidth = 0;
-            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+            surface_.GetDrawableSize(windowWidth, fbH);
         }
         glScissor(x, fbH - y - h, w, h);
     }
@@ -3755,7 +3764,7 @@ namespace CNA::Internal::Renderers::OpenGL2
         if (fbH == 0)
         {
             int windowWidth = 0;
-            SDL_GetWindowSize(window_, &windowWidth, &fbH);
+            surface_.GetDrawableSize(windowWidth, fbH);
         }
         glViewport(x, fbH - y - h, w, h);
         glDepthRange(minDepth, maxDepth);
@@ -3771,18 +3780,22 @@ namespace CNA::Internal::Renderers::OpenGL2
         // corresponding logical position).
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.width == 0.0f || viewport.height == 0.0f) return false;
-        logX = (windowX - viewport.x) * viewport.logicalWidth / viewport.width;
-        logY = (windowY - viewport.y) * viewport.logicalHeight / viewport.height;
-        return windowX >= viewport.x && windowX < viewport.x + viewport.width &&
-               windowY >= viewport.y && windowY < viewport.y + viewport.height;
+        const float drawableX = surface_.WindowToDrawable(windowX);
+        const float drawableY = surface_.WindowToDrawable(windowY);
+        logX = (drawableX - viewport.x) * viewport.logicalWidth / viewport.width;
+        logY = (drawableY - viewport.y) * viewport.logicalHeight / viewport.height;
+        return drawableX >= viewport.x && drawableX < viewport.x + viewport.width &&
+               drawableY >= viewport.y && drawableY < viewport.y + viewport.height;
     }
 
     bool OpenGL2Renderer::TransformLogicalToWindow(float logX, float logY, float& windowX, float& windowY) const
     {
         const LogicalViewport viewport = ComputeLogicalViewport();
         if (viewport.logicalWidth == 0.0f || viewport.logicalHeight == 0.0f) return false;
-        windowX = viewport.x + logX * viewport.width / viewport.logicalWidth;
-        windowY = viewport.y + logY * viewport.height / viewport.logicalHeight;
+        windowX = surface_.DrawableToWindow(
+            viewport.x + logX * viewport.width / viewport.logicalWidth);
+        windowY = surface_.DrawableToWindow(
+            viewport.y + logY * viewport.height / viewport.logicalHeight);
         return true;
     }
 
@@ -3797,7 +3810,7 @@ namespace CNA::Internal::Renderers::OpenGL2
             case CNA::GraphicsCapability::ThreeD:
                 return true;
             // A real 24-bit depth / 8-bit stencil buffer requested for the window's context
-            // (SDL_GL_DEPTH_SIZE/STENCIL_SIZE) and created for every FBO render target.
+            // (24 depth bits / 8 stencil bits) and created for every FBO render target.
             case CNA::GraphicsCapability::DepthStencilBuffer:
                 return true;
             // Real MRT: up to 8 colour attachments on one shared FBO with a real glDrawBuffers
@@ -3855,10 +3868,13 @@ namespace CNA::Internal::Renderers::OpenGL2
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGL2 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> OpenGL2::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<OpenGL2::OpenGL2Renderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
-            args.contextRecoveryEnabled, args.swapInterval);
+        return std::make_unique<OpenGL2::OpenGL2Renderer>(args);
     }
 }

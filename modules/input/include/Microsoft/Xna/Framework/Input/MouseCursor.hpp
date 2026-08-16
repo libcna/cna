@@ -5,20 +5,17 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "System/IDisposable.hpp"
 
-// Opaque forward declaration of SDL's cursor handle. This public header wraps an SDL cursor but must
-// not pull <SDL3/SDL.h> into consumers: a strict-XNA header (Mouse.hpp) includes this one, so doing so
-// would drag all of SDL into the public XNA include tree. A pointer to the incomplete type is all the
-// public API needs; MouseCursor.cpp includes the real SDL header.
-struct SDL_Cursor;
+#include <cstdint>
+#include <vector>
 
 namespace Microsoft::Xna::Framework::Input
 {
     /**
      * @brief Represents a mouse cursor image.
      *
-     * Wraps an SDL_Cursor* and provides the standard stock system cursors as lazily-created,
-     * process-lifetime singletons (each getXProperty() below constructs its SDL cursor on first
-     * access, matching MonoGame's static-constructor-triggered lazy initialization).
+     * Stores a platform-neutral system shape or an owned copy of custom RGBA pixels. The active
+     * platform creates and owns the corresponding native cursor when `Mouse::SetCursor` is called.
+     * Standard stock cursors are lazily-created process-lifetime singletons.
      *
      * @note CNAEXT — this is a MonoGame-derived CNA extension. No MouseCursor type exists
      * in XNA 4.0 or FNA.
@@ -28,13 +25,6 @@ namespace Microsoft::Xna::Framework::Input
     public:
         /** @brief Creates a default Arrow cursor. */
         CNAEXT MouseCursor();
-
-        /**
-         * @brief Creates a cursor wrapping the given SDL cursor.
-         * @param sdlCursor The SDL cursor to wrap.
-         * @param owning If true, this object takes ownership of the SDL cursor.
-         */
-        CNAEXT explicit MouseCursor(SDL_Cursor* sdlCursor, bool owning = false);
 
         /**
          * @brief Creates a cursor from the specified texture.
@@ -47,29 +37,23 @@ namespace Microsoft::Xna::Framework::Input
 
         MouseCursor(const MouseCursor&)            = delete;
         MouseCursor& operator=(const MouseCursor&) = delete;
-        /** @brief Move-constructs a MouseCursor, transferring SDL cursor ownership. */
+        /** @brief Move-constructs a MouseCursor, transferring its image description. */
         MouseCursor(MouseCursor&& other) noexcept;
-        /** @brief Move-assigns a MouseCursor, transferring SDL cursor ownership. */
+        /** @brief Move-assigns a MouseCursor, transferring its image description. */
         MouseCursor& operator=(MouseCursor&& other) noexcept;
 
-        /** @brief Destructor; disposes the cursor if owned. */
+        /** @brief Destructor; disposes this cursor description. */
         ~MouseCursor() override;
 
         /**
-         * @brief Releases the SDL cursor if owned. Safe to call more than once.
+         * @brief Releases owned custom pixels and makes this cursor unusable. Safe to repeat.
          *
          * @note For the stock system-cursor singletons (getArrowProperty() etc.) this is a
          *       deliberate no-op — they are process-lifetime shared instances, so disposing one
-         *       must not free the SDL cursor out from under every other user. Do not `std::move`
+         *       must not invalidate the cursor for every other user. Do not `std::move`
          *       a stock-cursor reference either; obtain and use it in place.
          */
         CNAEXT void Dispose() override;
-
-        /**
-         * @brief Returns the underlying SDL_Cursor pointer (not owned by the caller).
-         * @return The SDL_Cursor pointer.
-         */
-        CNAEXT [[nodiscard]] SDL_Cursor* GetSDLCursor() const { return sdlCursor_; }
 
         /**
          * @brief Gets the default arrow cursor.
@@ -133,16 +117,34 @@ namespace Microsoft::Xna::Framework::Input
         CNAEXT [[nodiscard]] static MouseCursor& getWaitArrowProperty();
 
     private:
-        SDL_Cursor* sdlCursor_        = nullptr;
-        bool        owning_           = false;
-        bool        isDisposed_       = false;
-        // True for the stock system-cursor singletons: Dispose()/destructor no-op so the shared
-        // process-lifetime SDL cursor is never freed (which would corrupt it for every other user
-        // and risks a free-after-SDL_Quit at static teardown).
-        bool        isSystemSingleton_ = false;
+        friend class Mouse;
 
-        // Takes the SDL_SystemCursor value as a plain int so the enum stays out of this public header
-        // (the .cpp casts it back). id values come from SDL_SYSTEM_CURSOR_* in MouseCursor.cpp.
-        CNAEXT static MouseCursor MakeSystem(int systemCursorId);
+        static constexpr std::uint8_t ShapeArrow = 0;
+        static constexpr std::uint8_t ShapeCrosshair = 1;
+        static constexpr std::uint8_t ShapeHand = 2;
+        static constexpr std::uint8_t ShapeIBeam = 3;
+        static constexpr std::uint8_t ShapeNo = 4;
+        static constexpr std::uint8_t ShapeSizeAll = 5;
+        static constexpr std::uint8_t ShapeSizeNESW = 6;
+        static constexpr std::uint8_t ShapeSizeNS = 7;
+        static constexpr std::uint8_t ShapeSizeNWSE = 8;
+        static constexpr std::uint8_t ShapeSizeWE = 9;
+        static constexpr std::uint8_t ShapeWait = 10;
+        static constexpr std::uint8_t ShapeWaitArrow = 11;
+
+        explicit MouseCursor(std::uint8_t shape, bool systemSingleton) noexcept;
+        MouseCursor(int width, int height, int originX, int originY,
+                    std::vector<std::uint32_t> rgba) noexcept;
+        static MouseCursor MakeSystem(std::uint8_t shape);
+
+        std::uint8_t systemShape_ = ShapeArrow;
+        std::vector<std::uint32_t> rgba_;
+        int width_ = 0;
+        int height_ = 0;
+        int originX_ = 0;
+        int originY_ = 0;
+        bool isCustom_ = false;
+        bool isDisposed_ = false;
+        bool isSystemSingleton_ = false;
     };
 }

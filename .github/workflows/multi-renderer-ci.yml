@@ -1,0 +1,119 @@
+# plan_runtimerenderer.md RTR-P12-7: CI for the opt-in multi-renderer build mode.
+#
+# The reference set is HEADLESS;SOFTWARE;STUB, chosen deliberately: none of the three creates a
+# window, touches SDL's video subsystem, or pulls a third-party graphics dependency, so this job
+# needs no Xvfb, no GPU and no driver -- and it still exercises the whole runtime-dispatch path,
+# including real fallback between renderers that all genuinely work.
+#
+# It also runs the single-renderer HEADLESS build of the same suite, because the property that
+# matters most about this feature is that it changed NOTHING for existing builds. A regression there
+# is far more serious than a failure in the multi build, and comparing the two failure sets in one
+# job is what makes it visible.
+
+name: Multi-renderer CI
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    branches: [develop, master]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+concurrency:
+  group: multi-renderer-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  multi-renderer:
+    name: Runtime renderer selection (HEADLESS + SOFTWARE + STUB)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CC: gcc-14
+      CXX: g++-14
+    steps:
+      - name: Checkout cna (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone sibling repos (public, no token needed)
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/.."
+          for repo in sharp-runtime easy-gl meta-gl; do
+            git clone --depth 1 --branch develop \
+              "https://github.com/openeggbert/${repo}.git" "${repo}"
+          done
+
+      - name: Install system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            g++-14 cmake ninja-build pkg-config \
+            libavcodec-dev libavformat-dev libavutil-dev libswresample-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev libxcursor-dev libxfixes-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+
+      - name: Registry gates
+        run: |
+          set -euo pipefail
+          python3 scripts/check_renderer_identities.py
+          python3 scripts/check_renderer_combinations.py
+          python3 scripts/check_runtime_renderer_discipline.py
+
+      - name: Configure and build (multi-renderer)
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-multi -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=HEADLESS \
+            -DCNA_GRAPHICS_RENDERERS="HEADLESS;SOFTWARE;STUB" \
+            -DCNA_BUILD_TESTS=ON
+          cmake --build build-multi --target CnaTests cna_demo_renderer_selection -j2
+
+      - name: Every compiled-in renderer is reachable at runtime
+        run: |
+          set -euo pipefail
+          for renderer in HEADLESS SOFTWARE STUB; do
+            echo "--- selecting ${renderer} ---"
+            actual=$(./build-multi/cna_demo_renderer_selection "${renderer}" \
+                     | sed -n 's/^Active renderer: //p')
+            if [ "${actual}" != "${renderer}" ]; then
+              echo "FAIL: asked for ${renderer}, got '${actual}'" >&2
+              exit 1
+            fi
+          done
+          echo "--- environment variable selection ---"
+          actual=$(CNA_GRAPHICS_RENDERER=SOFTWARE ./build-multi/cna_demo_renderer_selection \
+                   | sed -n 's/^Active renderer: //p')
+          [ "${actual}" = "SOFTWARE" ] || { echo "FAIL: env var ignored, got '${actual}'" >&2; exit 1; }
+
+      - name: Multi-renderer test suite
+        run: |
+          set -euo pipefail
+          # TwoProcessLoopbackTest is a known-environmental networking test; the clipboard test reads
+          # the machine's real X11 clipboard; SetRenderTargets_FourTargets is a pre-existing MRT
+          # boundary of the HEADLESS and SOFTWARE renderers themselves. None relates to this feature.
+          ./build-multi/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"
+
+      - name: Configure and build (single-renderer control)
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-single -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCNA_GRAPHICS_RENDERER=HEADLESS \
+            -DCNA_BUILD_TESTS=ON
+          cmake --build build-single --target CnaTests -j2
+
+      - name: Single-renderer mode is unchanged
+        run: |
+          set -euo pipefail
+          ./build-single/CnaTests --gtest_filter="-TwoProcessLoopbackTest.*:CnaInputClipboardTest.*:GraphicsDeviceValidationTest.SetRenderTargets_FourTargets_DoesNotThrow"

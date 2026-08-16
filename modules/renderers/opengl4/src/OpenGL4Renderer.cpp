@@ -3,8 +3,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Effect.hpp"
 #include "System/InvalidOperationException.hpp"
 
-#include <SDL3/SDL.h>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -20,6 +18,18 @@ namespace CNA::Internal::Renderers::OpenGL4
 {
     namespace
     {
+        CNA::Platform::GlContextDescription RequestedContext()
+        {
+            CNA::Platform::GlContextDescription description;
+            description.majorVersion = 4;
+            description.minorVersion = 1;
+            description.profile = CNA::Platform::GlProfile::Core;
+            description.depthBits = 24;
+            description.stencilBits = 8;
+            description.doubleBuffer = true;
+            return description;
+        }
+
         GLenum ToGLPrimitive(PrimitiveType pt)
         {
             switch (pt)
@@ -2388,50 +2398,33 @@ void main()
     // OpenGL4Renderer
     // ------------------------------------------------------------------------------------
 
-    OpenGL4Renderer::OpenGL4Renderer(SDL_Window* window, int virtualWidth, int virtualHeight,
-                                                   CnaPresentationMode mode, int multiSampleCount, int swapInterval)
-        : window_(window)
-        , virtualWidth_(virtualWidth)
-        , virtualHeight_(virtualHeight)
-        , presentationMode_(mode)
-        , swapInterval_(swapInterval)
+    OpenGL4Renderer::OpenGL4Renderer(const GraphicsRendererCreateArgs& args)
+        : platformContext_(std::make_unique<PlatformGlContextOwner>(
+              RequirePlatformGlContext(args.glContext, "OPENGL4"),
+              RequirePlatformGlWindow(args.surface, "OPENGL4"), RequestedContext()))
+        , surface_(args.surface)
+        , virtualWidth_(args.virtualWidth)
+        , virtualHeight_(args.virtualHeight)
+        , presentationMode_(args.presentationMode)
+        , swapInterval_(args.swapInterval)
         // GraphicsRendererCreateArgs::multiSampleCount uses 1 = "no MSAA" (matches
         // EasyGLRenderer's own sampleCount_ convention); this renderer's own internal
         // convention is 0 = disabled (matching OpenGL4RenderTargetRenderer's multiSampleCount_).
-        , msaaSampleCount_(multiSampleCount > 1 ? multiSampleCount : 0)
+        , msaaSampleCount_(args.multiSampleCount > 1 ? args.multiSampleCount : 0)
     {
-        if (!window_) throw std::runtime_error("OpenGL4Renderer initialized with null window.");
-
-        IGraphicsRenderer::RegisterForWindow(window_, this);
-
         // Real desktop OpenGL 4.1 core profile -- unlike EasyGLRenderer, which requests
-        // SDL_GL_CONTEXT_PROFILE_ES (OpenGL ES 3.0 / WebGL2). 4.1 is the highest core version
+        // OpenGL ES 3.0 / WebGL2. 4.1 is the highest core version
         // macOS's own GL driver ever exposes, so it is the widest-portable "real OpenGL 4" floor;
         // Linux/Windows drivers report whatever higher core version they actually support once
         // the context is current (see the version string logged below).
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-        SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-
-        SDL_GLContext ctx = SDL_GL_CreateContext(window_);
-        if (!ctx)
-            throw std::runtime_error(std::string("OpenGL4: SDL_GL_CreateContext failed: ") + SDL_GetError());
-        glContext_ = ctx;
-
-        if (!SDL_GL_MakeCurrent(window_, ctx))
-            throw std::runtime_error(std::string("OpenGL4: SDL_GL_MakeCurrent failed: ") + SDL_GetError());
-
-        if (!GL4::LoadGL4Functions(reinterpret_cast<GL4::GetProcAddressFn>(SDL_GL_GetProcAddress)))
+        if (!GL4::LoadGL4Functions(platformContext_->GetLoader()))
             throw std::runtime_error("OpenGL4: failed to resolve required GL 4.x core entry points");
 
         const auto* versionStr = glGetString(GL_VERSION);
         std::cout << "OpenGL4Renderer initialized with OpenGL "
                   << (versionStr ? reinterpret_cast<const char*>(versionStr) : "(unknown)") << std::endl;
 
-        SDL_GL_SetSwapInterval(swapInterval_);
+        platformContext_->SetSwapInterval(swapInterval_);
 
         // Anisotropic filtering is an extension until GL 4.6
         // (EXT/ARB_texture_filter_anisotropic), so the driver's real ceiling is queried once
@@ -2453,15 +2446,16 @@ void main()
         if (msaaSampleCount_ > 0)
         {
             int physW = 0, physH = 0;
-            SDL_GetWindowSize(window_, &physW, &physH);
+            surface_.GetDrawableSize(physW, physH);
             CreateMsaaBuffers(physW, physH);
             gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
         }
+        IGraphicsRenderer::RegisterForWindow(surface_.GetWindowId(), this);
     }
 
     OpenGL4Renderer::~OpenGL4Renderer()
     {
-        IGraphicsRenderer::UnregisterForWindow(window_);
+        IGraphicsRenderer::UnregisterForWindow(surface_.GetWindowId());
         gl4_glDeleteSamplers(kMaxSamplerSlots, samplers_);
         if (defaultWhiteTexture_) glDeleteTextures(1, &defaultWhiteTexture_);
         if (defaultFlatNormalTexture_) glDeleteTextures(1, &defaultFlatNormalTexture_);
@@ -2469,8 +2463,6 @@ void main()
         if (msaaDepthRbo_) gl4_glDeleteRenderbuffers(1, &msaaDepthRbo_);
         if (msaaColorRbo_) gl4_glDeleteRenderbuffers(1, &msaaColorRbo_);
         if (msaaFbo_) gl4_glDeleteFramebuffers(1, &msaaFbo_);
-        if (glContext_)
-            SDL_GL_DestroyContext(static_cast<SDL_GLContext>(glContext_));
     }
 
     void OpenGL4Renderer::CreateMsaaBuffers(int w, int h)
@@ -2502,7 +2494,7 @@ void main()
         {
             // Recreate the MSAA FBO if the window was resized since the last time it was built.
             int physW = 0, physH = 0;
-            SDL_GetWindowSize(window_, &physW, &physH);
+            surface_.GetDrawableSize(physW, physH);
             if (physW != msaaW_ || physH != msaaH_)
                 CreateMsaaBuffers(physW, physH);
             gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
@@ -2572,13 +2564,13 @@ void main()
     void OpenGL4Renderer::Present()
     {
         if (msaaSampleCount_ > 0) ResolveMsaa();
-        SDL_GL_SwapWindow(window_);
+        platformContext_->SwapBuffers();
         if (msaaSampleCount_ > 0) gl4_glBindFramebuffer(GL_FRAMEBUFFER, msaaFbo_);
     }
 
     void OpenGL4Renderer::GetPhysicalSize(int& width, int& height) const
     {
-        SDL_GetWindowSize(window_, &width, &height);
+        surface_.GetDrawableSize(width, height);
     }
 
     void OpenGL4Renderer::GetLogicalSize(int& width, int& height) const
@@ -2607,11 +2599,11 @@ void main()
     {
         if (virtualHeight_ <= 0) return false;
         int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        surface_.GetDrawableSize(physW, physH);
         if (physH <= 0) return false;
         const float scale = static_cast<float>(virtualHeight_) / static_cast<float>(physH);
-        logX = windowX * scale;
-        logY = windowY * scale;
+        logX = surface_.WindowToDrawable(windowX) * scale;
+        logY = surface_.WindowToDrawable(windowY) * scale;
         return true;
     }
 
@@ -2625,11 +2617,11 @@ void main()
         // EasyGLRenderer::TransformLogicalToWindow's own identical formula/rationale.
         if (virtualHeight_ <= 0) return false;
         int physW = 0, physH = 0;
-        SDL_GetWindowSize(window_, &physW, &physH);
+        surface_.GetDrawableSize(physW, physH);
         if (physH <= 0) return false;
         const float invScale = static_cast<float>(physH) / static_cast<float>(virtualHeight_);
-        windowX = logX * invScale;
-        windowY = logY * invScale;
+        windowX = surface_.DrawableToWindow(logX * invScale);
+        windowY = surface_.DrawableToWindow(logY * invScale);
         return true;
     }
 
@@ -2637,6 +2629,11 @@ void main()
     {
         virtualWidth_ = width;
         virtualHeight_ = height;
+    }
+
+    void OpenGL4Renderer::OnSurfaceChanged(const RendererSurfaceInfo& surface)
+    {
+        surface_.Update(surface);
     }
 
     void OpenGL4Renderer::SetPresentationMode(int mode)
@@ -2647,7 +2644,7 @@ void main()
     void OpenGL4Renderer::SetSwapInterval(int interval)
     {
         swapInterval_ = interval;
-        SDL_GL_SetSwapInterval(interval);
+        platformContext_->SetSwapInterval(interval);
     }
 
     std::unique_ptr<ITextureRenderer> OpenGL4Renderer::CreateTexture(const ImageData& data)
@@ -4011,11 +4008,14 @@ void main()
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_OPENGL4
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace OpenGL4 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> OpenGL4::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
-        return std::make_unique<OpenGL4::OpenGL4Renderer>(
-            args.window, args.virtualWidth, args.virtualHeight, args.presentationMode,
-            args.multiSampleCount, args.swapInterval);
+        return std::make_unique<OpenGL4::OpenGL4Renderer>(args);
     }
 #endif
 }

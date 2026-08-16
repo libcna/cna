@@ -42,11 +42,11 @@ namespace Microsoft::Xna::Framework::Audio
     // ── WAV-file builders (for PCM8/ADPCM wrapping) ───────────────────────────
     //
     // AUDIO-ADPCM-001 (2026-07-17 deep audit follow-up): the previous local BuildAdpcmWav() wrote
-    // a "fmt " chunk with cbSize=2 (only wSamplesPerBlock, no coefficient table at all). SDL3's
-    // real MS-ADPCM decoder requires at least 7 coefficient pairs (SDL_wave.c's MS_ADPCM_Init:
+    // a "fmt " chunk with cbSize=2 (only wSamplesPerBlock, no coefficient table at all). The
+    // real MS-ADPCM decoder requires at least 7 coefficient pairs:
     // "Missing required coefficients in MS ADPCM format header") and validates them against the
     // standard preset table -- confirmed empirically that the old wrapper's output was REJECTED
-    // outright by SDL_LoadWAV_IO ("Could not read MS ADPCM format header"), meaning every
+    // outright by the WAV decoder ("Could not read MS ADPCM format header"), meaning every
     // MS-ADPCM-compressed XACT WaveBank entry silently failed to load (WaveBank::GetSoundEffect
     // caught the resulting exception and returned nullptr). Now shares the same corrected,
     // tested WAV-assembly logic as the XNB SoundEffectReader (CNA::Internal::Audio::
@@ -319,7 +319,7 @@ namespace Microsoft::Xna::Framework::Audio
 
             if (entry.format == XwbFormat::PCM)
             {
-                // 8-bit PCM: SDL expects unsigned 8-bit; we use raw approach for 16-bit
+                // 8-bit PCM is unsigned; the direct raw-audio path is used for signed 16-bit.
                 if (entry.bitsPerSample == 16)
                 {
                     std::vector<uint8_t> samples(audioData, audioData + audioLen);
@@ -331,7 +331,7 @@ namespace Microsoft::Xna::Framework::Audio
                 }
                 else
                 {
-                    // 8-bit PCM: wrap in WAV since MIX_LoadRawAudio expects S16
+                    // Wrap 8-bit PCM in WAV because the raw-audio constructor expects S16.
                     auto wav = BuildPcmWav(audioData, audioLen,
                                            entry.channels, entry.sampleRate, 8);
                     CNA::Internal::Audio::AppendSmplChunkIfLooped(wav, loopStart, loopLength);
@@ -357,8 +357,8 @@ namespace Microsoft::Xna::Framework::Audio
             else
             {
                 // AUD-11-010/011 (2026-07-17 deep audit, A-11): XMA/XMA2 and WMA have no decode
-                // path anywhere in this stack -- both are proprietary codecs SDL3 does not decode
-                // (unlike PCM/float/MS-ADPCM/IMA-ADPCM, which SDL3's own WAV loader handles
+                // path anywhere in this stack -- both are proprietary codecs the engine does not
+                // decode (unlike PCM/float/MS-ADPCM/IMA-ADPCM, which its WAV loader handles
                 // natively, see WavWrapper.hpp). This is a genuine, permanent capability gap, not
                 // a bug to silently swallow -- name the bank and a human-readable format so a
                 // "missing sound" symptom is traceable to this exact cause from the log alone,

@@ -1604,6 +1604,17 @@ static int validate_mouse_queries(const CNA_Handle game)
 /* The cursor family is probed by behavior, never by renderer identity: a backend with no real
    video device still hands back usable handles, and a texture-derived cursor either works or
    reports a documented failure. Both outcomes are asserted, neither is assumed. */
+/* Installing a cursor is a capability, not a certainty. Since the platform-separation merge the
+   request goes through CNA::Platform, and an implementation that cannot honour it -- SDL under the
+   dummy video driver cannot create a system cursor -- refuses deterministically with
+   CNA_RESULT_PLATFORM instead of pretending to have set one. Both answers are correct here; what
+   would not be is a silent no-op, or CNA_RESULT_INTERNAL, which would say the ABI broke rather than
+   that the platform declined. */
+static int cursor_install_is_answered(const CNA_Result result)
+{
+    return result == CNA_RESULT_SUCCESS || result == CNA_RESULT_PLATFORM;
+}
+
 static int validate_cursor_family(const CNA_Handle game)
 {
     static const CNA_Color pixels[4] = {
@@ -1621,7 +1632,7 @@ static int validate_cursor_family(const CNA_Handle game)
     if (cna_mouse_cursor_create_ext(0) != CNA_RESULT_INVALID_ARGUMENT ||
         cna_mouse_cursor_create_ext(&empty) != CNA_RESULT_SUCCESS ||
         empty == CNA_INVALID_HANDLE ||
-        cna_mouse_set_cursor_ext(game, empty) != CNA_RESULT_SUCCESS ||
+        !cursor_install_is_answered(cna_mouse_set_cursor_ext(game, empty)) ||
         cna_mouse_cursor_dispose(empty) != CNA_RESULT_SUCCESS ||
         cna_mouse_cursor_dispose(empty) != CNA_RESULT_SUCCESS ||
         cna_mouse_cursor_destroy(empty) != CNA_RESULT_SUCCESS ||
@@ -1633,7 +1644,7 @@ static int validate_cursor_family(const CNA_Handle game)
     for (stock = UINT32_C(0); stock <= CNA_MOUSE_CURSOR_STOCK_WAIT_ARROW; ++stock) {
         if (cna_mouse_cursor_get_stock_ext(game, stock, &cursor) != CNA_RESULT_SUCCESS ||
             cursor == CNA_INVALID_HANDLE ||
-            cna_mouse_set_cursor_ext(game, cursor) != CNA_RESULT_SUCCESS ||
+            !cursor_install_is_answered(cna_mouse_set_cursor_ext(game, cursor)) ||
             cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS) {
             return 0;
         }
@@ -1653,7 +1664,7 @@ static int validate_cursor_family(const CNA_Handle game)
         cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS ||
         cna_mouse_cursor_get_stock_ext(game, CNA_MOUSE_CURSOR_STOCK_ARROW, &again) !=
             CNA_RESULT_SUCCESS ||
-        cna_mouse_set_cursor_ext(game, again) != CNA_RESULT_SUCCESS ||
+        !cursor_install_is_answered(cna_mouse_set_cursor_ext(game, again)) ||
         cna_mouse_cursor_destroy(again) != CNA_RESULT_SUCCESS) {
         return 0;
     }
@@ -1674,13 +1685,13 @@ static int validate_cursor_family(const CNA_Handle game)
             cna_mouse_cursor_create_from_texture2d(game, texture, 0, 0, &cursor);
         if (created == CNA_RESULT_SUCCESS) {
             if (cursor == CNA_INVALID_HANDLE ||
-                cna_mouse_set_cursor_ext(game, cursor) != CNA_RESULT_SUCCESS ||
+                !cursor_install_is_answered(cna_mouse_set_cursor_ext(game, cursor)) ||
                 cna_mouse_cursor_dispose(cursor) != CNA_RESULT_SUCCESS ||
                 cna_mouse_cursor_destroy(cursor) != CNA_RESULT_SUCCESS) {
                 (void)cna_texture2d_destroy(texture);
                 return 0;
             }
-        } else if (created != CNA_RESULT_INTERNAL && created != CNA_RESULT_NOT_SUPPORTED &&
+        } else if (created != CNA_RESULT_PLATFORM && created != CNA_RESULT_NOT_SUPPORTED &&
             created != CNA_RESULT_INVALID_ARGUMENT) {
             (void)cna_texture2d_destroy(texture);
             return 0;

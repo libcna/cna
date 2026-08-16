@@ -3,9 +3,10 @@
 
 #include "CNA/Internal/Renderers/Fna3d/Fna3dApi.hpp"
 
+#include <array>
+#include <span>
 #include <stdexcept>
 #include <string>
-#include <vector>
 
 namespace CNA::Internal::Renderers::Fna3d
 {
@@ -23,11 +24,12 @@ namespace CNA::Internal::Renderers::Fna3d
      * XNA vocabulary because that is what FNA3D takes.
      *
      * @param strideInBytes Byte stride of one vertex.
-     * @return The elements describing that stride.
+     * @return A non-owning view of immutable elements describing that stride. The storage is
+     *         static so the ordinary draw path never allocates merely to name a known layout.
      * @throws std::runtime_error for a stride no CNA layout defines, rather than binding a
      *         plausible-looking layout that would silently reinterpret the caller's bytes.
      */
-    [[nodiscard]] inline std::vector<FNA3D_VertexElement> ElementsForStride(int strideInBytes)
+    [[nodiscard]] inline std::span<const FNA3D_VertexElement> ElementsForStride(int strideInBytes)
     {
         const auto element = [](int offset, FNA3D_VertexElementFormat format,
                                 FNA3D_VertexElementUsage usage, int usageIndex = 0) {
@@ -39,106 +41,118 @@ namespace CNA::Internal::Renderers::Fna3d
             return result;
         };
 
+        static const std::array positionColor{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_COLOR,
+                    FNA3D_VERTEXELEMENTUSAGE_COLOR),
+        };
+        static const std::array positionTexture{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+        };
+        static const std::array positionColorTexture{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_COLOR,
+                    FNA3D_VERTEXELEMENTUSAGE_COLOR),
+            element(16, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+        };
+        static const std::array positionNormalTexture{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_NORMAL),
+            element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+        };
+        static const std::array positionNormalTangentTexture{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_NORMAL),
+            element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
+                    FNA3D_VERTEXELEMENTUSAGE_TANGENT),
+            element(40, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+        };
+        static const std::array positionNormalTextureSkinned{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_NORMAL),
+            element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+            element(32, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
+            element(48, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
+        };
+        static const std::array positionNormalTextureSkinnedColor{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_NORMAL),
+            element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+            element(32, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
+            element(48, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
+            element(52, FNA3D_VERTEXELEMENTFORMAT_COLOR,
+                    FNA3D_VERTEXELEMENTUSAGE_COLOR),
+        };
+        static const std::array positionNormalTangentTextureSkinned{
+            element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_POSITION),
+            element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
+                    FNA3D_VERTEXELEMENTUSAGE_NORMAL),
+            element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
+                    FNA3D_VERTEXELEMENTUSAGE_TANGENT),
+            element(40, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
+                    FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
+            element(48, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
+            element(64, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
+                    FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
+        };
+
         switch (strideInBytes)
         {
             // VertexPositionColor
             case 16:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_COLOR, FNA3D_VERTEXELEMENTUSAGE_COLOR),
-                };
+                return positionColor;
 
             // VertexPositionTexture
             case 20:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                };
+                return positionTexture;
 
             // VertexPositionColorTexture -- also the SpriteBatch vertex.
             case 24:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_COLOR, FNA3D_VERTEXELEMENTUSAGE_COLOR),
-                    element(16, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                };
+                return positionColorTexture;
 
             // VertexPositionNormalTexture
             case 32:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_NORMAL),
-                    element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                };
+                return positionNormalTexture;
 
             // VertexPositionNormalTangentTexture
             case 48:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_NORMAL),
-                    element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
-                            FNA3D_VERTEXELEMENTUSAGE_TANGENT),
-                    element(40, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                };
+                return positionNormalTangentTexture;
 
             // VertexPositionNormalTextureSkinned
             case 52:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_NORMAL),
-                    element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                    element(32, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
-                    element(48, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
-                };
+                return positionNormalTextureSkinned;
 
             // VertexPositionNormalTextureSkinned + per-vertex Color appended
             case 56:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_NORMAL),
-                    element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                    element(32, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
-                    element(48, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
-                    element(52, FNA3D_VERTEXELEMENTFORMAT_COLOR, FNA3D_VERTEXELEMENTUSAGE_COLOR),
-                };
+                return positionNormalTextureSkinnedColor;
 
             // VertexPositionNormalTangentTextureSkinned
             case 68:
-                return {
-                    element(0, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_POSITION),
-                    element(12, FNA3D_VERTEXELEMENTFORMAT_VECTOR3,
-                            FNA3D_VERTEXELEMENTUSAGE_NORMAL),
-                    element(24, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
-                            FNA3D_VERTEXELEMENTUSAGE_TANGENT),
-                    element(40, FNA3D_VERTEXELEMENTFORMAT_VECTOR2,
-                            FNA3D_VERTEXELEMENTUSAGE_TEXTURECOORDINATE),
-                    element(48, FNA3D_VERTEXELEMENTFORMAT_VECTOR4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDWEIGHT),
-                    element(64, FNA3D_VERTEXELEMENTFORMAT_BYTE4,
-                            FNA3D_VERTEXELEMENTUSAGE_BLENDINDICES),
-                };
+                return positionNormalTangentTextureSkinned;
 
             default:
                 throw std::runtime_error(

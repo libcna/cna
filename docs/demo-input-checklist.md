@@ -92,7 +92,7 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   values responding to motion, real rumble/trigger-haptics, and a real touchscreen's gestures. The demo
   now surfaces them, but confirming the *physical* result needs the hardware (INP-0231..0242).
 - **Gestures beyond Tap/FreeDrag/Flick** — the demo enables that subset; DoubleTap/Hold/H-V drag/Pinch are
-  covered by `GestureDetectorTests` (deterministic) and `SdlInputBridgeTouchGestureTests`, not the demo UI.
+  covered by `GestureDetectorTests` and `PlatformInputBridgeTouchGestureTest`, not the demo UI.
 - **Cursor-warp landing pixel on native Wayland** — X11/XWayland only (compositor policy); see platform notes.
 - **`CNA::Input::Joysticks`/`Sensors`/`Power` (P7-039, found 2026-07-17)** — `cna_demo_input` does not
   currently surface the standalone raw-joystick API (distinct from `GamePad`'s mapped view of the same
@@ -100,7 +100,7 @@ hardware is still human/hardware-gated** — see `input-manual-verification-resu
   above), or `Power` (battery query for any input device). There is therefore no manual-checklist item to
   physically exercise for these three, and no Phase 11 task names them (`plan_input.md`'s P11-001..015
   cover Keyboard/Mouse/GamePad/Touch/high-DPI only). Their current verification tier is unit tests against
-  the fake SDL renderers (`SdlJoystickBackendTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
+  canned platform services (`JoystickTests.cpp`, `SensorsTests.cpp`, `PowerTests.cpp` — real,
   substantial coverage, just not hardware-gated). Extending the demo UI to surface them is a legitimate
   follow-up but is out of this audit/documentation plan's scope (CLAUDE.md: no new features beyond audit/
   repair/test/doc); recorded here so the gap is explicit rather than silently unverifiable.

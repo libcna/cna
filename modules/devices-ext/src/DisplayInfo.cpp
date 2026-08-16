@@ -3,8 +3,10 @@
 
 #ifdef CNA_DEVICES
 
-#include <SDL3/SDL_video.h>
-
+#include "CNA/Platform/CurrentPlatform.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformSystemServices.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
 using Microsoft::Xna::Framework::GameWindow;
@@ -14,30 +16,35 @@ namespace CNA::Devices
 {
     float DisplayInfo::getContentScaleProperty(const GameWindow& window)
     {
-        SDL_Window* sdlWindow = window.GetNativeSdlWindowEXT();
-        if (sdlWindow == nullptr)
+        const CNA::Platform::IPlatformWindow* platformWindow =
+            window.getPlatformWindowInternal();
+        if (platformWindow == nullptr)
         {
             return 0.0f;
         }
 
-        return SDL_GetWindowDisplayScale(sdlWindow);
+        return platformWindow->GetDisplayScale();
     }
 
     Rectangle DisplayInfo::getSafeAreaProperty(const GameWindow& window)
     {
-        SDL_Window* sdlWindow = window.GetNativeSdlWindowEXT();
-        if (sdlWindow == nullptr)
+        const CNA::Platform::IPlatformWindow* platformWindow =
+            window.getPlatformWindowInternal();
+        if (platformWindow == nullptr)
         {
             return Rectangle::Empty;
         }
 
-        SDL_Rect rect{};
-        if (!SDL_GetWindowSafeArea(sdlWindow, &rect))
+        CNA::Platform::IPlatformDisplays* displays =
+            CNA::Platform::GetCurrentPlatform().GetDisplays();
+        CNA::Platform::WindowBounds safeArea;
+        if (displays == nullptr ||
+            !displays->TryGetSafeAreaForWindow(*platformWindow, safeArea))
         {
             return Rectangle::Empty;
         }
 
-        return Rectangle(rect.x, rect.y, rect.w, rect.h);
+        return Rectangle(safeArea.x, safeArea.y, safeArea.width, safeArea.height);
     }
 } // namespace CNA::Devices
 

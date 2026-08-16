@@ -8,9 +8,10 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <cstdint>
 #include <vector>
 
-#include <SDL3/SDL.h>
+#include "CNA/Platform/CurrentPlatform.hpp"
 
 #include "CNA/Logger.hpp"
 #include "Microsoft/Xna/Framework/TitleLocation.hpp"
@@ -34,26 +35,27 @@ namespace Microsoft::Xna::Framework
         }
 
 #if defined(__ANDROID__)
-        // Android assets are often readable through SDL even when they are not visible
-        // as normal files. Try the relative name first, then the resolved name.
+        // Android assets are readable through the platform's file loader even when they are not
+        // visible as normal files -- std::filesystem::exists() above returns false for them.
+        // Try the relative name first, then the resolved name.
         const std::string androidAssetName = IsPathRooted(safeName) ? realName : safeName;
 
-        std::size_t dataSize = 0;
-        void* rawData = SDL_LoadFile(androidAssetName.c_str(), &dataSize);
-        if (rawData == nullptr && androidAssetName != realName)
+        std::vector<std::uint8_t> assetData;
+        CNA::Platform::IPlatformFileSystem* fileSystem =
+            CNA::Platform::GetCurrentPlatform().GetFileSystem();
+
+        bool loaded = fileSystem->TryLoadFile(androidAssetName, assetData);
+        if (!loaded && androidAssetName != realName)
         {
-            rawData = SDL_LoadFile(realName.c_str(), &dataSize);
+            loaded = fileSystem->TryLoadFile(realName, assetData);
         }
 
-        if (rawData != nullptr)
+        if (loaded)
         {
-            auto* bytes = static_cast<SharpRuntime::bytecs*>(rawData);
-            auto stream = std::make_unique<System::IO::MemoryStream>(
-                bytes,
-                static_cast<SharpRuntime::intcs>(dataSize)
+            return std::make_unique<System::IO::MemoryStream>(
+                reinterpret_cast<SharpRuntime::bytecs*>(assetData.data()),
+                static_cast<SharpRuntime::intcs>(assetData.size())
             );
-            SDL_free(rawData);
-            return stream;
         }
 #endif
 
@@ -97,29 +99,33 @@ namespace Microsoft::Xna::Framework
 #if defined(__ANDROID__)
         const std::string androidAssetName = IsPathRooted(safeName) ? realName : safeName;
 
-        std::size_t dataSize = 0;
-        void* rawData = SDL_LoadFile(androidAssetName.c_str(), &dataSize);
-        if (rawData == nullptr && androidAssetName != realName)
+        std::vector<std::uint8_t> assetData;
+        CNA::Platform::IPlatformFileSystem* fileSystem =
+            CNA::Platform::GetCurrentPlatform().GetFileSystem();
+
+        bool loaded = fileSystem->TryLoadFile(androidAssetName, assetData);
+        if (!loaded && androidAssetName != realName)
         {
-            rawData = SDL_LoadFile(realName.c_str(), &dataSize);
+            loaded = fileSystem->TryLoadFile(realName, assetData);
         }
 
-        if (rawData != nullptr)
+        if (loaded)
         {
-            void* buffer = std::malloc(dataSize);
-            if (buffer == nullptr && dataSize > 0)
+            // The caller owns the returned block and frees it with std::free, so the platform's
+            // vector cannot simply be released into it -- the copy is the same one the previous
+            // implementation made out of its loader's own buffer.
+            void* buffer = std::malloc(assetData.size());
+            if (buffer == nullptr && !assetData.empty())
             {
-                SDL_free(rawData);
                 throw std::bad_alloc();
             }
 
-            if (dataSize > 0)
+            if (!assetData.empty())
             {
-                std::memcpy(buffer, rawData, dataSize);
+                std::memcpy(buffer, assetData.data(), assetData.size());
             }
 
-            SDL_free(rawData);
-            size = static_cast<IntPtr>(dataSize);
+            size = static_cast<IntPtr>(assetData.size());
             return buffer;
         }
 #endif

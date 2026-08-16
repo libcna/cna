@@ -17,7 +17,6 @@
 #include "Microsoft/Xna/Framework/Graphics/Blend.hpp"
 #include "Microsoft/Xna/Framework/Graphics/BlendFunction.hpp"
 
-#include <SDL3/SDL.h>
 #include <windows.h>
 
 #include <algorithm>
@@ -367,16 +366,11 @@ namespace CNA::Internal::Renderers::Glide
     struct GlideRenderer::Impl
     {
         explicit Impl(const GraphicsRendererCreateArgs& args)
-            : window(args.window)
-            , virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
+            : virtualWidth(args.virtualWidth > 0 ? args.virtualWidth : 640)
             , virtualHeight(args.virtualHeight > 0 ? args.virtualHeight : 480)
             , presentationMode(static_cast<CnaPresentationMode>(args.presentationMode))
             , swapInterval(args.swapInterval)
         {
-            if (window == nullptr)
-            {
-                throw std::runtime_error("GLIDE renderer requires CNA's SDL window");
-            }
             if (presentationMode != CnaPresentationMode::NativeBackBuffer)
             {
                 throw std::runtime_error(
@@ -387,12 +381,12 @@ namespace CNA::Internal::Renderers::Glide
             {
                 throw std::runtime_error("GLIDE renderer supports only swap intervals 0 (immediate) and 1 (v-sync)");
             }
-            const HWND hwnd = static_cast<HWND>(SDL_GetPointerProperty(
-                SDL_GetWindowProperties(window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
-            if (hwnd == nullptr)
+            CNA::Platform::Win32NativeWindow nativeWindow;
+            if (!CNA::Platform::TryGetWin32(args.surface.nativeHandle, nativeWindow))
             {
-                throw std::runtime_error("GLIDE renderer could not obtain a Win32 HWND from CNA's SDL window");
+                throw std::runtime_error("GLIDE renderer requires a Win32 native window");
             }
+            const HWND hwnd = static_cast<HWND>(nativeWindow.hwnd);
 
             try
             {
@@ -947,7 +941,6 @@ namespace CNA::Internal::Renderers::Glide
             const char* value = std::getenv("CNA_GLIDE_ADAPTIVE_TEXTURE_FORMAT");
             return value != nullptr && value[0] != '\0' && std::strcmp(value, "0") != 0;
         }();
-        SDL_Window* window = nullptr;
         GlideApi::Context context = nullptr;
         bool glideInitialized = false;
         int virtualWidth = 640;
@@ -1133,7 +1126,6 @@ namespace CNA::Internal::Renderers::Glide
 
         [[nodiscard]] int GetWidth() const override { return width_; }
         [[nodiscard]] int GetHeight() const override { return height_; }
-        [[nodiscard]] SDL_Texture* GetNativeTexture() const override { return nullptr; }
 
         void UpdatePixels(const std::uint8_t* rgba, int stride) override
         {
@@ -2019,11 +2011,6 @@ namespace CNA::Internal::Renderers::Glide
         impl_->viewportMinDepth = minDepth;
         impl_->viewportMaxDepth = maxDepth;
         impl_->ApplyEffectiveClipWindow();
-    }
-
-    SDL_Window* GlideRenderer::GetWindowInternal() const
-    {
-        return impl_->window;
     }
 
     std::unique_ptr<ITextureRenderer> GlideRenderer::CreateTexture(const ImageData& data)
@@ -3343,7 +3330,12 @@ namespace CNA::Internal::Renderers::Glide
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_GLIDE
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Glide { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Glide::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Glide::GlideRenderer>(args);
     }

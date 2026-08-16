@@ -28,11 +28,8 @@ namespace CNA::Devices
         /**
          * @brief The device disconnected or failed after being `Ready`.
          *
-         * @note No current backend transitions to this state — detecting device loss
-         * requires SDL's event queue, which is out of scope for this first
-         * implementation (see `docs/cna-devices-camera-design.md`'s own open
-         * questions). Reserved for a future backend that adds event-queue
-         * integration.
+         * A platform that can observe removal reports it here; other implementations may keep
+         * supplying blank frames until the session is closed.
          */
         Lost
     };

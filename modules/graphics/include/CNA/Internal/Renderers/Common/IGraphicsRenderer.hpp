@@ -13,11 +13,14 @@
 #include "CNA/Logger.hpp"
 #include "CNA/LogCategory.hpp"
 #include "CNA/GraphicsRendererType.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Unsupported3DGraphicsCallBehavior.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -28,14 +31,17 @@
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/GraphicsCapability.hpp"
 
-struct SDL_Window;
-struct SDL_Renderer;
-struct SDL_Texture;
-
 namespace Microsoft::Xna::Framework::Graphics { class Effect; }
+namespace CNA::Platform
+{
+    class IPlatformGlContext;
+    class IPlatformSurfacePresenter;
+    class IPlatformVulkanSurface;
+}
 
 namespace CNA::Internal::Renderers
 {
+    struct RendererSurfaceInfo;
     using Color = Microsoft::Xna::Framework::Color;
     using Rectangle = Microsoft::Xna::Framework::Rectangle;
     using Vector2 = Microsoft::Xna::Framework::Vector2;
@@ -369,8 +375,6 @@ namespace CNA::Internal::Renderers
         virtual ~ITextureRenderer() = default;
         virtual int GetWidth() const = 0;
         virtual int GetHeight() const = 0;
-        // TODO: SDL dependency should be abstracted later
-        virtual SDL_Texture* GetNativeTexture() const = 0;
         /// Replaces full level-0 texture pixels in-place. stride = row bytes (width * 4 for RGBA).
         virtual void UpdatePixels(const uint8_t* rgba, int stride) {}
         /// Uploads a specific mip level. levelW/levelH are the dimensions at that level.
@@ -461,7 +465,7 @@ namespace CNA::Internal::Renderers
         /// buffer backing it, as opposed to merely being requested via DepthFormat at
         /// construction time. Most renderers honor whatever DepthFormat was requested, so the
         /// default mirrors that (via @p depthFormatWasRequested, computed by the caller from
-        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). SDL_Renderer's
+        /// RenderTarget2D::getDepthStencilFormatProperty() != DepthFormat::None). The native 2D renderer's
         /// 2D-only render targets never allocate real depth-buffer storage regardless of what
         /// format was requested, and overrides this to always return false (Task 708).
         [[nodiscard]] virtual bool HasRealDepthBuffer(bool depthFormatWasRequested) const { return depthFormatWasRequested; }
@@ -539,7 +543,7 @@ namespace CNA::Internal::Renderers
         // is the one `RenderTarget2D::GetData` already established: top row first.
         //
         // Headless keeps the inherited refusal because it rasterizes nothing, and the renderers
-        // that create no cube render target at all (Software, SDL_Renderer, ASCII, Canvas, DIRECTX3, GDI)
+        // that create no cube render target at all (Software, native 2D, ASCII, Canvas, DIRECTX3, GDI)
         // never reach this class -- `GraphicsDevice::SetRenderTargets` refuses to bind one and
         // `TextureCube::GetData` refuses a null renderer one step earlier. Every remaining boundary
         // (a multisampled or mipped cube target on bgfx, a mip level D3D9 never allocated, WebGPU's
@@ -872,6 +876,9 @@ namespace CNA::Internal::Renderers
         /// Shader evaluates: if ((y>0) ? (|a-x|<y) : (a<x)) ? z : w < 0 → discard.
         /// Default {0,0,1,1} = Always pass (never discard).
         float alphaTest[4]      = {0.0f, 0.0f, 1.0f, 1.0f};
+        /// True when the active stock effect is AlphaTestEffect, including its `Always` and
+        /// `Never` variants whose identity cannot be recovered from alphaTest.x/y alone.
+        bool alphaTestEffect = false;
         /// EnvironmentMapEffect: emissive+ambient combined, RGB 0..1.
         /// BasicEffect (lit path only): raw EmissiveColor*Alpha, added after the ambient/light
         /// sum is multiplied by DiffuseColor (CNA folds ambient into that multiply instead of
@@ -1017,6 +1024,10 @@ namespace CNA::Internal::Renderers
         /// safely ignore it, matching the established accepted-and-ignored pattern for other
         /// not-yet-renderer-supported `GpuDrawParams` fields.
         IEffectRenderer* customEffectRenderer = nullptr;
+        /// True whenever the active effect is ShaderEffect, even when this renderer returned no
+        /// IEffectRenderer. Backends without custom shaders use this to refuse the draw instead of
+        /// mistaking a null renderer for an ordinary fixed-function stock effect.
+        bool customEffectRequested = false;
         /// plan_cnj.md CNB-58 (Phase 13A): PbrEffect's normal map (tangent-space, RGB), or null.
         /// When null the surface normal from the vertex stream is used unperturbed.
         const ITextureRenderer* pbrNormalMap = nullptr;
@@ -1319,6 +1330,27 @@ namespace CNA::Internal::Renderers
                static_cast<std::size_t>(stream.strideInBytes);
     }
 
+    /**
+     * @brief A renderer's answer about a surface format, or a deferral to the framework's own rule.
+     *
+     * plan_runtimerenderer.md design decision 9. Renderer-specific format behaviour used to live as
+     * #ifdef blocks inside the XNA layer, where the #else branch carried the renderer-agnostic
+     * rule. Moving those behind a virtual has to preserve that structure exactly: a renderer either
+     * has a real, renderer-specific answer, or it defers -- it must never be forced to restate the
+     * framework's rule, because a wrong restatement silently narrows a public API.
+     */
+    enum class RendererFormatVerdict
+    {
+        /** @brief This renderer has no renderer-specific answer; the framework's own rule applies. */
+        Defer,
+
+        /** @brief This renderer genuinely supports the format. */
+        Supported,
+
+        /** @brief This renderer genuinely does not support the format. */
+        Unsupported
+    };
+
     class IGraphicsRenderer
     {
     public:
@@ -1326,6 +1358,14 @@ namespace CNA::Internal::Renderers
         virtual void Clear(float r, float g, float b, float a) = 0;
         virtual void Present() = 0;
         virtual void GetViewportSize(int& width, int& height) = 0;
+        /// Refreshes the platform-owned presentation surface snapshot after a resize or density
+        /// change. The default is inert for renderers whose native swap chain handles this itself.
+        virtual void OnSurfaceChanged(const RendererSurfaceInfo& /*surface*/) {}
+        /**
+         * @brief Notifies retained presentation backends that a native client must be repainted.
+         * @param window Affected stable window id, or zero for a process-wide invalidation.
+         */
+        virtual void OnSurfaceInvalidated(CNA::Platform::WindowId /*window*/) {}
         /// Returns the PHYSICAL viewport rectangle (window/framebuffer pixels)
         /// GraphicsDevice::UpdateViewportFromWindow() should apply as the default GL/GPU viewport
         /// after a window resize or presentation-mode change -- separate from GetViewportSize(),
@@ -1389,6 +1429,25 @@ namespace CNA::Internal::Renderers
         {
             return requestedFormat;
         }
+        /**
+         * @brief Maps a requested MSAA sample count to the count this renderer actually applied.
+         *
+         * plan_runtimerenderer.md design decision 9. The identity default is deliberate and is
+         * exactly what every renderer except GDI did when this was an #ifdef CNA_RENDERER_GDI block
+         * in the XNA layer: PresentationParameters keeps echoing back what the game asked for.
+         * Only a renderer that clamps the request at construction time (GDI, which supports one
+         * real optional mode) needs to correct that, and it must not be generalized to "always
+         * report GetMultiSampleCount()" -- most renderers leave that at its 0 default, so doing so
+         * would report "no MSAA" for every renderer that in fact honoured the request.
+         *
+         * @param requestedMultiSampleCount The count the game asked for.
+         * @return The count actually in effect.
+         */
+        [[nodiscard]] virtual int GetAppliedMultiSampleCountEXT(int requestedMultiSampleCount) const
+        {
+            return requestedMultiSampleCount;
+        }
+
         /** @brief Depth/stencil counterpart of GetAppliedBackBufferFormatEXT(). */
         [[nodiscard]] virtual int GetAppliedDepthStencilFormatEXT(int requestedFormat) const
         {
@@ -1396,21 +1455,163 @@ namespace CNA::Internal::Renderers
         }
         /// Returns the backbuffer's actual (device-clamped) MSAA sample count; 0 if none/unsupported.
         [[nodiscard]] virtual int GetMultiSampleCount() const { return 0; }
+
+        // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -------------
+        //
+        // XNA's GraphicsProfile.Reach/HiDef carry real, enforced-at-creation-time ceilings. Only a
+        // renderer with a genuine capability structure to consult (D3D9's D3DCAPS9) can answer them
+        // honestly; the other 45 have no such structure, and this project refuses to substitute a
+        // hardcoded table pretending to be a capability query. The defaults below are therefore
+        // "no ceiling" -- exactly the behaviour every non-D3D9 renderer had when these lived as
+        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside the XNA layer.
+
+        /**
+         * @brief Largest texture edge length the given GraphicsProfile permits.
+         *
+         * A profile CEILING, not a hardware query: even where the device could allocate more, a
+         * Reach-profile game is restricted to the profile's limit, which is what XNA's portability
+         * guarantee means.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest cube-map edge length the given GraphicsProfile permits.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum edge length, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest volume-texture extent the given GraphicsProfile permits.
+         *
+         * Zero has a distinct meaning here: the profile does not support volume (3D) textures at
+         * all, which is genuinely the case for GraphicsProfile.Reach on D3D9 -- not merely a small
+         * size ceiling.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum extent, 0 for "no volume textures at all", or
+         *         std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        /**
+         * @brief Largest number of simultaneous render targets the given GraphicsProfile permits.
+         *
+         * Distinct from XNA's own general 4-target ceiling (which GraphicsDevice enforces for every
+         * renderer) and from any hardware cap the renderer enforces separately.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum count, or std::numeric_limits<int>::max() for no ceiling.
+         */
+        [[nodiscard]] virtual int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+        {
+            (void)graphicsProfile;
+            return (std::numeric_limits<int>::max)();
+        }
+
+        // --- Surface-format boundaries (plan_runtimerenderer.md design decision 9) -------------
+
+        /**
+         * @brief Whether a Texture2D may be created with the given surface format.
+         *
+         * Tri-state on purpose. The framework already has a renderer-agnostic rule for this
+         * (Texture::ValidateFormat), and 45 of the 46 renderers are content with it -- so the
+         * default is Defer, meaning "the framework's own rule applies". Only a renderer that
+         * genuinely stores each format in its own native layout (SKIA) answers Supported /
+         * Unsupported. A plain bool would have forced every other renderer to restate the
+         * framework rule, and getting that restatement wrong would silently narrow a public API.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifySurfaceFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a RenderTarget2D may be created with the given surface format.
+         *
+         * Deliberately separate from ClassifySurfaceFormatEXT: renderability is a strictly narrower
+         * question than storability. SKIA's raster surface has no hardware format restriction at
+         * all, yet it still refuses the formats real XNA/FNA hardware cannot render into, because
+         * parity with XNA is the goal rather than "whatever the backing library happens to allow".
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyRenderTargetFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether GetData/SetData with a Color-shaped element is meaningful for a format.
+         *
+         * Same tri-state reasoning as ClassifySurfaceFormatEXT. The framework rule here is "any
+         * format whose texel is a multiple of four bytes", which is a route real code depends on
+         * (MouseCursor::FromTexture2D reads a ColorSrgbEXT texture through it). SKIA narrows it to
+         * the formats that are genuinely 32-bit RGBA-shaped, because it stores the others in their
+         * own layouts and a Color* transfer would read the wrong bits.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return This renderer's verdict, or Defer to accept the framework's rule.
+         */
+        [[nodiscard]] virtual RendererFormatVerdict ClassifyColorTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return RendererFormatVerdict::Defer;
+        }
+
+        /**
+         * @brief Whether a format is a block-compressed format this renderer transfers as blocks.
+         *
+         * The default is false for every format: renderers that do not store compressed textures
+         * natively never take the compressed transfer path.
+         *
+         * @param surfaceFormat SurfaceFormat ordinal.
+         * @return true when the format transfers as compressed blocks rather than pixels.
+         */
+        [[nodiscard]] virtual bool IsCompressedTransferFormatEXT(int surfaceFormat) const
+        {
+            (void)surfaceFormat;
+            return false;
+        }
+
         /// Converts a point from SDL window-coordinate space to logical (virtual) game
-        /// coordinates. A renderer whose drawable pixel size differs from SDL_GetWindowSize()
+        /// coordinates. A renderer whose drawable pixel size differs from the window's logical size
         /// must account for that density internally. Returns true on success. Default: no-op.
+        /// Converts a point from the platform window's logical client-coordinate space to the
+        /// renderer's virtual game-coordinate space. Presentation scale, crop/letterbox offsets
+        /// and any difference between logical client units and drawable pixels are entirely the
+        /// renderer's responsibility. Returns true when a logical counterpart exists. Default:
+        /// no transform (returns false and leaves the outputs untouched).
         virtual bool TransformWindowToLogical(float windowX, float windowY,
                                               float& logX, float& logY) const { return false; }
-        /// Converts a point from logical (virtual) game coordinates to SDL window-coordinate
-        /// space — the inverse of TransformWindowToLogical. Returns true on success. Default:
-        /// no-op (returns false), i.e. window == logical (no scaling). Used by Mouse::SetPosition
-        /// to place the OS cursor correctly on a scaled/letterboxed window.
+        /// Converts a point from logical game coordinates to the platform window's logical client
+        /// coordinates -- the inverse of TransformWindowToLogical for points in the presentation
+        /// viewport. Returns true on success. Default: no transform (returns false and leaves the
+        /// outputs untouched); callers may then use a 1:1 fallback.
         virtual bool TransformLogicalToWindow(float logX, float logY,
                                               float& windowX, float& windowY) const { return false; }
-        // TODO: SDL dependency should be abstracted later
-        virtual SDL_Window* GetWindowInternal() const = 0;
-        virtual SDL_Renderer* GetRendererInternal() const = 0;
-
         virtual std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) = 0;
         virtual std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() = 0;
 
@@ -1578,7 +1779,7 @@ namespace CNA::Internal::Renderers
          *
          * Most renderers are 3D-capable and honor whatever depth/stencil format the presentation
          * parameters request, so the default is `true`. A renderer that is entirely 2D-only
-         * (SDL_Renderer) never has a depth/stencil buffer regardless of what was requested and
+         * (the native 2D renderer) never has a depth/stencil buffer regardless of what was requested and
          * overrides this to `false` — used by GraphicsDevice::Clear(ClearOptions, ...) to mask
          * DepthBuffer/Stencil out of a clear request instead of forwarding it to a
          * ClearColorDepthAndStencil()-style method this renderer cannot honor.
@@ -1880,20 +2081,20 @@ namespace CNA::Internal::Renderers
         /// On desktop: equivalent to DebugSimulateContextLoss() (destroy + recreate).
         virtual void DebugRestoreContext() {}
 
-        // ---- Window → renderer registry ----
-        // Renderers that implement TransformWindowToLogical register themselves here
-        // so that SdlInputBridge can map physical mouse coordinates to logical ones
-        // even for renderers that have no SDL_Renderer (e.g. EasyGL).
+        // ---- Window id → renderer registry ----
+        // Renderers that implement coordinate conversion register themselves here so input can
+        // map platform window-client coordinates without knowing or resolving a native window.
+        // WindowId is the sole identity crossing this common boundary.
 
-        static void RegisterForWindow(SDL_Window* window, IGraphicsRenderer* renderer)
+        static void RegisterForWindow(CNA::Platform::WindowId window, IGraphicsRenderer* renderer)
         {
             windowRegistry()[window] = renderer;
         }
-        static void UnregisterForWindow(SDL_Window* window)
+        static void UnregisterForWindow(CNA::Platform::WindowId window)
         {
             windowRegistry().erase(window);
         }
-        static IGraphicsRenderer* GetForWindow(SDL_Window* window)
+        static IGraphicsRenderer* GetForWindow(CNA::Platform::WindowId window)
         {
             auto& reg = windowRegistry();
             auto it = reg.find(window);
@@ -1947,9 +2148,9 @@ namespace CNA::Internal::Renderers
             CNA::Unsupported3DGraphicsCallBehavior::Throw;
         mutable std::unordered_set<std::string> warnedUnsupported3DCalls_;
 
-        static std::unordered_map<SDL_Window*, IGraphicsRenderer*>& windowRegistry()
+        static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*>& windowRegistry()
         {
-            static std::unordered_map<SDL_Window*, IGraphicsRenderer*> reg;
+            static std::unordered_map<CNA::Platform::WindowId, IGraphicsRenderer*> reg;
             return reg;
         }
     };
@@ -2009,17 +2210,53 @@ namespace CNA::Internal::Renderers
     };
 
     /**
-     * @brief Arguments for creating a graphics renderer.
-     * Currently minimal, but allows for easier extension.
+     * @brief Immutable platform-window snapshot supplied when a renderer is created.
+     *
+     * The value owns nothing. Its native handle remains valid only while the platform window
+     * identified by @ref windowId is alive. Renderers use the physical @ref drawableSize for
+     * swap-chain sizing; @ref displayScale relates that size to logical window coordinates.
      */
+    struct RendererSurfaceInfo
+    {
+        /** @brief Stable identity used by platform events and renderer lookup. */
+        CNA::Platform::WindowId windowId = 0;
+        /** @brief Typed native handle for renderers that talk directly to a window system. */
+        CNA::Platform::NativeWindowHandle nativeHandle;
+        /** @brief Initial drawable size in physical pixels. */
+        CNA::Platform::WindowSize drawableSize;
+        /** @brief Initial logical-to-physical display scale; 1.0 on unscaled/windowless hosts. */
+        float displayScale = 1.0f;
+    };
+
+    /** @brief Arguments for creating a graphics renderer. */
     struct GraphicsRendererCreateArgs
     {
-        // TODO: SDL dependency should be abstracted later
-        SDL_Window* window = nullptr;
-        /// Virtual (game-logic) resolution the renderer should present at.
-        /// SDL_SetRenderLogicalPresentation will be set to this size so that
-        /// the game always draws in its own coordinate space and the renderer
-        /// scales to the real surface automatically.
+        /** @brief Platform-neutral description of the renderer's presentation surface. */
+        RendererSurfaceInfo surface;
+        /**
+         * @brief OpenGL context service for GL-family renderers, otherwise null.
+         *
+         * The pointer is non-owning; the platform outlives every renderer. GL renderers use it
+         * with @ref RendererSurfaceInfo::windowId and never receive an `IPlatformWindow` or a
+         * native window-toolkit type.
+         */
+        CNA::Platform::IPlatformGlContext* glContext = nullptr;
+        /**
+         * @brief Vulkan presentation-surface service for Vulkan-family renderers, otherwise null.
+         *
+         * The pointer is non-owning; the platform outlives the renderer. The renderer identifies
+         * its target only by @ref RendererSurfaceInfo::windowId.
+         */
+        CNA::Platform::IPlatformVulkanSurface* vulkanSurface = nullptr;
+        /**
+         * @brief CPU-frame presentation service for raster renderers, otherwise null.
+         *
+         * The pointer is non-owning. GraphicsDevice keeps the presenter alive until after its
+         * renderer has been destroyed, and the presenter in turn remains bound to @ref surface.
+         */
+        CNA::Platform::IPlatformSurfacePresenter* surfacePresenter = nullptr;
+        /// Virtual (game-logic) resolution the renderer should present at. A renderer maps this
+        /// coordinate space onto the actual platform surface according to presentationMode.
         /// 0 means "unset"; the renderer should ignore logical presentation.
         int virtualWidth = 0;
         int virtualHeight = 0;
@@ -2073,7 +2310,13 @@ namespace CNA::Internal::Renderers
         std::function<void(RendererDeviceEvent)> deviceEventCallback;
     };
 
-    // Factory function to be implemented by each renderer
-    // INTERNAL API - SDL dependency should be abstracted later
+    // plan_runtimerenderer.md design decision 4: the factory used to be declared here, once, and
+    // defined once per renderer family with an identical signature -- which is exactly why two
+    // renderer archives could never link into the same binary. Each family now declares and
+    // defines CNA::Internal::Renderers::<Family>::CreateGraphicsRenderer instead, and
+    // GraphicsRendererRegistry reaches it through GraphicsRendererDescriptor::create.
+    // Factory function to be implemented by each renderer. The creation contract deliberately
+    // contains only platform value types; renderer-family-specific native API work starts behind
+    // this boundary.
     std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
 }

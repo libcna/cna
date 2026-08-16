@@ -14,14 +14,14 @@ namespace CNA::Input
      *
      * XNA 4.0 only ever modeled Xbox-style mapped gamepads (`GamePad`); it has no notion of a raw
      * joystick (flight sticks, wheels, throttles, arbitrary HID controllers). This descriptor pairs
-     * the SDL joystick instance id with its human-readable name and physical type.
+     * the platform device id with its human-readable name and physical type.
      */
     CNAEXT struct JoystickInfoEXT
     {
-        /** @brief The SDL joystick instance id (`SDL_JoystickID`). */
+        /** @brief The platform device id, stable while this joystick stays connected. */
         std::uint32_t id = 0;
 
-        /** @brief The device's human-readable name, or empty if SDL reports none. */
+        /** @brief The device's human-readable name, or empty if the platform reports none. */
         std::string name;
 
         /** @brief The device's physical category. */

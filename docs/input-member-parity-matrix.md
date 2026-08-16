@@ -547,14 +547,12 @@ documented collection-interface deviations below). Full per-type tables follow.
 | Member | Tag | In FNA | Note |
 |--------|-----|--------|------|
 | `CNAEXT MouseCursor()` | CNAEXT | no | CNA-only |
-| `CNAEXT explicit MouseCursor(SDL_Cursor* sdlCursor, bool owning = false)` | CNAEXT | no | CNA-only |
 | `CNAEXT static MouseCursor FromTexture2D(const Graphics::Texture2D& texture, int originX, int originY)` | CNAEXT | no | CNA-only |
 | `MouseCursor(const MouseCursor&) = delete` | CNAEXT | no | CNA-only |
 | `MouseCursor& operator=(const MouseCursor&) = delete` | CNAEXT | no | CNA-only |
 | `MouseCursor(MouseCursor&& other) noexcept` | CNAEXT | no | CNA-only |
 | `~MouseCursor() override` | CNAEXT | no | CNA-only |
 | `CNAEXT void Dispose() override` | CNAEXT | no | CNA-only |
-| `CNAEXT SDL_Cursor* GetSDLCursor() const` | CNAEXT | no | CNA-only |
 | `CNAEXT static MouseCursor& getArrowProperty()` | CNAEXT | no | CNA-only |
 | `CNAEXT static MouseCursor& getCrosshairProperty()` | CNAEXT | no | CNA-only |
 | `CNAEXT static MouseCursor& getHandProperty()` | CNAEXT | no | CNA-only |

@@ -1,9 +1,11 @@
 #pragma once
 
+#include "CNA/Internal/Renderers/EasyGL/GlProfile.hpp"
+
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Graphics/ImageData.hpp"
 #include "CNA/Internal/Graphics/VertexDeclarationFidelity.hpp"
-#include <SDL3/SDL.h>
+#include "CNA/Platform/IPlatformGlContext.hpp"
 #include <easygl/easygl.hpp>
 #include <array>
 #include <cstdint>
@@ -16,6 +18,49 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderer;
     class EasyGLRenderTargetRenderer;
     class EasyGLRenderTargetCubeRenderer;
+    class EasyGLPlatformContext;
+
+    /**
+     * @brief Platform-neutral presentation metrics consumed by the EasyGL family.
+     *
+     * The platform publishes physical drawable pixels plus a logical-to-physical display scale.
+     * This value object derives the client-coordinate dimensions and owns EasyGL's virtual
+     * resolution transform, so resize/DPI behavior can be tested without a native window or GL.
+     */
+    class EasyGLSurfaceState
+    {
+    public:
+        EasyGLSurfaceState(const RendererSurfaceInfo& surface, int virtualWidth,
+                           int virtualHeight, CnaPresentationMode presentationMode);
+
+        /** @brief Replaces the platform snapshot after resize or density change. */
+        void Update(const RendererSurfaceInfo& surface);
+        /** @brief Replaces the virtual game resolution. */
+        void SetVirtualResolution(int width, int height);
+        /** @brief Replaces the presentation policy. */
+        void SetPresentationMode(CnaPresentationMode mode);
+
+        /** @brief Gets the physical drawable extent used by GL framebuffer operations. */
+        void GetDrawableSize(int& width, int& height) const;
+        /** @brief Gets the renderer's logical game extent. */
+        void GetLogicalSize(int& width, int& height) const;
+        /** @brief Converts logical client units into renderer game units. */
+        bool WindowToLogical(float windowX, float windowY,
+                             float& logicalX, float& logicalY) const;
+        /** @brief Converts renderer game units into logical client units. */
+        bool LogicalToWindow(float logicalX, float logicalY,
+                             float& windowX, float& windowY) const;
+        /** @brief Gets the stable platform window identity. */
+        [[nodiscard]] CNA::Platform::WindowId GetWindowId() const { return surface_.windowId; }
+
+    private:
+        void GetClientSize(int& width, int& height) const;
+
+        RendererSurfaceInfo surface_;
+        int virtualWidth_ = 0;
+        int virtualHeight_ = 0;
+        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
+    };
 
     /**
      * @brief REMED-GFX-168: the one record of which EasyGL render target is currently bound.
@@ -88,7 +133,7 @@ namespace CNA::Internal::Renderers::EasyGL
         ~EasyGLTextureRenderer() override;
         int GetWidth() const override { return width; }
         int GetHeight() const override { return height; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
         void UpdatePixels(const uint8_t* rgba, int stride) override;
         void UpdatePixelsLevel(int level, const uint8_t* rgba, int levelW, int levelH) override;
@@ -144,7 +189,7 @@ namespace CNA::Internal::Renderers::EasyGL
 
         int GetWidth()  const override { return width_; }
         int GetHeight() const override { return height_; }
-        SDL_Texture* GetNativeTexture() const override { return nullptr; }
+
         void BindGL(int unit) const override;
 
         void BindAsRenderTarget()   override;
@@ -585,8 +630,10 @@ namespace CNA::Internal::Renderers::EasyGL
     class EasyGLRenderer : public IGraphicsRenderer
     {
     private:
-        SDL_Window* window = nullptr;
-        SDL_GLContext gl_context = nullptr;
+        // Declared first so it is destroyed last: all GL resources below release while the
+        // platform context is still current and alive.
+        std::unique_ptr<EasyGLPlatformContext> platformContext_;
+        EasyGLSurfaceState surfaceState_;
         ::easygl::Device device;
         ::easygl::ResourceRegistry registry_;
 
@@ -599,13 +646,12 @@ namespace CNA::Internal::Renderers::EasyGL
         void ForceAllColorWriteMasks();
         [[nodiscard]] bool HasRestrictedActiveColorWriteMask() const;
 
-        int virtualWidth_ = 0;
-        int virtualHeight_ = 0;
         static constexpr int kMaxSamplerSlots = 16;
         ::easygl::Sampler samplers_[kMaxSamplerSlots];
-        CnaPresentationMode presentationMode_ = CnaPresentationMode::FixedHeightDynamicWidth;
         bool contextRecoveryEnabled_ = true;
         int swapInterval_ = 1;
+        /// plan_runtimerenderer.md P11: which of EasyGL's five GL identities this instance serves.
+        GlProfile profile_ = kCompileTimeGlProfile;
 
         // MSAA — multisampled render buffer resolved to FBO 0 on Present().
         int sampleCount_ = 1;
@@ -765,12 +811,37 @@ namespace CNA::Internal::Renderers::EasyGL
         static void ResolveRenderTargetOrientationUniforms(Prog3D& p);
 
     public:
-        explicit EasyGLRenderer(SDL_Window* window,
-                                       int virtualWidth = 0, int virtualHeight = 0,
-                                       CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
-                                       bool contextRecoveryEnabled = true,
-                                       int multiSampleCount = 1,
-                                       int swapInterval = 1);
+        /**
+         * @brief Constructs the renderer for one of EasyGL's five GL profiles.
+         *
+         * plan_runtimerenderer.md phase P11: the profile is a constructor argument rather than a
+         * compile definition, which is what lets two GL identities coexist in one binary. It
+         * defaults to the profile this build was configured for, so a single-renderer build is
+         * unaffected.
+         *
+         * @param surface The platform surface to present into.
+         * @param glContext The platform GL context service this renderer drives.
+         * @param virtualWidth Logical presentation width; 0 means unset.
+         * @param virtualHeight Logical presentation height; 0 means unset.
+         * @param mode Presentation/scaling policy.
+         * @param contextRecoveryEnabled Whether to keep CPU-side copies for context-loss recovery.
+         * @param multiSampleCount Requested MSAA sample count.
+         * @param swapInterval Swap interval (0 immediate, 1 VSync, 2 half-rate).
+         * @param profile Which GL profile to create the context and shaders for.
+         */
+
+        /**
+         * @brief The GL profile this renderer instance was created for.
+         *
+         * @return The profile.
+         */
+        [[nodiscard]] GlProfile Profile() const { return profile_; }
+        explicit EasyGLRenderer(
+            const RendererSurfaceInfo& surface, CNA::Platform::IPlatformGlContext& glContext,
+            int virtualWidth = 0, int virtualHeight = 0,
+            CnaPresentationMode mode = CnaPresentationMode::FixedHeightDynamicWidth,
+            bool contextRecoveryEnabled = true, int multiSampleCount = 1,
+            int swapInterval = 1, GlProfile profile = kCompileTimeGlProfile);
         ~EasyGLRenderer() override;
         // AnisotropicFiltering/MultiSampleAntiAliasing re-query the same live GL state the
         // startup capability dump (EnsureGL()) already prints, since they're cheap, idempotent GL
@@ -782,6 +853,7 @@ namespace CNA::Internal::Renderers::EasyGL
         void Clear(float r, float g, float b, float a) override;
         void Present() override;
         void SetSwapInterval(int interval) override;
+        void OnSurfaceChanged(const RendererSurfaceInfo& surface) override;
         void GetViewportSize(int& width, int& height) override;
         void getLogicalSize(int& width, int& height) const;
         void getPhysicalSize(int& width, int& height) const;
@@ -803,8 +875,6 @@ namespace CNA::Internal::Renderers::EasyGL
         // already-applied value, ignoring the request). GetMultiSampleCount() reports that real
         // value honestly instead of falling back to the interface default of 0.
         [[nodiscard]] int GetMultiSampleCount() const override { return sampleCount_ > 1 ? sampleCount_ : 0; }
-        SDL_Window* GetWindowInternal() const override { return window; }
-        SDL_Renderer* GetRendererInternal() const override { return nullptr; }
 
         std::unique_ptr<ITextureRenderer> CreateTexture(const ImageData& data) override;
         std::unique_ptr<ISpriteBatchRenderer> CreateSpriteBatch() override;
@@ -881,4 +951,32 @@ namespace CNA::Internal::Renderers::EasyGL
                                        int instanceCount,
                                        const GpuDrawParams& params) override;
     };
+
+    /**
+     * @brief Creates an EasyGL renderer for the build's default GL profile.
+     *
+     * plan_runtimerenderer.md design decision 4: declared in the FAMILY's namespace so several
+     * renderer archives can link into one binary. Declared here, alongside the class, for the same
+     * reason the GDI family declares its own (GdiRenderer.hpp): this family's device-free suites
+     * and contract programs construct a renderer directly, without going through GraphicsDevice,
+     * and since RTR-P9-9 they compile whenever the family is PRESENT rather than only when it is
+     * the default.
+     *
+     * @param args Construction arguments.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args);
+
+    /**
+     * @brief Creates an EasyGL renderer for an explicit GL profile.
+     *
+     * plan_runtimerenderer.md P11: each of the five public GL identities this family serves reaches
+     * this with its own profile, which is what lets all five be compiled into one binary.
+     *
+     * @param args Construction arguments.
+     * @param profile The GL profile to create the context and shaders for.
+     * @return The new renderer; never nullptr on success. Throws on failure.
+     */
+    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRendererForProfile(
+        const GraphicsRendererCreateArgs& args, GlProfile profile);
 }

@@ -46,7 +46,7 @@ passed. Real visual verification needs a human with a browser — see
 | `RenderTargetUsage::DiscardContents` vs `PreserveContents` | ✅ | Confirmed a framework-layer (`GraphicsDevice.cpp`) concern, not a per-renderer one — zero renderer-specific code needed. |
 | `ReadBackbuffer`/`GetBackBufferData` | ✅ | Real, genuinely synchronous `ctx.getImageData(x,y,w,h)` against whichever context is currently bound. |
 | `SetRenderTargets` (MRT, 2+ targets) | ✅ throws-by-design | A `CanvasRenderingContext2D` is inherently single-target — same conclusion `SDL_RENDERER`'s Task 709 reached. |
-| `Texture2D::FromStream` (PNG/JPEG/DDS) decode | ✅ | Confirmed fully renderer-agnostic (`DxtUtil`/SDL3_image) before ever reaching this renderer's `putImageData` upload. |
+| `Texture2D::FromStream` (PNG/JPEG/DDS) decode | ✅ | Confirmed fully renderer-agnostic (`DxtUtil`/vendored `stb_image`) before ever reaching this renderer's `putImageData` upload. |
 
 ## 3. BlendState
 
@@ -76,7 +76,7 @@ passed. Real visual verification needs a human with a browser — see
 |---|---|---|
 | `GetViewportSize`/`SetVirtualResolution`/`SetPresentationMode` | ✅ | Verbatim port of `EasyGLRenderer`'s own `FixedHeightDynamicWidth` logical-size math against `SDL_GetWindowSize(window_,...)` — SDL3 keeps the DOM `<canvas>` element's width/height attributes in sync with the window it backs. |
 | `TransformWindowToLogical`/`TransformLogicalToWindow` | ✅ | Same verbatim port, for correct mouse-coordinate mapping under letterboxing. |
-| `GetWindowInternal()`/`GetRendererInternal()` | ✅ | Returns the real `SDL_Window*`; `GetRendererInternal()` is `nullptr` (no `SDL_Renderer*` exists on this renderer, same as `OPENGLES3`). |
+| Window ownership / SDL renderer exposure | ✅ | `GameWindow` owns the window-facing handle; the common renderer interface exposes neither an SDL window nor an `SDL_Renderer*` (PLAT-59). |
 | `Present()` | ✅ | Genuine no-op — the browser compositor presents the canvas automatically on the next paint tick. |
 | `Clear(color)` | ✅ (fixed) | `ctx.save()`/`fillRect` under an explicit `globalCompositeOperation='copy'`/`ctx.restore()`. An earlier version used a plain `fillRect` with whatever composite mode a previous `SpriteBatch` draw happened to leave active (e.g. `'lighter'`/`'copy'` from `Additive`/`Opaque`), blending the clear color with old content instead of the exact overwrite real XNA/FNA's `Clear()` performs; it also permanently reset the transform via `setTransform(identity)` rather than `save`/`restore`, corrupting an active `SpriteBatch` camera transform if `Clear()` was called mid-`Begin()`/`End()` (both found in external review). |
 

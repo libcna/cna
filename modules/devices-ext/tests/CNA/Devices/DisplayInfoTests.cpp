@@ -3,30 +3,51 @@
 
 #include <gtest/gtest.h>
 
-#include <SDL3/SDL.h>
-
 #include "CNA/Devices/DisplayInfo.hpp"
+#include "CNA/Platform/IPlatform.hpp"
+#include "CNA/Platform/IPlatformWindow.hpp"
+#include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/Platform/PlatformTestDecorator.hpp"
+#include "CNA/Platform/WindowDescription.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
+
+#include <algorithm>
+#include <exception>
+#include <memory>
+#include <string>
+#include <vector>
 
 using CNA::Devices::DisplayInfo;
 using Microsoft::Xna::Framework::GameWindow;
 using Microsoft::Xna::Framework::Rectangle;
 
 // CnaTests is a plain console/gtest binary, not a running Game, so most tests here
-// exercise the "no underlying SDL window" path via a default-constructed GameWindow().
-// One test (below) follows GameWindowTest.SetAndGetTitle_UsingSdlWindow's existing
-// precedent (tests/Microsoft/Xna/Framework/GameWindowTests.cpp) and creates a real,
-// hidden SDL window to exercise the actual SDL3 query path -- gracefully GTEST_SKIP()s
-// if this container has no usable video subsystem, rather than failing or silently
-// passing on an unexercised path.
+// exercise the "no underlying platform window" path via a default-constructed GameWindow().
+// One test creates a real hidden window through the SDL3 platform implementation to exercise the
+// service path, without importing an SDL type into this module.
 
-TEST(DisplayInfoTests, GetContentScalePropertyReturnsZeroForWindowWithNoSdlWindow)
+namespace
+{
+    struct VideoRelease
+    {
+        CNA::Platform::IPlatform* platform = nullptr;
+        ~VideoRelease()
+        {
+            if (platform != nullptr)
+            {
+                platform->ReleaseSubsystem(CNA::Platform::PlatformSubsystem::Video);
+            }
+        }
+    };
+}
+
+TEST(DisplayInfoTests, GetContentScalePropertyReturnsZeroForWindowWithNoPlatformWindow)
 {
     const GameWindow window;
     EXPECT_EQ(DisplayInfo::getContentScaleProperty(window), 0.0f);
 }
 
-TEST(DisplayInfoTests, GetSafeAreaPropertyReturnsEmptyForWindowWithNoSdlWindow)
+TEST(DisplayInfoTests, GetSafeAreaPropertyReturnsEmptyForWindowWithNoPlatformWindow)
 {
     const GameWindow window;
     EXPECT_EQ(DisplayInfo::getSafeAreaProperty(window), Rectangle::Empty);
@@ -44,37 +65,55 @@ TEST(DisplayInfoTests, RepeatedCallsDoNotCrash)
     }
 }
 
-TEST(DisplayInfoTests, QueriesAgainstARealSdlWindowDoNotCrashAndReturnDocumentedValues)
+TEST(DisplayInfoTests, QueriesAgainstARealPlatformWindowReturnDocumentedValues)
 {
-    if (!SDL_InitSubSystem(SDL_INIT_VIDEO))
+    const std::vector<std::string> available = CNA::Platform::PlatformFactory::GetAvailable();
+    if (std::find(available.begin(), available.end(), "SDL3") == available.end())
     {
-        GTEST_SKIP() << "SDL_InitSubSystem(SDL_INIT_VIDEO) failed: " << SDL_GetError();
+        GTEST_SKIP() << "built with CNA_PLATFORM != SDL3";
     }
 
-    SDL_Window* nativeWindow = SDL_CreateWindow("display-info-test", 64, 64, SDL_WINDOW_HIDDEN);
-    if (!nativeWindow)
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("SDL3");
+    try
     {
-        SDL_QuitSubSystem(SDL_INIT_VIDEO);
-        GTEST_SKIP() << "SDL_CreateWindow failed: " << SDL_GetError();
+        platform->AcquireSubsystem(CNA::Platform::PlatformSubsystem::Video);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "video subsystem unavailable: " << error.what();
+    }
+    const VideoRelease videoRelease{platform.get()};
+    const CNA::Platform::Testing::ScopedCurrentPlatform installed(*platform);
+
+    CNA::Platform::WindowDescription description;
+    description.title = "display-info-test";
+    description.width = 64;
+    description.height = 64;
+    description.visible = false;
+
+    std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow;
+    try
+    {
+        platformWindow = platform->CreateWindow(description);
+    }
+    catch (const std::exception& error)
+    {
+        GTEST_SKIP() << "window creation unavailable: " << error.what();
     }
 
-    const GameWindow window(nativeWindow);
+    const GameWindow window(platformWindow.get());
 
-    // A real (if hidden/headless) window should report a genuine, positive content
-    // scale -- 0.0f would mean SDL itself considers the query to have failed, which
-    // should not happen for a window it just successfully created.
+    // A real (if hidden/headless) window should report a genuine, positive content scale.
     const float contentScale = DisplayInfo::getContentScaleProperty(window);
     EXPECT_GT(contentScale, 0.0f);
 
-    // The safe area is expected to be a valid sub-rectangle of the window; not
-    // asserting exact bounds (platform/window-manager dependent), only that the
-    // query itself succeeds and returns a non-degenerate rectangle for a real window.
+    // The safe area is platform/window-manager dependent, so assert only a valid sub-rectangle.
     const Rectangle safeArea = DisplayInfo::getSafeAreaProperty(window);
     EXPECT_GT(safeArea.Width, 0);
     EXPECT_GT(safeArea.Height, 0);
-
-    SDL_DestroyWindow(nativeWindow);
-    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    EXPECT_LE(safeArea.X + safeArea.Width, description.width);
+    EXPECT_LE(safeArea.Y + safeArea.Height, description.height);
 }
 
 #endif // CNA_DEVICES

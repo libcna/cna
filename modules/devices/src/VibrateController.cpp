@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "Microsoft/Devices/Detail/SdlHapticVibrateBackend.hpp"
+#include "Detail/PlatformVibrateBackend.hpp"
 #include "System/ArgumentOutOfRangeException.hpp"
 
 namespace Microsoft::Devices
@@ -32,10 +32,8 @@ namespace Microsoft::Devices
          * `std::clamp(v, 0.0f, 1.0f)` alone leaves NaN unchanged -- every
          * comparison against NaN is `false`, so `std::clamp`'s own
          * `v < lo ? lo : (hi < v ? hi : v)` falls through to returning `v`
-         * itself. A NaN then reaching `SdlHapticVibrateBackend::StartLeftRight()`'s
-         * `static_cast<Uint16>(magnitude * 65535.0f)` conversion is
-         * undefined behavior (converting a value not representable in the
-         * destination integer type). True +/-infinity need no special
+         * itself. A native implementation must not receive NaN before converting
+         * a normalized magnitude to its integer motor scale. True +/-infinity need no special
          * handling: both comparisons against a finite bound are
          * well-defined for infinity, so `std::clamp` already correctly
          * saturates it to `0.0f`/`1.0f`. Canonicalizes NaN to `0.0f`
@@ -60,11 +58,17 @@ namespace Microsoft::Devices
     }
 
     VibrateController::VibrateController()
-        : backend_(std::make_unique<Detail::SdlHapticVibrateBackend>())
+        : backend_(std::make_unique<Detail::PlatformVibrateBackend>())
     {
     }
 
     VibrateController::~VibrateController() = default;
+
+    void VibrateController::ShutdownBackendForPlatform()
+    {
+        std::lock_guard<std::mutex> lock(backendMutex_);
+        backend_.reset();
+    }
 
     void VibrateController::SetBackendForTesting(std::unique_ptr<Detail::IVibrateBackend> backend)
     {
@@ -76,7 +80,7 @@ namespace Microsoft::Devices
         }
         else
         {
-            backend_ = std::make_unique<Detail::SdlHapticVibrateBackend>();
+            backend_ = std::make_unique<Detail::PlatformVibrateBackend>();
         }
     }
 
@@ -91,25 +95,31 @@ namespace Microsoft::Devices
         const float clampedIntensity = CanonicalizeVibrationMagnitude(intensity);
 
         std::lock_guard<std::mutex> lock(backendMutex_);
-        backend_->Start(duration, clampedIntensity);
+        if (backend_ != nullptr)
+        {
+            backend_->Start(duration, clampedIntensity);
+        }
     }
 
     void VibrateController::Stop()
     {
         std::lock_guard<std::mutex> lock(backendMutex_);
-        backend_->Stop();
+        if (backend_ != nullptr)
+        {
+            backend_->Stop();
+        }
     }
 
     bool VibrateController::getIsSupportedProperty()
     {
         std::lock_guard<std::mutex> lock(backendMutex_);
-        return backend_->IsSupported();
+        return backend_ != nullptr && backend_->IsSupported();
     }
 
     std::string VibrateController::getDeviceNameProperty()
     {
         std::lock_guard<std::mutex> lock(backendMutex_);
-        return backend_->GetDeviceName();
+        return backend_ != nullptr ? backend_->GetDeviceName() : std::string{};
     }
 
     void VibrateController::StartLeftRight(float largeMotor, float smallMotor, const System::TimeSpan& duration)
@@ -119,6 +129,9 @@ namespace Microsoft::Devices
         const float clampedSmall = CanonicalizeVibrationMagnitude(smallMotor);
 
         std::lock_guard<std::mutex> lock(backendMutex_);
-        backend_->StartLeftRight(clampedLarge, clampedSmall, duration);
+        if (backend_ != nullptr)
+        {
+            backend_->StartLeftRight(clampedLarge, clampedSmall, duration);
+        }
     }
 } // namespace Microsoft::Devices

@@ -17,6 +17,7 @@
 // out-of-line constructors, so both stay compile-time dependencies and add no link edge to any
 // translation unit that never throws one.
 #include "CNA/CNAException.hpp"
+#include "CNA/Platform/PlatformException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
@@ -284,6 +285,16 @@ template<typename TCallable>
     } catch (const Microsoft::Xna::Framework::GamerServices::NetworkException& exception) {
         // The base of both arms above: a network operation failed while the network was available.
         // That is a native service failure, and one a retry may well get past.
+        return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
+    } catch (const CNA::Platform::PlatformException& exception) {
+        // Merged from the platform-separation campaign: a platform operation that was expected to
+        // succeed did not -- SDL could not create a system cursor under the dummy video driver, a
+        // window could not be made, a subsystem could not be acquired. That is a native service
+        // failure, which this ABI already has a result and a category for, and it must not fall
+        // through to the std::exception arm and be reported as CNA_RESULT_INTERNAL: a caller can do
+        // something about a platform refusal, and nothing about an internal error.
+        //
+        // It derives from std::runtime_error, so this arm must precede that one.
         return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
     } catch (const CNA::CNAException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());

@@ -30,7 +30,7 @@ namespace CNA::Graphics {
      *
      * This is the direct successor to the former `ASCII` graphics-renderer identity
      * (`CNA_GRAPHICS_RENDERER=ASCII`, removed): that renderer only ever quantized its OWN 2D-only
-     * SDL_Renderer-composited frame before presenting it. As a post-process effect instead, the
+     * native 2D-renderer-composited frame before presenting it. As a post-process effect instead, the
      * exact same quantization/glyph-atlas logic applies to the completed output of ANY renderer
      * and ANY scene (2D or 3D) -- the effect only ever reads finished pixels back via the public
      * `Texture2D::GetData()`/`SpriteBatch` APIs, never a renderer-internal type.

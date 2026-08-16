@@ -66,7 +66,7 @@ namespace CNA::Internal::Media
         /// Switches the active audio stream to the trackIndex-th audio stream (0-based). Returns
         /// true if a different stream is now active (a genuine switch happened, decode state was
         /// discarded), false if trackIndex was already active or out of range (a true no-op) --
-        /// callers that recreate downstream resources (SDL audio streams, textures) after a switch
+        /// callers that recreate downstream resources (audio streams, textures) after a switch
         /// need to know whether anything actually changed, not just that the call didn't throw
         /// (plan_media.md MEDIA-154, found by external code review).
         bool SetAudioStream(int trackIndex);
