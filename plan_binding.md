@@ -544,7 +544,7 @@ because it builds on the completed effect and texture contracts.
 
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
-| CBIND-038 | Expand pure-C compatibility matrix | ⬜ | Build public headers and C smoke programs with the selected C compilers and target platforms; run selected renderer/headless configurations and record supported/skipped combinations honestly. |
+| CBIND-038 | Expand pure-C compatibility matrix | ✅ | `tools/c-api/compatibility_matrix.json` declares the toolchains, language modes and build configurations the ABI claims, and `generate_compatibility_matrix.py` both runs that matrix and generates `docs/c-api/COMPATIBILITY.md` from it. Each cell compiles **every public header on its own** — which is what proves a header is self-contained — plus the umbrella twice for its include guards: 60 translation units per cell, 1,380 across the 23 cells this machine has toolchains for. Two rules make the result honest rather than flattering: **a toolchain that is installed is binding** (present and rejecting a header fails the gate, required or optional), and **a toolchain that is absent is skipped by name, never counted as agreement**. Both are registered as build-free ctest gates (`CApiCompatibilityMatrix`, `CApiHeaderCompatibility`) beside `CApiCoverageMatrix`, with a CI workflow that installs the optional toolchains so their cells become evidence. **The matrix found a real defect on its first run**: `CNA_PowerState` was declared twice — once for a controller's power and once for the host's, same name and same six values — which C11 tolerates and C99 rejects. The duplicate is gone, `devices.h` now reuses the identity `input_gamepad.h` declares, and **C99 is the floor** rather than an unexamined claim. Verified to catch a regression by reinstating the duplicate: four C99 cells turn red while C11 and later stay green. Green in all four trees (78/78) and under ASan+UBSan. |
 | CBIND-039 | Add ABI layout, export and compatibility gates | ⬜ | Check struct size/offset/alignment, enum numeric values, ABI version behavior, exported-symbol allowlist and a baseline compatibility snapshot. New ABI fields/functions follow B0 policy. |
 | CBIND-040 | Add safety and lifetime stress tests | ⬜ | Run invalid-handle, double-release, stale-generation, shutdown-order, callback-unregister, UTF-8/buffer-boundary and high-volume create/release tests under ASan/UBSan where supported. Add focused fuzz targets for parser-like/buffer-facing APIs. |
 | CBIND-041 | Publish C consumer documentation and examples | ⬜ | Document CMake consumption, shared/static linking, initialization, error retrieval, UTF-8, buffers, handles, callbacks, threading, renderer limits and clean shutdown. Every example is C-only and builds in CI. |
@@ -1100,18 +1100,21 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037G7` is the last task completed, and it **closes the
-  `CBIND-037` campaign**: the working tree is clean, every slice is committed one-task-one-commit,
-  and the inventory has **no planned row left** — 6,063 implemented, 32 partial, 0 planned, 320 not
-  applicable across all fourteen modules.
-- **Next task:** the hardening tasks `CBIND-038`–`CBIND-042` and `CBIND-044`, which the campaign
-  deferred. Nothing in the coverage inventory is outstanding, so the next work is about the binding's
-  own quality rather than its breadth: read those rows for what each one asks for.
+- Branch: `feature/binding`. `CBIND-038` is the last task completed. The `CBIND-037` campaign is
+  closed — the inventory has **no planned row left**, 6,063 implemented, 32 partial, 0 planned, 320
+  not applicable — and Phase B7 hardening has started.
+- **Next task:** `CBIND-039`, the ABI layout, export and compatibility gates. Much of what it asks
+  for already exists and should be *found* rather than rebuilt: the C and C++ ABI assertion walls in
+  `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` already pin struct sizes, field
+  offsets and enum ordinals for every value type the campaign added, and `CApi_Exports`
+  (`cmake/CheckElfExports.cmake`) already checks the exported-symbol set. What is genuinely missing
+  is the part those cannot do: a **checked-in baseline snapshot** of the layouts and the exported
+  symbol list, so that a change to either is visible as a diff and has to be justified rather than
+  merely re-asserted. `CBIND-038`'s generator is the shape to copy — a declaration, a `--run` that
+  measures the real build, and a `--check` that fails when the two disagree.
 
-  The 32 remaining `partial` rows are not gaps this campaign left open — each is a symbol whose
-  canonical form cannot be fully expressed in C and whose usable subset is named in
-  `docs/c-api/COVERAGE.md`. Do not "close" one without a concrete new capability to add.
-
+  One thing `CBIND-038` established that this task inherits: **absence is skipped, presence is
+  binding.** A gate that cannot run somewhere should say so by name rather than pass quietly.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

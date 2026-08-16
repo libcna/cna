@@ -168,5 +168,26 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME CApiCoverageMatrix
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_coverage_inventory.py" --check)
+
+        # plan_binding.md CBIND-038: the pure-C compatibility matrix, also a gate.
+        #
+        # The declaration and the published matrix must not drift apart, for the same reason the
+        # coverage matrix must not: a matrix is read as evidence, so one that lags its declaration
+        # is worse than none. Build-free, like the coverage check above.
+        add_test(NAME CApiCompatibilityMatrix
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --check)
+
+        # The matrix itself: every public header compiled on its own, and the umbrella twice, in
+        # every declared language mode of every installed toolchain. A header that is not
+        # self-contained, or that reaches for a construct newer than the C99 floor, fails here --
+        # verified by reinstating a duplicate typedef, which turns the four C99 cells red while the
+        # C11 and later cells stay green.
+        #
+        # Compiles nothing of CNA itself: it needs the public headers and a compiler, which is what
+        # lets it run in the ordinary build rather than only where the C API is enabled.
+        add_test(NAME CApiHeaderCompatibility
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --run)
     endif()
 endif()

@@ -157,4 +157,6 @@ component callback model, the game's component collection and the limits of the 
 are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md); the gamer-services identities and the
 no-signed-in-gamer contract are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
-[`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.
+[`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record; the compilers, language
+modes and build configurations the ABI is actually put through — and the ones it is not — are in
+[`COMPATIBILITY.md`](COMPATIBILITY.md).

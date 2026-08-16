@@ -4,6 +4,7 @@
 #define CNA_C_DEVICES_H
 
 #include "CNA/C/core.h"
+#include "CNA/C/input_gamepad.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -201,21 +202,11 @@ CNA_C_API CNA_Result cna_vibrate_controller_get_test_log_ext(
 
 /* ---- Host power ---- */
 
-/** @brief Fixed-width identity of the host's power state. */
-typedef uint32_t CNA_PowerState;
+/* The host's power state and a controller's are **one identity**, declared by `input_gamepad.h` and
+   reused here rather than repeated: the same six values answer both questions, and a caller that
+   handles one handles the other. Only the maximum is added here, because the gamepad surface has no
+   use for it. */
 
-/** @brief The power state could not be determined because the query failed. */
-#define CNA_POWER_STATE_ERROR UINT32_C(0)
-/** @brief The power state is not known on this platform. */
-#define CNA_POWER_STATE_UNKNOWN UINT32_C(1)
-/** @brief Running on battery and discharging. */
-#define CNA_POWER_STATE_ON_BATTERY UINT32_C(2)
-/** @brief Plugged in with no battery present. */
-#define CNA_POWER_STATE_NO_BATTERY UINT32_C(3)
-/** @brief Plugged in and charging. */
-#define CNA_POWER_STATE_CHARGING UINT32_C(4)
-/** @brief Plugged in and fully charged. */
-#define CNA_POWER_STATE_CHARGED UINT32_C(5)
 /** @brief Highest defined power-state identity. */
 #define CNA_POWER_STATE_MAXIMUM CNA_POWER_STATE_CHARGED
 

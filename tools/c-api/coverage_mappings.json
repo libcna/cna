@@ -4667,7 +4667,7 @@
         "enum-value",
         "method"
       ],
-      "mapping": "a fixed-width `CNA_PowerState` with one macro per canonical value at its canonical ordinal plus `CNA_POWER_STATE_MAXIMUM`, and `cna_power_get_state_ext`, `_get_battery_percent_ext`, `_get_seconds_remaining_ext`. The canonical **-1 sentinel** for an unknown charge or time is preserved rather than replaced by a separate availability flag, because it is one value the platform genuinely returns rather than an encoding this ABI invented. This is the host machine's power, distinct from a controller's `cna_gamepad_get_battery_level_ext`",
+      "mapping": "the fixed-width `CNA_PowerState` identity `input_gamepad.h` declares — **one identity, not two**, since the same six values answer a controller's power question and the host's — plus `CNA_POWER_STATE_MAXIMUM`, which only this surface needs, and and `cna_power_get_state_ext`, `_get_battery_percent_ext`, `_get_seconds_remaining_ext`. The canonical **-1 sentinel** for an unknown charge or time is preserved rather than replaced by a separate availability flag, because it is one value the platform genuinely returns rather than an encoding this ABI invented. This is the host machine's power, distinct from a controller's `cna_gamepad_get_battery_level_ext`",
       "tests": "`DevicesSmoke.c` asserts the state is a defined identity, that both numbers are either -1 or in range, and covers the null-output refusals; the ordinals are pinned by C and C++ ABI assertions. With the extension layer compiled out every route reports `NOT_SUPPORTED`, which the same suite asserts",
       "status": "implemented",
       "task": "CBIND-037D3"

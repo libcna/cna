@@ -1166,10 +1166,26 @@
 > takes the interface. That is the same reasoning the component callbacks used, arrived at from the
 > other direction. All four trees green at 78/78, ASan+UBSan clean.
 >
-> **Next: the hardening tasks `CBIND-038`–`CBIND-042` and `CBIND-044`.** Nothing in the coverage
-> inventory is outstanding, so the remaining work is about the binding's own quality rather than its
-> breadth. The 32 `partial` rows are not gaps this campaign left open — each is a symbol whose
-> canonical form cannot be fully expressed in C and whose usable subset is named in
+> **Phase B7 hardening then starts with CBIND-038**, the pure-C compatibility matrix — and it earned
+> its keep on the first run. `CNA_PowerState` was declared **twice**, once for a controller's power
+> and once for the host's, with the same name and the same six values: legal since C11, rejected
+> under C99. Nothing had noticed, because every existing target compiled at C17. The duplicate is
+> gone — `devices.h` now reuses the identity `input_gamepad.h` declares — and **C99 is the floor**
+> rather than an unexamined claim.
+>
+> The matrix compiles **every public header on its own**, which is what proves a header is
+> self-contained, plus the umbrella twice for its include guards: 60 translation units per cell, 1,380
+> across the 23 cells this machine has toolchains for (gcc, clang, g++, clang++ and a MinGW
+> cross-compiler, C99 through C23 and C++11 through C++23). Two rules keep it from flattering itself:
+> **a toolchain that is installed is binding**, and **a toolchain that is absent is skipped by name,
+> never counted as agreement**. Both are worth reusing in the remaining gates.
+>
+> **Next: `CBIND-039`**, the ABI layout, export and compatibility gates. Much of it already exists —
+> the ABI assertion walls pin sizes, offsets and ordinals, and `CApi_Exports` checks the exported
+> symbol set — so the genuinely missing piece is a **checked-in baseline snapshot** of both, making a
+> change visible as a diff that has to be justified rather than merely re-asserted. `CBIND-038`'s
+> generator is the shape to copy. The 32 `partial` rows are not gaps the campaign left open — each is
+> a symbol whose canonical form cannot be fully expressed in C, with its usable subset named in
 > `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new capability to add.
 >
 > **State at this handoff.** Thirty-one slices are committed on `feature/binding` since
