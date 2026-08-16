@@ -84,7 +84,16 @@ def check_coverage_has_no_planned_rows() -> tuple[str, str]:
     implemented, partial, planned = (int(value.replace(",", "")) for value in snapshot.groups())
     if planned != 0:
         return NOT_MET, f"{planned} public symbols are still unmapped"
-    return MET, f"{implemented} implemented, {partial} partial, 0 planned"
+    # CBIND-044: a partial row is only acceptable when somebody with the authority said so. An
+    # unapproved one is an omission wearing a limitation's clothes.
+    rules = json.loads((TOOLS / "coverage_mappings.json").read_text(encoding="utf-8"))["rules"]
+    unapproved = [rule.get("id", "?") for rule in rules
+                  if rule.get("status") == "partial"
+                  and not rule.get("limitation", {}).get("approval")]
+    if unapproved:
+        return NOT_MET, f"{len(unapproved)} partial mapping(s) nobody approved: " + ", ".join(
+            unapproved[:4])
+    return MET, (f"{implemented} implemented, {partial} partial (all approved), 0 planned")
 
 
 def check_limitations_current() -> tuple[str, str]:

@@ -138,7 +138,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > the signed-in gamer collection, and `CBIND-044D` gives each of the 12 symbols that remain a
 > recorded disposition and a callable route that reports it, with the generator failing if one lacks
 > either. The snapshot is now 6,083 implemented, 12 partial, 0 planned and 320 not-applicable, and
-> every remaining partial row is a structural property of C rather than unfinished work.
+> every remaining partial row is a structural property of C rather than unfinished work. The project
+> owner **approved those twelve on 2026-08-16**, which closes `CBIND-044` and with it the whole
+> CBIND campaign: 6,415 public C++ declarations, 6,083 implemented, 12 approved partial, 0 planned,
+> 320 not applicable, and an experimental release gate that reads ready.
 
 ---
 

@@ -26,11 +26,11 @@
     {
       "id": "coverage-closed",
       "title": "No public C++ symbol is unaccounted for",
-      "requirement": "The generated inventory has no `planned` row: every public declaration is mapped, partially mapped with its subset named, or recorded as having no C form with the reason.",
+      "requirement": "The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason.",
       "check": "coverage_has_no_planned_rows",
       "recorded": "met",
       "evidence": "docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix",
-      "note": "Closing the remaining partial rows is CBIND-044 and is not a condition of an experimental release."
+      "note": "CBIND-044 closed on 2026-08-16: the twelve remaining partial rows were approved by the project owner as permanent limitations of a C ABI, each with a callable route that reports the reduced answer. An unapproved partial row now fails this criterion."
     },
     {
       "id": "limitations-matrix",

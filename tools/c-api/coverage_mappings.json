@@ -932,7 +932,7 @@
       "limitation": {
         "kind": "c-cannot-name-a-type",
         "reports_through": "`cna_content_manager_load_texture2d`, `_load_texture_cube` and `_load_sound_effect` load the canonical specializations; a further asset type needs its own typed route, which is an addition rather than a redesign",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -1997,7 +1997,7 @@
       "limitation": {
         "kind": "sharp-runtime-object",
         "reports_through": "`cna_content_manager_create` builds a manager whose services resolve through the graphics device it is given; `cna_content_manager_set_graphics_device` is how a caller supplies one",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -2035,7 +2035,7 @@
       "limitation": {
         "kind": "sharp-runtime-object",
         "reports_through": "`cna_content_manager_get_has_service_provider` answers the only part of the question that has a C form -- whether one is there",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -2148,7 +2148,7 @@
       "limitation": {
         "kind": "type-erased-value",
         "reports_through": "`cna_content_reader_read_object_tag` runs the same dispatch and reports whether an object was produced, which is what lets a caller advance past an untyped field",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -2211,7 +2211,7 @@
       "limitation": {
         "kind": "type-erased-value",
         "reports_through": "`cna_content_type_reader_read_untyped` runs the reader and reports whether an object was produced",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -2319,7 +2319,7 @@
       "limitation": {
         "kind": "sharp-runtime-object",
         "reports_through": "`cna_content_manager_create_resource` builds one the same way the base manager is built",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -2464,7 +2464,7 @@
       "limitation": {
         "kind": "no-c-counterpart",
         "reports_through": "`cna_network_session_properties_get_item` is the strict read and `_set_item` the appending write, which is the split the canonical header itself recommends",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {
@@ -5003,7 +5003,7 @@
       "limitation": {
         "kind": "c-cannot-name-a-type",
         "reports_through": "`cna_game_services_contains_ext` and `cna_game_services_remove_ext` name the two services the runtime registers, because a caller cannot name a C++ type to key the container with",
-        "approval": "awaiting owner approval (CBIND-044)"
+        "approval": "approved by the project owner on 2026-08-16 (CBIND-044)"
       }
     },
     {

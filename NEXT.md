@@ -1370,24 +1370,38 @@
 > generator fails if one lacks it. "No unspecified omission" is not a claim that nothing is missing;
 > it is a guarantee that nothing is missing *silently*.
 >
-> **What is left of `CBIND-044` is a decision, not work.** Twelve symbols, all structural properties
-> of C: four `GameServiceContainer` lookups and `ContentManager::Load` (C cannot name a C++ type),
-> four content-manager service-provider members (a Sharp Runtime object), two untyped content reads
-> (a type-erased value) and the network-session properties indexer (a proxy). Each has a route that
-> reports the reduced answer. They are listed in `docs/c-api/LIMITATIONS.md` as **awaiting owner
-> approval**; approving them closes `CBIND-044` and with it the whole plan. The 28 `partial` rows are not gaps the
+> **The owner approved the twelve on 2026-08-16, and that closes `CBIND-044` and the plan.** They
+> are all structural properties of C: four `GameServiceContainer` lookups and `ContentManager::Load`
+> (C cannot name a C++ type), four content-manager service-provider members (a Sharp Runtime
+> object), two untyped content reads (a type-erased value) and the network-session properties
+> indexer (a proxy). Each has a callable route that reports the reduced answer.
+>
+> The approval is **measured, not minuted**. `generate_limitations.py` fails if a partial row lacks a
+> disposition *or* an approval, and the release gate's `coverage-closed` criterion fails if any
+> partial mapping is unapproved — verified by clearing one, which turns both red. A future session
+> that adds a partial mapping cannot quietly inherit somebody else's approval for it.
+>
+> **Final state: nothing in `plan_binding.md` is open.** 6,415 public C++ declarations, 6,083
+> implemented, 12 approved partial, 0 planned, 320 not applicable; four verification trees green at
+> 81/81 and 88/88; the experimental release gate reads **ready**. What comes next is not in this
+> plan — publishing the experimental release, or opening a new plan for whatever the ABI should grow
+> next. Two things a later session should know before touching it: an added route or struct is an
+> **addition** the baseline permits and re-records, while changing an existing name, value or layout
+> is a break that costs a minor version; and the first thing to run in a fresh tree is
+> `ctest -R CApi` from the tree root, because five of the gates live at the top level and
+> `--test-dir modules/c-api` does not see them. The 28 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Forty-five slices are committed on `feature/binding` since
+> **State at this handoff.** Forty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
 > module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
-> as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`, so
-> **nothing in the plan is waiting on implementation**: `CBIND-044` needs only the owner's approval
-> of its twelve recorded limitations, and the release gate reads ready. All four verification trees are green at
+> as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`. With the
+> owner's approval of the twelve remaining limitations on 2026-08-16, **every task in the plan is
+> closed** and the release gate reads ready. All four verification trees are green at
 > 81/81 with the coverage, compatibility, ABI-baseline, limitations and release gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.

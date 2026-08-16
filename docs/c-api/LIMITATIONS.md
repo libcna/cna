@@ -37,9 +37,11 @@ row says what you get and, in the same breath, what you do not.
 | `NetworkSessionProperties::operator[]` | the canonical value is a proxy | `cna_network_session_properties_get_item` is the strict read and `_set_item` the appending write, which is the split the canonical header itself recommends |
 
 Every row above has a recorded disposition -- the kind of limitation it is and the route a
-caller uses instead -- and the generator fails if one does not. That is what "no
-unspecified omission" means here: not that nothing is missing, but that nothing is missing
-*silently*.
+caller uses instead -- and the generator fails if one lacks either that or an approval. That
+is what "no unspecified omission" means here: not that nothing is missing, but that
+nothing is missing *silently*, and that nobody left the decision to a later reader.
+
+All of them are **approved by the project owner on 2026-08-16 (CBIND-044)**.
 
 ## No C form: the reasons, by theme
 

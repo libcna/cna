@@ -153,6 +153,10 @@ def analyze() -> dict:
             problems.append(
                 f"{len(entry['symbols'])} partially mapped symbol(s) have no recorded disposition: "
                 f"{entry['mapping'][:110]}")
+        elif not entry["limitation"].get("approval"):
+            problems.append(
+                f"{len(entry['symbols'])} partially mapped symbol(s) have a disposition nobody "
+                f"approved: {entry['mapping'][:110]}")
 
     for entry in unmapped:
         entry["theme"] = classify(entry["mapping"], declaration["themes"])
@@ -228,10 +232,15 @@ def render(analysis: dict) -> str:
         instead = limitation.get("reports_through", "").replace("|", "\\|")
         add(f"| {subjects} | {kind} | {instead} |")
     add("")
+    approvals = sorted({(entry.get("limitation") or {}).get("approval", "")
+                        for entry in analysis["partial"]} - {""})
     add("Every row above has a recorded disposition -- the kind of limitation it is and the route a")
-    add("caller uses instead -- and the generator fails if one does not. That is what \"no")
-    add("unspecified omission\" means here: not that nothing is missing, but that nothing is missing")
-    add("*silently*.")
+    add("caller uses instead -- and the generator fails if one lacks either that or an approval. That")
+    add("is what \"no unspecified omission\" means here: not that nothing is missing, but that")
+    add("nothing is missing *silently*, and that nobody left the decision to a later reader.")
+    add("")
+    for approval in approvals:
+        add(f"All of them are **{approval}**.")
     add("")
 
     add("## No C form: the reasons, by theme")
