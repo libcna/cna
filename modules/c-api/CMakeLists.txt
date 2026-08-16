@@ -974,6 +974,23 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_audio_streaming_smoke
+        tests/pure_c/AudioStreamingSmoke.c
+    )
+    set_target_properties(cna_c_api_audio_streaming_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_audio_streaming_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_audio_streaming_smoke)
+    add_test(NAME CApi_AudioStreamingSmoke COMMAND cna_c_api_audio_streaming_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_AudioStreamingSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_audio_sound_effect_smoke
         tests/pure_c/AudioSoundEffectSmoke.c
     )

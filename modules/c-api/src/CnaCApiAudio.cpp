@@ -5,6 +5,9 @@
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/Audio/AudioChannels.hpp"
+#include "Microsoft/Xna/Framework/Audio/DynamicSoundEffectInstance.hpp"
+#include "Microsoft/Xna/Framework/Audio/Microphone.hpp"
+#include "Microsoft/Xna/Framework/Audio/MicrophoneState.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
@@ -545,7 +548,8 @@ CNA_Result cna_sound_effect_instance_destroy(const CNA_Handle instanceHandle)
                 ErrorCategoryForResult(result),
                 "The owned SoundEffectInstance handle could not be released.");
         }
-        if (instance->parent->instanceCount != 0U) {
+        // A streaming instance has no parent effect, so there is no instance count to decrement.
+        if (instance->parent && instance->parent->instanceCount != 0U) {
             --instance->parent->instanceCount;
         }
         RemoveOwnedAudioResource();
@@ -1087,5 +1091,788 @@ CNA_Result cna_sound_effect_instance_copy_type_name(
             return result;
         }
         return CopyAudioText(instance->value->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+namespace {
+
+using Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance;
+using Microsoft::Xna::Framework::Audio::Microphone;
+using Microsoft::Xna::Framework::Audio::MicrophoneState;
+
+// A streaming instance is a sound-effect instance, so it lives under the same handle kind and every
+// existing instance route accepts it. This side pointer is what the streaming-only routes need, and
+// its absence is what tells them the handle is an ordinary instance.
+[[nodiscard]] CNA_Result BorrowDynamicInstance(
+    const CNA_Handle handle,
+    std::shared_ptr<SoundEffectInstanceResource>* const outInstance,
+    DynamicSoundEffectInstance** const outDynamic)
+{
+    if (const CNA_Result result = GetSoundEffectInstance(handle, outInstance);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outDynamic = dynamic_cast<DynamicSoundEffectInstance*>((*outInstance)->value.get());
+    if (*outDynamic == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_STATE,
+            CNA_ERROR_CATEGORY_STATE,
+            "This SoundEffectInstance does not stream caller-supplied buffers.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// The canonical microphone list is owned by the runtime and handed out as raw pointers, so C
+// addresses it by index the way every other enumerated device in this ABI is addressed.
+[[nodiscard]] CNA_Result BorrowMicrophone(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    Microphone** const outMicrophone)
+{
+    if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    const auto& microphones = Microphone::getAllProperty();
+    if (index >= static_cast<uint64_t>(microphones.size()) ||
+        microphones[static_cast<std::size_t>(index)] == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The microphone index is at or past the reported count.");
+    }
+    *outMicrophone = microphones[static_cast<std::size_t>(index)];
+    return CNA_RESULT_SUCCESS;
+}
+
+class AudioRegistrationBase {
+public:
+    AudioRegistrationBase() = default;
+    AudioRegistrationBase(const AudioRegistrationBase&) = delete;
+    AudioRegistrationBase& operator=(const AudioRegistrationBase&) = delete;
+    virtual ~AudioRegistrationBase() = default;
+};
+
+class AudioRegistration final : public AudioRegistrationBase {
+public:
+    using Source = System::EventHandler<System::EventArgs>;
+    using Token = Source::Token;
+
+    AudioRegistration(std::shared_ptr<void> owner, Source* const source, const Token token)
+        : owner_(std::move(owner))
+        , source_(source)
+        , token_(token)
+    {
+    }
+
+    ~AudioRegistration() override
+    {
+        source_->Remove(token_);
+    }
+
+private:
+    std::shared_ptr<void> owner_;
+    Source* source_;
+    Token token_;
+};
+
+[[nodiscard]] CNA_Result PublishAudioRegistration(
+    std::shared_ptr<AudioRegistrationBase> registration,
+    CNA_Handle* const outRegistration)
+{
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::AudioEventRegistration,
+        std::move(registration),
+        outRegistration);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The audio registration could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_dynamic_sound_effect_instance_create(
+    const CNA_Handle gameHandle,
+    const int32_t sampleRate,
+    const CNA_AudioChannels channels,
+    CNA_Handle* const outInstance)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outInstance == nullptr) {
+            return AudioInvalidInput("The streaming instance output handle is null.");
+        }
+        *outInstance = CNA_INVALID_HANDLE;
+        AudioChannels nativeChannels = AudioChannels::Mono;
+        if (!TryMapChannels(channels, &nativeChannels)) {
+            return AudioInvalidInput("The audio channel count is not a defined identity.");
+        }
+        if (sampleRate <= 0) {
+            return AudioInvalidInput("The sample rate must be positive.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto nativeInstance = std::make_shared<DynamicSoundEffectInstance>(
+            static_cast<SharpRuntime::intcs>(sampleRate),
+            nativeChannels);
+        // No parent sound effect: the caller is the source of every sample, so the instance-count
+        // bookkeeping a SoundEffect child carries has nothing to point at here.
+        const auto resource = std::make_shared<SoundEffectInstanceResource>(
+            SoundEffectInstanceResource{std::move(nativeInstance), nullptr});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::SoundEffectInstance,
+            resource,
+            outInstance);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The owned streaming instance handle could not be created.");
+        }
+        AddOwnedAudioResource();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_pending_buffer_count(
+    const CNA_Handle instanceHandle,
+    int32_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return AudioInvalidInput("The pending buffer count output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<int32_t>(dynamicInstance->getPendingBufferCountProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_submit_buffer(
+    const CNA_Handle instanceHandle,
+    const uint8_t* const bytes,
+    const uint64_t byteCount,
+    const int32_t offset,
+    const int32_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t nativeByteCount = 0U;
+        if (const CNA_Result result =
+                CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The submitted audio byte range is invalid.");
+        }
+        if (offset < 0 || count <= 0 ||
+            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
+            return AudioInvalidInput("The submitted audio range lies outside the buffer.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The bytes are copied here, which is what lets a producer thread reuse its buffer the
+        // moment this returns.
+        const std::vector<SharpRuntime::bytecs> pcm(bytes, bytes + nativeByteCount);
+        dynamicInstance->SubmitBuffer(
+            pcm,
+            static_cast<SharpRuntime::intcs>(offset),
+            static_cast<SharpRuntime::intcs>(count));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_submit_float_buffer_ext(
+    const CNA_Handle instanceHandle,
+    const float* const samples,
+    const uint64_t sampleCount,
+    const int32_t offset,
+    const int32_t count)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::size_t nativeByteCount = 0U;
+        if (const CNA_Result result =
+                CheckedElementByteCount(samples, sampleCount, sizeof(float), &nativeByteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The submitted float sample range is invalid.");
+        }
+        if (offset < 0 || count <= 0 ||
+            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > sampleCount) {
+            return AudioInvalidInput("The submitted float range lies outside the buffer.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<float> buffer(samples, samples + sampleCount);
+        dynamicInstance->SubmitFloatBufferEXT(
+            buffer,
+            static_cast<SharpRuntime::intcs>(offset),
+            static_cast<SharpRuntime::intcs>(count));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_queue_initial_buffers_ext(
+    const CNA_Handle instanceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dynamicInstance->QueueInitialBuffers();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_clear_buffers_ext(const CNA_Handle instanceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dynamicInstance->ClearBuffers();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_update_ext(const CNA_Handle instanceHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        dynamicInstance->Update();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_sample_duration_ticks(
+    const CNA_Handle instanceHandle,
+    const int32_t sizeInBytes,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return AudioInvalidInput("The sample duration output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTicks = static_cast<int64_t>(
+            dynamicInstance->GetSampleDuration(static_cast<SharpRuntime::intcs>(sizeInBytes))
+                .getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_sample_size_in_bytes(
+    const CNA_Handle instanceHandle,
+    const int64_t durationTicks,
+    int32_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The sample size output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<int32_t>(dynamicInstance->GetSampleSizeInBytes(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks))));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
+    const CNA_Handle instanceHandle,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return AudioInvalidInput("The audio registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return AudioInvalidInput("The audio event callback is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &dynamicInstance->BufferNeeded;
+        const auto token = source->Add(
+            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+        return PublishAudioRegistration(
+            std::make_shared<AudioRegistration>(instance, source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_get_type_name_size(
+    const CNA_Handle instanceHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The type-name size output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = dynamicInstance->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
+    const CNA_Handle instanceHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        DynamicSoundEffectInstance* dynamicInstance = nullptr;
+        if (const CNA_Result result =
+                BorrowDynamicInstance(instanceHandle, &instance, &dynamicInstance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyAudioText(dynamicInstance->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_audio_unsubscribe_ext(const CNA_Handle registration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<AudioRegistrationBase> value;
+        if (const CNA_Result result = GetRuntimeHandles().Get(
+                registration,
+                ObjectKind::AudioEventRegistration,
+                &value);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The audio registration handle is invalid for this call.");
+        }
+        const CNA_Result releaseResult = GetRuntimeHandles().Release(registration);
+        if (releaseResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                releaseResult,
+                ErrorCategoryForResult(releaseResult),
+                "The audio registration handle could not be released.");
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_count(const CNA_Handle gameHandle, uint64_t* const outCount)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outCount == nullptr) {
+            return AudioInvalidInput("The microphone count output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outCount = static_cast<uint64_t>(Microphone::getAllProperty().size());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_default_index_ext(
+    const CNA_Handle gameHandle,
+    uint64_t* const outIndex,
+    CNA_Bool* const outAvailable)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr || outAvailable == nullptr) {
+            return AudioInvalidInput("The default microphone outputs are invalid.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outAvailable = CNA_FALSE;
+        const Microphone* const preferred = Microphone::getDefaultProperty();
+        if (preferred == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        const auto& microphones = Microphone::getAllProperty();
+        for (std::size_t index = 0U; index < microphones.size(); ++index) {
+            if (microphones[index] == preferred) {
+                *outIndex = static_cast<uint64_t>(index);
+                *outAvailable = CNA_TRUE;
+                return CNA_RESULT_SUCCESS;
+            }
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_name_size_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The microphone name size output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = microphone->Name.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_copy_name_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyAudioText(microphone->Name, destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_microphone_get_buffer_duration_ticks_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return AudioInvalidInput("The buffer duration output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTicks = static_cast<int64_t>(
+            microphone->getBufferDurationProperty().getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_set_buffer_duration_ticks_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    const int64_t ticks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        microphone->setBufferDurationProperty(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(ticks)));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_is_headset_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CNA_Bool* const outHeadset)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outHeadset == nullptr) {
+            return AudioInvalidInput("The headset output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outHeadset = microphone->getIsHeadsetProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_rate_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    int32_t* const outSampleRate)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSampleRate == nullptr) {
+            return AudioInvalidInput("The sample rate output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSampleRate = static_cast<int32_t>(microphone->getSampleRateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_state_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    CNA_MicrophoneState* const outState)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outState == nullptr) {
+            return AudioInvalidInput("The microphone state output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outState = static_cast<CNA_MicrophoneState>(microphone->getStateProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_start_at(const CNA_Handle gameHandle, const uint64_t index)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        microphone->Start();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_stop_at(const CNA_Handle gameHandle, const uint64_t index)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        microphone->Stop();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_data_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    uint8_t* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
+            return AudioInvalidInput("The capture read output is invalid.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = UINT64_C(0);
+        if (capacity == UINT64_C(0)) {
+            return CNA_RESULT_SUCCESS;
+        }
+        if (capacity > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+            return AudioInvalidInput("The capture destination is larger than the canonical limit.");
+        }
+        // A short read is the canonical answer rather than a failure: capture is a stream, so the
+        // route reports how much arrived instead of refusing a buffer it could not fill.
+        std::vector<SharpRuntime::bytecs> buffer(static_cast<std::size_t>(capacity), 0U);
+        const auto read = static_cast<uint64_t>(microphone->GetData(buffer));
+        const uint64_t copied = read < capacity ? read : capacity;
+        if (copied != UINT64_C(0)) {
+            std::memcpy(destination, buffer.data(), static_cast<std::size_t>(copied));
+        }
+        *outBytes = copied;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_duration_ticks_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    const int32_t sizeInBytes,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return AudioInvalidInput("The sample duration output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outTicks = static_cast<int64_t>(
+            microphone->GetSampleDuration(static_cast<SharpRuntime::intcs>(sizeInBytes))
+                .getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_sample_size_in_bytes_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    const int64_t durationTicks,
+    int32_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The sample size output is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = static_cast<int32_t>(microphone->GetSampleSizeInBytes(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks))));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_subscribe_buffer_ready_at(
+    const CNA_Handle gameHandle,
+    const uint64_t index,
+    const CNA_AudioEventCallback callback,
+    void* const context,
+    CNA_Handle* const outRegistration)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outRegistration == nullptr) {
+            return AudioInvalidInput("The audio registration output is null.");
+        }
+        *outRegistration = CNA_INVALID_HANDLE;
+        if (callback == nullptr) {
+            return AudioInvalidInput("The audio event callback is null.");
+        }
+        Microphone* microphone = nullptr;
+        if (const CNA_Result result = BorrowMicrophone(gameHandle, index, &microphone);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        auto* const source = &microphone->BufferReady;
+        const auto token = source->Add(
+            [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
+        // The runtime owns every microphone and outlives each registration, so this one needs no
+        // owner reference of its own.
+        return PublishAudioRegistration(
+            std::make_shared<AudioRegistration>(nullptr, source, token),
+            outRegistration);
+    });
+}
+
+CNA_Result cna_microphone_check_all_buffers_ext(const CNA_Handle gameHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        Microphone::CheckAllBuffers();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_get_type_name_size(
+    const CNA_Handle gameHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The type-name size output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The name belongs to the type, so a machine with no microphone still answers it.
+        static const std::string typeName = "Microsoft.Xna.Framework.Audio.Microphone";
+        *outBytes = typeName.size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_microphone_copy_type_name(
+    const CNA_Handle gameHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        static const std::string typeName = "Microsoft.Xna.Framework.Audio.Microphone";
+        return CopyAudioText(typeName, destination, capacity, outBytes);
     });
 }

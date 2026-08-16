@@ -5381,15 +5381,59 @@
     },
     {
       "id": "audio-exception-types",
-      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::(NoAudioHardwareException|InstancePlayLimitException)(::(NoAudioHardwareException|InstancePlayLimitException))?$",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::(NoAudioHardwareException|InstancePlayLimitException|NoMicrophoneConnectedException)(::(NoAudioHardwareException|InstancePlayLimitException|NoMicrophoneConnectedException))?$",
       "kinds": [
         "class",
         "constructor"
       ],
-      "mapping": "boundary conversions rather than types: the exception firewall in `CnaCApiDetail.hpp` catches both and reports `CNA_RESULT_NOT_SUPPORTED` for a machine with no audio hardware and `CNA_RESULT_INVALID_STATE` for too many instances already playing, each with the canonical message as the diagnostic. The constructors are the canonical ways to raise one, which C never does — it only receives them",
-      "tests": "`AudioUnavailableSmoke.c` drives an audio-less process and asserts the `NOT_SUPPORTED` answer; the barrier arms give every audio route the same conversion rather than only the creation route that used to catch it locally",
+      "mapping": "boundary conversions rather than types: the exception firewall in `CnaCApiDetail.hpp` catches all three and reports `CNA_RESULT_NOT_SUPPORTED` for a machine with no audio hardware and for one with no microphone connected, and `CNA_RESULT_INVALID_STATE` for too many instances already playing, each with the canonical message as the diagnostic. The constructors are the canonical ways to raise one, which C never does — it only receives them",
+      "tests": "`AudioUnavailableSmoke.c` drives an audio-less process and asserts the `NOT_SUPPORTED` answer; `AudioStreamingSmoke.c` exercises the capture surface on a machine with no microphone. The barrier arms give every audio route the same conversion rather than only the creation route that used to catch one locally",
       "status": "implemented",
       "task": "CBIND-037F1"
+    },
+    {
+      "id": "microphone-state-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::MicrophoneState(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_MicrophoneState` with one macro per canonical value at its canonical ordinal plus `CNA_MICROPHONE_STATE_MAXIMUM`",
+      "tests": "`AudioStreamingSmoke.c` pins both ordinals and the maximum and asserts every enumerated microphone reports a defined state; the ordinals are also pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037F2"
+    },
+    {
+      "id": "dynamic-sound-effect-instance",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::DynamicSoundEffectInstance(::(DynamicSoundEffectInstance|~DynamicSoundEffectInstance|BufferNeeded|getPendingBufferCountProperty|getIsLoopedProperty|setIsLoopedProperty|Dispose|GetSampleDuration|GetSampleSizeInBytes|Play|Stop|SubmitBuffer|SubmitFloatBufferEXT|QueueInitialBuffers|ClearBuffers|Update|getStateProperty|GetTypeName))?$",
+      "signature_regex": "^(?!\\(const DynamicSoundEffectInstance &\\))(?!\\(DynamicSoundEffectInstance &&\\)).*$",
+      "kinds": [
+        "class",
+        "constructor",
+        "destructor",
+        "event",
+        "method"
+      ],
+      "mapping": "an owned handle of the **same kind** as an ordinary sound-effect instance, created by `cna_dynamic_sound_effect_instance_create` from a sample rate and channel count rather than from a sound effect. Every `cna_sound_effect_instance_*` route therefore accepts it — the transport, the mixing setters, the state query and the destroy — and the canonical overrides dispatch virtually behind them. What this kind adds is the buffer queue: the pending count, the byte and float submit routes, the initial-buffer and clear routes, the queue advance and the buffer-needed subscription, plus the two **instance-level** sample computations that use the rate and channels the instance was created with. **Submitted bytes are copied**, which is what makes the route safe to call from a producer thread while playback runs. A streaming instance has **no parent sound effect**, so the instance-count bookkeeping a sound-effect child carries has nothing to point at; a route that needs streaming refuses an ordinary instance with `CNA_RESULT_INVALID_STATE`",
+      "tests": "`AudioStreamingSmoke.c` creates one, drives it through the ordinary instance routes to prove the shared kind, checks both instance-level computations against a known tenth of a second, submits bytes and asserts the pending count rises and survives the caller overwriting its own buffer, submits floats, refuses three bad ranges, subscribes to and detaches the buffer-needed event, clears the queue back to empty, and asserts an ordinary instance refuses every streaming route",
+      "status": "implemented",
+      "task": "CBIND-037F2"
+    },
+    {
+      "id": "microphone",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::Microphone(::(~Microphone|Name|BufferReady|getAllProperty|getDefaultProperty|getBufferDurationProperty|setBufferDurationProperty|getIsHeadsetProperty|getSampleRateProperty|getStateProperty|GetData|GetSampleDuration|GetSampleSizeInBytes|Start|Stop|CheckAllBuffers|GetTypeName))?$",
+      "signature_regex": "^(?!\\((const )?Microphone &&?\\)).*$",
+      "kinds": [
+        "class",
+        "destructor",
+        "field",
+        "event",
+        "method"
+      ],
+      "mapping": "an **index-addressed enumeration** rather than handles: the canonical list hands out pointers the runtime owns and never transfers, so `cna_microphone_get_count` plus `cna_microphone_*_at` routes address each device the way every other enumerated device in this ABI is addressed. The default microphone follows the **availability-separate-from-the-answer** rule — no default is an ordinary success with the flag clear and the index untouched. `cna_microphone_get_data_at` is the one count/copy route in this ABI where **a short read is not a failure**: capture is a stream, so it reports how much arrived rather than refusing a buffer it could not fill. The type name belongs to the type, so its routes answer on a machine with no microphone at all",
+      "tests": "`AudioStreamingSmoke.c` enumerates whatever this machine reports — zero, since no verification tree has a capture device — reads every property of each device it does report, refuses the first index past the count on all nine index routes, checks the untouched-output contract of the default query, reads the type name and its buffer-too-small case, and pumps the buffer check",
+      "status": "implemented",
+      "task": "CBIND-037F2"
     }
   ]
 }

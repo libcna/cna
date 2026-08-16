@@ -1260,6 +1260,12 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_MicrophoneState) == sizeof(uint32_t) &&
+                   CNA_MICROPHONE_STATE_STARTED == UINT32_C(0) &&
+                   CNA_MICROPHONE_STATE_STOPPED == UINT32_C(1) &&
+                   CNA_MICROPHONE_STATE_MAXIMUM == UINT32_C(1),
+               "CNA microphone state identities must remain stable");
+
 _Static_assert(sizeof(CNA_AudioStopOptions) == sizeof(uint32_t) &&
                    CNA_AUDIO_STOP_OPTIONS_AS_AUTHORED == UINT32_C(0) &&
                    CNA_AUDIO_STOP_OPTIONS_IMMEDIATE == UINT32_C(1) &&

@@ -94,3 +94,44 @@ and `..._get_sample_size_in_bytes`) are static too, and take no handle at all.
 `NoAudioHardwareException` becomes `CNA_RESULT_NOT_SUPPORTED` and `InstancePlayLimitException`
 becomes `CNA_RESULT_INVALID_STATE`, in the exception firewall rather than in one creation route that
 happened to catch the first one locally. Every audio route gets the same conversion.
+
+## Streaming: one handle kind, two shapes
+
+A streaming instance is a **sound-effect instance**. It lives under the same handle kind, so every
+`cna_sound_effect_instance_*` route accepts it — transport, mixing setters, state, destroy — and the
+canonical overrides dispatch virtually behind them. What the kind adds is the buffer queue, and what
+it lacks is a parent: `cna_dynamic_sound_effect_instance_create` takes a sample rate and a channel
+count, because the caller is the source of every sample. A route that needs streaming refuses an
+ordinary instance with `CNA_RESULT_INVALID_STATE`, which is how a caller tells the two apart.
+
+**Submitted buffers are copied.** The caller's array may be reused or freed the moment the call
+returns, which is what makes submission safe from a producer thread while playback runs — the
+canonical usage. Both the byte and float routes take an explicit range, covering both canonical
+overloads with one route each.
+
+The two sample computations here are **instance methods**, unlike the sound-effect ones: they use the
+rate and channel count the instance was created with rather than taking them as arguments.
+
+The pending buffer count only shrinks once a buffer has actually been **consumed by playback**, not
+when it was handed to the mixer. That is the canonical contract and the reason the count is worth
+polling at all.
+
+## Capture is enumerated, and a short read is not a failure
+
+Microphones are addressed by **index**, like every other enumerated device in this ABI, because the
+canonical list hands out pointers the runtime owns and never transfers. The default microphone
+follows the availability-separate-from-the-answer rule: no default is an ordinary success with the
+flag clear and the index left exactly as the caller set it.
+
+`cna_microphone_get_data_at` is the one count/copy route in this ABI where **a short read is not a
+failure**. Every text route refuses a buffer it cannot fill; capture is a stream, so this one fills
+what it can and reports how much arrived. Zero bytes means nothing has been captured yet, not an
+error.
+
+**No verification tree has a capture device**, so the count is zero and every index route refuses.
+That is the microphone's real availability rather than a gap in the binding — the same honesty the
+compass and the camera already record. The type-name routes still answer, because a type name
+belongs to the type rather than to a device.
+
+`NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall: no microphone
+connected is `CNA_RESULT_NOT_SUPPORTED`.

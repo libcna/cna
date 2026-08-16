@@ -924,9 +924,35 @@
 > than in the single creation route that caught one of them locally, so every audio route gets the
 > same answer. The inventory is now 5,284 implemented, 32 partial, 816 planned and 283 N/A — two
 > long-standing `partial` rows closed along the way; all four trees green at 67/67, ASan+UBSan clean.
-> **Next: CBIND-037F2**, streaming and capture audio (49 rows). Then `F3` (3D audio, 32) and `F4`
-> (the XACT family, 70), whose first question is whether it is reachable at all without a binary
-> fixture this repository does not have.
+> CBIND-037F2 then adds streaming and capture, 49 rows. The design question was whether a streaming
+> instance earns a handle kind of its own, and the answer is **no**: it *is* a sound-effect instance,
+> so it lives under the same kind and every `cna_sound_effect_instance_*` route accepts it, with the
+> canonical overrides dispatching virtually behind them. The streaming-only routes refuse an ordinary
+> instance with `INVALID_STATE`, which is how a caller tells the two apart. What a streaming instance
+> lacks is a **parent effect** — the caller is the source of every sample — and that needed the
+> existing destroy route taught not to dereference a parent that is not there.
+>
+> **Submitted buffers are copied**, which is what makes submission safe from a producer thread while
+> playback runs; the test proves it by overwriting its own buffer immediately afterwards and
+> asserting the queue still holds the data. The two sample computations here are instance methods
+> rather than statics, because they use the rate and channels the instance was created with.
+>
+> Microphones are **index-addressed**, because the canonical list hands out pointers the runtime owns
+> and never transfers. Two contracts are worth naming: the default microphone follows the
+> availability-separate-from-the-answer rule, and `cna_microphone_get_data_at` is the **one count/copy
+> route in this ABI where a short read is not a failure** — every text route refuses a buffer it
+> cannot fill, but capture is a stream, so this one fills what it can and reports how much arrived.
+> No verification tree has a capture device, so the count is zero and every index route refuses;
+> that is the device's real availability, recorded the way the compass's and the camera's already
+> are. `NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall.
+>
+> One thing learned about the tooling rather than the ABI: **deleted operations are already recorded
+> not-applicable by the generator itself**, before any rule is consulted, so writing rules for them
+> fails the "matched no symbols" check. Two such rules were written and removed. The inventory is now
+> 5,333 implemented, 32 partial, 767 planned and 283 N/A; the audio module stands at 119 implemented
+> with 102 planned, which is exactly `F3` plus `F4`. All four trees green at 68/68, ASan+UBSan clean.
+> **Next: CBIND-037F3**, 3D audio (32 rows), then `F4` (the XACT family, 70) whose first question is
+> whether it is reachable at all without a binary fixture this repository does not have.
 >
 > **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
 > one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,

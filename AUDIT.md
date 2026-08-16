@@ -86,8 +86,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > facade as not applicable, guarded by a check that fails if its symbols ever appear, and
 > `CBIND-037F1` opens the audio module by completing the sound-effect surface: three more creation
 > routes, the process-wide 3D-audio settings, the static sample computations and both audio
-> exceptions converting at the boundary. The
-> generated inventory currently records 5,284 implemented, 32 partial, 816 planned and 283
+> exceptions converting at the boundary, and `CBIND-037F2` adds streaming instances and the
+> index-addressed microphone surface. The
+> generated inventory currently records 5,333 implemented, 32 partial, 767 planned and 283
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

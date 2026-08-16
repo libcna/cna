@@ -21,6 +21,7 @@
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoMicrophoneConnectedException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
@@ -147,6 +148,7 @@ enum class ObjectKind : uint32_t {
     GameComponentEventRegistration = 99,
     GameEventRegistration = 100,
     GraphicsDeviceManager = 101,
+    AudioEventRegistration = 102,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX
@@ -214,6 +216,8 @@ template<typename TCallable>
         const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException& exception) {
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+    } catch (const Microsoft::Xna::Framework::Audio::NoMicrophoneConnectedException& exception) {
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const Microsoft::Xna::Framework::Audio::InstancePlayLimitException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());

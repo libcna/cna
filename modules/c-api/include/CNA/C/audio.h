@@ -602,6 +602,493 @@ CNA_C_API CNA_Result cna_sound_effect_instance_copy_type_name(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/* ---- Streaming audio ---- */
+
+/** @brief Owned handle to one audio event subscription. */
+typedef CNA_Handle CNA_AudioEventRegistrationHandle;
+
+/**
+ * @brief Handler invoked for an audio event that carries no data.
+ *
+ * @param context The caller context supplied at subscription time.
+ */
+typedef void (*CNA_AudioEventCallback)(void* context);
+
+/**
+ * @brief Creates a streaming sound-effect instance a caller feeds buffers to.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param sample_rate Sample rate in hertz.
+ * @param channels One `CNA_AUDIO_CHANNELS_*` identity.
+ * @param out_instance Receives an owned instance handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the machine has no audio hardware,
+ *         or a documented argument/handle/thread failure.
+ *
+ * The handle is a **sound-effect instance**: every `cna_sound_effect_instance_*` route accepts it,
+ * including the transport, the mixing setters and `cna_sound_effect_instance_destroy`. What this
+ * kind adds is the buffer queue below. Unlike an instance created from a sound effect, it has no
+ * parent effect — the caller is the source.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_create(
+    CNA_Handle game,
+    int32_t sample_rate,
+    CNA_AudioChannels channels,
+    CNA_Handle* out_instance);
+
+/**
+ * @brief Returns how many submitted buffers have not been played yet.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param out_count Receives the pending buffer count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread failure.
+ *
+ * The count only shrinks once a buffer has actually been **consumed by playback**, not merely handed
+ * to the mixer, which is the canonical contract.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_get_pending_buffer_count(
+    CNA_Handle instance,
+    int32_t* out_count);
+
+/**
+ * @brief Submits PCM16 bytes for playback.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param bytes Caller-owned PCM16LE bytes **copied during this call**.
+ * @param byte_count Bytes available at @p bytes.
+ * @param offset First byte of the range to submit.
+ * @param count Number of bytes to submit.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread/native failure.
+ *
+ * The bytes are **copied**, so the caller's buffer may be reused or freed the moment this returns.
+ * That is what makes this route safe to call from a producer thread while playback runs, which is
+ * the canonical usage; passing the range explicitly covers both canonical overloads.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_submit_buffer(
+    CNA_Handle instance,
+    const uint8_t* bytes,
+    uint64_t byte_count,
+    int32_t offset,
+    int32_t count);
+
+/**
+ * @brief Submits 32-bit float samples for playback.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param samples Caller-owned float samples **copied during this call**.
+ * @param sample_count Samples available at @p samples.
+ * @param offset First sample of the range to submit.
+ * @param count Number of samples to submit.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread/native failure.
+ *
+ * An instance plays either integer or float samples, whichever kind was submitted first; mixing the
+ * two kinds is the caller's mistake to avoid rather than something this ABI can validate per call.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_submit_float_buffer_ext(
+    CNA_Handle instance,
+    const float* samples,
+    uint64_t sample_count,
+    int32_t offset,
+    int32_t count);
+
+/**
+ * @brief Asks for the initial buffers before playback starts.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_queue_initial_buffers_ext(
+    CNA_Handle instance);
+
+/**
+ * @brief Drops every queued and submitted buffer.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_clear_buffers_ext(CNA_Handle instance);
+
+/**
+ * @brief Advances the buffer queue and raises the buffer-needed event when it runs low.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented handle/thread/native failure.
+ *
+ * `cna_framework_dispatcher_update` drives this for every live instance, so a caller running the
+ * game loop never needs it; it is here because the canonical operation is public.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_update_ext(CNA_Handle instance);
+
+/**
+ * @brief Returns how long a PCM buffer of a given size plays for on this instance.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param size_in_bytes Buffer size in bytes.
+ * @param out_ticks Receives the duration in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread failure.
+ *
+ * Unlike the sound-effect computations, these two are **instance methods**: they use the sample rate
+ * and channel count this instance was created with rather than taking them as arguments.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_get_sample_duration_ticks(
+    CNA_Handle instance,
+    int32_t size_in_bytes,
+    int64_t* out_ticks);
+
+/**
+ * @brief Returns how many bytes a PCM buffer of a given duration needs on this instance.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param duration_ticks Duration in 100-nanosecond ticks.
+ * @param out_bytes Receives the byte count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_get_sample_size_in_bytes(
+    CNA_Handle instance,
+    int64_t duration_ticks,
+    int32_t* out_bytes);
+
+/**
+ * @brief Subscribes to the instance's buffer-needed event.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param callback Handler invoked when the queue runs low.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread failure.
+ *
+ * The canonical event carries nothing but its sender, so the handler receives only its context. It
+ * is raised from whichever thread advances the queue, which is the game thread when the loop runs.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_subscribe_buffer_needed(
+    CNA_Handle instance,
+    CNA_AudioEventCallback callback,
+    void* context,
+    CNA_AudioEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Releases an audio event registration.
+ *
+ * @param registration Owned registration handle from any audio subscribe route.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle failure.
+ */
+CNA_C_API CNA_Result cna_audio_unsubscribe_ext(CNA_AudioEventRegistrationHandle registration);
+
+/* ---- Capture ---- */
+
+/** @brief Fixed-width identity of a microphone's capture state. */
+typedef uint32_t CNA_MicrophoneState;
+
+/** @brief The microphone is capturing. */
+#define CNA_MICROPHONE_STATE_STARTED UINT32_C(0)
+/** @brief The microphone is not capturing. */
+#define CNA_MICROPHONE_STATE_STOPPED UINT32_C(1)
+/** @brief Highest defined microphone-state identity. */
+#define CNA_MICROPHONE_STATE_MAXIMUM CNA_MICROPHONE_STATE_STOPPED
+
+/**
+ * @brief Returns how many microphones this machine reports.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_count Receives the microphone count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Microphones are addressed by **index**, like every other enumerated device in this ABI, because
+ * the canonical list hands out pointers the runtime owns. A machine with no capture device answers
+ * zero, which is an ordinary answer and the one every verification tree gives.
+ */
+CNA_C_API CNA_Result cna_microphone_get_count(CNA_Handle game, uint64_t* out_count);
+
+/**
+ * @brief Returns the index of the default microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_index Receives the zero-based index; left unchanged when there is no default.
+ * @param out_available Receives `CNA_TRUE` when a default microphone exists.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Availability is separate from the answer, as everywhere else in this ABI: having no microphone is
+ * an ordinary success with the flag clear and the index untouched.
+ */
+CNA_C_API CNA_Result cna_microphone_get_default_index_ext(
+    CNA_Handle game,
+    uint64_t* out_index,
+    CNA_Bool* out_available);
+
+/**
+ * @brief Returns the byte count of one microphone's name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_name_size_at(
+    CNA_Handle game,
+    uint64_t index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies one microphone's name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_copy_name_at(
+    CNA_Handle game,
+    uint64_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns one microphone's capture buffer duration, in 100-nanosecond ticks.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param out_ticks Receives the duration.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_buffer_duration_ticks_at(
+    CNA_Handle game,
+    uint64_t index,
+    int64_t* out_ticks);
+
+/**
+ * @brief Sets one microphone's capture buffer duration, in 100-nanosecond ticks.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param ticks Requested duration; the canonical setter validates and rounds it.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count or a
+ *         duration the canonical setter refuses, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_set_buffer_duration_ticks_at(
+    CNA_Handle game,
+    uint64_t index,
+    int64_t ticks);
+
+/**
+ * @brief Reports whether one microphone is part of a headset.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param out_headset Receives `CNA_TRUE` for a headset microphone.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_is_headset_at(
+    CNA_Handle game,
+    uint64_t index,
+    CNA_Bool* out_headset);
+
+/**
+ * @brief Returns one microphone's capture sample rate in hertz.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param out_sample_rate Receives the sample rate.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_sample_rate_at(
+    CNA_Handle game,
+    uint64_t index,
+    int32_t* out_sample_rate);
+
+/**
+ * @brief Returns one microphone's capture state.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param out_state Receives one `CNA_MICROPHONE_STATE_*` identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_state_at(
+    CNA_Handle game,
+    uint64_t index,
+    CNA_MicrophoneState* out_state);
+
+/**
+ * @brief Starts capturing on one microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count,
+ *         `CNA_RESULT_NOT_SUPPORTED` when no microphone is connected, or a documented
+ *         handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_microphone_start_at(CNA_Handle game, uint64_t index);
+
+/**
+ * @brief Stops capturing on one microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread/native failure.
+ */
+CNA_C_API CNA_Result cna_microphone_stop_at(CNA_Handle game, uint64_t index);
+
+/**
+ * @brief Reads captured PCM16 bytes from one microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param destination Buffer receiving the captured bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Receives the number of bytes actually read, which may be fewer than the capacity
+ *        and is zero when nothing has been captured yet.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread/native failure.
+ *
+ * Unlike every text route in this ABI, a short read is **not** a failure here: the canonical
+ * operation fills what it can and reports how much, because capture is a stream rather than a value.
+ */
+CNA_C_API CNA_Result cna_microphone_get_data_at(
+    CNA_Handle game,
+    uint64_t index,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns how long a captured buffer of a given size lasts on one microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param size_in_bytes Buffer size in bytes.
+ * @param out_ticks Receives the duration in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_sample_duration_ticks_at(
+    CNA_Handle game,
+    uint64_t index,
+    int32_t size_in_bytes,
+    int64_t* out_ticks);
+
+/**
+ * @brief Returns how many bytes a captured buffer of a given duration needs on one microphone.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param duration_ticks Duration in 100-nanosecond ticks.
+ * @param out_bytes Receives the byte count.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count, or
+ *         a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_get_sample_size_in_bytes_at(
+    CNA_Handle game,
+    uint64_t index,
+    int64_t duration_ticks,
+    int32_t* out_bytes);
+
+/**
+ * @brief Subscribes to one microphone's buffer-ready event.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param index Zero-based microphone index below the reported count.
+ * @param callback Handler invoked when captured data is ready to read.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index at or past the count or a
+ *         null handler, or a documented handle/thread failure.
+ *
+ * Release it with `cna_audio_unsubscribe_ext`. The microphone itself is owned by the runtime and
+ * outlives every registration a caller can hold.
+ */
+CNA_C_API CNA_Result cna_microphone_subscribe_buffer_ready_at(
+    CNA_Handle game,
+    uint64_t index,
+    CNA_AudioEventCallback callback,
+    void* context,
+    CNA_AudioEventRegistrationHandle* out_registration);
+
+/**
+ * @brief Checks every microphone's capture buffer and raises the events that are due.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread/native failure.
+ *
+ * `cna_framework_dispatcher_update` drives this as part of the frame, so a caller running the game
+ * loop never needs it.
+ */
+CNA_C_API CNA_Result cna_microphone_check_all_buffers_ext(CNA_Handle game);
+
+/**
+ * @brief Returns the byte count of the microphone type's .NET type name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The name belongs to the type, so this route needs no microphone and answers on a machine with
+ * none.
+ */
+CNA_C_API CNA_Result cna_microphone_get_type_name_size(CNA_Handle game, uint64_t* out_bytes);
+
+/**
+ * @brief Copies the microphone type's fully-qualified .NET type name.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_microphone_copy_type_name(
+    CNA_Handle game,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of the streaming-instance type's .NET type name.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for an instance that does not stream, or
+ *         a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_get_type_name_size(
+    CNA_Handle instance,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the streaming-instance type's fully-qualified .NET type name.
+ *
+ * @param instance Owned streaming-instance handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_STATE`, `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread
+ *         failure.
+ */
+CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
+    CNA_Handle instance,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif
