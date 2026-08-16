@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: MS-PL
+#
+# The package a C consumer finds. There is exactly one target in it, CNA::CApi, because that is the
+# whole of what this project promises to anybody outside it: a C ABI in one shared library, with
+# every canonical C++ module linked privately behind hidden visibility and a version script.
+#
+# The package version is the **C ABI** version, not the CNA project's, which is what makes
+# `find_package(CNA 0.1 CONFIG)` mean what a consumer expects it to mean.
+
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/CNACTargets.cmake")
+
+check_required_components(CNA)

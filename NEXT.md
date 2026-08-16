@@ -1247,25 +1247,47 @@
 > bytes. One practical trap — `__int128` is the obvious tool for the second oracle and is not
 > standard C++ under the `-pedantic` wall these targets build with.
 >
-> **Next: `CBIND-041`**, the C consumer documentation and examples — the first deliverable aimed at
-> somebody who has never read this repository. Resist writing a fourth summary of what already
-> exists: the 31 documents under `docs/c-api/` are the reference, and what is missing is a C program
-> that compiles, links and **runs against an installed CNA**, proving the CMake package, the include
-> spelling, the initialization order, the error idiom and a clean shutdown in one copyable file. The
-> `install(EXPORT CNACTargets)` rules are what a consumer actually sees and have never been
-> exercised by one; `build-consumer/` is the shared directory reserved for that. The 32 `partial`
-> rows are not gaps the
+> **CBIND-041 then discovers that the package was not a package.** The task looked like writing
+> documentation; the first thing it turned up is that `find_package(CNA CONFIG)` **could not work**,
+> because the module installed `CNACTargets.cmake` and no `CNAConfig.cmake` beside it. Every
+> consumption instruction anyone might have written would have been aspirational. There is now a
+> config file, a version file whose version is read out of `abi.h` at configure time so
+> `find_package(CNA 0.1 CONFIG)` cannot drift from `cna_get_abi_version()`, and a `CNACApi` install
+> component so the smallest useful install is the C ABI rather than 113 MB of SDL and GoogleTest
+> headers.
+>
+> `modules/c-api/examples/c/hello_cna.c` is the program a newcomer copies, and
+> **`CApi_InstalledConsumer` is what makes the documentation binding**: it installs the component
+> into a staging prefix, configures the example as a standalone project whose only knowledge of CNA
+> is `CMAKE_PREFIX_PATH`, builds it and runs it, requiring the program's own output lines so it
+> cannot pass by exiting zero without ever reaching the graphics device. Each step fails for a
+> different reason — not a package, wrong headers or export, library will not load — and none of
+> those is visible from inside the build tree, which is the lesson worth keeping: **a test that
+> builds inside the source tree proves nothing about the package**.
+>
+> Two limitations are recorded rather than papered over, at the end of `docs/c-api/CONSUMING.md`,
+> and both are the owner's to rule on in `CBIND-042`: the library carries `DT_NEEDED` entries for
+> SDL3 and FFmpeg that the package does not ship (its `INSTALL_RPATH` is now `$ORIGIN`, so a
+> deployment placing them beside it works), and `CNA_C_API_STATIC` names a static configuration that
+> does not exist — a static build would export every C++ symbol it archived and the ABI promise
+> would be meaningless.
+>
+> **Next: `CBIND-042`**, the experimental release gate — a *decision*, not an implementation. Most
+> of what it asks for now exists and should be pointed at rather than rebuilt; what is genuinely
+> missing is the known-limitations matrix as a document a reader can act on, plus those two
+> packaging questions. Do not decide them alone. ABI 1.0 is explicitly a later, separate decision.
+> The 32 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-five slices are committed on `feature/binding` since
+> **State at this handoff.** Thirty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row; `CBIND-038`, `CBIND-039` and `CBIND-040`
-> are done, so Phase B7 resumes at `CBIND-041`. All four verification trees are green at
-> 80/80 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-041`
+> are done, so Phase B7 resumes at `CBIND-042`. All four verification trees are green at
+> 81/81 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

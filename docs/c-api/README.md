@@ -160,4 +160,6 @@ no-signed-in-gamer contract are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record; the compilers, language
 modes and build configurations the ABI is actually put through — and the ones it is not — are in
 [`COMPATIBILITY.md`](COMPATIBILITY.md); how the surfaces that read caller-supplied bytes are
-covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md).
+covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md). If you are
+here to *use* this ABI rather than to build it, start at [`CONSUMING.md`](CONSUMING.md), which
+carries the installation, the CMake package and a complete C program to copy.

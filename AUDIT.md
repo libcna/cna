@@ -114,7 +114,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > the way graphics-device subscriptions already were. `CBIND-040B` closes the pair by covering the
 > ABI's byte-facing surface two ways: 16,843,008 enumerated UTF-8 cases — the whole space up to
 > three bytes — plus a libFuzzer target, both judged against an oracle written as a deliberately
-> different algorithm rather than a copy.
+> different algorithm rather than a copy. `CBIND-041` then finds that `find_package(CNA CONFIG)`
+> could not work at all — the module installed a targets file and no package config — and replaces
+> the gap with a real package, a complete C example, and a gate that installs the C ABI component
+> and builds that example as a standalone project from outside the source tree.
 
 ---
 

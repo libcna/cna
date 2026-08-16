@@ -75,6 +75,12 @@ set_target_properties(cna_c_api PROPERTIES
     OUTPUT_NAME cna_c_api
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN YES
+    # CBIND-041: the installed library keeps looking beside itself. It carries DT_NEEDED entries for
+    # SDL3 and FFmpeg, and CMake strips the build tree's RPATH on install, so without this a
+    # deployment that ships those libraries next to libcna_c_api.so would still not load. It costs
+    # nothing when they are installed system-wide. What it does NOT do is put them there --
+    # docs/c-api/CONSUMING.md records that as the package's one open packaging question.
+    INSTALL_RPATH "$ORIGIN"
 )
 
 if(UNIX AND NOT APPLE)
@@ -95,19 +101,68 @@ target_include_directories(cna_c_api
 # adapter exists needlessly builds every renderer-facing archive.
 target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cna_storage cna_content cna_media cna_devices cna_devices_ext CNA_Net CNA_GamerServices)
 
+# Every rule below names the same component, so `cmake --install . --component CNACApi` stages the
+# C ABI and nothing else. Without it the smallest possible install is the whole project -- 113 MB of
+# SDL and GoogleTest headers -- which is both wasteful and a misleading picture of what a C consumer
+# actually needs, since the shared library links every canonical module privately.
 install(TARGETS cna_c_api
     EXPORT CNACTargets
+    COMPONENT CNACApi
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT CNACApi
 )
 install(EXPORT CNACTargets
     FILE CNACTargets.cmake
     NAMESPACE CNA::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+    COMPONENT CNACApi
+)
+
+# CBIND-041: the targets file alone is not a package. Without a CNAConfig.cmake beside it,
+# find_package(CNA CONFIG) finds nothing and every documented consumption instruction would have
+# been aspirational.
+#
+# The package version is read out of abi.h rather than written twice, so `find_package(CNA 0.1
+# CONFIG)` cannot come to mean something different from what cna_get_abi_version() returns. The
+# compatibility is SameMinorVersion because that is exactly what docs/c-api/ABI_VERSIONING.md
+# promises within experimental 0.x: a consumer must reject a different major and may require a
+# minimum minor.
+include(CMakePackageConfigHelpers)
+file(STRINGS include/CNA/C/abi.h _cna_abi_version_lines
+    REGEX "^#define CNA_ABI_VERSION_(MAJOR|MINOR|PATCH) UINT32_C\\([0-9]+\\)$")
+foreach(_cna_abi_component MAJOR MINOR PATCH)
+    foreach(_cna_abi_line IN LISTS _cna_abi_version_lines)
+        if(_cna_abi_line MATCHES "^#define CNA_ABI_VERSION_${_cna_abi_component} UINT32_C\\(([0-9]+)\\)$")
+            set(_cna_abi_${_cna_abi_component} "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+endforeach()
+if(NOT DEFINED _cna_abi_MAJOR OR NOT DEFINED _cna_abi_MINOR OR NOT DEFINED _cna_abi_PATCH)
+    message(FATAL_ERROR
+        "The ABI version could not be read from modules/c-api/include/CNA/C/abi.h.")
+endif()
+set(CNA_C_ABI_VERSION "${_cna_abi_MAJOR}.${_cna_abi_MINOR}.${_cna_abi_PATCH}")
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CNAConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/CNAConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/CNAConfigVersion.cmake
+    VERSION ${CNA_C_ABI_VERSION}
+    COMPATIBILITY SameMinorVersion
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/CNAConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/CNAConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+    COMPONENT CNACApi
 )
 
 if(CNA_BUILD_TESTS)
@@ -1437,6 +1492,29 @@ if(CNA_BUILD_TESTS)
     cna_link_sharp_runtime(cna_c_api_utf8_oracle_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_utf8_oracle_test)
     add_test(NAME CApi_Utf8Oracle COMMAND cna_c_api_utf8_oracle_test)
+
+    # CBIND-041: the only test that leaves the source tree. It installs the CNACApi component into a
+    # staging prefix, configures modules/c-api/examples/c as a standalone project that knows nothing
+    # but CMAKE_PREFIX_PATH, builds it and runs it. Everything else in this suite proves the ABI
+    # works from inside the build; this proves the *package* works from outside it.
+    #
+    # ELF-only for now: the run step relies on LD_LIBRARY_PATH to supply SDL3, which the package
+    # deliberately does not ship. See docs/c-api/CONSUMING.md.
+    if(UNIX AND NOT APPLE)
+        add_test(NAME CApi_InstalledConsumer
+            COMMAND ${CMAKE_COMMAND}
+                -DCNA_BUILD_DIR=${CMAKE_BINARY_DIR}
+                -DCNA_EXAMPLE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/examples/c
+                -DCNA_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/installed-consumer
+                -DCNA_C_COMPILER=${CMAKE_C_COMPILER}
+                -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
+                -DCNA_SDL_LIB_DIR=${CNA_SDL_PREBUILT_ROOT}/install/lib
+                -DCNA_SANITIZE=${CNA_SANITIZE}
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
+        # It installs, configures, compiles and runs; it is by far the slowest test here, and the
+        # steady-state cost is small because cmake --install rewrites nothing that has not changed.
+        set_tests_properties(CApi_InstalledConsumer PROPERTIES TIMEOUT 900 RUN_SERIAL TRUE)
+    endif()
 
     # The libFuzzer target is not a ctest test: it needs Clang and, by design, never terminates.
     # It is compiled anyway -- as an object library nobody links -- so that it cannot rot silently
