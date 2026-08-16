@@ -162,4 +162,6 @@ modes and build configurations the ABI is actually put through — and the ones 
 [`COMPATIBILITY.md`](COMPATIBILITY.md); how the surfaces that read caller-supplied bytes are
 covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md). If you are
 here to *use* this ABI rather than to build it, start at [`CONSUMING.md`](CONSUMING.md), which
-carries the installation, the CMake package and a complete C program to copy.
+carries the installation, the CMake package and a complete C program to copy, and then
+[`LIMITATIONS.md`](LIMITATIONS.md), which answers the question the coverage inventory cannot: what
+is **not** here, grouped by the reason, so you can tell whether any of it stands in your way.

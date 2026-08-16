@@ -117,7 +117,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > different algorithm rather than a copy. `CBIND-041` then finds that `find_package(CNA CONFIG)`
 > could not work at all — the module installed a targets file and no package config — and replaces
 > the gap with a real package, a complete C example, and a gate that installs the C ABI component
-> and builds that example as a standalone project from outside the source tree.
+> and builds that example as a standalone project from outside the source tree. `CBIND-042A` then
+> publishes `docs/c-api/LIMITATIONS.md`, the matrix of what the ABI does **not** do, generated from
+> the same inventory; enforcing that every unmapped reason has a declared theme and that no deferral
+> names a finished task turned up three stale deferrals, one of which had silently become
+> implemented — the snapshot is now 6,067 implemented, 28 partial, 0 planned, 320 not-applicable.
 
 ---
 

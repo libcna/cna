@@ -706,7 +706,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_sprite_batch_begin` plus `cna_sprite_batch_begin_with_states`; Effect and transform-matrix variants remain planned in CBIND-035",
+      "mapping": "`cna_sprite_batch_begin` plus `cna_sprite_batch_begin_with_states`. The Effect and transform-matrix overloads have no C route: a caller cannot yet hand a custom effect or a view transform to a batch, and `CBIND-044` owns the decision to add them or to record the omission as permanent for this ABI generation",
       "tests": "all sort modes/defaults in `LifecycleSmoke.c` and explicit state/backend-refusal cases in `GraphicsSurfaceSmoke.c`",
       "status": "partial",
       "task": "CBIND-034"
@@ -1734,10 +1734,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "the device's own lifecycle events are subscribable through `cna_graphics_device_subscribe_event`; these service-level events belong to the canonical `GraphicsDeviceManager` implementation in the runtime module, whose C mapping is owned by CBIND-037",
-      "tests": "device-level Disposing/lost/reset/resetting subscriptions in strict-C `GraphicsDeviceSmoke.c`; service-level delivery evidence is pending CBIND-037",
-      "status": "partial",
-      "task": "CBIND-035F2"
+      "mapping": "`cna_graphics_device_manager_subscribe` with `CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_CREATED`, `_DEVICE_DISPOSING`, `_DEVICE_RESET` and `_DEVICE_RESETTING`; the device's own lifecycle events remain separately subscribable through `cna_graphics_device_subscribe_event`. The service-level events are raised by the canonical `GraphicsDeviceManager`, which is what the manager handle names",
+      "tests": "`GraphicsDeviceManagerSmoke.c` pins all five manager event identities and drives subscription and release for each; `GraphicsDeviceSmoke.c` covers the device-level Disposing/lost/reset/resetting subscriptions in strict C",
+      "status": "implemented",
+      "task": "CBIND-042A"
     },
     {
       "id": "graphics-device-exceptions",
@@ -2599,7 +2599,7 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_gamer_get_signed_in_gamer_count` reports the count. Element access is through the handles the caller created and published; a complete collection view belongs to the gamer-services coverage task",
+      "mapping": "`cna_gamer_get_signed_in_gamer_count` reports the count and `cna_gamer_get_signed_in_gamer_at_player_index` reaches an element. The collection object itself has no handle, so there is no view to enumerate, copy from or hold; `CBIND-044` owns the decision to add one or to record its absence as permanent",
       "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
       "status": "partial",
       "task": "CBIND-036E2"

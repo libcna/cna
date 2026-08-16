@@ -1,0 +1,169 @@
+{
+  "schema_version": 1,
+  "themes": [
+    {
+      "id": "deleted",
+      "title": "Operations the C++ class deletes",
+      "match": [
+        "explicitly deleted"
+      ],
+      "note": "A deleted copy constructor or assignment operator has no behavior to expose. Its absence from the C ABI is the same statement the C++ class already makes."
+    },
+    {
+      "id": "iterators",
+      "title": "C++ iterators and range-for support",
+      "match": [
+        "iterator",
+        "range-for"
+      ],
+      "note": "An iterator has no fixed size, no stable representation and no C spelling. Every collection this ABI exposes is iterated as a count plus indexed access, or through an explicit enumerator handle where the canonical type has one."
+    },
+    {
+      "id": "protected",
+      "title": "Protected members with no derived class to hang them on",
+      "match": [
+        "protected"
+      ],
+      "note": "A protected member is mappable only when this ABI supplies a derived class that would override it. Where it does -- a game component's hooks -- the member is mapped; where the derived class is the caller's C++ code, there is nothing for C to override."
+    },
+    {
+      "id": "templates",
+      "title": "Templates over an arbitrary C++ type",
+      "match": [
+        "template over",
+        "class template",
+        "arbitrary C++ type",
+        "naming an arbitrary",
+        "compile-time trait",
+        "constructs a C++ reader object",
+        "implements a C++ interface"
+      ],
+      "note": "C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped."
+    },
+    {
+      "id": "sharp-runtime",
+      "title": "Values that are Sharp Runtime objects",
+      "match": [
+        "Sharp Runtime",
+        "boxed value",
+        "IDisposable",
+        "serialization objects",
+        "IServiceProvider"
+      ],
+      "note": "Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md."
+    },
+    {
+      "id": "native-pointers",
+      "title": "Raw native backend pointers",
+      "match": [
+        "SDL_",
+        "native backend pointer"
+      ],
+      "note": "A route that accepts or returns an SDL pointer would make the caller's program depend on CNA's backend choice, which is the one thing this ABI exists to prevent."
+    },
+    {
+      "id": "friendship",
+      "title": "Friendship declarations",
+      "match": [
+        "friendship"
+      ],
+      "note": "A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation."
+    },
+    {
+      "id": "unimplemented-facade",
+      "title": "Declared and never defined in CNA itself",
+      "match": [
+        "declared and defi",
+        "declared and never"
+      ],
+      "note": "Not a design choice: the canonical declaration has no definition anywhere in CNA, so there is nothing to bind. CApi_UnimplementedRuntimeFacade keeps that record from going stale in silence."
+    },
+    {
+      "id": "lifetime-owned",
+      "title": "Objects the caller never constructs or destroys",
+      "match": [
+        "created and destroyed with it",
+        "the game creates and destroys",
+        "function-local static",
+        "every method that produces one is private",
+        "exactly one",
+        "delegate to",
+        "the only collection that means anything"
+      ],
+      "note": "Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes."
+    },
+    {
+      "id": "cpp-mechanics",
+      "title": "C++ language mechanics with no runtime behavior",
+      "match": [
+        "virtual destructor",
+        "base-from-member",
+        "spelling of",
+        "documentation-only marker",
+        "movable values",
+        "a value needs",
+        "two flags",
+        "cross-module signalling",
+        "no second name to move from"
+      ],
+      "note": "Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface."
+    },
+    {
+      "id": "async-result",
+      "title": "Asynchronous-result objects nothing produces",
+      "match": [
+        "asynchronous-result object",
+        "GamerAction"
+      ],
+      "note": "The canonical asynchronous pair completes before its Begin returns, so the C route is a single call that invokes the callback. The result object itself is never handed out."
+    },
+    {
+      "id": "unsafe-canonical",
+      "title": "Canonical routes this ABI declines to bind",
+      "match": [
+        "constraint the canonical source states outright",
+        "real limitation rather than an oversight",
+        "finding rather than a decision"
+      ],
+      "note": "A small number of canonical operations are unsafe or meaningless when reached through a C handle. Binding them would hand a caller a way to corrupt memory or to observe an event that can never fire; each is recorded individually in COVERAGE.md."
+    }
+  ],
+  "environment": [
+    {
+      "subject": "The package does not ship SDL3 or FFmpeg",
+      "impact": "A consumer must place libSDL3, libSDL3_image, libSDL3_mixer and the FFmpeg libraries where the dynamic loader finds them. The installed library's RPATH is `$ORIGIN`, so putting them beside it is enough.",
+      "status": "open decision",
+      "owner": "CBIND-042"
+    },
+    {
+      "subject": "There is no static configuration",
+      "impact": "`CNA_C_API_STATIC` names a future configuration that does not exist. A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 `cna_*` names and nothing else -- would be meaningless.",
+      "status": "open decision",
+      "owner": "CBIND-042"
+    },
+    {
+      "subject": "One active CNA runtime per process",
+      "impact": "A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design.",
+      "status": "by design",
+      "owner": "HANDLES.md"
+    },
+    {
+      "subject": "Handles are thread-affine and never leave their process",
+      "impact": "A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes.",
+      "status": "by design",
+      "owner": "HANDLES.md"
+    },
+    {
+      "subject": "The ABI is 0.x and experimental",
+      "impact": "An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision.",
+      "status": "by design",
+      "owner": "ABI_VERSIONING.md"
+    },
+    {
+      "subject": "Four of the 46 renderers are built and run here",
+      "impact": "The other 42 share the same C surface and the same capability queries. What a given backend supports is answered by `cna_graphics_device_supports_capability`, never by its renderer identity.",
+      "status": "by design",
+      "owner": "RENDERERS_AND_CAPABILITIES.md"
+    }
+  ]
+}

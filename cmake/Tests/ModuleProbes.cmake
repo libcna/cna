@@ -190,6 +190,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --run)
 
+        # plan_binding.md CBIND-042A: the known-limitations matrix, generated from the same
+        # inventory the coverage gate checks.
+        #
+        # A limitations document is the one document a consumer reads to decide whether to adopt an
+        # ABI, and the one most likely to rot: nothing breaks when it goes stale. Three rules are
+        # enforced mechanically -- every unmapped reason falls under a declared theme, no deferral
+        # names a task the plan records as finished, and the counts come from the inventory rather
+        # than from prose. Build-free, like the coverage and compatibility gates beside it.
+        #
+        # It found two stale deferrals on its first run: one to CBIND-035 whose work never landed,
+        # and one to CBIND-037 whose work did.
+        add_test(NAME CApiLimitations
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
+
         # plan_binding.md CBIND-039: the ABI layout and export baseline.
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,

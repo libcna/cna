@@ -1272,22 +1272,45 @@
 > does not exist — a static build would export every C++ symbol it archived and the ABI promise
 > would be meaningless.
 >
-> **Next: `CBIND-042`**, the experimental release gate — a *decision*, not an implementation. Most
-> of what it asks for now exists and should be pointed at rather than rebuilt; what is genuinely
-> missing is the known-limitations matrix as a document a reader can act on, plus those two
-> packaging questions. Do not decide them alone. ABI 1.0 is explicitly a later, separate decision.
-> The 32 `partial` rows are not gaps the
+> **CBIND-042A then publishes what the ABI does not do — and the act of publishing it found three
+> stale deferrals.** `docs/c-api/LIMITATIONS.md` answers the question `COVERAGE.md` structurally
+> cannot: the inventory records all 6,415 declarations and what became of each, this collapses the
+> ones that did *not* become a callable C route into the reasons behind them, and adds the
+> limitations no inventory can hold — the packaging gaps, one runtime per process, thread affinity,
+> 0.x status, the renderer boundary. It is generated, so it cannot drift.
+>
+> Three rules are enforced mechanically and **the first run broke on two of them**. Five unmapped
+> reasons fell under no declared theme, which is precisely how such a document acquires a silent
+> "other" bucket. And two deferrals named tasks the plan records as finished: `SpriteBatch::Begin`'s
+> Effect and transform overloads still pointed at `CBIND-035` (closed, work never landed) and the
+> four `IGraphicsDeviceService` events still pointed at `CBIND-037` (closed, work **did** land —
+> `cna_graphics_device_manager_subscribe` has covered them since, so the rule was simply wrong and
+> is now `implemented`, moving the snapshot to 6,067 / 28 / 0 / 320). A third, the signed-in-gamer
+> collection, named its owner in prose rather than by id and escaped the regex; corrected too.
+>
+> The lesson to carry: **a deferral is only a deferral while somebody owns it.** "Planned in
+> CBIND-035" stops being a plan the moment CBIND-035 closes; after that it is an omission wearing a
+> plan's clothes, and nothing in the repository noticed for weeks. The check that catches it costs
+> six lines.
+>
+> **Next: `CBIND-042B`**, the release gate itself. Every input now exists and should be pointed at
+> rather than rebuilt. Build it the way this campaign builds every gate — declaration, checker,
+> `--check` in ctest and CI — and make it fail **in both directions**: a criterion recorded as met
+> that no longer is, and one recorded as blocked that has quietly become met. Two criteria are owner
+> decisions and must block: shipping SDL3/FFmpeg with the package, and whether a static
+> configuration is ever offered. Do not decide them alone. ABI 1.0 is a separate, later decision.
+> The 28 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-six slices are committed on `feature/binding` since
+> **State at this handoff.** Thirty-seven slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-041`
-> are done, so Phase B7 resumes at `CBIND-042`. All four verification trees are green at
-> 81/81 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-041` and
+> `CBIND-042A` are done, so Phase B7 resumes at `CBIND-042B`. All four verification trees are green at
+> 81/81 with the coverage, compatibility, ABI-baseline and limitations gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >
