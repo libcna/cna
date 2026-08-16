@@ -996,8 +996,14 @@
 > flag. A fire-and-forget cue gets **no handle at all** — the caller never touches it. The inventory is
 > now 5,431 implemented, 32 partial, 665 planned and 287 N/A, and the `audio` module is closed at 217
 > implemented with 41 not applicable. All four trees green at 70/70, ASan+UBSan clean.
-> **Next: CBIND-037G**, gamer services — 665 rows and the whole of what is left in the campaign. It is
-> far too large for one slice and must be split into sub-tasks recorded in the plan first.
+> **Next: CBIND-037G1**, the gamer and guide identities (108 rows). `CBIND-037G` has been split into
+> seven slices in `plan_binding.md` — identities twice (the gamer/guide vocabulary and the avatar one
+> share nothing but their shape), the six exceptions as firewall arms, the gamer and its collections,
+> the guide with its dispatcher, achievements and leaderboards with property storage, and the avatar
+> surfaces last because the renderer composes the graphics module too. One fact applies to all seven:
+> **on every verification tree there is no signed-in gamer and no live service**, so the truthful
+> answer is usually "not signed in" — report it the way the absent compass and the absent microphone
+> were reported, not by pretending a gamer exists.
 >
 > **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
