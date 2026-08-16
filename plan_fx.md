@@ -545,35 +545,65 @@ values everywhere except inside a structure.
 | FX-070 | Implement and gate DirectX 9, which needs the effect container parsed but no shader translated | FX-060, FX-067 | Full shared suite passes on a Windows or DXVK-native configuration. Structurally the smallest backend in the project: `MOJOSHADER_compileShaderFunc` receives the raw D3D9 token buffer, so the backend's compile step is `CreateVertexShader` / `CreatePixelShader` on that buffer with nothing translated. Two facts the `cna_mojoshader_effect_probe` existence gate established: the parser refuses to run without a nine-function backend context, and reflection comes from `MOJOSHADER_parse`, whose non-translating `BYTECODE` profile the pin disables -- so this task either re-enables `SUPPORT_PROFILE_BYTECODE` for its configuration or parses through a translating profile and discards the output. Cannot be verified on this Linux development machine, so it ships behind the same capability gate as every other backend |
 | FX-071 | Give the SDL_GPU renderer a compiled-effect draw route | FX-061 | **Ordinary 3D draws done; `SupportsCompiledEffects()` still correctly false.** `DrawPrimitivesEx`/`DrawIndexedPrimitivesEx` dispatch a compiled-effect draw to a new `DrawKind::CompiledEffect` deferred command (`QueueCompiledEffectDraw`/`GetOrCreatePipelineCompiledEffect`/`IssueCompiledEffectDraw`, `SdlGpuRenderer.cpp`), mirroring the eight stock families' own queue/upload/replay pattern. `SdlGpuCompiledEffect` gained the three pieces the draw route needs: `BuildCompiledEffectVertexAttributes`/`BuildMojoShaderVertexAttributes` (a generic `VertexDeclaration`-to-`SDL_GPUVertexAttribute` builder, `SdlGpuCompiledEffectVertexLayout.hpp`/`.cpp`, matched against the applied pass's own vertex shader reflection), `LinkAndGetShadersEXT` (the separate, explicit `MOJOSHADER_sdlLinkProgram` step effect-framework binding never performs on its own, producing `SDL_GPUShader` handles MojoShader's linker cache keeps valid for this renderer's whole context lifetime), and `CaptureUniformSnapshotEXT` (packs `MOJOSHADER_sdlMapUniformBufferMemory`'s register files into each shader's uniform-buffer bytes immediately after `ApplyPass`, since this renderer defers GPU submission to `Present()` and the shared register files may be overwritten by then). The pipeline cache (`GetOrCreatePipelineCompiledEffect`) is keyed on shader identity and vertex layout rather than a fixed shader field. A real upstream MojoShader quirk surfaced and was worked around: `MOJOSHADER_sdlCompileShader` always reports at least one sampler slot per shader stage (an off-by-one against zero reflected samplers), so SDL_GPU's own binding-count validation requires a dummy binding (this renderer's default white texture) for every unreflected slot, not just the reflected ones. SpriteBatch draws now use a compiled effect too: `Effect::GetCompiledRuntimePtr()` lets `SdlGpuSpriteBatchRenderer::Draw` recognize one the same way it already recognized a ShaderEffect via `GetEffectRendererPtr()`, and `QueueSprite`/`IssueSpriteDraw` gained a third branch alongside the stock and custom-ShaderEffect ones, built against `SpriteVertex`'s own fixed layout (verified against FNA's `SpriteBatch.cs`: no `MatrixTransform` auto-set for a custom effect, and `Textures[0]` is unconditionally overwritten with the drawn texture after the effect's pass applies, which the existing trailing sampler bind already replicated). The ordinary-draw and SpriteBatch routes share one implementation (`BuildCompiledEffectBindingEXT`/`BindCompiledEffectForDrawEXT`, `CompiledEffectBinding`) and one pipeline cache rather than two that could drift apart. Verified by 19 passing tests (`SdlGpuCompiledEffectTests.cpp`), including end-to-end indexed, non-indexed and SpriteBatch draws through a real `Present()`, and a full 6819-test `CnaTests` run with zero regressions. Still open, each refused explicitly rather than silently mishandled: a compiled effect's vertex shader sampling a texture, a 3D/cube (not 2D) sampler binding, and more than one vertex stream. See the FX-071 golden-pixel investigation note below the task table for the remaining, unresolved blocker |
 
-#### FX-071 golden-pixel investigation (2026-08-16, not committed)
+#### FX-071 golden-pixel investigation (2026-08-16, root cause found and fixed)
 
-The FX-060 shared conformance suite passes. With `SdlGpuRenderer::SupportsCompiledEffects()`
-locally overridden to return `true` (an uncommitted, working-tree-only diagnostic edit) and a
-temporary test calling `CNA::TestSupport::RunCompiledEffectContract(device)` through the real
-public `Effect`/`GraphicsDevice` API, the whole shared contract -- format, reflection,
-techniques/passes, render state, state policy, samplers, texture binding, clone and lifetime --
-passed with no code changes. That result is worth recording even though the diagnostic itself was
-reverted: it means the draw route's remaining blocker is rendering output, not reflection, state
-translation, or lifecycle.
+The FX-060 shared conformance suite passes (see below for how that was verified) -- reflection,
+state translation, and lifecycle were never the problem. A golden-pixel attempt initially produced
+zero non-background pixels with every GPU-call input verified correct (vertex buffer, linked
+shaders, attribute layout, uniform buffer sizes, a byte-verified identity `Transform`, a valid
+sampler texture) and no SDL_GPU validation complaint, which first looked like it would need a
+visual/RenderDoc-class frame debugger to diagnose further.
 
-A golden-pixel attempt alongside it did not pass, and the cause is still open. Constructing
-`Effect(device, CnaConformanceEffect.fxb)`, binding a 1x1 white `FxTexture`, applying P0 (and,
-separately, StatePass with its own `CullMode=None` and disabled depth, to rule out culling and
-depth as the cause), then drawing a full-screen quad via `GraphicsDevice.DrawUserPrimitives` and
-reading the whole 800x480 backbuffer back produced zero non-background pixels anywhere -- not a
-wrong pixel value, no pixel value at all. Diagnostic `stderr` prints placed directly in
-`IssueCompiledEffectDraw` confirmed every input to the actual GPU call is correct: a non-null
-uploaded vertex buffer, valid linked `SDL_GPUShader` pointers, the right attribute count and
-stride, correctly-sized uniform buffers, a byte-verified identity `Transform` matrix, and a valid
-sampler texture pointer. SDL_GPU's own debug validation layer -- which caught the real
-sampler-slot off-by-one bug earlier in this same task -- raised nothing for this draw either. The
-break is therefore somewhere between a validly-bound pipeline/draw call and an actual fragment
-write reaching the presented target: a category of bug this text-only environment cannot keep
-diagnosing blind, since it needs a visual or RenderDoc-class frame debugger to find. Re-run the
-same diagnostic setup (the `SupportsCompiledEffects()` override plus the shared-suite test plus a
-`DrawUserPrimitives`/`GetBackBufferData` pixel readback test) as the starting point for the next
-attempt rather than re-deriving it from scratch. `SupportsCompiledEffects()` correctly stays false
-until this is found, fixed, and a real (committed) golden-pixel test passes.
+It didn't. A standalone existence-gate spike, `tools/graphics/mojoshader_sdlgpu_probe --render
+<file.fxb>`, reproduced the identical all-black result with **zero CNA code** -- MojoShader and
+SDL_GPU only, no FNA3D, no renderer, no `Effect`/`GraphicsDevice`. That isolated the defect
+upstream of CNA's integration entirely, and let the rest of the investigation proceed by
+instrumenting MojoShader directly (a scratch build, never committed) instead of guessing through
+CNA's own draw path blind.
+
+The root cause: **two register-count/float-count unit mismatches in CNA's own
+`mojoshader-6333f74-effect-parser-robustness.patch`** (the FX-051-era security-hardening patch that
+added bounds checks to MojoShader's Effect Framework preshader interpreter), not a CNA renderer bug
+and not an upstream MojoShader defect.
+
+- `run_preshader()`'s `inregs_count` bound was set to `preshader->register_count` -- a
+  **vec4-register** count -- and then compared directly against `index`, which is a **float**
+  offset into that same array (matching `copy_parameter_data`'s own `wanted = register_count << 2`
+  convention, and matching how `outregs_count` is already correctly pre-multiplied by its caller).
+  Any preshader input spanning more than the first register -- which is any struct or array wider
+  than one float4, e.g. `CnaConformanceEffect.fx`'s `Lighting` struct or `Weights[2]` array -- read
+  an `index` past the falsely-small bound and hit the new `return`, silently aborting the *entire*
+  preshader mid-evaluation and leaving its output register at whatever it was before (zero).
+- The same unit mismatch existed at the call site that fills a preshader's own input buffer:
+  `copy_parameter_data(..., pd->preshader->registers, NULL, NULL, pd->preshader->register_count, 0,
+  0)` passed the destination bound in register units too, truncating the copy itself before
+  `run_preshader` even ran.
+
+Both were one-line fixes (`<< 2` on each register-count value, matching the `wanted`/`outregs_count`
+convention already used everywhere else in the same file), verified with the standalone probe
+against three technique/pass combinations exercising both bugs independently (`CnaConformanceEffect`
+technique 0 pass 0 -- `MainPixelShader`, a struct-driven preshader computing `saturate(...)`;
+technique 0 pass 1 and technique 1 pass 0 -- `FlatPixelShader`, an array-driven preshader computing
+`Tint * Weights[1]`): all three now render deterministic, non-black, independently
+hand-verified-correct pixel values (e.g. `FlatPixelShader` renders `(20,41,61,82)`, an exact byte
+match for `0.8 * (0.1,0.2,0.3,0.4)` in sRGB-free UNORM8). The fix was regenerated as a clean
+`git diff` from the pristine 6333f74 checkout (not hand-edited into the existing unified diff) and
+re-verified to `git apply --check` cleanly against a fresh pristine checkout before landing.
+
+An earlier pass of this same investigation chased a different, incorrect lead: a `0xDEADBEEF`
+sentinel `OpDecorate ... Location` found by dumping the vertex/pixel SPIR-V and disassembling with
+`spirv-dis`. That was a red herring caused by dumping the SPIR-V *before*
+`MOJOSHADER_sdlLinkProgram` ran -- the sentinel is patched to a real interface location by
+`MOJOSHADER_linkSPIRVShaders`/`MOJOSHADER_spirv_link_attributes` as part of linking, and the
+post-link SPIR-V (dumped and disassembled the same way) shows correct, matching `Location`
+decorations on both sides of the vertex-output/pixel-input interface. No SPIR-V code generation bug
+exists; this can be treated as closed.
+
+Remaining before `SupportsCompiledEffects()` can flip to `true`: a real (committed) CNA-side
+golden-pixel test through the actual `Effect`/`GraphicsDevice`/`SdlGpuRenderer` path (the
+diagnostic that confirmed the shared suite passes, and the golden-pixel test itself, were both
+uncommitted working-tree edits, reverted after use), and a committed FX-060 shared-suite test run
+for SDL_GPU.
 
 ### Phase H - Optional future formats and tooling
 
