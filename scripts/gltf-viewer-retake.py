@@ -31,7 +31,7 @@ import time
 from typing import Any
 from urllib.parse import unquote
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 
 PINNED_RENDERER_COMMIT = "863b981fb755359063e370ff7b6e956bda0716e2"
@@ -366,6 +366,29 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+def compare_to_golden(actual_path: Path, golden_path: Path) -> dict[str, int]:
+    """Compare a capture with its committed golden by pixel, at zero tolerance.
+
+    Mirrors scripts/gltf-l7-corpus.py's own comparison so the two instruments cannot disagree
+    about the same golden files.
+    """
+    actual = Image.open(actual_path).convert("RGBA")
+    golden = Image.open(golden_path).convert("RGBA")
+    if actual.size != golden.size:
+        raise RuntimeError(
+            f"image size mismatch: actual={actual.size}, golden={golden.size}"
+        )
+    extrema = ImageChops.difference(actual, golden).getextrema()
+    max_rgb = max(channel[1] for channel in extrema[:3])
+    max_alpha = extrema[3][1]
+    if max_rgb > 0 or max_alpha > 0:
+        raise RuntimeError(
+            f"golden mismatch: max RGB delta {max_rgb} (allowed 0), "
+            f"max alpha delta {max_alpha} (allowed 0)"
+        )
+    return {"maximumRgbDelta": max_rgb, "maximumAlphaDelta": max_alpha}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--renderer", type=Path, required=True,
@@ -473,14 +496,26 @@ def main() -> int:
                 golden: dict[str, Any] | None = None
                 if case.golden_id is not None:
                     golden_path = repo / "tests/gltf-l7/easygl" / f"{case.golden_id}.png"
-                    if not golden_path.is_file() or first_png.read_bytes() != golden_path.read_bytes():
+                    if not golden_path.is_file():
                         raise RuntimeError(
-                            f"row {case.row} {case.case_id}: CNA capture differs from L7 golden"
+                            f"row {case.row} {case.case_id}: no L7 golden at {golden_path}"
                         )
+                    # Pixels, not bytes -- the same tolerance-0 comparison the whole-corpus L7 gate
+                    # (scripts/gltf-l7-corpus.py) already applies to these very files. A byte
+                    # comparison additionally asserts the PNG *encoder*, which is not this gate's
+                    # subject and which PLAT-65 changed underneath it: moving graphics off SDL_image
+                    # onto the vendored stb_image_write re-encoded identical pixels from 3 218 to
+                    # 12 698 IDAT bytes. That fired "CNA capture differs from L7 golden" while all
+                    # 137 corpus assets were pixel-identical at tolerance 0 -- a gate failing for a
+                    # reason other than the one it names. Determinism stays byte-exact: the two CNA
+                    # runs above must still produce identical files.
+                    deltas = compare_to_golden(first_png, golden_path)
                     golden = {
                         "path": str(golden_path.relative_to(repo)),
                         "sha256": sha256(golden_path),
-                        "byteIdentical": True,
+                        "pixelIdentical": True,
+                        "maximumRgbDelta": deltas["maximumRgbDelta"],
+                        "maximumAlphaDelta": deltas["maximumAlphaDelta"],
                     }
 
                 contrast: dict[str, Any] | None = None
