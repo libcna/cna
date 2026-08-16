@@ -1091,8 +1091,13 @@
 > that gives a runtime-implemented component the same handle, registry entry and ownership
 > bookkeeping a caller-derived one gets. The inventory is now 5,866 implemented, 32 partial, 212
 > planned and 305 N/A; all four trees green at 74/74, ASan+UBSan clean.
-> **Next: CBIND-037G6**, achievements, leaderboards and property storage (129 rows) — decide which of
-> the two asynchronous shapes a leaderboard read is before writing it.
+> CBIND-037G6 was then split into three slices in `plan_binding.md`, because its three families are
+> unrelated to each other but **not independent in order**: a leaderboard entry's columns *are* a
+> `PropertyDictionary`, so property storage has to land before leaderboards. The asynchronous question
+> is already answered too — `LeaderboardReader::Read` spins on `GamerServicesDispatcher::UpdateAsync`
+> until its own `BeginRead` completes, so a leaderboard read is the **deferred** shape, and the
+> synchronous overloads are routes that pump the dispatcher themselves.
+> **Next: CBIND-037G6a**, achievements (35 rows).
 >
 > **State at this handoff.** Twenty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
