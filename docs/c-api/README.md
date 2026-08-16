@@ -154,6 +154,7 @@ media identities, songs, the library catalog and their ownership contract are in
 [`MEDIA.md`](MEDIA.md); the sensor timestamp, reading and device contract is in
 [`DEVICES.md`](DEVICES.md), which also covers vibration, the host services and the camera; the
 component callback model, the game's component collection and the limits of the service container
-are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md). The
+are in [`GAME_COMPONENTS.md`](GAME_COMPONENTS.md); the gamer-services identities and the
+no-signed-in-gamer contract are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record.

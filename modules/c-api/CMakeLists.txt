@@ -1009,6 +1009,18 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_gamer_identities_smoke
+        tests/pure_c/GamerIdentitiesSmoke.c
+    )
+    set_target_properties(cna_c_api_gamer_identities_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_gamer_identities_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_gamer_identities_smoke)
+    add_test(NAME CApi_GamerIdentitiesSmoke COMMAND cna_c_api_gamer_identities_smoke)
+
     add_executable(cna_c_api_xact_smoke
         tests/pure_c/XactSmoke.c
     )

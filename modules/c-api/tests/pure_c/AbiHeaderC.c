@@ -280,6 +280,56 @@ _Static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dop
                    offsetof(CNA_AudioEmitter, up) == 36U &&
                    offsetof(CNA_AudioEmitter, velocity) == 48U,
                "CNA_AudioEmitter layout must remain stable");
+_Static_assert(sizeof(CNA_GamerPresenceMode) == sizeof(uint32_t) &&
+                   CNA_GAMER_PRESENCE_MODE_NONE == UINT32_C(0) &&
+                   CNA_GAMER_PRESENCE_MODE_CORNFLOWER_BLUE == UINT32_C(59) &&
+                   CNA_GAMER_PRESENCE_MODE_MAXIMUM == CNA_GAMER_PRESENCE_MODE_CORNFLOWER_BLUE,
+               "CNA GamerPresenceMode identities must remain stable");
+_Static_assert(sizeof(CNA_NotificationPosition) == sizeof(uint32_t) &&
+                   CNA_NOTIFICATION_POSITION_TOP_LEFT == UINT32_C(0) &&
+                   CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT == UINT32_C(8) &&
+                   CNA_NOTIFICATION_POSITION_MAXIMUM == CNA_NOTIFICATION_POSITION_BOTTOM_RIGHT,
+               "CNA NotificationPosition identities must remain stable");
+_Static_assert(sizeof(CNA_GamerZone) == sizeof(uint32_t) &&
+                   CNA_GAMER_ZONE_UNKNOWN == UINT32_C(0) &&
+                   CNA_GAMER_ZONE_UNDERGROUND == UINT32_C(4) &&
+                   CNA_GAMER_ZONE_MAXIMUM == CNA_GAMER_ZONE_UNDERGROUND,
+               "CNA GamerZone identities must remain stable");
+_Static_assert(sizeof(CNA_LeaderboardKey) == sizeof(uint32_t) &&
+                   CNA_LEADERBOARD_KEY_BEST_SCORE_LIFE_TIME == UINT32_C(0) &&
+                   CNA_LEADERBOARD_KEY_BEST_TIME_RECENT == UINT32_C(3) &&
+                   CNA_LEADERBOARD_KEY_MAXIMUM == CNA_LEADERBOARD_KEY_BEST_TIME_RECENT,
+               "CNA LeaderboardKey identities must remain stable");
+_Static_assert(sizeof(CNA_LeaderboardOutcome) == sizeof(uint32_t) &&
+                   CNA_LEADERBOARD_OUTCOME_NONE == UINT32_C(0) &&
+                   CNA_LEADERBOARD_OUTCOME_TIE == UINT32_C(3) &&
+                   CNA_LEADERBOARD_OUTCOME_MAXIMUM == CNA_LEADERBOARD_OUTCOME_TIE,
+               "CNA LeaderboardOutcome identities must remain stable");
+_Static_assert(sizeof(CNA_MessageBoxIcon) == sizeof(uint32_t) &&
+                   CNA_MESSAGE_BOX_ICON_NONE == UINT32_C(0) &&
+                   CNA_MESSAGE_BOX_ICON_ALERT == UINT32_C(3) &&
+                   CNA_MESSAGE_BOX_ICON_MAXIMUM == CNA_MESSAGE_BOX_ICON_ALERT,
+               "CNA MessageBoxIcon identities must remain stable");
+_Static_assert(sizeof(CNA_ControllerSensitivity) == sizeof(uint32_t) &&
+                   CNA_CONTROLLER_SENSITIVITY_LOW == UINT32_C(0) &&
+                   CNA_CONTROLLER_SENSITIVITY_HIGH == UINT32_C(2) &&
+                   CNA_CONTROLLER_SENSITIVITY_MAXIMUM == CNA_CONTROLLER_SENSITIVITY_HIGH,
+               "CNA ControllerSensitivity identities must remain stable");
+_Static_assert(sizeof(CNA_GameDifficulty) == sizeof(uint32_t) &&
+                   CNA_GAME_DIFFICULTY_EASY == UINT32_C(0) &&
+                   CNA_GAME_DIFFICULTY_HARD == UINT32_C(2) &&
+                   CNA_GAME_DIFFICULTY_MAXIMUM == CNA_GAME_DIFFICULTY_HARD,
+               "CNA GameDifficulty identities must remain stable");
+_Static_assert(sizeof(CNA_GamerPrivilegeSetting) == sizeof(uint32_t) &&
+                   CNA_GAMER_PRIVILEGE_SETTING_BLOCKED == UINT32_C(0) &&
+                   CNA_GAMER_PRIVILEGE_SETTING_EVERYONE == UINT32_C(2) &&
+                   CNA_GAMER_PRIVILEGE_SETTING_MAXIMUM == CNA_GAMER_PRIVILEGE_SETTING_EVERYONE,
+               "CNA GamerPrivilegeSetting identities must remain stable");
+_Static_assert(sizeof(CNA_RacingCameraAngle) == sizeof(uint32_t) &&
+                   CNA_RACING_CAMERA_ANGLE_BACK == UINT32_C(0) &&
+                   CNA_RACING_CAMERA_ANGLE_INSIDE == UINT32_C(2) &&
+                   CNA_RACING_CAMERA_ANGLE_MAXIMUM == CNA_RACING_CAMERA_ANGLE_INSIDE,
+               "CNA RacingCameraAngle identities must remain stable");
 _Static_assert(sizeof(CNA_CueInfo) == 16U && offsetof(CNA_CueInfo, is_created) == 8U &&
                    offsetof(CNA_CueInfo, is_stopping) == 15U &&
                    CNA_AUDIO_ENGINE_CONTENT_VERSION == INT32_C(46),

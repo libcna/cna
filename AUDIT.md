@@ -89,8 +89,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > exceptions converting at the boundary, and `CBIND-037F2` adds streaming instances and the
 > index-addressed microphone surface, and `CBIND-037F3` adds 3D
 > positioning: the emitter and listener values and both `Apply3D` overloads, and `CBIND-037F4`
-> closes the audio module with the XACT family against binary fixtures the test authors itself. The
-> generated inventory currently records 5,431 implemented, 32 partial, 665 planned and 287
+> closes the audio module with the XACT family against binary fixtures the test authors itself, and
+> `CBIND-037G1` opens the last module with the gamer and guide identities. The
+> generated inventory currently records 5,539 implemented, 32 partial, 557 planned and 287
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

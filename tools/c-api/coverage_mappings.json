@@ -5569,6 +5569,30 @@
       "tests": "`XactSmoke.c` asserts a cue from a bank arrives **prepared** rather than created, that pausing leaves it playing as well as paused, that stopping immediately reports stopped and not playing, round-trips a cue-scoped variable through its authored clamp, asserts the engine refuses that name and the cue refuses the engine's, positions the cue, refuses an undefined stop option and an invalid listener or emitter, and asserts a released handle is gone",
       "status": "implemented",
       "task": "CBIND-037F4"
+    },
+    {
+      "id": "gamer-presence-mode",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerPresenceMode(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_GamerPresenceMode` with one macro per canonical value at its canonical ordinal plus `CNA_GAMER_PRESENCE_MODE_MAXIMUM`. All sixty values are carried, including `CornflowerBlue` — the canonical vocabulary really does end with the framework's own joke, and dropping it would move nothing but would leave a C caller unable to name a mode the canonical API accepts",
+      "tests": "`GamerIdentitiesSmoke.c` writes every value out in canonical order and asserts each sits at its own index, which is what catches a moved ordinal rather than a rename; C and C++ ABI assertions pin the width, the first and last ordinals and the maximum",
+      "status": "implemented",
+      "task": "CBIND-037G1"
+    },
+    {
+      "id": "gamer-guide-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(NotificationPosition|GamerZone|LeaderboardKey|LeaderboardOutcome|MessageBoxIcon|ControllerSensitivity|GameDifficulty|GamerPrivilegeSetting|RacingCameraAngle)(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "one fixed-width `uint32_t` identity each, with a macro per canonical value at its canonical ordinal and a `_MAXIMUM`. They are grouped because they are one vocabulary in use: a guide notification, a leaderboard read, a message box and the four game-defaults settings a gamer configures",
+      "tests": "`GamerIdentitiesSmoke.c` walks every value of all nine in canonical order and asserts each sits at its own index and that the maximum is the last; C and C++ ABI assertions pin the width and the endpoints of each",
+      "status": "implemented",
+      "task": "CBIND-037G1"
     }
   ]
 }

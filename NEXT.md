@@ -996,14 +996,27 @@
 > flag. A fire-and-forget cue gets **no handle at all** — the caller never touches it. The inventory is
 > now 5,431 implemented, 32 partial, 665 planned and 287 N/A, and the `audio` module is closed at 217
 > implemented with 41 not applicable. All four trees green at 70/70, ASan+UBSan clean.
-> **Next: CBIND-037G1**, the gamer and guide identities (108 rows). `CBIND-037G` has been split into
-> seven slices in `plan_binding.md` — identities twice (the gamer/guide vocabulary and the avatar one
-> share nothing but their shape), the six exceptions as firewall arms, the gamer and its collections,
-> the guide with its dispatcher, achievements and leaderboards with property storage, and the avatar
-> surfaces last because the renderer composes the graphics module too. One fact applies to all seven:
-> **on every verification tree there is no signed-in gamer and no live service**, so the truthful
-> answer is usually "not signed in" — report it the way the absent compass and the absent microphone
-> were reported, not by pretending a gamer exists.
+> CBIND-037G was then split into seven slices in `plan_binding.md` — identities twice (the gamer/guide
+> vocabulary and the avatar one share nothing but their shape), the six exceptions as firewall arms,
+> the gamer and its collections, the guide with its dispatcher, achievements and leaderboards with
+> property storage, and the avatar surfaces last because the renderer composes the graphics module
+> too. One fact applies to all seven: **on every verification tree there is no signed-in gamer and no
+> live service**, so the truthful answer is usually "not signed in" — report it the way the absent
+> compass and the absent microphone were reported, not by pretending a gamer exists.
+>
+> CBIND-037G1 then lands the first of them, 108 rows of gamer and guide identities. Two things are
+> worth carrying forward. `GamerPresenceMode` **keeps `CornflowerBlue`**: the framework's own joke is
+> a presence mode a game may really set, so dropping it would move no ordinal but would leave a C
+> caller unable to name something the canonical API accepts — an identity is the canonical vocabulary,
+> not a curated one. And the test writes **every value of all ten identities out in canonical order
+> and asserts each sits at its own index**, which is stronger than spot-checking a few ordinals: it
+> catches a value inserted or removed in the middle, the change that actually breaks the ABI, while a
+> rename is caught by the compile instead. That is the pattern the remaining identity slices should
+> reuse. New `docs/c-api/GAMER_SERVICES.md`. The inventory is now 5,539 implemented, 32 partial, 557
+> planned and 287 N/A; all four trees green at 71/71, ASan+UBSan clean.
+> **Next: CBIND-037G2**, the avatar identities (133 rows), whose only new decision is the two
+> `*ToContentNameEXT` / `*ToClipNameEXT` name functions — count/copy routes over a canonical table
+> rather than identities.
 >
 > **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,

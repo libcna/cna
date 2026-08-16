@@ -461,7 +461,7 @@ behind it.
 
 | # | Rows | Task | Status | Acceptance criteria |
 |---|---:|---|---|---|
-| CBIND-037G1 | 108 | Establish the gamer and guide identities | ⬜ | Map `GamerPresenceMode` (the largest identity in the whole inventory), `NotificationPosition`, `GamerZone`, `LeaderboardKey`, `LeaderboardOutcome`, `MessageBoxIcon`, `ControllerSensitivity`, `GameDifficulty`, `GamerPrivilegeSetting` and `RacingCameraAngle` as fixed-width identities at their canonical ordinals with `_MAXIMUM`, pinned by C and C++ ABI assertions and a strict-C test. Nothing here needs a gamer, a service or a handle, which is why it comes first. |
+| CBIND-037G1 | 108 | Establish the gamer and guide identities | ✅ | `gamer_services.h` gains ten fixed-width identities — `GamerPresenceMode`, `NotificationPosition`, `GamerZone`, `LeaderboardKey`, `LeaderboardOutcome`, `MessageBoxIcon`, `ControllerSensitivity`, `GameDifficulty`, `GamerPrivilegeSetting` and `RacingCameraAngle` — each a `uint32_t` with one macro per canonical value at its canonical ordinal and a `_MAXIMUM`. `GamerPresenceMode` is the largest identity in the whole inventory at sixty values and **keeps `CornflowerBlue`**: the framework's own joke is a presence mode a game may really set, so a C caller has to be able to name it. `GamerIdentitiesSmoke.c` writes every value of all ten out **in canonical order and asserts each sits at its own index**, which is stronger than spot-checking ordinals — it catches a value inserted or removed in the middle, the change that actually breaks the ABI, while a rename is caught by the compile. C and C++ ABI assertions pin each identity's width, endpoints and maximum separately. Nothing here needs a gamer, a service or a handle, so it is the one gamer-services surface fully exercised on every tree. Green in all four (71/71) and under ASan+UBSan. New `docs/c-api/GAMER_SERVICES.md`. |
 | CBIND-037G2 | 133 | Establish the avatar identities | ⬜ | Map `AvatarBone`, `AvatarAnimationPreset`, `AvatarEye`, `AvatarMouth`, `AvatarEyebrow`, `AvatarRendererState` and `AvatarBodyType` the same way, plus the two `*ToContentNameEXT` / `*ToClipNameEXT` free functions, which are count/copy routes over a canonical name table rather than identities. A separate slice from `G1` because the two vocabularies share nothing but their shape. |
 | CBIND-037G3 | 30 | Convert the six gamer-services exceptions at the boundary | ⬜ | `GamerServicesNotAvailableException`, `NetworkNotAvailableException`, `NetworkException`, `GamerPrivilegeException`, `GuideAlreadyVisibleException` and `GameUpdateRequiredException` become firewall arms in `CnaCApiDetail.hpp`, following `CBIND-037F1`'s precedent exactly: the type is not bound, the conversion is. Decide one result code per type and record why; a service that is not available and a network that is not available are not the same answer as an invalid argument. |
 | CBIND-037G4 | 129 | Complete the gamer, its collections and its per-gamer surfaces | ⬜ | `Gamer`, `SignedInGamer`, `GamerCollection` and `SignedInGamerCollection`, `FriendGamer` and `FriendCollection`, `GamerProfile`, `GamerPrivileges`, `GamerPresence`, and the signed-in/signed-out event arguments. `CBIND-036E2`/`E3` already borrowed a minimum signed-in-gamer surface -- extend it rather than building a second one. The template `GamerCollection<T>` is the same C++-type-keyed problem `CBIND-037E1`'s service container hit: decide whether the instantiations this ABI can name are enough for `implemented` or only for `partial`, and record which. |
@@ -1068,7 +1068,8 @@ approximated, and moving `RendererDetail` to `F4` because an `AudioEngine` is it
 snapshot is now 5,357 implemented, 32 partial, 743 planned and 283 not applicable. CBIND-037F4 then
 closes the audio module with the XACT family, deciding that the family is reachable because its
 binary files can be authored by the test itself. The snapshot is now 5,431 implemented, 32 partial,
-665 planned and 287 not applicable.
+665 planned and 287 not applicable. CBIND-037G1 then opens the last module with the gamer and guide
+identities. The snapshot is now 5,539 implemented, 32 partial, 557 planned and 287 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1077,16 +1078,19 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037F4` is the last task completed; the working tree is clean
-  and every slice below is committed one-task-one-commit. **The whole `audio` module is closed** —
-  217 implemented, 41 not applicable, no partial and no planned row — as are `input`, `storage`,
-  `content`, `net`, `core`, `media`, `devices`, `devices-ext` and `runtime`.
-- **Next task:** `CBIND-037G1`, the gamer and guide identities — **108 rows**, the first of the seven
-  slices `CBIND-037G` was split into (see *CBIND-037G gamer-services implementation slices*).
-  `GamerPresenceMode` alone is 61 rows and is the largest single identity in the inventory.
-  Nothing in `G1` needs a gamer, a service or a handle, which is why it is first.
+- Branch: `feature/binding`. `CBIND-037G1` is the last task completed; the working tree is clean
+  and every slice below is committed one-task-one-commit. **The `audio` module is closed** — 217
+  implemented, 41 not applicable — as are `input`, `storage`, `content`, `net`, `core`, `media`,
+  `devices`, `devices-ext` and `runtime`. `gamer-services` is the only module with planned rows left.
+- **Next task:** `CBIND-037G2`, the avatar identities — **133 rows**: `AvatarBone` (56),
+  `AvatarAnimationPreset` (32), `AvatarEye` (15), `AvatarMouth` (15), `AvatarEyebrow` (6),
+  `AvatarRendererState` (4) and `AvatarBodyType` (3), plus the two `*ToContentNameEXT` /
+  `*ToClipNameEXT` free functions, which are count/copy routes over a canonical name table rather
+  than identities. `CBIND-037G1` settled the shape: a `uint32_t` per identity, a macro per value at
+  its canonical ordinal, a `_MAXIMUM`, and a test that writes every value out in canonical order and
+  asserts each sits at its own index. Reuse it; the only new decision is the two name functions.
 
-  One thing applies to every slice in that table and should not be rediscovered per slice: **on every
+  One thing applies to every remaining slice and should not be rediscovered per slice: **on every
   verification tree there is no signed-in gamer and no live service.** Report that as the real
   availability the way `CBIND-037D` reported a machine with no compass and `CBIND-037F2` a machine
   with no microphone — an ordinary success with the flag clear where the canonical API answers a
