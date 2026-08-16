@@ -190,8 +190,12 @@ three open ROBUST rows, ordered by cost.
    sudo apt-get install -y libwayland-egl-backend-dev libz-mingw-w64-dev
    ```
 
-   BGFX fails to link on `-lwayland-egl`; the MinGW DirectX11 viewer — the Direct3D path the row
-   requires — fails to configure because sharp-runtime's io-compression wants a Windows zlib.
+   The MinGW DirectX11 viewer — the Direct3D path the row requires — fails to configure because
+   sharp-runtime's io-compression wants a Windows zlib. **BGFX needs no package at all**: only the
+   `libwayland-egl.so` dev symlink is missing (the `.so.1` is installed), so a `-L` directory with
+   one symlink builds it. It then agrees with EasyGL within 1 LSB on nine of Gate C's ten
+   golden-backed assets and by 129 on the textured one, so it needs its own reviewed golden set and
+   an entry in `validate_policy`'s four-renderer allowlist — see §27.2 row 12 before starting.
    DirectX11 additionally needs a Wine prefix with DXVK (`~/.wine-cna-d3d11`, absent here);
    `scripts/run-wine-dxvk.sh` is the runner and asserts DXVK actually handled the run.
 
