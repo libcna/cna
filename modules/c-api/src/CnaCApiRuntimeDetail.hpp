@@ -65,6 +65,13 @@ void ResetGraphicsDeviceAdapterState() noexcept;
 // until the game itself is going away.
 void ResetGraphicsDeviceManagerState() noexcept;
 
+// Drops every live game-event and game-window subscription this ABI is holding. A caller's
+// registration handle stays valid -- unsubscribing it afterwards simply detaches nothing -- but the
+// handler collection it named is inside the game, so nothing may reach for it once the game is
+// gone. Called from the game-destroy path after the game has raised its own disposal event, for the
+// same reason ResetGraphicsDeviceAdapterState is.
+void ResetGameEventRegistrationState() noexcept;
+
 // Releases the single borrowed handle to the game's own content manager. The manager is a value
 // member of the game, so the handle is invalidated with the game rather than destroyed by a caller.
 void ResetGameContentManagerState() noexcept;

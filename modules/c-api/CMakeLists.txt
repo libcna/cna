@@ -1127,6 +1127,21 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_xact_smoke PRIVATE cna_c_api)
     cna_c_api_enable_strict_warnings(cna_c_api_xact_smoke)
     add_test(NAME CApi_XactSmoke COMMAND cna_c_api_xact_smoke)
+
+    # CBIND-040A: the lifetime and boundary contract rather than any one route's behavior.
+    # Threads::Threads because it proves handle thread-affinity from a second thread.
+    add_executable(cna_c_api_stress_smoke
+        tests/pure_c/StressSmoke.c
+    )
+    set_target_properties(cna_c_api_stress_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_stress_smoke PRIVATE cna_c_api)
+    target_link_libraries(cna_c_api_stress_smoke PRIVATE Threads::Threads)
+    cna_c_api_enable_strict_warnings(cna_c_api_stress_smoke)
+    add_test(NAME CApi_StressSmoke COMMAND cna_c_api_stress_smoke)
     if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
         set_tests_properties(CApi_XactSmoke PROPERTIES
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"

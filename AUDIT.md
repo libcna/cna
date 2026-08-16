@@ -108,6 +108,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > records what the ABI **actually is** — 166 struct layouts, 258 scalar widths, 1,338 constant
 > values and 2,720 exported symbols — in `tools/c-api/abi_baseline.json`, so a moved field or a
 > changed constant arrives as a reviewable diff rather than a silently different binary.
+> `CBIND-040A` then puts the lifetime rules under load and finds a heap use-after-free: a game-event
+> registration could outlive its game, and unsubscribing afterwards reached into a freed handler
+> collection. Live registrations are now invalidated once the game has raised its disposal event,
+> the way graphics-device subscriptions already were.
 
 ---
 

@@ -75,10 +75,10 @@
     },
     {
       "id": "asan",
-      "renderer": "HEADLESS",
+      "renderer": "SOFTWARE",
       "devices": "ON",
       "role": "required",
-      "note": "AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released."
+      "note": "AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states."
     }
   ],
   "unsupported": [

@@ -15,6 +15,7 @@
 #include "System/TimeSpan.hpp"
 
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
 #include <memory>
 #include <string>
@@ -86,8 +87,12 @@ public:
     virtual ~GameRegistrationBase() = default;
 };
 
-// The game outlives every registration a caller can hold, because a game refuses to be destroyed
-// while owned child handles are alive and a registration is released explicitly.
+// A registration names a handler inside the game -- the game's own event, or its window's -- and the
+// game can be destroyed while the caller still holds the handle: unlike a texture or a component,
+// nothing about a subscription makes cna_game_destroy refuse. The registration is therefore tracked
+// and invalidated when the game goes away, exactly as a graphics-device subscription is: the
+// subscriber still observes the game's disposal, and the later unsubscribe detaches nothing rather
+// than reaching into a destroyed handler collection.
 class GameRegistration final : public GameRegistrationBase {
 public:
     using Source = System::EventHandler<System::EventArgs>;
@@ -101,15 +106,66 @@ public:
 
     ~GameRegistration() override
     {
+        if (!subscribed_) {
+            return;
+        }
         source_->Remove(token_);
+    }
+
+    void Invalidate() noexcept
+    {
+        subscribed_ = false;
     }
 
 private:
     Source* source_;
     Token token_;
+    bool subscribed_ = true;
 };
 
+struct LiveGameRegistrations final {
+    std::mutex mutex;
+    std::vector<std::weak_ptr<GameRegistration>> entries;
+};
+
+[[nodiscard]] LiveGameRegistrations& GetLiveGameRegistrations()
+{
+    static LiveGameRegistrations registrations;
+    return registrations;
+}
+
+// Publishes a registration and hands back the base pointer the handle registry stores. Expired
+// entries are swept on the way in, so a program that subscribes and unsubscribes for hours does not
+// accumulate dead weak pointers.
+[[nodiscard]] std::shared_ptr<GameRegistrationBase> TrackGameRegistration(
+    std::shared_ptr<GameRegistration> registration)
+{
+    LiveGameRegistrations& live = GetLiveGameRegistrations();
+    std::lock_guard lock(live.mutex);
+    std::erase_if(live.entries, [](const std::weak_ptr<GameRegistration>& entry) {
+        return entry.expired();
+    });
+    live.entries.push_back(registration);
+    return std::static_pointer_cast<GameRegistrationBase>(std::move(registration));
+}
+
 } // namespace
+
+namespace CNA::C::Detail {
+
+void ResetGameEventRegistrationState() noexcept
+{
+    LiveGameRegistrations& live = GetLiveGameRegistrations();
+    std::lock_guard lock(live.mutex);
+    for (const std::weak_ptr<GameRegistration>& entry : live.entries) {
+        if (const std::shared_ptr<GameRegistration> registration = entry.lock()) {
+            registration->Invalidate();
+        }
+    }
+    live.entries.clear();
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_game_get_is_active(const CNA_Handle gameHandle, CNA_Bool* const outActive)
 {
@@ -438,8 +494,7 @@ CNA_Result cna_game_subscribe(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
             ObjectKind::GameEventRegistration,
-            std::static_pointer_cast<GameRegistrationBase>(
-                std::make_shared<GameRegistration>(source, token)),
+            TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
             outRegistration);
         if (result != CNA_RESULT_SUCCESS) {
             return Fail(
@@ -1132,8 +1187,7 @@ CNA_Result cna_game_window_subscribe(
             [callback, context](System::Object*, const System::EventArgs&) { callback(context); });
         const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
             ObjectKind::GameEventRegistration,
-            std::static_pointer_cast<GameRegistrationBase>(
-                std::make_shared<GameRegistration>(source, token)),
+            TrackGameRegistration(std::make_shared<GameRegistration>(source, token)),
             outRegistration);
         if (result != CNA_RESULT_SUCCESS) {
             return Fail(

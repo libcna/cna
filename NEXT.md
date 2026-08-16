@@ -1204,22 +1204,45 @@
 > skipped **by name**. The sanitized tree passes its own `-fsanitize` flags to the probe rather than
 > being excluded, because a sanitized shared object will not load into an uninstrumented one.
 >
-> **Next: `CBIND-040`**, the safety and lifetime stress tests — the first *behavioural* hardening
-> task rather than a mechanical one. The material already exists and should be measured, not
-> redesigned: the handle table is generation-checked and thread-affine (`docs/c-api/HANDLES.md`),
-> and every string route is a count/copy pair returning `CNA_RESULT_BUFFER_TOO_SMALL` with **no
-> partial write** (`docs/c-api/STRINGS_AND_BUFFERS.md`). The 32 `partial` rows are not gaps the
+> **CBIND-040A then stresses the lifetime rules, and finds a memory-safety bug.** The suite is load
+> rather than assertion: 4,096 create/destroy cycles keeping *every* handle ever issued, then
+> requiring that no value was issued twice and that each dead one still refuses after the slots
+> beneath it were recycled thousands of times; a capacity sweep over a copy route from zero past the
+> exact length, checking that a refusal writes **not one byte** and a success writes no terminator;
+> thread affinity proved from a second thread and then proved not to have half-released anything;
+> and 20,000 parent/child churn cycles that double as the leak check.
+>
+> What it found is the point. **A game-event or game-window registration could outlive its game.**
+> `cna_game_destroy` guards owned *resources* — texture, sprite batch, content manager, audio
+> object, component — but deliberately not subscriptions, so destroying a game with a live
+> registration succeeded and the later `cna_game_unsubscribe` ran `~GameRegistration` against a
+> freed handler collection: a heap use-after-free, and the source carried a comment asserting the
+> invariant it did not actually have. The fix follows the graphics-device family, which had already
+> solved exactly this: live registrations are tracked and invalidated once the game has raised its
+> disposal event, so a subscriber still observes the disposal and the later unsubscribe detaches
+> nothing. **Refusing the destroy was considered and rejected** — it would make
+> `CNA_GAME_EVENT_DISPOSED` unobservable to anybody, since you would have to detach the handler
+> before the event that fires it. Two documentation defects came with it: `HANDLES.md` claimed a
+> zero handle answers `INVALID_ARGUMENT` when every route has always answered `INVALID_HANDLE`, and
+> the compatibility matrix declared the sanitized tree as `HEADLESS` when it is `SOFTWARE`.
+>
+> **Next: `CBIND-040B`**, the fuzz targets. The subject that matters is the UTF-8 validator behind
+> every `CNA_StringView` (`ValidateStringView` in `CnaCApiDetail.cpp`), which already rejects
+> overlongs, surrogates and out-of-range lead bytes — reachable from C through any route taking a
+> string view, and directly from `BoundaryDetailTest.cpp`. Prefer an exhaustive differential oracle
+> to a random walk where the space allows it: every byte sequence up to three bytes is 16.8M cases
+> and proves the answer rather than sampling it. The 32 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-three slices are committed on `feature/binding` since
+> **State at this handoff.** Thirty-four slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row; `CBIND-038` and `CBIND-039` are done, so
-> Phase B7 resumes at `CBIND-040`. All four verification trees are green at
-> 78/78 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038`, `CBIND-039` and `CBIND-040A`
+> are done, so Phase B7 resumes at `CBIND-040B`. All four verification trees are green at
+> 79/79 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

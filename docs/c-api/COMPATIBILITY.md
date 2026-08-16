@@ -41,7 +41,7 @@ different answers from the runtime underneath it.
 | `headless` | `HEADLESS` | OFF | required | No window, no GPU. Every route that needs neither is proven here, and every route that does is proven to refuse. |
 | `sdlrenderer` | `SDL_RENDERER` | ON | required | SDL's own 2D renderer under the dummy video driver, with the CNA_DEVICES half of devices-ext compiled in. |
 | `software` | `SOFTWARE` | OFF | required | A CPU rasteriser: a third backend answer for every capability query, and the compiled-out devices half again. |
-| `asan` | `HEADLESS` | ON | required | AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. |
+| `asan` | `SOFTWARE` | ON | required | AddressSanitizer and UndefinedBehaviorSanitizer with leak detection on. This is what catches a handle that outlives its owner or an operation nobody released. It runs the CPU rasteriser with the devices half compiled in, which is the one pairing the other three rows leave out: SOFTWARE is therefore exercised in both CNA_DEVICES states. |
 
 ## What is not covered
 

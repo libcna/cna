@@ -78,3 +78,20 @@ CNA frame or freeing a live callback context is unsupported behavior.
 `cna_game_destroy` synchronizes callback teardown before it invalidates the game handle. It invokes
 the exit then unload callbacks when they have not already occurred, releases native resources and
 allows a new C-owned game to be created only after the previous handle has fully closed.
+
+Step 2 is a requirement for owned **resources** — a texture, a sprite batch, a content manager, an
+audio object, a game component. A game refuses to be destroyed while one is alive, answering
+`CNA_RESULT_INVALID_STATE` and changing nothing, so getting that order wrong is a diagnosable
+mistake rather than a crash.
+
+**Event registrations are the deliberate exception.** A registration from `cna_game_subscribe` or
+`cna_game_window_subscribe` does *not* block `cna_game_destroy`, because a subscriber must be able
+to observe the game's own disposal — a game that could not be destroyed until its
+`CNA_GAME_EVENT_DISPOSED` handler was detached could never raise that event to anyone. So the
+registration may outlive the thing it names, and the ABI handles the consequence rather than
+forbidding it: destroying a game invalidates every live registration after raising the disposal
+event, and unsubscribing afterwards succeeds, detaching nothing. The registration handle stays the
+caller's to release exactly once, in any order, and a second release answers
+`CNA_RESULT_INVALID_HANDLE` like any other dead handle. `CApi_StressSmoke` holds both a game and a
+window registration across a destroy and checks all of it, including that the disposal event was
+observed first.

@@ -732,6 +732,9 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         // observed its Disposing event. Drop the subscriptions before the device object itself
         // goes away with the game.
         CNA::C::Detail::ResetGraphicsDeviceAdapterState();
+        // Same rule for the game's own events and its window's: the subscriber has just observed
+        // the disposal, and the handler collections are about to go with the game.
+        CNA::C::Detail::ResetGameEventRegistrationState();
         // Any manager the caller released is still alive here, because the game cached a raw
         // pointer to it; the game is going away now, so it can finally go too.
         CNA::C::Detail::ResetGraphicsDeviceManagerState();
