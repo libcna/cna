@@ -106,6 +106,17 @@ def short_symbol(symbol: str) -> str:
     return "::".join(parts[-2:]) if len(parts) > 1 else text
 
 
+MAPPINGS_PATH = Path(__file__).resolve().parent / "coverage_mappings.json"
+
+
+def rule_dispositions() -> dict[str, dict]:
+    """The recorded disposition of every partial rule, keyed by its mapping text."""
+    rules = json.loads(MAPPINGS_PATH.read_text(encoding="utf-8"))["rules"]
+    return {rule["mapping"]: rule["limitation"]
+            for rule in rules
+            if rule.get("status") == "partial" and "limitation" in rule}
+
+
 def analyze() -> dict:
     declaration = json.loads(DECLARATION_PATH.read_text(encoding="utf-8"))
     rows = read_rows()
@@ -131,6 +142,17 @@ def analyze() -> dict:
             problems.append(
                 f"the limitation \"{entry['subject']}\" is owned by {owner}, "
                 "which the plan records as finished")
+
+    # CBIND-044: no unspecified omission. A partial mapping without a recorded disposition -- what
+    # kind of limitation it is, and which route reports it to a caller -- is exactly the "we will
+    # get to it" state this campaign is trying not to end in.
+    dispositions = rule_dispositions()
+    for entry in partial:
+        entry["limitation"] = dispositions.get(entry["mapping"])
+        if entry["limitation"] is None:
+            problems.append(
+                f"{len(entry['symbols'])} partially mapped symbol(s) have no recorded disposition: "
+                f"{entry['mapping'][:110]}")
 
     for entry in unmapped:
         entry["theme"] = classify(entry["mapping"], declaration["themes"])
@@ -193,15 +215,23 @@ def render(analysis: dict) -> str:
     add("does exist under the name you expect, and it does less than the C++ of the same name. Each")
     add("row says what you get and, in the same breath, what you do not.")
     add("")
-    add("| Symbols | What exists, and what it leaves out |")
-    add("|---|---|")
+    kinds = declaration.get("partial_kinds", {})
+    add("| Symbols | Why | What to call instead |")
+    add("|---|---|---|")
     for entry in analysis["partial"]:
         names = collections.Counter(short_symbol(symbol) for symbol in entry["symbols"])
         subjects = "<br/>".join(
             f"`{name}`" + (f" ×{count}" if count > 1 else "")
             for name, count in sorted(names.items()))
-        mapping = entry["mapping"].replace("|", "\\|")
-        add(f"| {subjects} | {mapping} |")
+        limitation = entry.get("limitation") or {}
+        kind = kinds.get(limitation.get("kind", ""), limitation.get("kind", ""))
+        instead = limitation.get("reports_through", "").replace("|", "\\|")
+        add(f"| {subjects} | {kind} | {instead} |")
+    add("")
+    add("Every row above has a recorded disposition -- the kind of limitation it is and the route a")
+    add("caller uses instead -- and the generator fails if one does not. That is what \"no")
+    add("unspecified omission\" means here: not that nothing is missing, but that nothing is missing")
+    add("*silently*.")
     add("")
 
     add("## No C form: the reasons, by theme")

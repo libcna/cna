@@ -928,7 +928,12 @@
       "mapping": "`cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` cover the canonical specializations of this template; the generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route",
       "tests": "real UTF-8 fixture, cache, unload and pixel tests plus extension-less resolution and the unsupported/IO refusals for cube and sound assets in `ContentSmoke.c`",
       "status": "partial",
-      "task": "CBIND-036B1"
+      "task": "CBIND-036B1",
+      "limitation": {
+        "kind": "c-cannot-name-a-type",
+        "reports_through": "`cna_content_manager_load_texture2d`, `_load_texture_cube` and `_load_sound_effect` load the canonical specializations; a further asset type needs its own typed route, which is an addition rather than a redesign",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "sound-effect-handle-type",
@@ -1988,7 +1993,12 @@
       "mapping": "`cna_content_manager_create`, reachable only with a null service provider: `System::IServiceProvider` is a Sharp Runtime object that the C ABI must never expose, so a C-created manager always resolves services through its explicitly set graphics device instead",
       "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE; `cna_content_manager_get_has_service_provider` is asserted to report `CNA_FALSE` for every C-created manager",
       "status": "partial",
-      "task": "CBIND-036B1"
+      "task": "CBIND-036B1",
+      "limitation": {
+        "kind": "sharp-runtime-object",
+        "reports_through": "`cna_content_manager_create` builds a manager whose services resolve through the graphics device it is given; `cna_content_manager_set_graphics_device` is how a caller supplies one",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "content-manager-destructor",
@@ -2021,7 +2031,12 @@
       "mapping": "`cna_content_manager_get_has_service_provider` reports presence only. The pointer itself is a Sharp Runtime object and never crosses the C boundary",
       "tests": "`ContentSmoke.c` UTF-8 root count/copy/set, resolved asset path and normalized key including separator folding and case folding, builtin-loader re-registration, service-provider presence, graphics-device identity round trip, manifest snapshot over a storage-built content root, typed Texture2D/TextureCube/SoundEffect loads with extension-less resolution, cache and unload lifetime, parent ordering, stale handles and wrong-thread refusal, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "partial",
-      "task": "CBIND-036B1"
+      "task": "CBIND-036B1",
+      "limitation": {
+        "kind": "sharp-runtime-object",
+        "reports_through": "`cna_content_manager_get_has_service_provider` answers the only part of the question that has a C form -- whether one is there",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "content-manager-graphics-device",
@@ -2129,7 +2144,12 @@
       "mapping": "`cna_content_reader_read_object_tag` runs the same dispatch protocol and reports only whether a non-null object was produced. The canonical return is a type-erased object, which has no C representation, so the value itself cannot be handed back; the route exists so a C consumer can advance past an untyped field and observe its presence",
       "tests": "`ContentReaderSmoke.c` builds a compiled-asset fixture through the storage API and asserts the whole protocol against it: an empty type-reader table, an empty shared-resource pass, a null object reference, byte-exact matrix/quaternion/vector/color/bounding-sphere values, asset-name count/copy, container version and platform, the standalone no-manager answer, both limit checks in their accepting and refusing forms, exact-byte reads including the capacity-checked refusal that consumes nothing and the truncation failure at end of stream, and the refusal to close a stream a reader still borrows, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "partial",
-      "task": "CBIND-036B2"
+      "task": "CBIND-036B2",
+      "limitation": {
+        "kind": "type-erased-value",
+        "reports_through": "`cna_content_reader_read_object_tag` runs the same dispatch and reports whether an object was produced, which is what lets a caller advance past an untyped field",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "content-reader-typed-templates",
@@ -2187,7 +2207,12 @@
       "mapping": "`cna_content_type_reader_read_untyped` runs the reader against a content reader and reports only whether an object was produced. The canonical operation both takes and returns a type-erased object, neither of which has a C representation, so the route always passes \"no existing instance\" and cannot hand the value back",
       "tests": "`ContentReaderSmoke.c` registry probing for an unregistered and a registered canonical name, reader creation, target type name count/copy, type version and both version-support answers, in-place deserialization capability, initialization, the canonical refusal a recognized-but-unsupported reader raises when run, placeholder creation including the rejected reason identity, and an observable clear/re-register round trip of the process-wide registry",
       "status": "partial",
-      "task": "CBIND-036B2"
+      "task": "CBIND-036B2",
+      "limitation": {
+        "kind": "type-erased-value",
+        "reports_through": "`cna_content_type_reader_read_untyped` runs the reader and reports whether an object was produced",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "content-type-reader-base-protected-constructor",
@@ -2290,7 +2315,12 @@
       "mapping": "`cna_content_manager_create_resource`, reachable only with a null service provider for the same hard ABI reason as the base manager's service-provider constructors",
       "tests": "`ContentSmoke.c` creation and shared-operation coverage; presence of a service provider is asserted to be `CNA_FALSE`",
       "status": "partial",
-      "task": "CBIND-036B2"
+      "task": "CBIND-036B2",
+      "limitation": {
+        "kind": "sharp-runtime-object",
+        "reports_through": "`cna_content_manager_create_resource` builds one the same way the base manager is built",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "resource-content-manager-open-stream",
@@ -2430,7 +2460,12 @@
       "mapping": "`cna_network_session_properties_get_item` and `_set_item` express the strict read and the appending write separately, which is what the canonical header itself recommends. The proxy this operator returns has no C counterpart, so its documented quirk -- that a bare out-of-range *read* through it also appends, because the proxy must bind a slot before it knows whether the caller will read or write -- cannot be reproduced and is not simulated",
       "tests": "`NetSmoke.c` count, read-only reporting, strict indexed reads including the out-of-range refusal, append-past-the-end setter behavior, index-of hit and miss, containment, insert and remove-at including both C-side range refusals, value removal hit and miss, clear, copy-to with a start offset plus its too-small and negative-index refusals, and a full enumerator walk with the before-first and past-last state refusals, reset, and the refusal to destroy a list an enumerator is still walking",
       "status": "partial",
-      "task": "CBIND-036C"
+      "task": "CBIND-036C",
+      "limitation": {
+        "kind": "no-c-counterpart",
+        "reports_through": "`cna_network_session_properties_get_item` is the strict read and `_set_item` the appending write, which is the split the canonical header itself recommends",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "network-session-properties-stl-interop",
@@ -4964,7 +4999,12 @@
       "mapping": "`cna_game_services_contains_ext` and `cna_game_services_remove_ext`, **covering the two services the runtime registers and no others**. The canonical container is keyed by C++ type identity, which has no C expression: a caller cannot name a type, so the ABI names the types instead. Removing is exposed because the canonical operation permits it and cannot be undone from C; removing what is not registered is an ordinary success",
       "tests": "`RuntimeComponentsSmoke.c` covers both identities, the repeated removal, and the undefined-identity refusal",
       "status": "partial",
-      "task": "CBIND-037E1"
+      "task": "CBIND-037E1",
+      "limitation": {
+        "kind": "c-cannot-name-a-type",
+        "reports_through": "`cna_game_services_contains_ext` and `cna_game_services_remove_ext` name the two services the runtime registers, because a caller cannot name a C++ type to key the container with",
+        "approval": "awaiting owner approval (CBIND-044)"
+      }
     },
     {
       "id": "game-service-container-add",

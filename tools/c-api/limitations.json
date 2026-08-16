@@ -165,5 +165,11 @@
       "status": "by design",
       "owner": "RENDERERS_AND_CAPABILITIES.md"
     }
-  ]
+  ],
+  "partial_kinds": {
+    "c-cannot-name-a-type": "C cannot name a C++ type",
+    "sharp-runtime-object": "the value is a Sharp Runtime object",
+    "type-erased-value": "the value is type-erased",
+    "no-c-counterpart": "the canonical value is a proxy"
+  }
 }

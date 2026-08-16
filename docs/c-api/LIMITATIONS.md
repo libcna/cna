@@ -25,16 +25,21 @@ These are the only entries in this document that can surprise a working program:
 does exist under the name you expect, and it does less than the C++ of the same name. Each
 row says what you get and, in the same breath, what you do not.
 
-| Symbols | What exists, and what it leaves out |
-|---|---|
-| `GameServiceContainer::GetService` ×2<br/>`GameServiceContainer::RemoveService` ×2 | `cna_game_services_contains_ext` and `cna_game_services_remove_ext`, **covering the two services the runtime registers and no others**. The canonical container is keyed by C++ type identity, which has no C expression: a caller cannot name a type, so the ABI names the types instead. Removing is exposed because the canonical operation permits it and cannot be undone from C; removing what is not registered is an ordinary success |
-| `ContentManager::ContentManager` ×2 | `cna_content_manager_create`, reachable only with a null service provider: `System::IServiceProvider` is a Sharp Runtime object that the C ABI must never expose, so a C-created manager always resolves services through its explicitly set graphics device instead |
-| `ResourceContentManager::ResourceContentManager` | `cna_content_manager_create_resource`, reachable only with a null service provider for the same hard ABI reason as the base manager's service-provider constructors |
-| `ContentManager::getServiceProviderProperty` | `cna_content_manager_get_has_service_provider` reports presence only. The pointer itself is a Sharp Runtime object and never crosses the C boundary |
-| `ContentManager::Load` | `cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` cover the canonical specializations of this template; the generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route |
-| `ContentReader::ReadObject` | `cna_content_reader_read_object_tag` runs the same dispatch protocol and reports only whether a non-null object was produced. The canonical return is a type-erased object, which has no C representation, so the value itself cannot be handed back; the route exists so a C consumer can advance past an untyped field and observe its presence |
-| `ContentTypeReaderBase::ReadUntyped` | `cna_content_type_reader_read_untyped` runs the reader against a content reader and reports only whether an object was produced. The canonical operation both takes and returns a type-erased object, neither of which has a C representation, so the route always passes "no existing instance" and cannot hand the value back |
-| `NetworkSessionProperties::operator[]` | `cna_network_session_properties_get_item` and `_set_item` express the strict read and the appending write separately, which is what the canonical header itself recommends. The proxy this operator returns has no C counterpart, so its documented quirk -- that a bare out-of-range *read* through it also appends, because the proxy must bind a slot before it knows whether the caller will read or write -- cannot be reproduced and is not simulated |
+| Symbols | Why | What to call instead |
+|---|---|---|
+| `GameServiceContainer::GetService` ×2<br/>`GameServiceContainer::RemoveService` ×2 | C cannot name a C++ type | `cna_game_services_contains_ext` and `cna_game_services_remove_ext` name the two services the runtime registers, because a caller cannot name a C++ type to key the container with |
+| `ContentManager::ContentManager` ×2 | the value is a Sharp Runtime object | `cna_content_manager_create` builds a manager whose services resolve through the graphics device it is given; `cna_content_manager_set_graphics_device` is how a caller supplies one |
+| `ResourceContentManager::ResourceContentManager` | the value is a Sharp Runtime object | `cna_content_manager_create_resource` builds one the same way the base manager is built |
+| `ContentManager::getServiceProviderProperty` | the value is a Sharp Runtime object | `cna_content_manager_get_has_service_provider` answers the only part of the question that has a C form -- whether one is there |
+| `ContentManager::Load` | C cannot name a C++ type | `cna_content_manager_load_texture2d`, `_load_texture_cube` and `_load_sound_effect` load the canonical specializations; a further asset type needs its own typed route, which is an addition rather than a redesign |
+| `ContentReader::ReadObject` | the value is type-erased | `cna_content_reader_read_object_tag` runs the same dispatch and reports whether an object was produced, which is what lets a caller advance past an untyped field |
+| `ContentTypeReaderBase::ReadUntyped` | the value is type-erased | `cna_content_type_reader_read_untyped` runs the reader and reports whether an object was produced |
+| `NetworkSessionProperties::operator[]` | the canonical value is a proxy | `cna_network_session_properties_get_item` is the strict read and `_set_item` the appending write, which is the split the canonical header itself recommends |
+
+Every row above has a recorded disposition -- the kind of limitation it is and the route a
+caller uses instead -- and the generator fails if one does not. That is what "no
+unspecified omission" means here: not that nothing is missing, but that nothing is missing
+*silently*.
 
 ## No C form: the reasons, by theme
 

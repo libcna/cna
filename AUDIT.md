@@ -134,8 +134,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > verdict is **ready**. `CBIND-044A` then turns the first of the remaining partial rows into a real
 > route -- both `SpriteBatch::Begin` overloads that take a custom effect -- and `CBIND-044B` closes
 > the largest remaining group by adding the `Draw` family that places a sprite by position and
-> scale, as a new structure and route rather than by growing a published one. The snapshot is now
-> 6,082 implemented, 13 partial, 0 planned and 320 not-applicable.
+> scale, as a new structure and route rather than by growing a published one. `CBIND-044C` completes
+> the signed-in gamer collection, and `CBIND-044D` gives each of the 12 symbols that remain a
+> recorded disposition and a callable route that reports it, with the generator failing if one lacks
+> either. The snapshot is now 6,083 implemented, 12 partial, 0 planned and 320 not-applicable, and
+> every remaining partial row is a structural property of C rather than unfinished work.
 
 ---
 
