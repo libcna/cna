@@ -159,4 +159,5 @@ no-signed-in-gamer contract are in [`GAMER_SERVICES.md`](GAMER_SERVICES.md). The
 [initial feature matrix](FEATURE_MATRIX.md) is the concise consumer view;
 [`COVERAGE.md`](COVERAGE.md) is the source-to-C implementation record; the compilers, language
 modes and build configurations the ABI is actually put through — and the ones it is not — are in
-[`COMPATIBILITY.md`](COMPATIBILITY.md).
+[`COMPATIBILITY.md`](COMPATIBILITY.md); how the surfaces that read caller-supplied bytes are
+covered, and what makes their oracle worth trusting, is in [`FUZZING.md`](FUZZING.md).

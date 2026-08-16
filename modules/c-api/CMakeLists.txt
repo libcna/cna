@@ -1403,4 +1403,65 @@ if(CNA_BUILD_TESTS)
     cna_link_sharp_runtime(cna_c_api_boundary_detail_test PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_boundary_detail_test)
     add_test(NAME CApi_BoundaryDetail COMMAND cna_c_api_boundary_detail_test)
+
+    # CBIND-040B: the byte-facing surfaces against an independent oracle. Detail-level rather than
+    # through the C ABI, because the subject is one decision function reached by thousands of
+    # routes, and reaching it 18 million times through a public route would measure the route.
+    add_executable(cna_c_api_utf8_oracle_test
+        tests/cpp/Utf8OracleTest.cpp
+        src/CnaCApi.cpp
+        src/CnaCApiDetail.cpp
+    )
+    target_include_directories(cna_c_api_utf8_oracle_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
+        ${PROJECT_SOURCE_DIR}/modules/core/include
+        ${PROJECT_SOURCE_DIR}/modules/graphics/include
+        ${PROJECT_SOURCE_DIR}/modules/storage/include
+        ${PROJECT_SOURCE_DIR}/modules/content/include
+        ${PROJECT_SOURCE_DIR}/modules/net/include
+        ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
+        ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/audio/include
+        ${PROJECT_SOURCE_DIR}/modules/math/include
+    )
+    target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
+        sharp_runtime_core_base
+        cna_core
+        cna_storage
+        CNA_Net
+        CNA_GamerServices
+        cna_devices
+    )
+    cna_link_sharp_runtime(cna_c_api_utf8_oracle_test PRIVATE Core.Base IO Runtime)
+    cna_c_api_enable_strict_warnings(cna_c_api_utf8_oracle_test)
+    add_test(NAME CApi_Utf8Oracle COMMAND cna_c_api_utf8_oracle_test)
+
+    # The libFuzzer target is not a ctest test: it needs Clang and, by design, never terminates.
+    # It is compiled anyway -- as an object library nobody links -- so that it cannot rot silently
+    # between the sessions when somebody actually goes hunting with it. docs/c-api/FUZZING.md has
+    # the Clang command line that turns this source into a running fuzzer.
+    add_library(cna_c_api_fuzz_targets OBJECT
+        tests/fuzz/StringViewFuzz.cpp
+    )
+    target_include_directories(cna_c_api_fuzz_targets PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/support
+        ${PROJECT_SOURCE_DIR}/modules/core/include
+        ${PROJECT_SOURCE_DIR}/modules/graphics/include
+        ${PROJECT_SOURCE_DIR}/modules/storage/include
+        ${PROJECT_SOURCE_DIR}/modules/content/include
+        ${PROJECT_SOURCE_DIR}/modules/net/include
+        ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
+        ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/audio/include
+        ${PROJECT_SOURCE_DIR}/modules/math/include
+    )
+    cna_link_sharp_runtime(cna_c_api_fuzz_targets PRIVATE Core.Base IO Runtime)
+    cna_c_api_enable_strict_warnings(cna_c_api_fuzz_targets)
+    # The exhaustive sweep is the slowest test in the suite by a wide margin, and slower still under
+    # a sanitizer; the default 1500 s ctest timeout is generous, but say so rather than rely on it.
+    set_tests_properties(CApi_Utf8Oracle PROPERTIES TIMEOUT 900)
 endif()

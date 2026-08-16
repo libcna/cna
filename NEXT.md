@@ -1226,23 +1226,46 @@
 > zero handle answers `INVALID_ARGUMENT` when every route has always answered `INVALID_HANDLE`, and
 > the compatibility matrix declared the sanitized tree as `HEADLESS` when it is `SOFTWARE`.
 >
-> **Next: `CBIND-040B`**, the fuzz targets. The subject that matters is the UTF-8 validator behind
-> every `CNA_StringView` (`ValidateStringView` in `CnaCApiDetail.cpp`), which already rejects
-> overlongs, surrogates and out-of-range lead bytes — reachable from C through any route taking a
-> string view, and directly from `BoundaryDetailTest.cpp`. Prefer an exhaustive differential oracle
-> to a random walk where the space allows it: every byte sequence up to three bytes is 16.8M cases
-> and proves the answer rather than sampling it. The 32 `partial` rows are not gaps the
+> **CBIND-040B then covers the byte-facing surface, and enumerates rather than samples.** The
+> surface is short — `ValidateStringView`/`CopyStringView` behind every `CNA_StringView`, and
+> `ValidateBuffer`/`CheckedElementByteCount` behind every array and count — and where a space is
+> small enough to enumerate, sampling it wastes a proof. `CApi_Utf8Oracle` runs **every** byte
+> sequence of length one, two and three under both NUL policies: 16,843,008 cases, the entire space
+> in which a UTF-8 scanner's mistakes live. Four bytes is 4.3 billion, so that sweep is structured
+> instead, and longer strings come from a fixed seed so a failure is reproducible. A libFuzzer
+> target covers what enumeration cannot reach; it is not a ctest test, because it needs Clang and
+> does not terminate, but it is compiled by the normal build as an object library nobody links, so
+> it cannot rot unnoticed.
+>
+> The thing worth carrying is **what makes an oracle worth having**. Both tests judge the *answer*,
+> not the absence of a crash, and the oracle is deliberately a different algorithm: the
+> implementation matches byte ranges and never forms a code point, the oracle decodes the code point
+> and applies the Unicode rules to the value; the implementation asks whether a product would
+> overflow by dividing, the oracle forms the whole 128-bit product from 32-bit limbs and looks at
+> it. An oracle that mirrors the implementation agrees with its mistakes. Proved it can fail:
+> inverting the surrogate rule makes the sweep name `ED A0 80` and the fuzz target abort on the same
+> bytes. One practical trap — `__int128` is the obvious tool for the second oracle and is not
+> standard C++ under the `-pedantic` wall these targets build with.
+>
+> **Next: `CBIND-041`**, the C consumer documentation and examples — the first deliverable aimed at
+> somebody who has never read this repository. Resist writing a fourth summary of what already
+> exists: the 31 documents under `docs/c-api/` are the reference, and what is missing is a C program
+> that compiles, links and **runs against an installed CNA**, proving the CMake package, the include
+> spelling, the initialization order, the error idiom and a clean shutdown in one copyable file. The
+> `install(EXPORT CNACTargets)` rules are what a consumer actually sees and have never been
+> exercised by one; `build-consumer/` is the shared directory reserved for that. The 32 `partial`
+> rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-four slices are committed on `feature/binding` since
+> **State at this handoff.** Thirty-five slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row; `CBIND-038`, `CBIND-039` and `CBIND-040A`
-> are done, so Phase B7 resumes at `CBIND-040B`. All four verification trees are green at
-> 79/79 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038`, `CBIND-039` and `CBIND-040`
+> are done, so Phase B7 resumes at `CBIND-041`. All four verification trees are green at
+> 80/80 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

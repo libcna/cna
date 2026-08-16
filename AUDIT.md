@@ -111,7 +111,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-040A` then puts the lifetime rules under load and finds a heap use-after-free: a game-event
 > registration could outlive its game, and unsubscribing afterwards reached into a freed handler
 > collection. Live registrations are now invalidated once the game has raised its disposal event,
-> the way graphics-device subscriptions already were.
+> the way graphics-device subscriptions already were. `CBIND-040B` closes the pair by covering the
+> ABI's byte-facing surface two ways: 16,843,008 enumerated UTF-8 cases — the whole space up to
+> three bytes — plus a libFuzzer target, both judged against an oracle written as a deliberately
+> different algorithm rather than a copy.
 
 ---
 
