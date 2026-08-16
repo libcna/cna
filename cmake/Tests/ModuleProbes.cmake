@@ -189,5 +189,40 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
         add_test(NAME CApiHeaderCompatibility
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_compatibility_matrix.py" --run)
+
+        # plan_binding.md CBIND-039: the ABI layout and export baseline.
+        #
+        # A generated probe reports what the compiler *actually* laid out -- every struct size,
+        # alignment and field offset, every scalar typedef's width, every constant's value -- and it
+        # is held against tools/c-api/abi_baseline.json. Additions are permitted and re-recorded; a
+        # moved field, a changed value or a vanished export is named as an ABI break.
+        #
+        # The header half needs no build, so it runs here for the same reason the coverage matrix
+        # does: gating it on the C API being enabled would mean the ordinary build -- the one most
+        # changes are made in -- never notices a struct field moved. Verified to catch both arms:
+        # swapping CNA_Point's two fields reports them as moved, and an added constant is classified
+        # as an addition rather than a break.
+        add_test(NAME CApiAbiHeaderBaseline
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_abi_baseline.py" --check
+                --compiler "${CMAKE_C_COMPILER}")
+
+        # The other half: the library that was actually built, asked for its own ABI version and its
+        # dynamic export list. ELF-only, because reading exports is what makes the symbol half
+        # meaningful, and only where the C API target exists.
+        if(TARGET cna_c_api AND UNIX AND NOT APPLE)
+            set(_abi_baseline_flags "")
+            if(CNA_SANITIZE)
+                # A sanitized shared object refuses to load into a probe that was not built the same
+                # way, so the sanitized tree runs the gate with its own flags rather than skipping it.
+                list(APPEND _abi_baseline_flags "--compile-flag=-fsanitize=${CNA_SANITIZE}")
+            endif()
+            add_test(NAME CApiAbiBaseline
+                COMMAND Python3::Interpreter
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_abi_baseline.py" --check
+                    --library $<TARGET_FILE:cna_c_api>
+                    --compiler "${CMAKE_C_COMPILER}"
+                    ${_abi_baseline_flags})
+        endif()
     endif()
 endif()

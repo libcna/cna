@@ -545,7 +545,7 @@ because it builds on the completed effect and texture contracts.
 | # | Task | Status | Acceptance criteria |
 |---|---|---|---|
 | CBIND-038 | Expand pure-C compatibility matrix | ✅ | `tools/c-api/compatibility_matrix.json` declares the toolchains, language modes and build configurations the ABI claims, and `generate_compatibility_matrix.py` both runs that matrix and generates `docs/c-api/COMPATIBILITY.md` from it. Each cell compiles **every public header on its own** — which is what proves a header is self-contained — plus the umbrella twice for its include guards: 60 translation units per cell, 1,380 across the 23 cells this machine has toolchains for. Two rules make the result honest rather than flattering: **a toolchain that is installed is binding** (present and rejecting a header fails the gate, required or optional), and **a toolchain that is absent is skipped by name, never counted as agreement**. Both are registered as build-free ctest gates (`CApiCompatibilityMatrix`, `CApiHeaderCompatibility`) beside `CApiCoverageMatrix`, with a CI workflow that installs the optional toolchains so their cells become evidence. **The matrix found a real defect on its first run**: `CNA_PowerState` was declared twice — once for a controller's power and once for the host's, same name and same six values — which C11 tolerates and C99 rejects. The duplicate is gone, `devices.h` now reuses the identity `input_gamepad.h` declares, and **C99 is the floor** rather than an unexamined claim. Verified to catch a regression by reinstating the duplicate: four C99 cells turn red while C11 and later stay green. Green in all four trees (78/78) and under ASan+UBSan. |
-| CBIND-039 | Add ABI layout, export and compatibility gates | ⬜ | Check struct size/offset/alignment, enum numeric values, ABI version behavior, exported-symbol allowlist and a baseline compatibility snapshot. New ABI fields/functions follow B0 policy. |
+| CBIND-039 | Add ABI layout, export and compatibility gates | ✅ | `tools/c-api/abi_baseline.json` is a checked-in snapshot of what the ABI **actually is**, and `generate_abi_baseline.py` is what measures it: a generated probe reports every one of the 166 structs' size and alignment and every field's offset and size, 258 scalar typedefs' widths, 1,183 integer constants, 14 string constants and 141 named-color channel sets as the compiler really lays them out, then `nm -D` reads the shared object's 2,720 `cna_*` exports and the library is asked its own ABI version. The hand-written walls in `AbiHeaderC.c`/`AbiHeaderCpp.cpp` pin what each slice remembered to pin; this pins **everything else**, and the value is that a change arrives as a reviewable diff instead of a silently different binary. Differences are classified against `docs/c-api/ABI_VERSIONING.md`: an added struct, field, constant or export is an **addition** the evolution policy permits and the baseline is re-recorded; a moved or resized field, a changed size/alignment or constant value, a vanished export, or a library whose reported version disagrees with its headers is named individually as an **ABI break**. `--library` is optional, which splits the gate honestly in two: `CApiAbiHeaderBaseline` measures the header half with no build at all — so the ordinary build and a build-free CI job catch a moved field, which is where one is most likely to be introduced — while `CApiAbiBaseline` adds the two halves only a built library can answer, and what it cannot see it reports as **skipped by name** rather than passing over. Two defects the tool found in itself are worth recording: a `\s`-based macro regex made an include guard swallow the next line as its value, and `CNA_PRESENTATION_PARAMETERS_TYPE_NAME`, written across a line continuation, was therefore measured as a *pointer* — so the probe is now run twice and any value that differs between runs is refused as not a compile-time constant. Verified to catch both arms: swapping `CNA_Point`'s two fields reports them as moved, and an added constant is classified as an addition. **All four configurations export the same 2,720 symbols** — the ABI surface does not vary with the renderer or with `CNA_DEVICES`, only the answers do — which the four green trees now prove rather than assume. Green in all four trees (78/78 plus both new gates), including the sanitized tree, which passes its own `-fsanitize` flags to the probe rather than being excluded. |
 | CBIND-040 | Add safety and lifetime stress tests | ⬜ | Run invalid-handle, double-release, stale-generation, shutdown-order, callback-unregister, UTF-8/buffer-boundary and high-volume create/release tests under ASan/UBSan where supported. Add focused fuzz targets for parser-like/buffer-facing APIs. |
 | CBIND-041 | Publish C consumer documentation and examples | ⬜ | Document CMake consumption, shared/static linking, initialization, error retrieval, UTF-8, buffers, handles, callbacks, threading, renderer limits and clean shutdown. Every example is C-only and builds in CI. |
 | CBIND-042 | Define experimental release gate | ⬜ | Require the B7 matrix, a real C application, documentation, installability, no unreviewed ABI break and a known-limitations matrix before publishing an experimental C ABI release. ABI 1.0 requires a later explicit release decision. |
@@ -623,22 +623,20 @@ Regenerate or verify with `python3 tools/c-api/generate_coverage_inventory.py --
 
 ### What remains
 
-Everything still open belongs to `CBIND-037` (1,362 rows), the B7 hardening phase
-(`CBIND-038`–`042`) and the final close (`CBIND-044`). The CI coverage gate `CBIND-043` is already
-done and is not waiting on `CBIND-037`.
-`CBIND-037` is partitioned into seven module-sized slices; work them in this order, because each
-later one composes the earlier ones:
+`CBIND-037` is **closed**: the inventory has no planned row left. What is still open is the B7
+hardening phase and the final close, in this order:
 
-| Order | Slice | Rows left | Note |
-|---:|---|---:|---|
-| 1 | `CBIND-037D` devices and devices-ext | 219 (after `D1`) | sub-partitioned into `D1`–`D4`; `D1` is done, `D2` sensor devices is next. `sdlrenderer` and `asan` now build with `CNA_DEVICES=ON` |
-| 2 | `CBIND-037E` runtime | 273 | `Game`, `GameWindow`, `GraphicsDeviceManager`, components, services (split into `E1`–`E4`) |
-| 3 | `CBIND-037F` audio | 205 | remaining SoundEffect, dynamic instances, microphone, XACT, 3D |
-| 4 | `CBIND-037G` gamer services | 665 | largest; builds on the signed-in-gamer surface `CBIND-036E2`/`E3` already borrowed |
+| Order | Task | Status | Note |
+|---:|---|---|---|
+| — | `CBIND-038` pure-C compatibility matrix | ✅ | 23 cells, 1,380 translation units; found and fixed a duplicate `CNA_PowerState` that made C99 impossible |
+| — | `CBIND-039` ABI layout, export and compatibility gates | ✅ | `abi_baseline.json` records 166 structs, 258 scalars, 1,338 constants and 2,720 exports; two gates, one build-free |
+| 1 | `CBIND-040` safety and lifetime stress tests | ⬜ | the first *behavioural* hardening task: invalid/stale handles, double release, shutdown order, buffer boundaries, plus fuzz targets |
+| 2 | `CBIND-041` C consumer documentation and examples | ⬜ | C-only examples that build in CI; the 30 documents under `docs/c-api/` are the material |
+| 3 | `CBIND-042` experimental release gate | ⬜ | needs 040 and 041 first: it is the decision that everything above is enough |
+| 4 | `CBIND-044` close the public API coverage matrix | ⬜ | the final close; every row implemented, or carrying an owner-approved limitation a caller can query |
 
 `CBIND-043` is done — the matrix is a gate in both CTest and CI, so an unmapped public symbol now
-fails a build rather than merely showing up in a report. After `CBIND-037` closes: `CBIND-038`–`042`,
-then `CBIND-044`.
+fails a build rather than merely showing up in a report.
 
 ### Judgment calls that produced the closed slices
 
@@ -1093,28 +1091,32 @@ the snapshot is 6,063 implemented, 32 partial, **0 planned** and 320 not applica
 public/protected declaration the inventory tracks is now either mapped, partially mapped with the
 subset named, or explicitly recorded as having no C form with the reason.
 
-## Handoff for the next context / Claude Code (2026-08-15)
+## Handoff for the next context / Claude Code (2026-08-16)
 
 Read *Current status* above first: it carries the snapshot, what is closed, and the ordered list of
 what remains. This section carries only what a fresh context cannot infer from the plan.
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-038` is the last task completed. The `CBIND-037` campaign is
+- Branch: `feature/binding`. `CBIND-039` is the last task completed. The `CBIND-037` campaign is
   closed — the inventory has **no planned row left**, 6,063 implemented, 32 partial, 0 planned, 320
-  not applicable — and Phase B7 hardening has started.
-- **Next task:** `CBIND-039`, the ABI layout, export and compatibility gates. Much of what it asks
-  for already exists and should be *found* rather than rebuilt: the C and C++ ABI assertion walls in
-  `tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` already pin struct sizes, field
-  offsets and enum ordinals for every value type the campaign added, and `CApi_Exports`
-  (`cmake/CheckElfExports.cmake`) already checks the exported-symbol set. What is genuinely missing
-  is the part those cannot do: a **checked-in baseline snapshot** of the layouts and the exported
-  symbol list, so that a change to either is visible as a diff and has to be justified rather than
-  merely re-asserted. `CBIND-038`'s generator is the shape to copy — a declaration, a `--run` that
-  measures the real build, and a `--check` that fails when the two disagree.
+  not applicable — and Phase B7 hardening is under way: `CBIND-038` and `CBIND-039` are both ✅.
+- **Next task:** `CBIND-040`, the safety and lifetime stress tests. This one is *behavioural*, not
+  mechanical: invalid handles, double release, stale generations, shutdown order, callback
+  unregistration, UTF-8 and buffer boundaries, and high-volume create/release, all under the ASan
+  tree that already exists. Two things the campaign has already settled are the material to work
+  from rather than rediscover — the handle table is generation-checked and thread-affine
+  (`docs/c-api/HANDLES.md`), and every string route is a count/copy pair that returns
+  `CNA_RESULT_BUFFER_TOO_SMALL` **with no partial write** (`docs/c-api/STRINGS_AND_BUFFERS.md`).
+  The stress tests are what turn those from documented intentions into measured ones. Fuzz targets
+  for the buffer-facing routes belong to the same task; keep them where the ASan tree can build
+  them, and remember that a fuzzer that never gets a valid input finds nothing.
 
-  One thing `CBIND-038` established that this task inherits: **absence is skipped, presence is
-  binding.** A gate that cannot run somewhere should say so by name rather than pass quietly.
+  Two things the last two gate tasks established that this one inherits: **absence is skipped by
+  name, presence is binding** — a gate that cannot run somewhere says so rather than passing
+  quietly; and a gate is not finished until it has been **shown to fail** on the defect it exists
+  for. `CBIND-038` proved itself by reinstating a duplicate typedef; `CBIND-039` by swapping two
+  struct fields, in CI as well as by hand.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

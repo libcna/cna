@@ -1180,20 +1180,46 @@
 > **a toolchain that is installed is binding**, and **a toolchain that is absent is skipped by name,
 > never counted as agreement**. Both are worth reusing in the remaining gates.
 >
-> **Next: `CBIND-039`**, the ABI layout, export and compatibility gates. Much of it already exists —
-> the ABI assertion walls pin sizes, offsets and ordinals, and `CApi_Exports` checks the exported
-> symbol set — so the genuinely missing piece is a **checked-in baseline snapshot** of both, making a
-> change visible as a diff that has to be justified rather than merely re-asserted. `CBIND-038`'s
-> generator is the shape to copy. The 32 `partial` rows are not gaps the campaign left open — each is
-> a symbol whose canonical form cannot be fully expressed in C, with its usable subset named in
-> `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new capability to add.
+> **CBIND-039 then records the ABI baseline.** `tools/c-api/abi_baseline.json` is a checked-in
+> snapshot of what the ABI *actually is*: 166 struct layouts with every field's offset, 258 scalar
+> widths, 1,338 constant values and 2,720 exported symbols, measured by a generated probe rather
+> than asserted by hand. The assertion walls pin what each slice remembered to pin; this pins the
+> rest, and its point is that a change arrives as a **reviewable diff** instead of a silently
+> different binary. Differences are classified: an added struct, field, constant or export is an
+> addition the evolution policy permits; a moved field, a changed value or a vanished export is
+> named as a break.
 >
-> **State at this handoff.** Thirty-one slices are committed on `feature/binding` since
+> Two findings are worth carrying. First, **the tool's own bugs were the interesting part**: a
+> `\s`-based regex let an include guard swallow the next line as its value, and
+> `CNA_PRESENTATION_PARAMETERS_TYPE_NAME` — written across a line continuation — was consequently
+> measured as a *pointer*, so the baseline disagreed with itself on the very next run. The probe now
+> runs twice and refuses any value that differs, which turns that whole class of mistake into an
+> immediate error. Second, **all four configurations export exactly the same 2,720 symbols**: the
+> ABI surface does not vary with the renderer or with `CNA_DEVICES`, only the answers do. That was
+> an intention the campaign stated repeatedly; it is now measured.
+>
+> The gate is split by what it can honestly see. `CApiAbiHeaderBaseline` measures the header half
+> with no build at all — so the ordinary build and a build-free CI job catch a moved field — and
+> `CApiAbiBaseline` adds the library's own version and export list; what it cannot see it reports as
+> skipped **by name**. The sanitized tree passes its own `-fsanitize` flags to the probe rather than
+> being excluded, because a sanitized shared object will not load into an uninstrumented one.
+>
+> **Next: `CBIND-040`**, the safety and lifetime stress tests — the first *behavioural* hardening
+> task rather than a mechanical one. The material already exists and should be measured, not
+> redesigned: the handle table is generation-checked and thread-affine (`docs/c-api/HANDLES.md`),
+> and every string route is a count/copy pair returning `CNA_RESULT_BUFFER_TOO_SMALL` with **no
+> partial write** (`docs/c-api/STRINGS_AND_BUFFERS.md`). The 32 `partial` rows are not gaps the
+> campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
+> its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
+> capability to add.
+>
+> **State at this handoff.** Thirty-three slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row. All four verification trees are green at
-> 78/78 with the coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038` and `CBIND-039` are done, so
+> Phase B7 resumes at `CBIND-040`. All four verification trees are green at
+> 78/78 with the coverage, compatibility and ABI-baseline gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

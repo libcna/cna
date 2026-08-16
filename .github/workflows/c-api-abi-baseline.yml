@@ -1,0 +1,81 @@
+# plan_binding.md CBIND-039: the ABI layout and export baseline as a gate.
+#
+# A stable ABI is a promise about numbers nobody reads: struct sizes, field offsets, scalar widths,
+# constant values, exported symbol names. The hand-written assertion walls pin the ones each slice
+# remembered to pin; this job pins the rest, by measuring what the compiler actually laid out and
+# holding it against a checked-in baseline.
+#
+# The value is that a change becomes a **reviewable diff** rather than a silently different binary.
+# Additions are permitted by docs/c-api/ABI_VERSIONING.md and are simply re-recorded; a moved field,
+# a changed value or a vanished export is named as a break.
+#
+# The header half needs no build, which is what lets this run on every push instead of waiting for a
+# nightly. The export half needs the built library and runs as the CApiAbiBaseline ctest test in
+# each of the four C API build trees.
+
+name: C API ABI baseline
+
+on:
+  push:
+    paths:
+      - 'modules/c-api/include/**'
+      - 'tools/c-api/abi_baseline.json'
+      - 'tools/c-api/generate_abi_baseline.py'
+      - '.github/workflows/c-api-abi-baseline.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'modules/c-api/include/**'
+      - 'tools/c-api/abi_baseline.json'
+      - 'tools/c-api/generate_abi_baseline.py'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-abi-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  abi-baseline:
+    name: Layouts, widths and constant values against the baseline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Measure the headers against the baseline
+        run: python3 tools/c-api/generate_abi_baseline.py --check
+
+      # A gate that cannot fail is not a gate. This reinstates the exact mistake the baseline exists
+      # to catch -- two fields of a public struct swapped -- and requires the check to reject it, so
+      # a check that quietly degraded into a no-op cannot pass unnoticed.
+      - name: Prove the gate rejects a moved field
+        run: |
+          set -euo pipefail
+          header=modules/c-api/include/CNA/C/math_values.h
+          cp "$header" /tmp/math_values.h.orig
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("modules/c-api/include/CNA/C/math_values.h")
+          text = path.read_text(encoding="utf-8")
+          before = "    int32_t x;\n    /** @brief Vertical component. */\n    int32_t y;\n} CNA_Point;"
+          after = "    int32_t y;\n    /** @brief Vertical component. */\n    int32_t x;\n} CNA_Point;"
+          assert text.count(before) == 1, "the CNA_Point declaration this check perturbs has moved"
+          path.write_text(text.replace(before, after, 1), encoding="utf-8")
+          PY
+          status=0
+          python3 tools/c-api/generate_abi_baseline.py --check || status=$?
+          cp /tmp/math_values.h.orig "$header"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the baseline check accepted a moved struct field" >&2
+            exit 1
+          fi
+          echo "the gate rejected the moved field, as it must"
+
+      - name: Confirm the tree was restored
+        run: git diff --exit-code -- modules/c-api/include/CNA/C/math_values.h

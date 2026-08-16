@@ -82,3 +82,51 @@ New capabilities use one of these paths:
 Changing an existing meaning is forbidden. Deprecated functions continue to export through their
 ABI major and direct consumers to their replacement in documentation. The C API's version is
 independent of the CNA project version and independent of Sharp Runtime's version.
+
+## The recorded baseline
+
+The rule above is only worth what enforces it, and a rule about numbers nobody reads needs
+something that reads them. `tools/c-api/abi_baseline.json` is a checked-in snapshot of what the ABI
+**actually is**, produced by `tools/c-api/generate_abi_baseline.py`:
+
+| Recorded | Measured how |
+|---|---|
+| Every struct's size and alignment, and every field's offset and size | `sizeof`, `_Alignof` and `offsetof` in a generated probe |
+| Every scalar typedef's width and alignment | the same probe |
+| Every integer, string and named-color constant's value | printed by the probe, so a macro's *expansion* is what is recorded |
+| The ABI version the headers declare, and the one the library reports | `CNA_ABI_VERSION` against `cna_get_abi_version()` |
+| Every `cna_*` symbol the shared object exports | `nm -D --defined-only` |
+
+The point is not that these numbers are asserted — the assertion walls in
+`tests/pure_c/AbiHeaderC.c` and `tests/cpp/AbiHeaderCpp.cpp` already pin the ones each slice
+remembered to pin — but that a change to **any** of them arrives as a reviewable diff instead of a
+silently different binary.
+
+When the check disagrees with the build it says which kind of difference it found:
+
+- **Additions** — a new struct, field, constant or export. Permitted by the four evolution paths
+  above; re-record them with `--write` and the diff shows exactly what was added.
+- **ABI breaks** — a struct that changed size or alignment, a field that moved or was resized, a
+  constant whose value changed, an export that vanished, or a library whose reported version
+  disagrees with its headers. Each is named individually. These are what this section forbids.
+
+Two gates run it:
+
+- `CApiAbiHeaderBaseline` measures the headers alone. It needs no build, so it runs in the ordinary
+  build and in the `c-api-abi-baseline` CI job, which is where a moved field is most likely to be
+  introduced.
+- `CApiAbiBaseline` adds the two halves only a built library can answer — its own ABI version and
+  its export list — and runs in each C API build tree.
+
+What one cannot see, it skips **by name**: a header-only run reports the export list and the
+runtime version as skipped rather than passing over them in silence.
+
+Recording the baseline needs the library:
+
+```sh
+python3 tools/c-api/generate_abi_baseline.py --write --library <build>/modules/c-api/libcna_c_api.so
+```
+
+All four build configurations export the same 2,720 symbols. That is itself part of the contract:
+the ABI **surface** does not vary with the renderer or with `CNA_DEVICES` — only the answers do. A
+route whose backend is absent exists and refuses, rather than disappearing from the library.

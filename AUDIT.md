@@ -103,7 +103,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > with the reason. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and
-> `docs/c-api/COVERAGE.md`.
+> `docs/c-api/COVERAGE.md`. Phase B7 hardening then adds two mechanical gates over that surface:
+> `CBIND-038` compiles every public header on its own across 23 toolchain cells, and `CBIND-039`
+> records what the ABI **actually is** — 166 struct layouts, 258 scalar widths, 1,338 constant
+> values and 2,720 exported symbols — in `tools/c-api/abi_baseline.json`, so a moved field or a
+> changed constant arrives as a reviewable diff rather than a silently different binary.
 
 ---
 
