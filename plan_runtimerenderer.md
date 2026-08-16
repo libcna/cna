@@ -459,6 +459,14 @@ Each task: implement `<Family>::GetDescriptor()` in that family's module, export
 to `ActiveDescriptor()` for that configuration. Each must be verified by actually building and
 running that family's own smoke/example target where one exists.
 
+> **Superseded field names (the `next` merge, 2026-08-16).** The rows below still name the two
+> hooks this phase shipped, `prepareWindowFlags` and `applyPreWindowAttributes`, because that is
+> what each task actually did at the time. Both are now DATA on the descriptor -- `windowKind` +
+> `wantsHighDpi`, and `glFramebuffer` -- so a row saying "wraps `X()` in a `prepareWindowFlags`
+> hook" means "that family's runtime answer, now expressed as descriptor data". See the merge
+> section at the end of this file for why. The work each row records is unchanged; only where the
+> answer lives changed.
+
 | ID | St | Family → identity |
 |---|---|---|
 | RTR-P1-D01 | ✅ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
