@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MS-PL
 //
-// plan_fx.md FX-061: the SDL_GPU compiled-effect runtime, exercised directly.
+// plan_fx.md FX-061/FX-071: the SDL_GPU compiled-effect runtime and its draw route.
 //
-// These go through CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer::CreateCompiledEffect rather
-// than through the public Effect class, because SupportsCompiledEffects() is deliberately still
-// false on this renderer: a compiled pass cannot yet take over its draw path, and advertising
-// support before that would mean silently drawing with a stock shader. The runtime underneath is
-// complete, so it is tested at the level where it is reachable.
+// SupportsCompiledEffects() reports true (FX-071 is done: ordinary 3D draws and SpriteBatch both
+// draw with a compiled pass, verified by RendersTheAppliedPassesExpectedPixelsIntoARenderTarget
+// below and by SharedBackendConformanceContract). Most tests here still go through
+// CNA::Internal::Renderers::SdlGpu::SdlGpuRenderer::CreateCompiledEffect directly rather than the
+// public Effect class -- that predates the draw route and stays useful as a lower-level check of
+// the runtime itself (reflection, state translation, parameter/texture validation, clone
+// independence) independent of whatever draws it.
 //
 // What this proves that the existence-gate probes do not: the runtime honours CNA's own contract
 // -- reflection matching the source, technique and pass selection, parameter and texture
@@ -18,7 +20,9 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
+#include "CNA/TestSupport/CompiledEffectConformance.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
+#include "Microsoft/Xna/Framework/Graphics/RenderTarget2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
@@ -70,13 +74,17 @@ namespace
     }
 }
 
-TEST(SdlGpuCompiledEffectTest, TheCapabilityStaysFalseUntilDrawsExecuteTheEffect)
+TEST(SdlGpuCompiledEffectTest, TheCapabilityIsTrueNowThatDrawsExecuteTheEffect)
 {
     GraphicsDevice device;
-    // The whole point of this file: the runtime works, and the renderer still does not claim it.
-    // A compiled pass cannot yet take over this renderer's draw path, and a true here would mean
-    // a game silently rendered with a stock shader instead.
-    EXPECT_FALSE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
+    if (RendererOf(device) == nullptr)
+        GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+    // plan_fx.md FX-071: ordinary 3D draws and SpriteBatch both draw with a compiled pass now
+    // (RendersTheAppliedPassesExpectedPixelsIntoARenderTarget, DrawsASpriteWithACompiledEffect),
+    // verified by a real golden-pixel readback and the FX-060 shared conformance contract
+    // (SharedBackendConformanceContract) -- so this capability no longer means "will silently
+    // render with a stock shader instead".
+    EXPECT_TRUE(device.SupportsCapability(CNA::GraphicsCapability::CompiledEffects));
 }
 
 TEST(SdlGpuCompiledEffectTest, ReflectionMatchesTheConformanceSource)
@@ -533,6 +541,100 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsIndexedAndNonIndexedPrimitivesWithTheApp
     EXPECT_NO_THROW(renderer->Present());
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, RendersTheAppliedPassesExpectedPixelsIntoARenderTarget)
+{
+    // plan_fx.md FX-071 golden-pixel test: the real per-pixel proof that was missing while the
+    // FX-071 investigation was open. RenderTarget2D::GetData() is real on this renderer (unlike
+    // backbuffer readback, see sdlgpu_rendertarget2d_test.cpp), so this draws through
+    // SdlGpuRenderer::DrawPrimitivesEx the same way DrawsIndexedAndNonIndexedPrimitivesWithTheApplied
+    // Pass does, then reads the render target back and checks the centre pixel against values
+    // independently verified against CnaConformanceEffect.fx's own arithmetic via a standalone,
+    // CNA-code-free probe (tools/graphics/mojoshader_sdlgpu_probe --render): a 1x1 white FxTexture
+    // sampled and multiplied through MainPixelShader's Tint/Gain/Lighting-preshader chain lands on
+    // (3,6,10,13), and FlatPixelShader's Tint*Weights[1] preshader lands on (20,41,61,82).
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    runtime->SetParameterTexture(5, &white);  // FxTexture
+
+    const VertexDeclaration declaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    struct Vertex { float x, y, z, u, v; };
+    // Full-screen quad in clip space: Transform is the identity, so MainVertexShader's
+    // mul(Position, Transform) passes Position straight through -- these need to already be NDC.
+    const std::vector<Vertex> quad = {
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        {-1.0f, -1.0f, 0.0f, 0.0f, 1.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        {-1.0f,  1.0f, 0.0f, 0.0f, 0.0f},
+        { 1.0f, -1.0f, 0.0f, 1.0f, 1.0f},
+        { 1.0f,  1.0f, 0.0f, 1.0f, 0.0f},
+    };
+
+    auto drawQuadAndReadCentre = [&](int techniqueIndex, int passIndex, const char* label) -> Color
+    {
+        RenderTarget2D rt(device, 8, 8);
+        device.SetRenderTarget(&rt);
+        device.Clear(Color(50, 50, 50, 255));  // a colour neither expected result is close to
+        // Neither P0 nor P1 assign a CullMode render state of their own (only StatePass does), so
+        // CompiledEffectDeviceState::rasterizer below is never consulted for these two passes --
+        // it only matters to a pass that itself changes that state group. The device's own live
+        // RasterizerState is what CaptureRenderState() actually reads at draw time, so it has to
+        // be set here directly, the same way a real game would before issuing this draw.
+        device.setRasterizerStateProperty(RasterizerState::CullNone);
+
+        CompiledEffectDeviceState deviceState;
+        CompiledEffectPassStateChanges changes;
+        runtime->SetTechnique(techniqueIndex);
+        runtime->ApplyPass(passIndex, deviceState, changes);
+
+        GpuDrawParams params{};
+        params.compiledEffectRuntime = sdlGpuEffect;
+
+        auto vb = renderer->CreateVertexBuffer(6);
+        vb->SetVertexDeclaration(declaration);
+        vb->SetData(quad.data(), 6, sizeof(Vertex));
+        EXPECT_NO_THROW(renderer->DrawPrimitivesEx(
+            *vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+            Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 2, params)) << label;
+
+        device.SetRenderTarget(static_cast<RenderTarget2D*>(nullptr));
+        EXPECT_NO_THROW(renderer->Present()) << label;
+
+        Color pixel(0, 0, 0, 0);
+        const Rectangle centre(4, 4, 1, 1);
+        rt.GetData(0, &centre, &pixel, 0, 1);
+        return pixel;
+    };
+
+    // Technique 0 pass 0 (P0): MainVertexShader/MainPixelShader -- samples FxTexture, and its
+    // preshader combines the Lighting struct's Intensity/Thresholds[0] via saturate().
+    const Color mainPixel = drawQuadAndReadCentre(0, 0, "P0/MainPixelShader");
+    EXPECT_NEAR(mainPixel.getRProperty(), 3, 3);
+    EXPECT_NEAR(mainPixel.getGProperty(), 6, 3);
+    EXPECT_NEAR(mainPixel.getBProperty(), 10, 3);
+    EXPECT_NEAR(mainPixel.getAProperty(), 13, 3);
+
+    // Technique 1 pass 0 (P1): MainVertexShader/FlatPixelShader -- no sampling at all, its
+    // preshader combines the Tint and Weights[2] array parameters via a single MUL_SCALAR.
+    const Color flatPixel = drawQuadAndReadCentre(1, 0, "P1/FlatPixelShader");
+    EXPECT_NEAR(flatPixel.getRProperty(), 20, 3);
+    EXPECT_NEAR(flatPixel.getGProperty(), 41, 3);
+    EXPECT_NEAR(flatPixel.getBProperty(), 61, 3);
+    EXPECT_NEAR(flatPixel.getAProperty(), 82, 3);
+}
+
 TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
 {
     GraphicsDevice device;
@@ -587,10 +689,9 @@ TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
     runtime->ApplyPass(0, deviceState, changes);  // P0: MainVertexShader/MainPixelShader
 
     // plan_fx.md FX-071: exercised at the level SdlGpuRenderer::QueueSprite is reachable from
-    // directly, the same way this file's ordinary-draw tests bypass Effect/GraphicsDevice, because
-    // SupportsCompiledEffects() staying false means the public Effect(device, bytecode)
-    // constructor -- and therefore SpriteBatch::Begin's public Effect* overload -- refuses before
-    // ever reaching this renderer's own runtime, exactly as it should.
+    // directly, the same way this file's other lower-level tests bypass Effect/GraphicsDevice, to
+    // isolate the SpriteBatch draw route from the public Effect(device, bytecode)/SpriteBatch::Begin
+    // construction path (both now work, since SupportsCompiledEffects() is true).
     const CNA::Internal::Renderers::SdlGpu::SdlGpuSampledTextureEXT nativeTexture =
         CNA::Internal::Renderers::SdlGpu::ResolveSampledTextureEXT(
             &white.GetRenderer(), "SpriteBatchCompiledEffectTest");
@@ -617,6 +718,19 @@ TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
         ASSERT_NE(runtime, nullptr) << name;
         EXPECT_FALSE(runtime->GetDescription().techniques.empty()) << name;
     }
+}
+
+TEST(SdlGpuCompiledEffectTest, SharedBackendConformanceContract)
+{
+    // plan_fx.md FX-060/FX-071: the same cross-renderer contract FNA3D's
+    // Fna3dCompiledEffectTest.SharedBackendConformanceContract runs -- format, reflection,
+    // techniques/passes, render state, state policy, samplers, texture binding, clone and
+    // lifetime -- now through the public Effect/GraphicsDevice API, since SupportsCompiledEffects()
+    // is true.
+    GraphicsDevice device;
+    if (!CNA::TestSupport::SupportsCompiledEffects(device))
+        GTEST_SKIP() << "selected renderer does not execute XNA Effect Framework bytecode";
+    CNA::TestSupport::RunCompiledEffectContract(device);
 }
 
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS

@@ -1593,16 +1593,23 @@ namespace CNA::Internal::Renderers::SdlGpu
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
         /**
          * @brief Parses a compiled XNA effect for this device (plan_fx.md FX-061).
-         *
-         * `SupportsCompiledEffects()` deliberately still reports false, so the public `Effect`
-         * path never reaches this. It is reachable directly, which is how the runtime is tested
-         * while the compiled-effect draw route is still missing.
          * @param effectCode Compiled effect bytes.
          * @param effectCodeBytes Number of bytes at @p effectCode.
          * @return The runtime, or null if MojoShader has no context for this device.
          */
         std::unique_ptr<ICompiledEffectRuntime> CreateCompiledEffect(
             const std::uint8_t* effectCode, std::size_t effectCodeBytes) override;
+
+        /**
+         * @brief True: this renderer executes compiled XNA Effect Framework bytecode
+         * (plan_fx.md FX-071). Ordinary 3D draws and SpriteBatch both have a working compiled-
+         * effect route, verified by a real (not simulated) golden-pixel test and the FX-060 shared
+         * conformance suite. Still refused explicitly rather than silently mishandled: a compiled
+         * effect's vertex shader sampling a texture, a 3D/cube (not 2D) sampler binding, and more
+         * than one vertex stream.
+         * @return true.
+         */
+        [[nodiscard]] bool SupportsCompiledEffects() const override { return true; }
 
         /**
          * @brief CNAEXT. Returns this device's MojoShader context, creating it on first use.

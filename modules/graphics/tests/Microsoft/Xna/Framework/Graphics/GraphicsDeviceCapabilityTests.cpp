@@ -171,7 +171,7 @@ constexpr bool kExpectOcclusionQuery        = true;
 constexpr bool kExpectCustomEffects         = true;
 #endif
 
-#if defined(CNA_RENDERER_FNA3D)
+#if defined(CNA_RENDERER_FNA3D) || defined(CNA_RENDERER_SDL_GPU)
 constexpr bool kExpectCompiledEffects = true;
 #else
 constexpr bool kExpectCompiledEffects = false;
