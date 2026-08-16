@@ -181,12 +181,23 @@ Rewritten 2026-08-15 after §27.2 was assessed row by row. Four of the five clus
 list named are now closed (`GLTF-184`, `GLTF-244`, `GLTF-379`, `385`–`387`); what is left is the
 three open ROBUST rows, ordered by cost.
 
-1. **Re-run Gate C's real-world rows on three more renderers (§27.2 row 12).** The cheapest of the
-   three and the least obvious, because the hard part is already done: EasyGL, Vulkan, SOFTWARE and
-   DirectX11-under-DXVK each hold whole-corpus, tolerance-0, reviewed-golden image evidence with a
-   passing guard test. What ran on only one renderer is `scripts/gltf-viewer-retake.py` itself —
-   specifically its real-world rows, since the generated corpus deliberately contains no ≥ 50 MB
-   asset (`GLTF-019`). This is a protocol re-run on renderers that already have the pipeline.
+1. **Finish Gate C on two more renderers (§27.2 row 12) — 2 of 4 are done.** OPENGLES3 and
+   **VULKAN** both pass all 14 rows now; the harness was the blocker and is fixed (`--goldens`
+   selects the renderer's own set, and golden comparison is pixel-exact rather than byte-exact,
+   which PLAT-65's PNG-encoder swap had broken). The last two need **system packages, not work**:
+
+   ```bash
+   sudo apt-get install -y libwayland-egl-backend-dev libz-mingw-w64-dev
+   ```
+
+   BGFX fails to link on `-lwayland-egl`; the MinGW DirectX11 viewer — the Direct3D path the row
+   requires — fails to configure because sharp-runtime's io-compression wants a Windows zlib.
+   DirectX11 additionally needs a Wine prefix with DXVK (`~/.wine-cna-d3d11`, absent here);
+   `scripts/run-wine-dxvk.sh` is the runner and asserts DXVK actually handled the run.
+
+   **Do not reach for SOFTWARE as the fourth.** It renders unlit — pure white where the reference
+   shades — so it fails Gate C's reference comparison at row 1 by MAE 206/255 while its own
+   whole-corpus goldens encode that white. Recorded in §27.2 row 12 with the numbers.
 2. **The `KHR_materials_specular` texture pair on `metal`, `webgpu`, `wicked` (`GLTF-344`,
    §27.2 row 3).** Not three small bindings: none of the three carries a second UV stream, and the
    binding contract is defined per map with its own UV selector, so the dual-UV foundation comes
