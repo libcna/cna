@@ -2,6 +2,7 @@
 
 #include "CNA/C/runtime_components.h"
 #include "CnaCApiDetail.hpp"
+#include "CnaCApiGameComponentsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
 #include "Microsoft/Xna/Framework/DrawableGameComponent.hpp"
@@ -381,6 +382,48 @@ template<typename TComponent>
 }
 
 } // namespace
+
+namespace CNA::C::Detail {
+
+CNA_Result CreateOwnedCanonicalGameComponent(
+    const CNA_Handle gameHandle,
+    std::unique_ptr<Microsoft::Xna::Framework::GameComponent> component,
+    CNA_Handle* const outComponent)
+{
+    if (component == nullptr || outComponent == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The canonical game component factory arguments are invalid.");
+    }
+    *outComponent = CNA_INVALID_HANDLE;
+    auto resource = std::make_shared<ComponentResource>();
+    resource->game = gameHandle;
+    // A canonical component is never one this ABI derived, so it has no drawable half to record and
+    // no callback set behind it -- only the handle, the registry entry and the ownership count are
+    // the same as for a component a caller built.
+    IGameComponent* const key = component.get();
+    resource->value = std::move(component);
+    const CNA_Result result = CNA::C::Detail::GetRuntimeHandles().Create(
+        ObjectKind::GameComponent,
+        resource,
+        outComponent);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The game component handle could not be created.");
+    }
+    resource->handle = *outComponent;
+    {
+        const std::lock_guard<std::mutex> lock(ComponentRegistryMutex());
+        ComponentRegistry()[key] = *outComponent;
+    }
+    CNA::C::Detail::AddOwnedGameComponent();
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
 
 CNA_Result cna_game_component_callbacks_init(CNA_GameComponentCallbacks* const outCallbacks)
 {

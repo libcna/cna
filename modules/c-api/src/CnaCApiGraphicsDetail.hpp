@@ -9,6 +9,7 @@
 #include <memory>
 
 namespace Microsoft::Xna::Framework::Graphics {
+class SpriteBatch;
 class Effect;
 class OcclusionQuery;
 class SpriteFont;
@@ -114,6 +115,13 @@ struct TextureCubeResourceView final {
     std::shared_ptr<Microsoft::Xna::Framework::Graphics::TextureCube> texture,
     CNA_Handle parentGame,
     CNA_Handle* outTexture);
+
+// The guide draws its own keyboard and message box, so it needs a sprite batch it did not create.
+// The batch resource layout stays private to the graphics adapter; this hands back only the canonical
+// object, which is all a caller outside that adapter can use.
+[[nodiscard]] CNA_Result GetOwnedSpriteBatchValue(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::Graphics::SpriteBatch** outSpriteBatch);
 
 [[nodiscard]] CNA_Result GetOwnedSpriteFont(
     CNA_Handle handle,

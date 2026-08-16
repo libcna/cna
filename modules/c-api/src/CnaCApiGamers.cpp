@@ -343,6 +343,19 @@ void RaiseGamerEvent(
 
 } // namespace
 
+namespace CNA::C::Detail {
+
+CNA_Result BorrowAnyGamer(const CNA_Handle handle, Gamer** const outGamer)
+{
+    if (outGamer == nullptr) {
+        return InvalidInput("The borrowed Gamer output is null.");
+    }
+    *outGamer = nullptr;
+    return BorrowGamerBase(handle, outGamer);
+}
+
+} // namespace CNA::C::Detail
+
 CNA_Result cna_gamer_presence_init(CNA_GamerPresence* const outPresence)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {

@@ -1066,17 +1066,41 @@
 > from C. The third is the established one: a protected member is mappable only when this ABI supplies
 > a derived class to hang it on. The inventory is now 5,808 implemented, 32 partial, 270 planned and
 > 305 N/A; all four trees green at 73/73, ASan+UBSan clean.
-> **Next: CBIND-037G5**, the guide, its dispatcher and its component (58 rows) — reuse the settled
-> asynchronous shape, but check first whether any guide operation genuinely defers rather than
-> completing before `Begin` returns.
+> CBIND-037G5 then completes the guide, its dispatcher and its component, 58 rows — and the check the
+> handoff asked for paid off. **The guide's two operations do not complete before `Begin` returns.**
+> The on-screen keyboard and the message box stay pending until the user answers, and only then does
+> the completion callback run. So this ABI now has **two** asynchronous shapes, and a new slice has to
+> pick: a pair that completes synchronously is one route that then invokes the callback; a pair that
+> genuinely defers keeps the operation in the C layer and answers through `has_pending` plus an end
+> route with no operation argument. Only one of each may be pending, a second start is refused without
+> disturbing the first, and keeping the operation is also what stops the canonical `new`ed object
+> leaking when a caller never reads the answer.
 >
-> **State at this handoff.** Twenty-five slices are committed on `feature/binding` since
+> **Thirteen guide screens are no-ops.** There is no UI behind compose message, friends, invites,
+> gamer cards, the marketplace, messages, party, party sessions, player review, players, sign-in or
+> achievements, and no notification system to delay. They validate their arguments and do nothing —
+> and the validation still happens, because that is the boundary's job whether or not anything
+> downstream uses the value. The keyboard and the message box are real only because **this ABI draws
+> them itself**, which is what the two renderers and the readable pending state exist for.
+>
+> Two behaviors were found by testing rather than assumed: a **cancelled keyboard input carries no
+> text at all** (the canonical implementation clears it), so the cancellation flag is the only way to
+> tell it from a confirmed empty string; and **discarding is not completing** — reset runs no callback.
+> The component slice added one small thing worth knowing: `cna_gamer_services_component_create`
+> publishes the **first canonical component** this ABI has, so the components adapter grew a factory
+> that gives a runtime-implemented component the same handle, registry entry and ownership
+> bookkeeping a caller-derived one gets. The inventory is now 5,866 implemented, 32 partial, 212
+> planned and 305 N/A; all four trees green at 74/74, ASan+UBSan clean.
+> **Next: CBIND-037G6**, achievements, leaderboards and property storage (129 rows) — decide which of
+> the two asynchronous shapes a leaderboard read is before writing it.
+>
+> **State at this handoff.** Twenty-six slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (270) is all
-> that remains in the whole campaign**, in three slices: the guide, achievements and leaderboards,
-> and the avatars. All four verification trees are green at 73/73 with the coverage gate current, and
-> the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (212) is all
+> that remains in the whole campaign**, in two slices: achievements and leaderboards, and the avatars.
+> All four verification trees are green at 74/74 with the coverage gate current, and the ASan tree
+> runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

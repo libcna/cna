@@ -5803,6 +5803,77 @@
       "tests": "`GamersSmoke.c` subscribes to both events with a callback that asserts the description carries a live handle, and releases both registrations",
       "status": "implemented",
       "task": "CBIND-037G4"
+    },
+    {
+      "id": "guide-settings",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Guide(::(get|set)(IsScreenSaverEnabled|IsTrialMode|IsVisible|NotificationPosition|SimulateTrialMode)Property)?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "free `cna_guide_*` routes, because the canonical guide is a static class with a deleted constructor -- there is nothing to hold a handle to. The five settings are get/set pairs, and the notification position refuses an undefined identity at the boundary",
+      "tests": "`GuideSmoke.c` round-trips every setting and refuses a non-boolean flag, an undefined notification position and a null output",
+      "status": "implemented",
+      "task": "CBIND-037G5"
+    },
+    {
+      "id": "guide-keyboard-input",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Guide::(BeginShowKeyboardInput|EndShowKeyboardInput|getHasPendingKeyboardInputEXTProperty|WasKeyboardInputCanceledEXT|GetPendingKeyboardInput(Title|Description|DisplayText)ForTestingEXT|RenderPendingKeyboardInputEXT|SimulateKeyboardInputCancelEXT|ResetPendingKeyboardInputForTestingEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_guide_begin_show_keyboard_input` and the `cna_guide_*_keyboard_input*` family. **This is the first genuinely deferred operation in the whole ABI**: unlike every other begin/end pair, the canonical input does not complete before `Begin` returns -- it stays pending until the user confirms or cancels, and only then does the completion callback run. The two canonical overloads differ only by the password flag, so passing it is the C form of both. The end routes take no operation argument because only one input may be pending and the C layer keeps that one operation itself, which is also what stops it leaking when a caller never reads the answer",
+      "tests": "`GuideSmoke.c` starts an input and asserts the callback has **not** run, that a second start is refused without disturbing the first, that the pending title, description and display text are readable, that the answer cannot be read early, that cancelling runs the callback exactly once and leaves nothing pending, that a cancelled input carries **no** text so the cancellation flag is what distinguishes it, that password mode masks the display text, and that discarding runs no callback at all",
+      "status": "implemented",
+      "task": "CBIND-037G5"
+    },
+    {
+      "id": "guide-message-box",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Guide::(BeginShowMessageBox|EndShowMessageBox|getHasPendingMessageBoxEXTProperty|GetPendingMessageBoxFocusButtonForTestingEXT|RenderPendingMessageBoxEXT|SimulateMessageBoxClickEXT|ResetPendingMessageBoxForTestingEXT)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_guide_begin_show_message_box` and the `cna_guide_*_message_box*` family, on the same deferred shape the keyboard input established. Both canonical overloads reach one route, since the implementation ignores the player entirely. The answer is optional, so availability is separate from it: a box that completed without a choice is an ordinary success with the flag clear. An empty button list is refused, because a box with no button has no answer anyone could ever give",
+      "tests": "`GuideSmoke.c` starts a box and asserts the callback has not run, reads the focused button, refuses a second box and an early answer, refuses a click outside the button list in both directions, then clicks and asserts the callback ran once and the answer is the button clicked; an empty button list, an undefined icon and an undefined player are each refused",
+      "status": "implemented",
+      "task": "CBIND-037G5"
+    },
+    {
+      "id": "guide-screens",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::Guide::(DelayNotifications|Show(ComposeMessage|FriendRequest|Friends|GameInvite|GamerCard|Marketplace|Messages|Party|PartySessions|PlayerReview|Players|SignIn|AchievementsEXT))$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "one `cna_guide_*` route each. **Every one of them is a no-op on this runtime**: there is no guide UI for any of these screens and no notification system to delay, so they validate their arguments and do nothing. Only the keyboard input and the message box are real, and those two are real because this ABI draws them itself. The two `ShowGameInvite` overloads are separate routes because they take genuinely different things -- a recipient list and a session identifier",
+      "tests": "`GuideSmoke.c` calls every screen and asserts it is accepted, and asserts the boundary still refuses an undefined player index and an invalid gamer handle even though nothing would have used either",
+      "status": "implemented",
+      "task": "CBIND-037G5"
+    },
+    {
+      "id": "gamer-services-dispatcher",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerServicesDispatcher(::(getIsInitializedProperty|(get|set)WindowHandleProperty|InstallingTitleUpdate|Initialize|Update|UpdateAsync|GetFreedGamerCountForTesting))?$",
+      "kinds": [
+        "class",
+        "method",
+        "event"
+      ],
+      "mapping": "free `cna_gamer_services_dispatcher_*` routes, since the dispatcher is a static class with a deleted constructor. `Initialize` takes a game handle and hands the dispatcher that game's service container, which is the only service provider a C caller has. The window handle passes through as an integer without being interpreted; nothing in this runtime reads it. The title-update event is a subscription released through the shared `cna_gamer_unsubscribe_ext`",
+      "tests": "`GuideSmoke.c` round-trips the window handle, initializes the dispatcher against a real game and asserts it reports itself initialized, refuses an invalid game handle, pumps both update routes, reads the freed-gamer counter and subscribes to and releases the title-update event",
+      "status": "implemented",
+      "task": "CBIND-037G5"
+    },
+    {
+      "id": "gamer-services-component",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::GamerServicesComponent(::(GamerServicesComponent|Initialize|Update))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "`cna_gamer_services_component_create`, answering an ordinary game-component handle that every `cna_game_component_*` route accepts. This is the first **canonical** component this ABI publishes -- every other one is derived from a caller's callback set -- so its initialize and update behavior belong to the runtime rather than to C, and the components adapter grew a factory for exactly that case so the handle, the collection registry entry and the ownership bookkeeping stay identical",
+      "tests": "`GuideSmoke.c` creates one from a game, drives it through an ordinary component route to prove the handle is not a special kind, and releases it",
+      "status": "implemented",
+      "task": "CBIND-037G5"
     }
   ]
 }

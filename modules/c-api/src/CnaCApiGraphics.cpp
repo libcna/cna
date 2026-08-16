@@ -397,6 +397,27 @@ CNA_Result GetOwnedTexture2D(
         "The owned Texture2D handle is invalid for this call.");
 }
 
+
+CNA_Result GetOwnedSpriteBatchValue(
+    const CNA_Handle handle,
+    Microsoft::Xna::Framework::Graphics::SpriteBatch** const outSpriteBatch)
+{
+    if (outSpriteBatch == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The SpriteBatch output is null.");
+    }
+    *outSpriteBatch = nullptr;
+    std::shared_ptr<SpriteBatchResource> spriteBatch;
+    if (const CNA_Result result = GetSpriteBatch(handle, &spriteBatch);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outSpriteBatch = spriteBatch->value.get();
+    return CNA_RESULT_SUCCESS;
+}
+
 } // namespace CNA::C::Detail
 
 CNA_Result cna_graphics_device_get_renderer_info(

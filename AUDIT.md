@@ -92,8 +92,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > closes the audio module with the XACT family against binary fixtures the test authors itself, and
 > `CBIND-037G1` opens the last module with the gamer and guide identities, and `CBIND-037G2`
 > adds the avatar identities, and `CBIND-037G3` converts the six gamer-services exceptions at the
-> boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces. The
-> generated inventory currently records 5,808 implemented, 32 partial, 270 planned and 305
+> boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces, and
+> `CBIND-037G5` completes the guide, its dispatcher and its component. The
+> generated inventory currently records 5,866 implemented, 32 partial, 212 planned and 305
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

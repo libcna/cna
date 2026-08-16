@@ -6,6 +6,7 @@
 #include "CnaCApiDetail.hpp"
 
 namespace Microsoft::Xna::Framework::GamerServices {
+class Gamer;
 class SignedInGamer;
 }
 
@@ -28,6 +29,12 @@ namespace CNA::C::Detail {
 // Every `cna_gamer_*` route accepts either handle kind, because the canonical surface belongs to the
 // gamer base. This reports a kind mismatch **without recording a diagnostic**, so the caller can try
 // the other kind next and only the final failure is what a caller reads back.
+// The guide takes gamers it did not create, and its routes accept either handle kind for the same
+// reason every `cna_gamer_*` route does: the canonical parameter is the base both derive from.
+[[nodiscard]] CNA_Result BorrowAnyGamer(
+    CNA_Handle handle,
+    Microsoft::Xna::Framework::GamerServices::Gamer** outGamer);
+
 [[nodiscard]] CNA_Result TryBorrowSignedInGamerQuietly(
     CNA_Handle handle,
     Microsoft::Xna::Framework::GamerServices::SignedInGamer** outGamer) noexcept;

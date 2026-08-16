@@ -153,3 +153,52 @@ ABI — every begin/end pair is one synchronous route, so there is nothing to ho
 that no longer exist. And the protected members of `Gamer` and `GamerCollection` are unmappable for
 the reason already settled for sensors and windows: **a protected member is mappable only when this
 ABI supplies a derived class to hang it on**, and it supplies none here.
+
+## The guide: two real screens and thirteen that do nothing
+
+The guide is a static class with a deleted constructor, so it has no handle: every route is a free
+`cna_guide_*` function.
+
+**Thirteen of its screens are no-ops on this runtime.** Compose message, friend request, friends,
+both game-invite forms, gamer card, marketplace, messages, party, party sessions, player review,
+players, sign-in and achievements all validate their arguments and do nothing, and so does
+`cna_guide_delay_notifications` — there is no notification system to delay. The routes exist because
+the canonical API does, and because a platform that grows these screens would need them. A bad player
+index or an invalid gamer handle is still refused, because argument validation is the boundary's job
+whether or not anything downstream uses the value.
+
+**Two screens are real, and they are real because this ABI draws them.** The on-screen keyboard and
+the message box have no system overlay behind them here, so the runtime renders them and the game
+supplies the surfaces — that is what `cna_guide_render_pending_keyboard_input_ext` and
+`cna_guide_render_pending_message_box_ext` are for, and why the pending title, description, display
+text and focused button are readable at all.
+
+### The one operation that is genuinely deferred
+
+Every other asynchronous pair in this ABI completes before its begin route returns. **These two do
+not.** `cna_guide_begin_show_keyboard_input` leaves an input pending and returns; the completion
+callback runs only when the user confirms or cancels, and the same is true of the message box. Poll
+`cna_guide_get_has_pending_*_ext` or wait for the callback.
+
+Only one of each may be pending at a time — a second start is refused and leaves the first alone —
+and the end routes take no operation argument because the C layer keeps that one operation itself.
+That is also what stops the canonical operation leaking when a caller never asks for its answer.
+
+Two behaviors are worth naming. **A cancelled keyboard input carries no text at all**: the canonical
+implementation clears what was typed, so `cna_guide_was_keyboard_input_canceled_ext` is the only way
+to tell a cancellation from a caller who confirmed an empty string. And **discarding is not
+completing**: `cna_guide_reset_pending_*_ext` throws the operation away and runs no callback, which is
+what makes it the right thing for a game tearing down a screen and the wrong thing for a game
+answering one.
+
+### The dispatcher and the one canonical component
+
+The dispatcher is static too. `cna_gamer_services_dispatcher_initialize` takes a game handle and hands
+the dispatcher that game's service container, which is the only service provider a C caller has. The
+window handle passes through as an integer without being interpreted — nothing in this runtime reads
+it.
+
+`cna_gamer_services_component_create` answers an **ordinary game-component handle**: every
+`cna_game_component_*` route accepts it. It is the first canonical component this ABI publishes —
+every other one is derived from a caller's callback set — so its initialize and update behavior belong
+to the runtime rather than to C.

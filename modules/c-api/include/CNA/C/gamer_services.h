@@ -1813,6 +1813,619 @@ CNA_C_API CNA_Result cna_friend_collection_create_ext(
  */
 CNA_C_API CNA_Result cna_gamer_collection_destroy(CNA_GamerCollectionHandle collection);
 
+/* ---- The guide, its dispatcher and its component ---- */
+
+/**
+ * @brief Reports whether the platform screen saver is enabled.
+ *
+ * @param out_is_enabled Receives non-zero when the screen saver is enabled.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_get_is_screen_saver_enabled(CNA_Bool* out_is_enabled);
+
+/**
+ * @brief Enables or disables the platform screen saver.
+ *
+ * @param is_enabled Non-zero to enable it.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_set_is_screen_saver_enabled(CNA_Bool is_enabled);
+
+/**
+ * @brief Reports whether the title is running in trial mode.
+ *
+ * @param out_is_trial_mode Receives non-zero in trial mode.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_get_is_trial_mode(CNA_Bool* out_is_trial_mode);
+
+/**
+ * @brief Sets whether the title is running in trial mode.
+ *
+ * @param is_trial_mode Non-zero for trial mode.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_set_is_trial_mode(CNA_Bool is_trial_mode);
+
+/**
+ * @brief Reports whether a guide screen is currently up.
+ *
+ * @param out_is_visible Receives non-zero when the guide is visible.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_get_is_visible(CNA_Bool* out_is_visible);
+
+/**
+ * @brief Shows or hides the guide.
+ *
+ * @param is_visible Non-zero to show it.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_set_is_visible(CNA_Bool is_visible);
+
+/**
+ * @brief Reads where the guide draws its notifications.
+ *
+ * @param out_position Receives one of the `CNA_NOTIFICATION_POSITION_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_get_notification_position(CNA_NotificationPosition* out_position);
+
+/**
+ * @brief Sets where the guide draws its notifications.
+ *
+ * @param position One of the `CNA_NOTIFICATION_POSITION_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_set_notification_position(CNA_NotificationPosition position);
+
+/**
+ * @brief Reports whether trial mode is being simulated.
+ *
+ * @param out_simulate Receives non-zero when trial mode is simulated.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_get_simulate_trial_mode(CNA_Bool* out_simulate);
+
+/**
+ * @brief Sets whether trial mode is simulated.
+ *
+ * @param simulate Non-zero to simulate trial mode.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_set_simulate_trial_mode(CNA_Bool simulate);
+
+/**
+ * @brief Opens the on-screen keyboard.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param title Title text, borrowed for the duration of the call.
+ * @param description Description text, borrowed for the duration of the call.
+ * @param default_text Text the input starts with, borrowed for the duration of the call.
+ * @param use_password_mode Non-zero to mask the text as it is typed.
+ * @param callback Callback invoked when the input completes or is cancelled; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when an input is already pending, or a
+ *         documented argument/thread failure.
+ *
+ * **This one really is asynchronous**, unlike every other begin/end pair in this ABI: the input stays
+ * pending until the user confirms or cancels it, and only then does @p callback run. Poll
+ * `cna_guide_get_has_pending_keyboard_input_ext` or wait for the callback, then read the answer with
+ * `cna_guide_end_show_keyboard_input_*`. Only one input may be pending at a time.
+ *
+ * The canonical API has a second overload without the password flag; passing `CNA_FALSE` here is
+ * exactly that overload.
+ */
+CNA_C_API CNA_Result cna_guide_begin_show_keyboard_input(
+    CNA_PlayerIndex player,
+    CNA_StringView title,
+    CNA_StringView description,
+    CNA_StringView default_text,
+    CNA_Bool use_password_mode,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Reports the byte length of the text the completed keyboard input produced.
+ *
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started or it has
+ *         not completed yet, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_guide_end_show_keyboard_input_size(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the text the completed keyboard input produced.
+ *
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
+ *         `CNA_RESULT_INVALID_STATE` when no completed input is available, or a documented argument
+ *         failure.
+ */
+CNA_C_API CNA_Result cna_guide_end_show_keyboard_input(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a keyboard input is waiting for the user.
+ *
+ * @param out_has_pending Receives non-zero while an input is pending.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * CNAEXT: the canonical API has no way to ask, because a real platform draws the keyboard itself.
+ * This runtime draws it, so a game needs to know when to.
+ */
+CNA_C_API CNA_Result cna_guide_get_has_pending_keyboard_input_ext(CNA_Bool* out_has_pending);
+
+/**
+ * @brief Reports whether the completed keyboard input was cancelled.
+ *
+ * @param out_was_canceled Receives non-zero when the user cancelled.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no input has been started, or a
+ *         documented argument failure.
+ *
+ * CNAEXT. **A cancelled input produces no text at all** — the canonical implementation clears what
+ * was typed — so this flag is the only way to tell a cancellation from a caller who confirmed an
+ * empty string.
+ */
+CNA_C_API CNA_Result cna_guide_was_keyboard_input_canceled_ext(CNA_Bool* out_was_canceled);
+
+/**
+ * @brief Reports the byte length of the pending input's title.
+ *
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when nothing is pending, or a documented
+ *         argument failure.
+ *
+ * CNAEXT: the pending text is what a game draws, so it has to be readable.
+ */
+CNA_C_API CNA_Result cna_guide_get_pending_keyboard_input_title_size_ext(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the pending input's title.
+ *
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
+ *         `CNA_RESULT_INVALID_STATE` when nothing is pending, or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_copy_pending_keyboard_input_title_ext(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of the pending input's description.
+ *
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return The same answers as @ref cna_guide_get_pending_keyboard_input_title_size_ext.
+ */
+CNA_C_API CNA_Result cna_guide_get_pending_keyboard_input_description_size_ext(uint64_t* out_bytes);
+
+/**
+ * @brief Copies the pending input's description.
+ *
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return The same answers as @ref cna_guide_copy_pending_keyboard_input_title_ext.
+ */
+CNA_C_API CNA_Result cna_guide_copy_pending_keyboard_input_description_ext(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of what the pending input currently displays.
+ *
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return The same answers as @ref cna_guide_get_pending_keyboard_input_title_size_ext.
+ *
+ * CNAEXT: in password mode this is the masked form, not what was typed.
+ */
+CNA_C_API CNA_Result cna_guide_get_pending_keyboard_input_display_text_size_ext(uint64_t* out_bytes);
+
+/**
+ * @brief Copies what the pending input currently displays.
+ *
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return The same answers as @ref cna_guide_copy_pending_keyboard_input_title_ext.
+ */
+CNA_C_API CNA_Result cna_guide_copy_pending_keyboard_input_display_text_ext(
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Draws the pending keyboard input.
+ *
+ * @param device Graphics device handle.
+ * @param sprite_batch Sprite batch handle.
+ * @param font Sprite font handle.
+ * @param white_pixel Single-white-pixel texture handle used for the panels.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure. Drawing when nothing
+ *         is pending is a no-op that reports success.
+ *
+ * CNAEXT: no real platform makes a game draw its own on-screen keyboard. This runtime has no system
+ * overlay, so it draws one and the game supplies the surfaces.
+ */
+CNA_C_API CNA_Result cna_guide_render_pending_keyboard_input_ext(
+    CNA_Handle device,
+    CNA_Handle sprite_batch,
+    CNA_Handle font,
+    CNA_Handle white_pixel);
+
+/**
+ * @brief Cancels the pending keyboard input as though the user had.
+ *
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_STATE` when nothing is pending.
+ *
+ * CNAEXT: the completion callback runs, exactly as it would for a real cancellation.
+ */
+CNA_C_API CNA_Result cna_guide_simulate_keyboard_input_cancel_ext(void);
+
+/**
+ * @brief Discards the pending keyboard input without completing it.
+ *
+ * @return `CNA_RESULT_SUCCESS`; discarding nothing is not a failure.
+ *
+ * CNAEXT: this is the reset a test uses between cases. **No callback runs** — the input never
+ * completed, it was thrown away.
+ */
+CNA_C_API CNA_Result cna_guide_reset_pending_keyboard_input_ext(void);
+
+/**
+ * @brief Opens a message box.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param title Title text, borrowed for the duration of the call.
+ * @param text Body text, borrowed for the duration of the call.
+ * @param buttons Array of @p button_count button captions, borrowed for the duration of the call.
+ * @param button_count Number of buttons; must be at least one.
+ * @param focus_button Index of the button that starts focused.
+ * @param icon One of the `CNA_MESSAGE_BOX_ICON_*` identities.
+ * @param callback Callback invoked when a button is chosen; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an empty button list or an
+ *         undefined icon, `CNA_RESULT_INVALID_STATE` when a message box is already pending, or a
+ *         documented argument/thread failure.
+ *
+ * Asynchronous in the same real sense the keyboard input is: it stays pending until a button is
+ * chosen. The canonical API has a second overload without the player; both reach the same
+ * implementation, which ignores the player entirely.
+ */
+CNA_C_API CNA_Result cna_guide_begin_show_message_box(
+    CNA_PlayerIndex player,
+    CNA_StringView title,
+    CNA_StringView text,
+    const CNA_StringView* buttons,
+    uint64_t button_count,
+    int32_t focus_button,
+    CNA_MessageBoxIcon icon,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Reads which button answered the message box.
+ *
+ * @param out_has_choice Receives non-zero when a button was chosen.
+ * @param out_button_index Receives the chosen button index when @p out_has_choice is non-zero, and
+ *        is left exactly as the caller set it otherwise.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when no message box has been started or
+ *         it has not been answered yet, or a documented argument failure.
+ *
+ * The canonical answer is optional, so availability is separate from the answer here too: a message
+ * box that completed without a choice is an ordinary success with the flag clear.
+ */
+CNA_C_API CNA_Result cna_guide_end_show_message_box(
+    CNA_Bool* out_has_choice,
+    int32_t* out_button_index);
+
+/**
+ * @brief Reports whether a message box is waiting for the user.
+ *
+ * @param out_has_pending Receives non-zero while one is pending.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * CNAEXT, for the same reason the keyboard input has one: this runtime draws the box itself.
+ */
+CNA_C_API CNA_Result cna_guide_get_has_pending_message_box_ext(CNA_Bool* out_has_pending);
+
+/**
+ * @brief Reports which button the pending message box has focused.
+ *
+ * @param out_focus_button Receives the focused button index.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when nothing is pending, or a documented
+ *         argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_get_pending_message_box_focus_button_ext(int32_t* out_focus_button);
+
+/**
+ * @brief Draws the pending message box.
+ *
+ * @param device Graphics device handle.
+ * @param sprite_batch Sprite batch handle.
+ * @param font Sprite font handle.
+ * @param white_pixel Single-white-pixel texture handle used for the panels.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure. Drawing when nothing
+ *         is pending is a no-op that reports success.
+ *
+ * CNAEXT, for the same reason the keyboard input's renderer is.
+ */
+CNA_C_API CNA_Result cna_guide_render_pending_message_box_ext(
+    CNA_Handle device,
+    CNA_Handle sprite_batch,
+    CNA_Handle font,
+    CNA_Handle white_pixel);
+
+/**
+ * @brief Chooses a button on the pending message box as though the user had.
+ *
+ * @param button_index Index of the button to choose.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the button list,
+ *         or `CNA_RESULT_INVALID_STATE` when nothing is pending.
+ *
+ * CNAEXT: the completion callback runs, exactly as it would for a real click.
+ */
+CNA_C_API CNA_Result cna_guide_simulate_message_box_click_ext(int32_t button_index);
+
+/**
+ * @brief Discards the pending message box without answering it.
+ *
+ * @return `CNA_RESULT_SUCCESS`; discarding nothing is not a failure.
+ *
+ * CNAEXT. **No callback runs** — the box never completed, it was thrown away.
+ */
+CNA_C_API CNA_Result cna_guide_reset_pending_message_box_ext(void);
+
+/**
+ * @brief Delays guide notifications.
+ *
+ * @param delay_ticks Delay in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS`.
+ *
+ * **A no-op on this runtime**, like every guide screen below: there is no notification system to
+ * delay. The route exists because the canonical API does.
+ */
+CNA_C_API CNA_Result cna_guide_delay_notifications(int64_t delay_ticks);
+
+/**
+ * @brief Opens the compose-message screen.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param text Message text, borrowed for the duration of the call.
+ * @param recipients Array of @p recipient_count gamer handles, borrowed for the duration of the
+ *        call; may be null when @p recipient_count is zero.
+ * @param recipient_count Number of recipients.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **A no-op on this runtime.** Every `cna_guide_show_*` route below is: this runtime has no guide
+ * UI for any of these screens, so they accept their arguments, validate them and do nothing. Only
+ * the keyboard input and the message box are real, and those two are real because this ABI draws
+ * them.
+ */
+CNA_C_API CNA_Result cna_guide_show_compose_message(
+    CNA_PlayerIndex player,
+    CNA_StringView text,
+    const CNA_GamerHandle* recipients,
+    uint64_t recipient_count);
+
+/**
+ * @brief Opens the friend-request screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param gamer Gamer handle the request is for.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_friend_request(CNA_PlayerIndex player, CNA_GamerHandle gamer);
+
+/**
+ * @brief Opens the friends screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_friends(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the game-invite screen for a set of recipients. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param recipients Array of @p recipient_count gamer handles, borrowed for the duration of the
+ *        call; may be null when @p recipient_count is zero.
+ * @param recipient_count Number of recipients.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_game_invite(
+    CNA_PlayerIndex player,
+    const CNA_GamerHandle* recipients,
+    uint64_t recipient_count);
+
+/**
+ * @brief Opens the game-invite screen for a session. A no-op on this runtime.
+ *
+ * @param session_id Session identifier, borrowed for the duration of the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_game_invite_for_session(CNA_StringView session_id);
+
+/**
+ * @brief Opens a gamer card. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param gamer Gamer handle whose card to show.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_gamer_card(CNA_PlayerIndex player, CNA_GamerHandle gamer);
+
+/**
+ * @brief Opens the marketplace. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_marketplace(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the messages screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_messages(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the party screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_party(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the party-sessions screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_party_sessions(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the player-review screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @param gamer Gamer handle to review.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_player_review(CNA_PlayerIndex player, CNA_GamerHandle gamer);
+
+/**
+ * @brief Opens the players screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ */
+CNA_C_API CNA_Result cna_guide_show_players(CNA_PlayerIndex player);
+
+/**
+ * @brief Opens the sign-in screen. A no-op on this runtime.
+ *
+ * @param pane_count How many sign-in panes to show.
+ * @param online_only Non-zero to require an online sign-in.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument failure.
+ */
+CNA_C_API CNA_Result cna_guide_show_sign_in(int32_t pane_count, CNA_Bool online_only);
+
+/**
+ * @brief Opens the achievements screen. A no-op on this runtime.
+ *
+ * @param player One of the `CNA_PLAYER_INDEX_*` identities.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity.
+ *
+ * CNAEXT: the canonical guide has no achievements screen of its own.
+ */
+CNA_C_API CNA_Result cna_guide_show_achievements_ext(CNA_PlayerIndex player);
+
+/**
+ * @brief Reports whether the gamer-services dispatcher has been initialized.
+ *
+ * @param out_is_initialized Receives non-zero once it has.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_get_is_initialized(
+    CNA_Bool* out_is_initialized);
+
+/**
+ * @brief Reads the window handle the dispatcher was given.
+ *
+ * @param out_window_handle Receives the platform window handle as an integer, zero if none was set.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * The value is whatever the caller stored: this ABI passes it through without interpreting it, and
+ * nothing in this runtime reads it.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_get_window_handle(uint64_t* out_window_handle);
+
+/**
+ * @brief Sets the window handle the dispatcher reports.
+ *
+ * @param window_handle Platform window handle as an integer.
+ * @return `CNA_RESULT_SUCCESS`.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_set_window_handle(uint64_t window_handle);
+
+/**
+ * @brief Initializes the dispatcher against a game's services.
+ *
+ * @param game Owning game handle, whose service container the dispatcher takes.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_initialize(CNA_Handle game);
+
+/**
+ * @brief Pumps the dispatcher once.
+ *
+ * @return `CNA_RESULT_SUCCESS` or a documented failure.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_update(void);
+
+/**
+ * @brief Pumps one asynchronous step of the dispatcher.
+ *
+ * @param out_did_work Receives non-zero when there was work left to do.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_update_async(CNA_Bool* out_did_work);
+
+/**
+ * @brief Reports how many gamers the dispatcher has released.
+ *
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * CNAEXT: a counter the canonical implementation keeps for its own tests, exposed because it is the
+ * only way to observe the dispatcher having done anything.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_get_freed_gamer_count_ext(uint64_t* out_count);
+
+/**
+ * @brief Subscribes to the dispatcher's title-update notification.
+ *
+ * @param callback Callback invoked synchronously when a title update begins installing.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle, released with
+ *        `cna_gamer_unsubscribe_ext`.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_services_dispatcher_subscribe_installing_title_update_ext(
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_Handle* out_registration);
+
+/**
+ * @brief Creates the canonical gamer-services game component.
+ *
+ * @param game Owning game handle.
+ * @param out_component Receives an owned component handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The handle is an ordinary game-component handle, so every `cna_game_component_*` route accepts it.
+ * Unlike the components a C caller builds from a callback set, this one is a **canonical** component:
+ * its initialize and update behavior belong to the runtime, and it is what pumps the dispatcher for a
+ * game that adds it to its component collection.
+ */
+CNA_C_API CNA_Result cna_gamer_services_component_create(CNA_Handle game, CNA_Handle* out_component);
+
 #ifdef __cplusplus
 }
 #endif
