@@ -735,6 +735,7 @@ CNA_Result cna_game_destroy(const CNA_Handle gameHandle)
         // Any manager the caller released is still alive here, because the game cached a raw
         // pointer to it; the game is going away now, so it can finally go too.
         CNA::C::Detail::ResetGraphicsDeviceManagerState();
+        CNA::C::Detail::ResetGameContentManagerState();
         const CNA_Result callbackResult = game->GetCallbackFailure();
         RuntimeState& state = GetRuntimeState();
         const CNA_Result releaseResult = state.handles.Release(gameHandle);

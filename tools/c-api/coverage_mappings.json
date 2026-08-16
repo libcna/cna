@@ -5288,6 +5288,17 @@
       "tests": "`GraphicsDeviceManagerSmoke.c` creates one, asserts both services appear where none did before, and asserts the second creation is refused with its output left invalid",
       "status": "implemented",
       "task": "CBIND-037E4"
+    },
+    {
+      "id": "game-content-manager-property",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(getContentProperty|setContentProperty)$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_game_get_content_manager_ext`, which answers a **borrowed** content-manager handle, and `cna_game_set_content_manager_ext`, which copies. A game owns its manager as a value member, so the borrow is the whole contract: one handle answered every time, refused by `cna_content_manager_destroy`, released with the game rather than by a caller, and accepted by every other content-manager route. The setter copies because the canonical setter copies — the caller keeps its own manager and later changes to it never reach the game",
+      "tests": "`RuntimeGameSmoke.c` borrows the manager twice and asserts the same handle comes back, reads and sets the game's own root directory through it, asserts destroying it is refused while it stays usable afterwards, copies a manager into the game and checks the borrowed handle still addresses the game's own object, and covers the null-output and invalid-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037E2b"
     }
   ]
 }

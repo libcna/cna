@@ -872,8 +872,20 @@
 > decided for game components, and the difference is who constructs the object: the runtime creates
 > the manager itself and resolves it through the service container. The inventory is now 5,243
 > implemented, 34 partial, 878 planned and 260 N/A; all four trees green at 65/65, ASan+UBSan clean.
-> **Next: CBIND-037E2b**, the last three runtime rows — the game's content manager, which needs the
-> borrowed-content-manager contract settled in `OWNERSHIP.md` before it is written.
+> CBIND-037E2b then closes the runtime module with those last three rows, and the contract it was
+> held back for turned out to be short: a game owns its content manager as a **value member**, so
+> `cna_game_get_content_manager_ext` answers a **borrowed** handle — the same one every time,
+> refused by `cna_content_manager_destroy`, released with the game rather than by a caller, and
+> accepted by every other content-manager route. Destroying the game while holding it is allowed and
+> simply invalidates it, which is the opposite of an owned manager.
+> `cna_game_set_content_manager_ext` **copies**, because the canonical setter copy-assigns: the
+> caller keeps its own manager and later changes to it never reach the game. The inventory is now
+> 5,246 implemented, 34 partial, 875 planned and 260 N/A. The runtime module is **11 rows from
+> closed**, not closed: `CNA::Runtime` and `CNA::RuntimeOptions` remain, and the module summary is
+> what caught the premature claim. All four trees green at 65/65, ASan+UBSan clean.
+> **Next: CBIND-037E5**, those 11 rows — the first surface in this ABI that is not anchored to a game
+> handle, since the runtime facade is what a caller uses *before* a game exists. Then `CBIND-037F`
+> (audio, 205) and `CBIND-037G` (gamer services, 665).
 >
 > **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
 > one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,

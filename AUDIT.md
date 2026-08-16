@@ -81,8 +81,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > control, events, launch parameters, framework pump and title content, and `CBIND-037E3` adds the
 > game window with its state, metrics and events, and `CBIND-037E4` adds the graphics device manager
 > with its preferences, its candidate configuration, its device lifecycle events and the services it
-> registers with the game. The
-> generated inventory currently records 5,243 implemented, 34 partial, 878 planned and 260
+> registers with the game, and `CBIND-037E2b` closes the runtime module with the game's own content
+> manager as a borrowed handle. The
+> generated inventory currently records 5,246 implemented, 34 partial, 875 planned and 260
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

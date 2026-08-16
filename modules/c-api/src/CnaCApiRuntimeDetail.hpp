@@ -65,6 +65,10 @@ void ResetGraphicsDeviceAdapterState() noexcept;
 // until the game itself is going away.
 void ResetGraphicsDeviceManagerState() noexcept;
 
+// Releases the single borrowed handle to the game's own content manager. The manager is a value
+// member of the game, so the handle is invalidated with the game rather than destroyed by a caller.
+void ResetGameContentManagerState() noexcept;
+
 void AddOwnedGraphicsResource() noexcept;
 
 void RemoveOwnedGraphicsResource() noexcept;

@@ -482,6 +482,55 @@ static int validate_window(const CNA_Handle game)
         cna_game_unsubscribe(screen_name) == CNA_RESULT_INVALID_HANDLE;
 }
 
+/* A game owns its content manager as a value member, so C borrows it: one handle, never destroyed,
+   released with the game. */
+static int validate_content_manager(const CNA_Handle game)
+{
+    CNA_Handle borrowed = CNA_INVALID_HANDLE;
+    CNA_Handle again = CNA_INVALID_HANDLE;
+    uint64_t bytes = UINT64_C(9);
+    char text[256];
+
+    if (cna_game_get_content_manager_ext(game, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+        cna_game_get_content_manager_ext(game, &borrowed) != CNA_RESULT_SUCCESS ||
+        borrowed == CNA_INVALID_HANDLE ||
+        cna_game_get_content_manager_ext(game, &again) != CNA_RESULT_SUCCESS ||
+        again != borrowed) {
+        return 0;
+    }
+    /* Every other content-manager route accepts the borrowed handle, so the game's own root
+       directory is readable and settable through it. */
+    memset(text, 0, sizeof(text));
+    if (cna_content_manager_get_root_directory_size(borrowed, &bytes) != CNA_RESULT_SUCCESS ||
+        bytes >= (uint64_t)sizeof(text) ||
+        cna_content_manager_copy_root_directory(borrowed, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_manager_set_root_directory(borrowed, view("cna-c-api-content")) !=
+            CNA_RESULT_SUCCESS ||
+        cna_content_manager_copy_root_directory(borrowed, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "cna-c-api-content") != 0) {
+        return 0;
+    }
+    /* The borrowed manager cannot be destroyed: it belongs to the game. */
+    if (cna_content_manager_destroy(borrowed) != CNA_RESULT_INVALID_STATE ||
+        cna_content_manager_get_root_directory_size(borrowed, &bytes) != CNA_RESULT_SUCCESS) {
+        return 0;
+    }
+    /* Replacing the game's manager copies, so the borrowed handle still addresses the game's own
+       object and the source is untouched by later changes to it. */
+    if (cna_game_set_content_manager_ext(game, borrowed) != CNA_RESULT_SUCCESS ||
+        cna_game_get_content_manager_ext(game, &again) != CNA_RESULT_SUCCESS ||
+        again == CNA_INVALID_HANDLE ||
+        cna_content_manager_copy_root_directory(again, text, (uint64_t)sizeof(text), &bytes) !=
+            CNA_RESULT_SUCCESS ||
+        strcmp(text, "cna-c-api-content") != 0 ||
+        cna_game_set_content_manager_ext(game, CNA_INVALID_HANDLE) != CNA_RESULT_INVALID_HANDLE) {
+        return 0;
+    }
+    return cna_content_manager_set_root_directory(again, view("Content")) == CNA_RESULT_SUCCESS;
+}
+
 static CNA_Result on_update(
     const CNA_Handle game,
     const CNA_GameTime* const game_time,
@@ -492,7 +541,8 @@ static CNA_Result on_update(
     GameSmokeState* const state = (GameSmokeState*)context;
     EventState exiting = {0};
     if (game_time == 0 || !validate_properties(game) || !validate_launch_parameters(game) ||
-        !validate_title(game) || !validate_events(game, &exiting) || !validate_window(game)) {
+        !validate_title(game) || !validate_events(game, &exiting) || !validate_window(game) ||
+        !validate_content_manager(game)) {
         return CNA_RESULT_INVALID_STATE;
     }
     state->validated = 1;

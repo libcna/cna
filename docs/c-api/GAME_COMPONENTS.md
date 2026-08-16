@@ -172,3 +172,17 @@ manager's own preference routes and apply them.
 **not** let one: the runtime creates the manager itself and the game resolves it through the service
 container, so there is no seam for a caller-provided implementation. That is the same question the
 component model answered the other way, and the difference is who constructs the object.
+
+## The game's content manager is borrowed
+
+A game owns its content manager as a **value member**, so `cna_game_get_content_manager_ext` answers
+a borrowed handle rather than an owned one: the same handle every time it is asked, refused by
+`cna_content_manager_destroy`, and released when the game is. Every other content-manager route
+accepts it, so a caller can set the root directory the game loads from and load through the game's
+own cache. Destroying the game while holding the handle is allowed — the handle simply becomes
+invalid — which is the opposite of an owned manager, and the difference is exactly who owns the
+object.
+
+`cna_game_set_content_manager_ext` **copies**, because the canonical setter takes a reference and
+copy-assigns. The caller keeps its own manager, later changes to it never reach the game, and the
+borrowed handle keeps addressing the game's own object rather than the source.

@@ -6,6 +6,8 @@
 #include "CnaCApiGraphicsDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/Game.hpp"
+
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundEffect.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
@@ -18,6 +20,7 @@
 #include <algorithm>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -53,7 +56,26 @@ struct ContentManagerResource final {
     // The canonical manager stores a raw device pointer, so the C layer remembers which borrowed
     // handle supplied it and re-validates that handle before ever answering with it again.
     CNA_Handle graphicsDevice;
+    // A game owns its own content manager as a value member. C can reach it, but never owns it: the
+    // handle borrows, refuses to be destroyed and is released with the game.
+    bool borrowed = false;
 };
+
+// A game owns exactly one content manager as a value member, so C borrows it through a single
+// handle that is created on first use and released when the game goes away. Handing out a new
+// handle per call would give a caller several names for one object and several chances to get its
+// lifetime wrong.
+std::mutex& BorrowedGameContentMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+CNA_Handle& BorrowedGameContentHandle()
+{
+    static CNA_Handle handle = CNA_INVALID_HANDLE;
+    return handle;
+}
 
 [[nodiscard]] CNA_Result GetContentManager(
     const CNA_Handle handle,
@@ -221,7 +243,8 @@ CNA_Result cna_content_manager_create(
             ContentManagerResource{
                 nativeManager,
                 graphicsDevice->parentGame,
-                graphicsDeviceHandle});
+                graphicsDeviceHandle,
+                false});
         const CNA_Result result = GetRuntimeHandles().Create(
             ObjectKind::ContentManager,
             resource,
@@ -449,7 +472,8 @@ CNA_Result cna_content_manager_create_resource(
             ContentManagerResource{
                 nativeManager,
                 graphicsDevice->parentGame,
-                graphicsDeviceHandle});
+                graphicsDeviceHandle,
+                false});
         const CNA_Result result = GetRuntimeHandles().Create(
             ObjectKind::ContentManager,
             resource,
@@ -991,6 +1015,12 @@ CNA_Result cna_content_manager_destroy(const CNA_Handle contentManagerHandle)
             result != CNA_RESULT_SUCCESS) {
             return result;
         }
+        if (contentManager->borrowed) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The game owns this ContentManager; it is released with the game.");
+        }
         contentManager->value->Dispose();
         const CNA_Result releaseResult = GetRuntimeHandles().Release(contentManagerHandle);
         if (releaseResult != CNA_RESULT_SUCCESS) {
@@ -1003,3 +1033,90 @@ CNA_Result cna_content_manager_destroy(const CNA_Handle contentManagerHandle)
         return CNA_RESULT_SUCCESS;
     });
 }
+
+CNA_Result cna_game_get_content_manager_ext(
+    const CNA_Handle gameHandle,
+    CNA_Handle* const outContentManager)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContentManager == nullptr) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The content-manager output handle is null.");
+        }
+        *outContentManager = CNA_INVALID_HANDLE;
+        Microsoft::Xna::Framework::Game* game = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::lock_guard<std::mutex> lock(BorrowedGameContentMutex());
+        CNA_Handle& cached = BorrowedGameContentHandle();
+        if (cached != CNA_INVALID_HANDLE) {
+            std::shared_ptr<ContentManagerResource> existing;
+            if (GetRuntimeHandles().Get(cached, ObjectKind::ContentManager, &existing) ==
+                CNA_RESULT_SUCCESS) {
+                *outContentManager = cached;
+                return CNA_RESULT_SUCCESS;
+            }
+            cached = CNA_INVALID_HANDLE;
+        }
+        // A non-owning shared_ptr: the manager is a value member of the game and outlives every
+        // borrow, so nothing here may ever delete it.
+        std::shared_ptr<ContentManager> borrowed(
+            std::shared_ptr<void>(),
+            &game->getContentProperty());
+        const auto resource = std::make_shared<ContentManagerResource>(
+            ContentManagerResource{borrowed, gameHandle, CNA_INVALID_HANDLE, true});
+        const CNA_Result result = GetRuntimeHandles().Create(
+            ObjectKind::ContentManager,
+            resource,
+            outContentManager);
+        if (result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The borrowed ContentManager handle could not be created.");
+        }
+        cached = *outContentManager;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_game_set_content_manager_ext(
+    const CNA_Handle gameHandle,
+    const CNA_Handle contentManagerHandle)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        Microsoft::Xna::Framework::Game* game = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::GetGameObject(gameHandle, &game);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::shared_ptr<ContentManagerResource> source;
+        if (const CNA_Result result = GetContentManager(contentManagerHandle, &source);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical setter copies, so the caller keeps its own manager and later changes to it
+        // never reach the game.
+        game->setContentProperty(*source->value);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace CNA::C::Detail {
+
+void ResetGameContentManagerState() noexcept
+{
+    const std::lock_guard<std::mutex> lock(BorrowedGameContentMutex());
+    CNA_Handle& cached = BorrowedGameContentHandle();
+    if (cached == CNA_INVALID_HANDLE) {
+        return;
+    }
+    static_cast<void>(GetRuntimeHandles().Release(cached));
+    cached = CNA_INVALID_HANDLE;
+}
+
+} // namespace CNA::C::Detail

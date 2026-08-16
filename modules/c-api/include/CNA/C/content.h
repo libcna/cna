@@ -485,8 +485,44 @@ CNA_C_API CNA_Result cna_content_manager_copy_xnb_reader_usage_name(
  * returns `CNA_RESULT_INVALID_HANDLE`.
  *
  * Independently owned resource handles returned by the manager are not destroyed by this call.
+ * A **borrowed** manager — the one a game owns, reached with `cna_game_get_content_manager_ext` —
+ * is refused with `CNA_RESULT_INVALID_STATE`: it is released with its game.
  */
 CNA_C_API CNA_Result cna_content_manager_destroy(CNA_Handle content_manager);
+
+/**
+ * @brief Borrows the content manager a game owns.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_content_manager Receives a borrowed content-manager handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A game owns exactly one content manager as a **value member**, so this handle borrows rather than
+ * owns: it answers the same handle every time it is asked, it cannot be destroyed, and it is
+ * released when the game is. Every other content-manager route accepts it, so a caller can set the
+ * root directory the game loads from and load assets through the game's own cache. Destroying the
+ * game while holding it is allowed — the handle simply becomes invalid, unlike an owned manager,
+ * which must be destroyed first.
+ */
+CNA_C_API CNA_Result cna_game_get_content_manager_ext(
+    CNA_Handle game,
+    CNA_Handle* out_content_manager);
+
+/**
+ * @brief Replaces the content manager a game owns with a copy of another.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param content_manager Owned or borrowed content-manager handle to copy from.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/native failure.
+ *
+ * The canonical setter takes a reference and **copies**, so this does too: the caller keeps its own
+ * manager, later changes to it do not reach the game, and the game's borrowed handle keeps
+ * addressing the game's own manager rather than the source. What is copied includes the root
+ * directory, the device association and whatever the source has already cached.
+ */
+CNA_C_API CNA_Result cna_game_set_content_manager_ext(
+    CNA_Handle game,
+    CNA_Handle content_manager);
 
 #ifdef __cplusplus
 }
