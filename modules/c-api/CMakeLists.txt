@@ -1502,8 +1502,10 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/devices/include
         ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
+        ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
+        cna_platform
         Threads::Threads
         sharp_runtime_core_base
     )
@@ -1528,6 +1530,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/devices/include
         ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
+        ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     # The storage, network-join, gamer-services and CNA core exceptions are the canonical types this test
     # throws whose constructors are not header-only, so proving their conversion needs those modules on the
@@ -1535,6 +1538,7 @@ if(CNA_BUILD_TESTS)
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
         sharp_runtime_core_base
         cna_core
+        cna_platform
         cna_storage
         CNA_Net
         CNA_GamerServices
@@ -1565,10 +1569,12 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/devices/include
         ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
+        ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     target_link_libraries(cna_c_api_utf8_oracle_test PRIVATE
         sharp_runtime_core_base
         cna_core
+        cna_platform
         cna_storage
         CNA_Net
         CNA_GamerServices
@@ -1622,6 +1628,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/devices/include
         ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
+        ${PROJECT_SOURCE_DIR}/modules/platform/include
     )
     cna_link_sharp_runtime(cna_c_api_fuzz_targets PRIVATE Core.Base IO Runtime)
     cna_c_api_enable_strict_warnings(cna_c_api_fuzz_targets)

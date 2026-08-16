@@ -17,12 +17,30 @@
 > rules describing declarations that took raw `SDL_Cursor*`/`SDL_Haptic*` pointers were deleted,
 > because the platform separation removed exactly those declarations.
 >
+> Two more breakages surfaced only in a **full** build, which is worth remembering: after changing
+> the exception barrier I rebuilt just `cna_c_api` and got a green suite from stale test binaries.
+> The four C++ targets that compile `CnaCApiDetail.cpp` list their include directories by hand
+> instead of inheriting them, so they each needed the platform module's headers. And
+> `modules/renderers/sdl-renderer/src/SdlRenderer.cpp` did not compile **on `next` itself**: merge
+> `2f00c2017` left two consecutive `return` statements in its factory, the first referencing
+> `args.window`, which the platform separation had replaced with `args.surface`. The dead line is
+> removed here, keeping its leading `::` — the comment above it explains that the qualification is
+> required, and the surviving line had lost it. **`next` still carries that defect**; the other four
+> families that resolve a window the same way were checked and are fine.
+>
 > What is **not** fixed here is `CBIND-047`: the merge grew the tracked public surface by 1,327
 > declarations and left **1,303 unmapped**, 1,196 of them in `modules/platform`. The release gate
 > reads **not ready** as a result, and that is the gate working. The first question is whether
 > `CNA::Platform` is in the C ABI's scope at all — it is a substrate the C API sits on top of, not a
 > surface it exposes — and that is the owner's to answer, not an implementer's to settle by editing
 > an exclusion list.
+>
+> Nor is `CBIND-048`, which is why `CNA_DEVICES=ON` does not build: the C API's four fake device
+> backends stand on `CNA::Devices::Detail::I*Backend` interfaces that the platform separation
+> deleted outright. Tray, dialogs and message boxes are platform services now, and `Camera` takes no
+> backend at all, so the published `cna_*_set_test_backend_ext` routes have nothing to inject into.
+> The `headless` and `software` trees pass 81/81; `sdlrenderer` and `asan` are blocked on that one
+> decision.
 
 > **Active campaign — CNA platform separation (`feature/platform`):** `plan_platform.md` is the
 > authoritative task/evidence log, `docs/platform-abstraction.md` is the durable implementer's
