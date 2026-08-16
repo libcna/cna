@@ -186,3 +186,24 @@ object.
 `cna_game_set_content_manager_ext` **copies**, because the canonical setter takes a reference and
 copy-assigns. The caller keeps its own manager, later changes to it never reach the game, and the
 borrowed handle keeps addressing the game's own object rather than the source.
+
+## The one runtime type C cannot bind
+
+`CNA::Runtime` — the facade that would turn graphics, audio, input and content on and off before a
+game exists — is **declared and defined nowhere**. All five of its methods would fail to link if
+anything called them, nothing in the tree calls them, no translation unit includes `CNA/Misc.hpp`,
+and the compiled runtime archive contains no `CNA::Runtime::` symbol at all. This ABI cannot bind a
+symbol that does not exist, so its rows are recorded not-applicable rather than left planned as if
+they were work waiting to be done.
+
+`RuntimeOptions` is a sound four-flag value on its own, but its only purpose is to parameterize
+`Initialize`. Mapping it alone would hand a C consumer a structure that configures nothing.
+
+The `CApi_UnimplementedRuntimeFacade` test is what keeps that record honest: it inspects the built
+runtime archive and fails the moment any `CNA::Runtime::` symbol appears. If the facade is ever
+implemented, the check fires and the coverage rows become real work instead of quietly staying
+wrong.
+
+What a caller actually needs from this area already exists elsewhere and is answered honestly:
+`cna_graphics_ext_is_available` and `cna_devices_ext_is_available` report which extension layers this
+build contains, and the audio and renderer capability queries report what the machine can do.

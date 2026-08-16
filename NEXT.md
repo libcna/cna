@@ -883,9 +883,28 @@
 > 5,246 implemented, 34 partial, 875 planned and 260 N/A. The runtime module is **11 rows from
 > closed**, not closed: `CNA::Runtime` and `CNA::RuntimeOptions` remain, and the module summary is
 > what caught the premature claim. All four trees green at 65/65, ASan+UBSan clean.
-> **Next: CBIND-037E5**, those 11 rows — the first surface in this ABI that is not anchored to a game
-> handle, since the runtime facade is what a caller uses *before* a game exists. Then `CBIND-037F`
-> (audio, 205) and `CBIND-037G` (gamer services, 665).
+> CBIND-037E5 then closes the runtime module, and it turned out to have **no routes to write** —
+> finding that out was the work. **`CNA::Runtime` is declared and defined nowhere.** All five of its
+> methods would fail to link if anything called them, nothing in the tree calls them, no translation
+> unit includes `CNA/Misc.hpp`, and the built runtime archive contains no `CNA::Runtime::` symbol at
+> all. The repository's own `audit/include/CNA/Misc.hpp.audit.md` had already reached the same
+> conclusion independently, which is corroboration rather than novelty. This ABI cannot bind a symbol
+> that does not exist, so all 11 rows are recorded **not-applicable** with that reason instead of
+> being left planned as if they were work waiting to be done. `RuntimeOptions` is a sound four-flag
+> value on its own, but its only purpose is to parameterize `Initialize`, so mapping it alone would
+> hand a consumer a structure that configures nothing.
+>
+> The record is **guarded rather than asserted**: the new `CApi_UnimplementedRuntimeFacade` check
+> inspects the built runtime archive and fails the moment any `CNA::Runtime::` symbol appears —
+> verified against a stub that produces one, so it is a real gate and not a vacuous pass. If the
+> facade is ever implemented, the check fires and those rows become real work instead of quietly
+> staying wrong. That pattern is the precedent for any surface this campaign finds unreachable.
+>
+> The runtime module is now genuinely closed: 223 implemented, 4 partial, **0 planned**, 69 not
+> applicable. The inventory is 5,246 implemented, 34 partial, 864 planned and 271 N/A; all four trees
+> green at 66/66, ASan+UBSan clean. Only `audio` (205) and `gamer-services` (665) remain in the whole
+> coverage campaign.
+> **Next: CBIND-037F**, the 205-row audio module.
 >
 > **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
 > one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,

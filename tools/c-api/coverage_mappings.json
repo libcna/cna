@@ -5299,6 +5299,20 @@
       "tests": "`RuntimeGameSmoke.c` borrows the manager twice and asserts the same handle comes back, reads and sets the game's own root directory through it, asserts destroying it is refused while it stays usable afterwards, copies a manager into the game and checks the borrowed handle still addresses the game's own object, and covers the null-output and invalid-handle refusals",
       "status": "implemented",
       "task": "CBIND-037E2b"
+    },
+    {
+      "id": "cna-runtime-facade",
+      "qualified_name_regex": "^CNA::(Runtime(::(Initialize|Shutdown|IsGraphicsEnabled|IsAudioEnabled|IsInputEnabled))?|RuntimeOptions(::(enableGraphics|enableAudio|enableInput|enableContent))?)$",
+      "kinds": [
+        "class",
+        "struct",
+        "field",
+        "method"
+      ],
+      "mapping": "No C mapping, and the reason is not a design choice: **`CNA::Runtime` is declared and defined nowhere**. All five of its methods would fail to link if anything called them, nothing in the tree calls them, no translation unit includes `CNA/Misc.hpp`, and the compiled runtime archive contains no `CNA::Runtime::` symbol at all — the repository's own `audit/include/CNA/Misc.hpp.audit.md` reached the same conclusion independently. This ABI cannot bind a symbol that does not exist. `RuntimeOptions` is a sound four-flag value on its own, but its only purpose is to parameterize `Initialize`, so mapping it alone would hand a C consumer a structure that configures nothing. If the facade is ever implemented, these rows become real work rather than a record",
+      "tests": "the `CApi_UnimplementedRuntimeFacade` CTest check inspects the built runtime archive and fails if any `CNA::Runtime::` symbol ever appears, so this record cannot go stale in silence; subsystem availability that a caller actually needs is answered by `cna_graphics_ext_is_available`, `cna_devices_ext_is_available` and the audio/renderer capability queries instead",
+      "status": "not-applicable",
+      "task": "CBIND-037E5"
     }
   ]
 }
