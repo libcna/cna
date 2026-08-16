@@ -22,6 +22,7 @@
 
 #include "CNA/CNAHelper.hpp"
 #include "CNA/Internal/Renderers/Common/ICompiledEffectRuntime.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
 
 #include "mojoshader.h"
 
@@ -164,6 +165,32 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT void GetBoundSamplerEXT(std::uint32_t slot, bool vertexStage,
                                        Texture*& texture,
                                        Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const;
+
+        /**
+         * @brief CNAEXT. Links the currently applied pass's shader pair and returns the native
+         * shader modules and vertex attribute set a draw's pipeline is built from.
+         *
+         * `MOJOSHADER_sdlBindShaders` -- the effect-framework backend callback `ApplyPass()` drives
+         * -- only records which shader *data* (reflection) is bound; it does not link a program or
+         * produce `SDL_GPUShader` handles (`GetBoundShadersEXT` above returns exactly that shader
+         * data, not shader modules). This performs the separate, explicit linking step
+         * `MOJOSHADER_sdlLinkProgram` documents, using @p declaredElements to patch the linked
+         * SPIR-V vertex shader's non-float input types to match the actual vertex buffer format.
+         * MojoShader caches linked programs by shader identity and vertex attribute list for this
+         * context's whole lifetime, so the returned handles stay valid after a later pass links
+         * something else -- safe to store for a deferred draw.
+         *
+         * @param declaredElements The caller's `VertexDeclaration` elements for this draw.
+         * @param vertexShader Receives the linked vertex shader module.
+         * @param pixelShader Receives the linked pixel shader module.
+         * @return The pipeline's vertex attribute set, one entry per shader input.
+         * @throws std::runtime_error if the applied pass bound no shader pair, or linking fails.
+         * @throws System::NotSupportedException if @p declaredElements does not supply an input the
+         *         vertex shader consumes.
+         */
+        CNAEXT [[nodiscard]] std::vector<SDL_GPUVertexAttribute> LinkAndGetShadersEXT(
+            const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+            SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const;
 
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);

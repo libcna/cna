@@ -87,6 +87,43 @@ namespace CNA::Internal::Renderers::SdlGpu
         const MOJOSHADER_parseData& vertexParseData,
         const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
         Uint32 bufferSlot);
+
+    /**
+     * @brief Maps one XNA vertex element format to MojoShader's own vertex element format enum.
+     *
+     * `MOJOSHADER_vertexElementFormat` names and orders its members identically to XNA's
+     * `VertexElementFormat`; this is still an explicit switch rather than a `static_cast`, matching
+     * `ToSdlGpuVertexElementFormat`'s own convention of never relying on ordinal coincidence between
+     * two independently maintained enumerations.
+     *
+     * @param format The XNA vertex element format.
+     * @return The equivalent MojoShader vertex element format.
+     * @throws std::invalid_argument if @p format is not one of the twelve XNA formats.
+     */
+    [[nodiscard]] MOJOSHADER_vertexElementFormat ToMojoShaderVertexElementFormat(
+        Microsoft::Xna::Framework::Graphics::VertexElementFormat format);
+
+    /**
+     * @brief Builds the `MOJOSHADER_vertexAttribute` list `MOJOSHADER_sdlLinkProgram` needs to patch
+     * a linked SPIR-V vertex shader's non-float input types (`Byte4`, `Short2`, `Short4`) to match
+     * the caller's actual declared vertex format.
+     *
+     * `MOJOSHADER_linkSPIRVShaders` (called internally by `MOJOSHADER_sdlLinkProgram`) looks each
+     * entry up by `(usage, usageIndex)` -- not by array position -- so, unlike
+     * `BuildCompiledEffectVertexAttributes`, this list's order does not matter and it may safely
+     * include declared elements the vertex shader does not consume; those are simply never looked
+     * up. Applies the same one-vertex-shader-consumed-input-must-exist check as
+     * `BuildCompiledEffectVertexAttributes`, so a caller that already validated one list has, in
+     * effect, validated the other -- these are two representations of the same matched set.
+     *
+     * @param vertexParseData The applied pass's vertex shader reflection.
+     * @param declaredElements The caller's `VertexDeclaration` elements.
+     * @return One `MOJOSHADER_vertexAttribute` per shader attribute.
+     * @throws System::NotSupportedException if a shader attribute has no matching declared element.
+     */
+    [[nodiscard]] std::vector<MOJOSHADER_vertexAttribute> BuildMojoShaderVertexAttributes(
+        const MOJOSHADER_parseData& vertexParseData,
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements);
 }
 
 #endif  // CNA_SDL_GPU_COMPILED_EFFECTS

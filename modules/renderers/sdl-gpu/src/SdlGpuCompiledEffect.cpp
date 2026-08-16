@@ -9,6 +9,7 @@
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
 
 #include "CNA/Internal/Renderers/MojoShader/EffectTranslation.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerStateCollection.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
@@ -290,6 +291,59 @@ namespace CNA::Internal::Renderers::SdlGpu
         }
         texture = vertexStage ? boundVertexTextures_[slot] : boundTextures_[slot];
         sampler = vertexStage ? boundVertexSamplers_[slot] : boundSamplers_[slot];
+    }
+
+    std::vector<SDL_GPUVertexAttribute> SdlGpuCompiledEffect::LinkAndGetShadersEXT(
+        const std::vector<Microsoft::Xna::Framework::Graphics::VertexElement>& declaredElements,
+        SDL_GPUShader*& vertexShader, SDL_GPUShader*& pixelShader) const
+    {
+        vertexShader = nullptr;
+        pixelShader = nullptr;
+        if (context_ == nullptr)
+            throw std::runtime_error("SDL_GPU compiled effect: no MojoShader context.");
+
+        MOJOSHADER_sdlShaderData* vertex = nullptr;
+        MOJOSHADER_sdlShaderData* pixel = nullptr;
+        MOJOSHADER_sdlGetBoundShaderData(context_, &vertex, &pixel);
+        if (vertex == nullptr || pixel == nullptr)
+        {
+            throw std::runtime_error(
+                "SDL_GPU compiled effect: the applied pass bound no shader pair.");
+        }
+
+        const MOJOSHADER_parseData* vertexParseData = MOJOSHADER_sdlGetShaderParseData(vertex);
+        if (vertexParseData == nullptr)
+        {
+            throw std::runtime_error(
+                "SDL_GPU compiled effect: the applied vertex shader has no reflection.");
+        }
+
+        std::vector<SDL_GPUVertexAttribute> sdlAttributes =
+            BuildCompiledEffectVertexAttributes(*vertexParseData, declaredElements, /*bufferSlot=*/0);
+        std::vector<MOJOSHADER_vertexAttribute> mojoAttributes =
+            BuildMojoShaderVertexAttributes(*vertexParseData, declaredElements);
+
+        // MOJOSHADER_sdlLinkProgram reads ctx->bound_vshader_data/bound_pshader_data -- exactly
+        // what MOJOSHADER_sdlGetBoundShaderData just returned, so this links the pair this pass
+        // just applied, not some other effect's. It also sets ctx->bound_program itself, so a
+        // separate MOJOSHADER_sdlBindProgram call would be redundant.
+        MOJOSHADER_sdlProgram* program = MOJOSHADER_sdlLinkProgram(
+            context_, mojoAttributes.empty() ? nullptr : mojoAttributes.data(),
+            static_cast<int>(mojoAttributes.size()));
+        if (program == nullptr)
+        {
+            throw std::runtime_error(
+                "SDL_GPU compiled effect: failed to link the applied pass's shaders.");
+        }
+
+        MOJOSHADER_sdlGetShaders(context_, &vertexShader, &pixelShader);
+        if (vertexShader == nullptr || pixelShader == nullptr)
+        {
+            throw std::runtime_error(
+                "SDL_GPU compiled effect: the linked program has no native shader modules.");
+        }
+
+        return sdlAttributes;
     }
 
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,

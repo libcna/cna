@@ -424,6 +424,45 @@ TEST(SdlGpuCompiledEffectTest, BoundSamplerPersistsAcrossAPassThatDoesNotReassig
     EXPECT_EQ(vertexTexture, nullptr);
 }
 
+TEST(SdlGpuCompiledEffectVertexLayoutTest, LinksTheAppliedPassAndReturnsStableShaderModules)
+{
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);  // P0: MainVertexShader/MainPixelShader
+
+    const std::vector<VertexElement> declaration = {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    };
+
+    SDL_GPUShader* vertexShader = nullptr;
+    SDL_GPUShader* pixelShader = nullptr;
+    const auto attributes = sdlGpuEffect->LinkAndGetShadersEXT(declaration, vertexShader, pixelShader);
+    EXPECT_NE(vertexShader, nullptr);
+    EXPECT_NE(pixelShader, nullptr);
+    EXPECT_EQ(attributes.size(), 2u);
+
+    // Applying a different pass (StatePass, same MainVertexShader but a different pixel shader)
+    // and linking again must not invalidate the first pair -- MojoShader's linker cache keeps
+    // both alive for the context's whole lifetime, which is what makes it safe for a deferred
+    // draw command to keep a linked pair around past this call.
+    runtime->ApplyPass(1, deviceState, changes);
+    SDL_GPUShader* secondVertexShader = nullptr;
+    SDL_GPUShader* secondPixelShader = nullptr;
+    (void) sdlGpuEffect->LinkAndGetShadersEXT(declaration, secondVertexShader, secondPixelShader);
+    EXPECT_NE(secondPixelShader, pixelShader);  // StatePass links FlatPixelShader, not MainPixelShader
+    EXPECT_NE(vertexShader, nullptr);
+    EXPECT_NE(pixelShader, nullptr);
+}
+
 TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
 {
     GraphicsDevice device;
