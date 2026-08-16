@@ -166,3 +166,56 @@ first listener. A null array is an argument failure, which is a different answer
 `RendererDetail` is not mapped here. Its constructor is private and its only source is
 `AudioEngine::getRendererDetailsProperty`, so it cannot be reached without an engine — it belongs
 with the XACT surface, and is recorded there.
+
+## XACT: reachable, because the test authors the files
+
+Nothing in this repository ships an `.xgs`, `.xsb` or `.xwb`, and the whole XACT family needs all
+three. It is still fully bound, because a binary XACT file is **authorable**: `XactSmoke.c` writes a
+settings file with one category and two variables, a wave bank with one mono PCM entry and a sound
+bank with one cue, and then drives the real parsers. The family did not have to be recorded
+unreachable the way the unimplemented runtime facade was.
+
+Ownership runs in one direction and is enforced: an engine is a child of the game, banks and
+categories are children of the engine, and a prepared cue is a child of its sound bank. Each parent
+refuses to be released while a C child of it is alive.
+
+### A renderer detail is an index, and a category is a handle
+
+`RendererDetail` has a **private constructor** and exactly one source — the engine's own list — so C
+never holds one. Its friendly name, identifier and text form are count/copy pairs addressed by index,
+and equality and the hash code answer against indices too. This runtime reports exactly one renderer,
+and the two extra arguments of the look-ahead constructor are accepted and ignored: there is one
+backend, so a renderer id has nothing to select between.
+
+`AudioCategory` is the opposite case. The canonical lookup answers a value, and the handle here is
+simply somewhere for C to keep it: releasing one changes nothing about the engine or about playback.
+**Categories compare by name alone**, so two categories obtained from two different engines are
+equal — canonical behavior, and the reason one equality route covers both canonical operators.
+
+`AudioEngine::InstanceLimitDecision` is the one XACT type with no C form. It is public, but every
+method that produces one is private: the decision is computed inside `Cue::Play` and handed to
+nobody. A C caller sees its effect — a cue refused by an authored instance limit — and never the
+value.
+
+### Two variable domains, and one silent write
+
+Engine-global and cue-scoped variables are **separate domains, not a strict and a lax view of one**.
+A variable reachable through `cna_cue_get_variable` is refused by
+`cna_audio_engine_get_global_variable`, and the other way round. Both clamp a write to the authored
+range rather than refusing it.
+
+**Writing a read-only global variable succeeds and changes nothing.** The canonical route never
+reports that refusal — the reference implementation ignores the native return code — so this one does
+not invent it either. Read the value back to see what took effect.
+
+### Two kinds of cue
+
+`cna_sound_bank_get_cue` prepares a cue the caller owns, and each call answers a **new** one: two
+lookups of the same name give two independently playable cues. `cna_sound_bank_play_cue` plays a cue
+that gets **no handle at all**, because the caller never touches it — the bank keeps it alive while it
+plays and `cna_audio_engine_update` is what retires it.
+
+A cue's eight state predicates are one snapshot rather than eight routes, so a caller cannot see a
+combination that never existed. Two of them are worth naming: a cue from a bank arrives **prepared**
+rather than created — the created state is internal to construction — and **pausing does not stop
+playing**, so a paused cue reports both paused and playing at once.

@@ -29,6 +29,9 @@
 namespace {
 
 using CNA::C::Detail::AddOwnedAudioResource;
+using CNA::C::Detail::AudioRegistration;
+using CNA::C::Detail::AudioRegistrationBase;
+using CNA::C::Detail::PublishAudioRegistration;
 using CNA::C::Detail::CallWithExceptionBarrier;
 using CNA::C::Detail::CheckedElementByteCount;
 using CNA::C::Detail::ErrorCategoryForResult;
@@ -1216,54 +1219,6 @@ using Microsoft::Xna::Framework::Audio::MicrophoneState;
             "The microphone index is at or past the reported count.");
     }
     *outMicrophone = microphones[static_cast<std::size_t>(index)];
-    return CNA_RESULT_SUCCESS;
-}
-
-class AudioRegistrationBase {
-public:
-    AudioRegistrationBase() = default;
-    AudioRegistrationBase(const AudioRegistrationBase&) = delete;
-    AudioRegistrationBase& operator=(const AudioRegistrationBase&) = delete;
-    virtual ~AudioRegistrationBase() = default;
-};
-
-class AudioRegistration final : public AudioRegistrationBase {
-public:
-    using Source = System::EventHandler<System::EventArgs>;
-    using Token = Source::Token;
-
-    AudioRegistration(std::shared_ptr<void> owner, Source* const source, const Token token)
-        : owner_(std::move(owner))
-        , source_(source)
-        , token_(token)
-    {
-    }
-
-    ~AudioRegistration() override
-    {
-        source_->Remove(token_);
-    }
-
-private:
-    std::shared_ptr<void> owner_;
-    Source* source_;
-    Token token_;
-};
-
-[[nodiscard]] CNA_Result PublishAudioRegistration(
-    std::shared_ptr<AudioRegistrationBase> registration,
-    CNA_Handle* const outRegistration)
-{
-    const CNA_Result result = GetRuntimeHandles().Create(
-        ObjectKind::AudioEventRegistration,
-        std::move(registration),
-        outRegistration);
-    if (result != CNA_RESULT_SUCCESS) {
-        return Fail(
-            result,
-            ErrorCategoryForResult(result),
-            "The audio registration could not be created.");
-    }
     return CNA_RESULT_SUCCESS;
 }
 

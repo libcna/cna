@@ -381,7 +381,7 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037F1 | 48 | Complete sound effects and their instances | ✅ | `SoundEffect` gains three creation routes beside the one `CBIND-035E` already had — the seven-argument range-and-loop constructor, the stream factory (taking the bytes it would have read, since C has no stream) and the file constructor — plus the disposal and name queries, the four **process-wide** 3D-audio settings, both fire-and-forget play routes, both static sample computations and type names for the effect and its instances. Two canonical behaviors are reported rather than evened out: **pan is range-checked while pitch is clamped**, and an **empty asset path yields a silent effect** rather than an error. The C range route adds the boundary validation the canonical constructor lacks — a negative offset, an empty count or a range leaving the buffer is refused before the decoder sees a length nobody checked. Move operations are `not-applicable`: a handle already names an object C never copies or moves. Both audio exceptions now convert in the **exception firewall** rather than in the one creation route that caught the first locally. Strict-C `AudioSoundEffectSmoke.c`, including a WAV built in memory and decoded; green in all four trees (67/67) and under ASan+UBSan with leak detection on. |
 | CBIND-037F2 | 49 | Complete streaming and capture audio | ✅ | A streaming instance is a **sound-effect instance**: it lives under the same handle kind, so every `cna_sound_effect_instance_*` route accepts it and the canonical overrides dispatch virtually behind them, while the streaming-only routes refuse an ordinary instance with `INVALID_STATE`. It has **no parent effect** — the caller is the source — which needed the existing destroy route taught not to dereference a parent that is not there. **Submitted buffers are copied**, which is what makes submission safe from a producer thread while playback runs, and the test proves it by overwriting its own buffer afterwards. Microphones are **index-addressed**, because the canonical list hands out pointers the runtime owns; the default follows the availability-separate-from-the-answer rule; and `cna_microphone_get_data_at` is the one count/copy route in this ABI where **a short read is not a failure**, because capture is a stream rather than a value. No verification tree has a capture device, so the count is zero and every index route refuses — the device's real availability, recorded like the compass's and the camera's. `NoMicrophoneConnectedException` joins the firewall. Strict-C `AudioStreamingSmoke.c`; green in all four trees (68/68) and under ASan+UBSan with leak detection on. |
 | CBIND-037F3 | 24 | Complete 3D audio | ✅ | The emitter and the listener are **fixed values, not handles**: the canonical types carry settings and no behavior, so `CNA_AudioEmitter` and `CNA_AudioListener` are structures the caller fills in, with `cna_audio_emitter_init` / `cna_audio_listener_init` writing the canonical defaults (origin, facing -Z with +Y up, at rest, and for the emitter alone a Doppler scale of 1). They stay **two structures rather than one**, because the listener has no Doppler scale. `cna_sound_effect_instance_apply_3d` positions against one listener and reads the four process-wide settings `CBIND-037F1` mapped; `cna_sound_effect_instance_apply_3d_multi_ext` covers the array overload and is `_ext` because it reports a limit C could not otherwise see — **this runtime supports exactly one listener**, so a count of zero or two is `NOT_SUPPORTED` rather than a silent fallback, while a null array stays an argument failure. **Positioning latches**: the spatial gain, pan and pitch survive into every later call and `..._set_pan` stops reaching the output, while the properties keep reading back what the caller set — asserted directly rather than smoothed over. `RendererDetail`'s 7 rows plus its class row **moved to `CBIND-037F4`**: its constructor is private and `AudioEngine::getRendererDetailsProperty` is its only source, so it cannot be reached without the engine. The planned count was 32 against an actual inventory of 24 here and 8 there. Strict-C `Audio3DSmoke.c`; green in all four trees (69/69) and under ASan+UBSan with leak detection on. |
-| CBIND-037F4 | 78 | Complete the XACT audio surface | ⬜ | Map `AudioEngine`, its `InstanceLimitDecision`, `SoundBank`, `WaveBank`, `AudioCategory`, `Cue` and the `RendererDetail` `CBIND-037F3` moved here, since a renderer detail has a private constructor and `AudioEngine::getRendererDetailsProperty` is its only source. **Decide first whether this is reachable at all**: every one of these types loads a binary XACT file (`.xgs`, `.xsb`, `.xwb`) and no fixture in this repository has one. Either generate a minimal fixture and map the surface against it, or record the family the way `CBIND-037E5` recorded the unimplemented runtime facade — with the reason stated and a guard that fails if the situation changes. Do not leave rows planned to avoid the decision. |
+| CBIND-037F4 | 78 | Complete the XACT audio surface | ✅ | **The family is reachable**, and the decision the plan asked for went the other way from `CBIND-037E5`: a binary XACT file is *authorable*, so `XactSmoke.c` writes the settings file, the wave bank and the sound bank itself and drives the real parsers. No fixture had to ship and nothing had to be recorded unreachable. Ownership runs one way and is enforced: engine under game, banks and categories under engine, prepared cue under sound bank. `RendererDetail` is **addressed by index, never held**, because its constructor is private and the engine's list is its only source; the look-ahead constructor's two extra arguments are accepted and ignored, since there is one backend. `AudioCategory` is the opposite: the canonical lookup answers a value, so the handle is just somewhere for C to keep it, and **categories compare by name alone** — two from different engines are equal. `InstanceLimitDecision` is the one type with **no C form**: it is public but every producer of it is private, so its 4 rows are not-applicable. Engine-global and cue-scoped variables are **separate domains** that refuse each other's names, both clamp to the authored range, and a **read-only write succeeds silently** because the canonical route never reports that refusal. A prepared cue is owned and each lookup answers a new one; a fire-and-forget cue gets **no handle at all**. A cue's eight predicates are one snapshot, and two canonical facts are asserted rather than smoothed: a cue from a bank arrives **prepared**, not created, and **pausing leaves it playing**. Strict-C `XactSmoke.c`; green in all four trees (70/70) and under ASan+UBSan with leak detection on. **This closes the `audio` module** — 217 implemented, 41 not applicable, no partial and no planned row. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
 
 #### CBIND-037B input implementation slices
@@ -1038,7 +1038,10 @@ than a failure. The snapshot is now 5,333 implemented, 32 partial, 767 planned a
 applicable. CBIND-037F3 then adds 3D positioning, deciding that the emitter and the listener are
 values rather than handles and that the array overload's one-listener limit is reported rather than
 approximated, and moving `RendererDetail` to `F4` because an `AudioEngine` is its only source. The
-snapshot is now 5,357 implemented, 32 partial, 743 planned and 283 not applicable.
+snapshot is now 5,357 implemented, 32 partial, 743 planned and 283 not applicable. CBIND-037F4 then
+closes the audio module with the XACT family, deciding that the family is reachable because its
+binary files can be authored by the test itself. The snapshot is now 5,431 implemented, 32 partial,
+665 planned and 287 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1047,23 +1050,20 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037F3` is the last task completed; the working tree is clean
-  and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
-  834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
-  `net`, `core`, `media`, `devices`, `devices-ext` and `runtime`.
-- **Next task:** `CBIND-037F4`, the XACT family — **78 rows**, and the last of the audio module:
-  `AudioEngine` (18), `Cue` (21), `SoundBank` (11), `WaveBank` (10), `AudioCategory` (10) and the 8
-  `RendererDetail` rows `CBIND-037F3` moved here. After it only `CBIND-037G` (gamer services, 665)
-  is left in the campaign.
+- Branch: `feature/binding`. `CBIND-037F4` is the last task completed; the working tree is clean
+  and every slice below is committed one-task-one-commit. **The whole `audio` module is closed** —
+  217 implemented, 41 not applicable, no partial and no planned row — as are `input`, `storage`,
+  `content`, `net`, `core`, `media`, `devices`, `devices-ext` and `runtime`.
+- **Next task:** `CBIND-037G`, gamer services — **665 rows, and the whole of what is left in the
+  campaign**. Nothing else in the inventory is planned. It is far too large for one slice: split it
+  the way `CBIND-037B`, `CBIND-037D`, `CBIND-037E` and `CBIND-037F` were split, one family per
+  sub-task, and record the split in this table before writing any code.
 
-  **Decide reachability first, and do not leave rows planned to avoid the decision.** Every one of
-  these types loads a binary XACT file (`.xgs`, `.xsb`, `.xwb`) and no fixture in this repository has
-  one; `AudioEngine`'s only constructors take a settings-file path. Either generate a minimal fixture
-  and map the surface against it, or record the family the way `CBIND-037E5` recorded the
-  unimplemented runtime facade — with the reason stated and a guard that fails if the situation
-  changes. `RendererDetail` rides on that decision: its constructor is private with `AudioEngine` as
-  the friend, so `getRendererDetailsProperty` is the only way a C caller could ever see one, and
-  `plan_audio.md` XA-9 records that CNA always reports exactly one renderer.
+  One thing is already known: the module's own state is recorded in `plan_gamer_services.md` and
+  `AUDIT.md`, and several of its types are stubs whose behavior on this platform is "not signed in".
+  Check which parts are genuinely implemented before assuming a route has something to bind, and
+  follow `CBIND-037D`'s precedent for a family whose real answer on every verification tree is that
+  the device or the service is absent: report the real availability rather than pretending.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

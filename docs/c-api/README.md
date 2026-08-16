@@ -107,7 +107,11 @@ The exact modules and headers are defined in the implementation plan. The curren
 `sprite_font.h`, `graphics_resource.h`, `math_values.h`, `math.h`, `vectors.h`, `quaternion.h`, `matrix.h`, `geometry.h`,
 `curve.h`, `color.h`, `packed_vectors.h`, `graphics3d.h`, `effects.h`, `models.h`, `vertex_values.h`,
 `vertex_resources.h`, `index_resources.h`, `texture.h`, `texture_volume.h`, `input.h`, `content.h`,
-`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`, `input_haptics.h`, `content_readers.h`, `storage.h`, `gamer_services.h`, `net.h`, `net_gamers.h`, `net_sessions.h` and `audio.h`;
+`input_gamepad.h`, `input_keyboard.h`, `input_mouse.h`, `input_cursor.h`, `input_text.h`, `input_touch.h`,
+`input_haptics.h`, `input_devices.h`, `input_joystick.h`, `content_readers.h`, `storage.h`, `gamer_services.h`,
+`net.h`, `net_gamers.h`, `net_sessions.h`, `graphics_device.h`, `graphics_ext.h`, `named_colors.h`, `audio.h`,
+`xact.h`, `media.h`, `media_library.h`, `media_player.h`, `video.h`, `sensors.h`, `devices.h`,
+`runtime_components.h`, `runtime_window.h` and `runtime_graphics_manager.h`;
 later family headers follow as coverage requires.
 
 ## Supported configurations

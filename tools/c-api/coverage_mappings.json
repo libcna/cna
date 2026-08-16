@@ -5471,6 +5471,104 @@
       "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, asserts the instance's own volume/pitch/pan still read back what the caller set after positioning latches the spatial values, and pins the multi-listener refusals for counts of zero and two, a null array and a released handle",
       "status": "implemented",
       "task": "CBIND-037F3"
+    },
+    {
+      "id": "audio-engine",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioEngine(::(ContentVersion|Disposing|AudioEngine|~AudioEngine|getIsDisposedProperty|getRendererDetailsProperty|GetCategory|GetGlobalVariable|SetGlobalVariable|Update|Dispose|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constant",
+        "event",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned game-child handle with `cna_audio_engine_create`, `cna_audio_engine_create_with_renderer`, `cna_audio_engine_destroy`, the disposal query, the global-variable pair, `cna_audio_engine_update`, a type-name pair, `cna_audio_engine_subscribe_disposing_ext` and `CNA_AUDIO_ENGINE_CONTENT_VERSION`. The renderer list is addressed by index rather than materialized, and the category lookup answers a handle. Both extra arguments of the second constructor are accepted and ignored, because this runtime has one audio backend and no scheduling look-ahead to configure",
+      "tests": "`XactSmoke.c` builds a settings file, opens an engine both ways, reads the exact type name, updates it, round-trips a global variable through its authored clamp, asserts a cue-scoped name is refused as a different domain, subscribes to disposal, and pins the missing-file answer as `IO` rather than an internal failure; the content version is pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "audio-engine-instance-limit-decision",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioEngine::InstanceLimitDecision(::(allowed|triggered|fadeInMS))?$",
+      "kinds": [
+        "struct",
+        "field"
+      ],
+      "mapping": "no C form. The type is public, but **every method that produces one is private**: a decision is computed inside `Cue::Play` and never handed to anybody. A C caller can observe its effect -- a cue refused by an authored instance limit -- but never the value, so binding it would mean inventing a producer the canonical API does not have",
+      "tests": "not applicable; there is nothing a C caller can call",
+      "status": "not-applicable",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "renderer-detail",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::RendererDetail(::(getFriendlyNameProperty|getRendererIdProperty|ToString|GetHashCode|Equals|operator==|operator!=))?$",
+      "kinds": [
+        "struct",
+        "method",
+        "operator"
+      ],
+      "mapping": "`cna_audio_engine_*_renderer_*` routes addressed by index. A renderer detail has a **private constructor** and one source -- the engine's own list -- so C never holds one: the friendly name, the identifier and the text form are count/copy pairs against an index, and the hash code and equality answer against indices too. `cna_audio_engine_renderers_equal` is the single route behind the equality method and both operators, since inequality is its negation",
+      "tests": "`XactSmoke.c` reads all three strings of the one renderer this runtime reports, asserts the hash code is stable across calls and that a renderer equals itself, refuses a too-small buffer with nothing written, and pins an index past the end as an argument failure on every one of the routes",
+      "status": "implemented",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "audio-category",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioCategory(::(getNameProperty|Pause|Resume|SetVolume|Stop|Equals|GetHashCode|operator==|operator!=))?$",
+      "kinds": [
+        "struct",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned engine-child handle from `cna_audio_engine_get_category`, with a name pair, the four playback operations, `cna_audio_category_equals` and `cna_audio_category_get_hash_code`. The canonical lookup answers a value rather than a reference, and the handle is what gives C somewhere to keep it; releasing one changes nothing about the engine. **Categories compare by name alone**, so two categories from two different engines are equal -- the canonical behavior, and the reason one equality route covers both operators",
+      "tests": "`XactSmoke.c` looks the same category up twice and asserts the two are equal with one hash code, reads the exact name, drives pause/resume/volume/stop including both stop options, refuses an undefined stop option and an unknown category name, and asserts a released handle is gone",
+      "status": "implemented",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "wave-bank",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::WaveBank(::(Disposing|WaveBank|~WaveBank|getIsDisposedProperty|getIsPreparedProperty|getIsInUseProperty|Dispose|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "event",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned engine-child handle with `cna_wave_bank_create` and `cna_wave_bank_create_streaming` for the two canonical constructors, the three state queries, `cna_wave_bank_destroy`, a type-name pair and `cna_wave_bank_subscribe_disposing_ext`. The bank registers itself with the engine under the name recorded inside the file, which is how a sound bank later resolves it",
+      "tests": "`XactSmoke.c` builds a wave bank of one mono PCM entry, opens it, reads all three state queries and the exact type name, and pins the missing-file answer as `IO`",
+      "status": "implemented",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "sound-bank",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundBank(::(Disposing|SoundBank|~SoundBank|getIsDisposedProperty|getIsInUseProperty|GetCue|PlayCue|Dispose|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "event",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned engine-child handle with `cna_sound_bank_create`, both state queries, `cna_sound_bank_get_cue`, `cna_sound_bank_play_cue` and `cna_sound_bank_play_cue_3d` for the two canonical play overloads, a type-name pair and `cna_sound_bank_subscribe_disposing_ext`. A prepared cue is an owned handle because the canonical lookup hands back a cue the caller owns; a **fire-and-forget cue gets no handle at all**, because the caller never touches it -- the bank keeps it alive and the engine's own update retires it",
+      "tests": "`XactSmoke.c` builds a sound bank of one cue, opens it, reads both state queries and the exact type name, plays the cue both ways, refuses an unknown and an empty cue name, subscribes to disposal and asserts the callback fires exactly once when the bank is released",
+      "status": "implemented",
+      "task": "CBIND-037F4"
+    },
+    {
+      "id": "cue",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::Cue(::(Disposing|~Cue|getIs(Created|Disposed|Paused|Playing|Prepared|Preparing|Stopped|Stopping)Property|getNameProperty|Apply3D|GetVariable|SetVariable|Play|Pause|Resume|Stop|Dispose|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "event",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned sound-bank-child handle with `cna_cue_get_info` for all eight state predicates at once, a name pair, `cna_cue_apply_3d`, the cue-variable pair, the four transport routes, `cna_cue_destroy`, a type-name pair and `cna_cue_subscribe_disposing_ext`. The eight predicates are one snapshot rather than eight routes because a caller reading them one at a time could see a combination that never existed. Cue-scoped and engine-global variables are **separate domains**: a name reachable through a cue is refused by the engine, and the other way round",
+      "tests": "`XactSmoke.c` asserts a cue from a bank arrives **prepared** rather than created, that pausing leaves it playing as well as paused, that stopping immediately reports stopped and not playing, round-trips a cue-scoped variable through its authored clamp, asserts the engine refuses that name and the cue refuses the engine's, positions the cue, refuses an undefined stop option and an invalid listener or emitter, and asserts a released handle is gone",
+      "status": "implemented",
+      "task": "CBIND-037F4"
     }
   ]
 }

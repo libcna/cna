@@ -972,15 +972,39 @@
 > estimate; the real inventory is 24 here and 78 there. The inventory is now 5,357 implemented, 32
 > partial, 743 planned and 283 N/A; the audio module stands at 143 implemented with 78 planned, which
 > is exactly `F4`. All four trees green at 69/69, ASan+UBSan clean.
-> **Next: CBIND-037F4**, the XACT family (78 rows), whose first question is whether it is reachable at
-> all without a binary fixture this repository does not have.
+> CBIND-037F4 then closes the audio module with the XACT family, 78 rows. Its first question was
+> whether the family is reachable at all without a binary fixture this repository does not have, and
+> the answer is **yes**: an XACT file is *authorable*. `XactSmoke.c` writes the settings file, the
+> wave bank and the sound bank itself and drives the real parsers, so nothing had to be recorded
+> unreachable the way `CBIND-037E5` recorded the runtime facade. That is the general lesson: check
+> whether a missing fixture can be built before concluding a family cannot be tested.
 >
-> **State at this handoff.** Twenty slices are committed on `feature/binding` since `CBIND-037B7a`,
-> one task per commit. Five modules closed in this stretch: `input`, `media`, `devices`,
-> `devices-ext` and `runtime` have no planned row left, joining `storage`, `content`, `net`, `core`,
-> `math`, `graphics` and `graphics-ext`. What remains is `audio` (78, all of it `F4`) and
-> `gamer-services` (665). All four verification trees are green at 69/69 with the coverage gate
-> current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> Two types went opposite ways for the same reason — what C can hold. `RendererDetail` has a
+> **private constructor** and one source, the engine's own list, so it is **addressed by index and
+> never held**: name, id, text, hash and equality all answer against an index. `AudioCategory` has the
+> same private constructor but the canonical lookup answers a *value*, so its handle is simply
+> somewhere for C to keep that value, and releasing one changes nothing. Categories compare by **name
+> alone**, so two from different engines are equal. `InstanceLimitDecision` is the one type with no C
+> form at all: it is public, but every method that produces one is private, so its 4 rows are
+> not-applicable — **a public type whose every producer is private is unreachable**, which is a new
+> variant of the reachability rule worth carrying forward.
+>
+> Four canonical behaviors are reported rather than smoothed: engine-global and cue-scoped variables
+> are **separate domains** that refuse each other's names; a **read-only global write succeeds
+> silently**, because the canonical route never reports that refusal; a cue from a bank arrives
+> **prepared**, not created; and **pausing a cue leaves it playing**, since paused is an independent
+> flag. A fire-and-forget cue gets **no handle at all** — the caller never touches it. The inventory is
+> now 5,431 implemented, 32 partial, 665 planned and 287 N/A, and the `audio` module is closed at 217
+> implemented with 41 not applicable. All four trees green at 70/70, ASan+UBSan clean.
+> **Next: CBIND-037G**, gamer services — 665 rows and the whole of what is left in the campaign. It is
+> far too large for one slice and must be split into sub-tasks recorded in the plan first.
+>
+> **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
+> `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
+> `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (665) is all
+> that remains in the whole campaign.** All four verification trees are green at 70/70 with the
+> coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

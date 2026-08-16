@@ -151,6 +151,11 @@ enum class ObjectKind : uint32_t {
     AudioEventRegistration = 102,
     Video = 89,
     VideoPlayer = 90,
+    AudioEngine = 103,
+    AudioCategory = 104,
+    WaveBank = 105,
+    SoundBank = 106,
+    Cue = 107,
     Test = UINT32_MAX
 };
 

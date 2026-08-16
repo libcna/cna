@@ -201,6 +201,10 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
                   offsetof(CNA_AudioEmitter, up) == 36U &&
                   offsetof(CNA_AudioEmitter, velocity) == 48U,
               "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_CueInfo) == 16U && offsetof(CNA_CueInfo, is_created) == 8U &&
+                  offsetof(CNA_CueInfo, is_stopping) == 15U &&
+                  CNA_AUDIO_ENGINE_CONTENT_VERSION == INT32_C(46),
+              "CNA_CueInfo layout and the XACT content version must remain stable");
 static_assert(sizeof(CNA_AudioListener) == 56U && offsetof(CNA_AudioListener, forward) == 8U &&
                   offsetof(CNA_AudioListener, position) == 20U &&
                   offsetof(CNA_AudioListener, up) == 32U &&
