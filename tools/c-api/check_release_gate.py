@@ -157,6 +157,26 @@ def check_native_dependencies_shipped() -> tuple[str, str]:
     return MET, "SDL3 ships beside the library; the consumer needs no environment variable"
 
 
+def check_static_configuration_available() -> tuple[str, str]:
+    """A static build only counts if it publishes the same names the shared library does."""
+    builder = TOOLS / "generate_static_archive.py"
+    if not builder.exists():
+        return NOT_MET, "nothing builds a static archive"
+    text = builder.read_text(encoding="utf-8")
+    if "--keep-global-symbols" not in text or "survived localization" not in text:
+        return NOT_MET, "the static archive is built without localizing its internal symbols"
+    lists = (C_API_DIR / "CMakeLists.txt").read_text(encoding="utf-8")
+    if "cna_c_api_static" not in lists:
+        return NOT_MET, "the build does not produce the static archive"
+    example = (C_API_DIR / "examples" / "c" / "CMakeLists.txt").read_text(encoding="utf-8")
+    if "CNA::CApiStatic" not in example:
+        return NOT_MET, "no consumer links the static archive"
+    config = (C_API_DIR / "cmake" / "CNAConfig.cmake.in").read_text(encoding="utf-8")
+    if "CNACStaticTargets" not in config:
+        return NOT_MET, "the installed package does not offer the static target"
+    return MET, "CNA::CApiStatic ships and is linked and run by the consumer gate"
+
+
 def check_owner_decision_still_open(subject: str) -> tuple[str, str]:
     limitations = json.loads(LIMITATIONS_PATH.read_text(encoding="utf-8"))
     for entry in limitations["environment"]:

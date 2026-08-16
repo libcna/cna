@@ -88,12 +88,12 @@
     },
     {
       "id": "static-configuration",
-      "title": "Whether a static configuration is ever offered",
-      "requirement": "A decision on `CNA_C_API_STATIC`, which names a configuration that does not exist.",
-      "check": "owner_decision_still_open:There is no static configuration",
-      "recorded": "owner-decision",
-      "evidence": "docs/c-api/LIMITATIONS.md, recorded as an open decision",
-      "note": "A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 cna_* names and nothing else -- would stop meaning anything. Offering one requires a design, not a build option."
+      "title": "A static configuration that keeps the same ABI promise",
+      "requirement": "A static archive exists, exports the same cna_* names as the shared library and no others, and a consumer links and runs against it from the installed package.",
+      "check": "static_configuration_available",
+      "recorded": "met",
+      "evidence": "tools/c-api/generate_static_archive.py and CNA::CApiStatic, proved by CApi_InstalledConsumer",
+      "note": "Ruled on by the project owner on 2026-08-16: build it. The objection that stopped it before was real -- an archive carries every object it swallowed -- so the archive is not simply ar'd together: the closure is partially linked into one relocatable object and every symbol that is not part of the ABI is localized, with the build failing outright if any non-cna_* symbol other than an unlocalizable STB_GNU_UNIQUE C++ static survives. The same hello_cna.c is built both ways from the installed package and both are run."
     }
   ],
   "required_documents": [

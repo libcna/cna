@@ -80,6 +80,23 @@ if(NOT _consumer_program)
     message(FATAL_ERROR "The consumer built but produced no hello_cna program in ${_consumer}.")
 endif()
 
+# CBIND-046: the static half. Where the build produces the archive its absence is a failure, not a
+# skip -- a consumer project that cannot find CNA::CApiStatic means the package lost it. Where the
+# build was configured without it, this says so by name rather than testing half a package silently.
+# Deliberately not pre-set to "": find_program does not search when its result variable is already
+# defined, so initializing it would make the search silently return nothing.
+if(CNA_EXPECT_STATIC)
+    find_program(_static_program hello_cna_static PATHS "${_consumer}" NO_DEFAULT_PATH)
+    if(NOT _static_program)
+        message(FATAL_ERROR
+            "The installed package offered no CNA::CApiStatic target, so nothing linked the archive.")
+    endif()
+else()
+    message(STATUS
+        "skipped: the static archive, because this tree was configured with "
+        "CNA_C_API_BUILD_STATIC=OFF")
+endif()
+
 # Deliberately no LD_LIBRARY_PATH: the consumer is run in an environment that knows nothing about
 # where CNA or SDL live, which is the only way to prove the installed package stands on its own.
 execute_process(
@@ -105,4 +122,26 @@ foreach(_expected IN ITEMS "CNA C ABI" "renderer:" "game type: Microsoft.Xna.Fra
     endif()
 endforeach()
 
-message(STATUS "The installed CNA package built and ran a standalone C consumer.")
+# The static consumer runs through the same checks: the same source, linked the other way, must
+# behave identically. A difference here is an ABI difference between the two halves of the package.
+if(CNA_EXPECT_STATIC AND _static_program)
+execute_process(
+    COMMAND ${CMAKE_COMMAND} -E env "SDL_VIDEODRIVER=dummy" "${_static_program}"
+    RESULT_VARIABLE _static_code
+    OUTPUT_VARIABLE _static_output
+    ERROR_VARIABLE _static_error)
+if(NOT _static_code EQUAL 0)
+    message(FATAL_ERROR
+        "The statically linked consumer failed (${_static_code}):\n${_static_output}\n${_static_error}")
+endif()
+foreach(_expected IN ITEMS "CNA C ABI" "renderer:" "game type: Microsoft.Xna.Framework.Game"
+        "hello_cna finished")
+    string(FIND "${_static_output}" "${_expected}" _found)
+    if(_found EQUAL -1)
+        message(FATAL_ERROR
+            "The statically linked consumer never printed \"${_expected}\":\n${_static_output}")
+    endif()
+endforeach()
+endif()
+
+message(STATUS "The installed CNA package built and ran a standalone C consumer, shared and static.")

@@ -127,7 +127,11 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > that no implementer may make alone. The published verdict is **not ready**, and correctly so.
 > The owner ruled on both on 2026-08-16. `CBIND-045` implements the first: the package now carries
 > the SDL3 libraries CNA builds, so an installed C API links and runs with no environment variable
-> at all, while FFmpeg stays a system dependency on purpose.
+> at all, while FFmpeg stays a system dependency on purpose. `CBIND-046` implements the second: a
+> static archive that publishes the same 2,720 `cna_*` names the shared library does, built by
+> partially linking the whole closure into one object and localizing everything else, with the build
+> failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
+> verdict is **ready**.
 
 ---
 

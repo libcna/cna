@@ -72,9 +72,36 @@ cc -std=c99 -I/opt/cna/include main.c -L/opt/cna/lib -lcna_c_api -o my_game
 
 ## Shared and static
 
-The C API is built and installed as a **shared** library by default. The version script
-(`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` are what keep the exported symbol set to
-`cna_*` and nothing else — 2,720 names, pinned by `tools/c-api/abi_baseline.json`.
+The package ships **both**, and they export the same names.
+
+```cmake
+target_link_libraries(my_game PRIVATE CNA::CApi)        # the shared library
+target_link_libraries(my_game PRIVATE CNA::CApiStatic)  # one archive, nothing to deploy
+```
+
+`CNA::CApiStatic` defines `CNA_C_API_STATIC` for you, which is what makes the export macro expand
+to nothing; nothing else about your source changes. The same `hello_cna.c` is built both ways from
+the installed package and run, on every build of this repository, so the two halves cannot drift.
+
+The shared library keeps its symbol set honest with a version script
+(`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL`: `cna_*` and nothing else, 2,720 names pinned
+by `tools/c-api/abi_baseline.json`. The archive has no such mechanism available to it, which is why
+a static CNA was refused for a long time — `ar`-ing the C API together with every CNA module and
+Sharp Runtime would publish tens of thousands of C++ symbols into your program.
+
+So the archive is not simply `ar`'d together. The whole closure is partially linked into **one
+relocatable object**, every symbol that is not part of the ABI is localized, and the build **fails**
+if any non-`cna_*` symbol survives — except the handful GCC emits as `STB_GNU_UNIQUE` (function-local
+statics in inline and template code), which cannot be localized because their uniqueness is what
+makes them correct. Those are mangled C++ names no C program can collide with, and the build fails
+if a symbol of any other binding appears, so the exception cannot widen quietly.
+
+A static consumer links the archive plus SDL3 (shipped in the package), FFmpeg (from the system) and
+the usual `stdc++ m pthread dl` — the `CNA::CApiStatic` target carries all of that for you.
+
+Building the archive can be turned off per build tree with `-DCNA_C_API_BUILD_STATIC=OFF`: it is a
+few hundred megabytes in a debug build and is rewritten whenever the library relinks. Where it is
+off, the consumer test says so by name rather than testing half a package in silence.
 
 ## Native dependencies
 

@@ -8,9 +8,7 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 ## Verdict
 
-**Not ready.** Every mechanical criterion is met. What remains is 1 decision(s) that no implementer may make alone.
-
-- ⏸ **Whether a static configuration is ever offered** — no decision has been recorded.
+**Ready.** Every criterion below is met.
 
 This verdict is measured on every run, not written down once. A criterion recorded as met
 that stops being met fails the check; so does a criterion recorded as blocked that has
@@ -30,7 +28,7 @@ decided not to ship.
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
 | ✅ | **The lifetime and byte-facing contracts are measured, not asserted** | Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle. | stress, exhaustive oracle and fuzz target all present |
 | ✅ | **The package carries the native libraries CNA builds** | An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN. | SDL3 ships beside the library; the consumer needs no environment variable |
-| ⏸ | **Whether a static configuration is ever offered** | A decision on `CNA_C_API_STATIC`, which names a configuration that does not exist. | no decision has been recorded |
+| ✅ | **A static configuration that keeps the same ABI promise** | A static archive exists, exports the same cna_* names as the shared library and no others, and a consumer links and runs against it from the installed package. | CNA::CApiStatic ships and is linked and run by the consumer gate |
 
 ## Why each one is here
 
@@ -88,11 +86,11 @@ The stress suite found a heap use-after-free on its first run; that is what this
 
 Ruled on by the project owner on 2026-08-16: the package ships them. FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. CApi_InstalledConsumer now passes no -rpath-link and no LD_LIBRARY_PATH, so a regression here fails a test rather than surprising a consumer.
 
-### ⏸ Whether a static configuration is ever offered
+### ✅ A static configuration that keeps the same ABI promise
 
-*Evidence:* docs/c-api/LIMITATIONS.md, recorded as an open decision
+*Evidence:* tools/c-api/generate_static_archive.py and CNA::CApiStatic, proved by CApi_InstalledConsumer
 
-A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 cna_* names and nothing else -- would stop meaning anything. Offering one requires a design, not a build option.
+Ruled on by the project owner on 2026-08-16: build it. The objection that stopped it before was real -- an archive carries every object it swallowed -- so the archive is not simply ar'd together: the closure is partially linked into one relocatable object and every symbol that is not part of the ABI is localized, with the build failing outright if any non-cna_* symbol other than an unlocalizable STB_GNU_UNIQUE C++ static survives. The same hello_cna.c is built both ways from the installed package and both are run.
 
 Regenerate with:
 

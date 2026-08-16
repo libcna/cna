@@ -36,3 +36,20 @@ target_compile_options(hello_cna PRIVATE
 )
 
 target_link_libraries(hello_cna PRIVATE CNA::CApi)
+
+# CBIND-046: the same source, linked the other way. A static CNA is a different link and a different
+# CNA_C_API macro expansion, and the only way to know the package delivers both is to build both
+# from the same file. The target exists only where the package shipped the archive.
+if(TARGET CNA::CApiStatic)
+    add_executable(hello_cna_static hello_cna.c)
+    set_target_properties(hello_cna_static PROPERTIES
+        C_STANDARD 99
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_compile_options(hello_cna_static PRIVATE
+        $<$<NOT:$<C_COMPILER_ID:MSVC>>:-Wall;-Wextra;-Wpedantic;-Werror>
+        $<$<C_COMPILER_ID:MSVC>:/W4;/WX>
+    )
+    target_link_libraries(hello_cna_static PRIVATE CNA::CApiStatic)
+endif()

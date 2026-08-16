@@ -1329,6 +1329,29 @@
 > `cmake_install.cmake`**, because the reconfigure had failed while its output went to `/dev/null`.
 > A green suite proves nothing if the configure that produced it errored — check the exit status.
 >
+> **CBIND-046 then builds the static configuration, without giving up what made it hard.** The
+> objection that had blocked it for the whole campaign was real: an archive carries every object it
+> swallowed, and `ar`-ing the C API together with 25 CNA and Sharp Runtime archives publishes 68,120
+> global C++ symbols into a consumer's program. The answer was to finish the job rather than skip
+> it. `generate_static_archive.py` reads **the link line CMake already computed for the shared
+> library** — so the closure cannot drift from the one that produces the working `.so` — partially
+> links all of it into one relocatable object, localizes every global that is not part of the ABI,
+> and **fails the build** if a non-`cna_*` symbol survives. What survives is 83–95 symbols depending
+> on the tree, every one `STB_GNU_UNIQUE`: function-local statics in inline and template code, which
+> `objcopy` refuses to localize because their uniqueness is what makes them correct. The gate is
+> written as a *property*, not a count, so it holds in every configuration.
+>
+> Three things worth carrying. **Reading CMake's own link line** is the general trick — it is the
+> same one `check_module_link_closure.py` uses, and it beats maintaining a parallel list of what to
+> link. **CMake's `find_program` does not search when its result variable is already defined**, so
+> initializing it to `""` silently finds nothing; that cost a debugging round. And the archive plus
+> its two intermediates are each a few hundred megabytes in a debug tree, so the tool deletes the
+> intermediates and the whole thing is behind `-DCNA_C_API_BUILD_STATIC=OFF` — where it is off, the
+> consumer gate says so by name rather than testing half a package.
+>
+> **With both owner decisions delivered, the release gate's verdict is READY.** All ten criteria are
+> met and re-measured on every run.
+>
 > **Next: `CBIND-044`**, the final close — the last unfinished task in the plan. It asks that every
 > coverage row be implemented or carry an owner-approved limitation a caller can query. The 28
 > `partial` rows are exactly that list, and they are already published with their reasons in
@@ -1338,12 +1361,13 @@
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-eight slices are committed on `feature/binding` since
+> **State at this handoff.** Forty slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
 > module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
-> so **`CBIND-044` is the only unfinished task left in the plan**. All four verification trees are green at
+> as are `CBIND-045` and `CBIND-046` from the owner's two decisions, so **`CBIND-044` is the only
+> unfinished task left in the plan** and the release gate reads ready. All four verification trees are green at
 > 81/81 with the coverage, compatibility, ABI-baseline, limitations and release gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.

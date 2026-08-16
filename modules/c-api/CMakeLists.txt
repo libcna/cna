@@ -105,6 +105,48 @@ target_link_libraries(cna_c_api PRIVATE cna_core cna_runtime cna_graphics_ext cn
 # C ABI and nothing else. Without it the smallest possible install is the whole project -- 113 MB of
 # SDL and GoogleTest headers -- which is both wasteful and a misleading picture of what a C consumer
 # actually needs, since the shared library links every canonical module privately.
+# CBIND-046: the static configuration, which exists only because it can keep the same promise.
+#
+# Archiving the C API together with every CNA module and Sharp Runtime would publish tens of
+# thousands of C++ symbols into a consumer's program. generate_static_archive.py instead partially
+# links the whole closure into one relocatable object, localizes every symbol that is not part of
+# the ABI, and FAILS if any non-cna_* symbol of any binding other than STB_GNU_UNIQUE survives --
+# so the archive exports the same names the shared library exports, or it is not produced at all.
+#
+# It reads the link line CMake already computed for cna_c_api, which is why it cannot drift from the
+# set of objects and archives that actually produce the working .so.
+# Python3 is looked up here rather than relied upon: cmake/Tests/ModuleProbes.cmake finds it too,
+# but that file is included after add_subdirectory(modules), so at this point nothing has yet.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+# The archive is a single relocatable object holding the entire closure, so in a Debug tree it is
+# a few hundred megabytes and is rewritten whenever the library relinks. That is the right artifact
+# to ship and the wrong one to regenerate idly, so it can be turned off per build tree -- and when
+# it is off, the consumer gate says so by name instead of quietly testing half the package.
+option(CNA_C_API_BUILD_STATIC "Build and install the static C API archive" ON)
+if(CNA_C_API_BUILD_STATIC AND UNIX AND NOT APPLE AND Python3_Interpreter_FOUND)
+    set(CNA_C_API_STATIC_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/libcna_c_api_static.a")
+    set(CNA_C_API_STATIC_TARGETS "${CMAKE_CURRENT_BINARY_DIR}/CNACStaticTargets.cmake")
+    add_custom_command(
+        OUTPUT "${CNA_C_API_STATIC_ARCHIVE}" "${CNA_C_API_STATIC_TARGETS}"
+        COMMAND Python3::Interpreter
+            "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
+            --build-dir "${CMAKE_BINARY_DIR}"
+            --output "${CNA_C_API_STATIC_ARCHIVE}"
+            --targets-file "${CNA_C_API_STATIC_TARGETS}"
+            --work-dir "${CMAKE_CURRENT_BINARY_DIR}/static-archive"
+        DEPENDS cna_c_api "${CMAKE_CURRENT_SOURCE_DIR}/../../tools/c-api/generate_static_archive.py"
+        COMMENT "Combining the C API and its closure into a single static archive"
+        VERBATIM)
+    add_custom_target(cna_c_api_static ALL
+        DEPENDS "${CNA_C_API_STATIC_ARCHIVE}" "${CNA_C_API_STATIC_TARGETS}")
+    install(FILES "${CNA_C_API_STATIC_ARCHIVE}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT CNACApi)
+    install(FILES "${CNA_C_API_STATIC_TARGETS}"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+        COMPONENT CNACApi)
+endif()
+
 install(TARGETS cna_c_api
     EXPORT CNACTargets
     COMPONENT CNACApi
@@ -185,10 +227,13 @@ if(NOT DEFINED _cna_abi_MAJOR OR NOT DEFINED _cna_abi_MINOR OR NOT DEFINED _cna_
 endif()
 set(CNA_C_ABI_VERSION "${_cna_abi_MAJOR}.${_cna_abi_MINOR}.${_cna_abi_PATCH}")
 
+set(CNA_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+set(CNA_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/CNAConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/CNAConfig.cmake
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/CNA
+    PATH_VARS CNA_INSTALL_LIBDIR CNA_INSTALL_INCLUDEDIR
 )
 write_basic_package_version_file(
     ${CMAKE_CURRENT_BINARY_DIR}/CNAConfigVersion.cmake
@@ -1547,6 +1592,7 @@ if(CNA_BUILD_TESTS)
                 -DCNA_C_COMPILER=${CMAKE_C_COMPILER}
                 -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
                 -DCNA_SANITIZE=${CNA_SANITIZE}
+                -DCNA_EXPECT_STATIC=$<BOOL:${CNA_C_API_BUILD_STATIC}>
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the
         # steady-state cost is small because cmake --install rewrites nothing that has not changed.
