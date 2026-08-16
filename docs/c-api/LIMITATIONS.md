@@ -99,8 +99,8 @@ promise rather than of any declaration.
 
 | Subject | What it means | Status |
 |---|---|---|
-| **The package does not ship SDL3 or FFmpeg** | A consumer must place libSDL3, libSDL3_image, libSDL3_mixer and the FFmpeg libraries where the dynamic loader finds them. The installed library's RPATH is `$ORIGIN`, so putting them beside it is enough. | open decision (CBIND-042) |
-| **There is no static configuration** | `CNA_C_API_STATIC` names a future configuration that does not exist. A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 `cna_*` names and nothing else -- would be meaningless. | open decision (CBIND-042) |
+| **The package does not ship SDL3 or FFmpeg** | A consumer must place libSDL3, libSDL3_image, libSDL3_mixer and the FFmpeg libraries where the dynamic loader finds them. The installed library's RPATH is `$ORIGIN`, so putting them beside it is enough. | open decision (the project owner) |
+| **There is no static configuration** | `CNA_C_API_STATIC` names a future configuration that does not exist. A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 `cna_*` names and nothing else -- would be meaningless. | open decision (the project owner) |
 | **One active CNA runtime per process** | A second `cna_game_create` while a game is alive returns `CNA_RESULT_INVALID_STATE`. This makes the interaction with CNA's process-level graphics and input state explicit; simultaneous runtimes are an ABI-semantic change requiring a reviewed design. | by design (HANDLES.md) |
 | **Handles are thread-affine and never leave their process** | A handle used from a thread other than its creator's answers `CNA_RESULT_THREAD`. Handles are not pointers, not serializable and not stable across processes. | by design (HANDLES.md) |
 | **The ABI is 0.x and experimental** | An incompatible change requires only a minor-version increment, release notes and a regenerated baseline. The additive-only guarantee begins at 1.0, which is a separate, later decision. | by design (ABI_VERSIONING.md) |

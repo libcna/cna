@@ -1293,24 +1293,48 @@
 > plan's clothes, and nothing in the repository noticed for weeks. The check that catches it costs
 > six lines.
 >
-> **Next: `CBIND-042B`**, the release gate itself. Every input now exists and should be pointed at
-> rather than rebuilt. Build it the way this campaign builds every gate — declaration, checker,
-> `--check` in ctest and CI — and make it fail **in both directions**: a criterion recorded as met
-> that no longer is, and one recorded as blocked that has quietly become met. Two criteria are owner
-> decisions and must block: shipping SDL3/FFmpeg with the package, and whether a static
-> configuration is ever offered. Do not decide them alone. ABI 1.0 is a separate, later decision.
-> The 28 `partial` rows are not gaps the
+> **CBIND-042B then closes Phase B7 with a verdict that is measured, not written down.**
+> `release_gate.json` declares ten criteria, each naming its requirement, its mechanical evidence
+> and its recorded state; `check_release_gate.py` measures all ten on every run and
+> `docs/c-api/RELEASE_GATE.md` publishes the result. Eight are met and re-measured rather than
+> asserted. The other two are **owner decisions**, and the gate's most important property is that it
+> cannot be talked out of them: the verdict is **NOT READY**, phrased exactly as it should be —
+> every mechanical criterion is met, and what remains is two decisions no implementer may make
+> alone.
+>
+> The design point worth carrying: the check fails **in both directions**. A criterion recorded as
+> met that regressed is the ordinary case. The one that matters is a criterion recorded as
+> *blocked* that has quietly become met, because that is how a project ships something it had
+> decided not to ship — nobody re-reads a document that says "not yet". Verified both ways: adding
+> a required document that does not exist turns `documentation` red, and ruling on the
+> static-configuration question in `limitations.json` alone makes the gate refuse until
+> `release_gate.json` agrees. **A decision recorded in one place and not the other is not a
+> decision.** The same rule now applies one level up: a limitation whose owner is a finished task
+> fails the limitations gate, which is what caught `CBIND-042` naming itself as the owner of the two
+> questions it exists to escalate.
+>
+> **The two questions are yours, not an implementer's**, and they are the only thing standing
+> between this ABI and an experimental release: whether the package ships SDL3/FFmpeg beside the
+> library, and whether a static configuration is ever offered given that it would export every C++
+> symbol it archived. Both are recorded in `docs/c-api/LIMITATIONS.md` with the consequences spelled
+> out.
+>
+> **Next: `CBIND-044`**, the final close — the last unfinished task in the plan. It asks that every
+> coverage row be implemented or carry an owner-approved limitation a caller can query. The 28
+> `partial` rows are exactly that list, and they are already published with their reasons in
+> `LIMITATIONS.md`; what `CBIND-044` must decide, row by row, is whether each becomes a route or
+> becomes permanent. Three of them name `CBIND-044` explicitly as their owner. The 28 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Thirty-seven slices are committed on `feature/binding` since
+> **State at this handoff.** Thirty-eight slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
-> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-041` and
-> `CBIND-042A` are done, so Phase B7 resumes at `CBIND-042B`. All four verification trees are green at
-> 81/81 with the coverage, compatibility, ABI-baseline and limitations gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
+> so **`CBIND-044` is the only unfinished task left in the plan**. All four verification trees are green at
+> 81/81 with the coverage, compatibility, ABI-baseline, limitations and release gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

@@ -1,0 +1,99 @@
+# plan_binding.md CBIND-042B: the experimental release gate.
+#
+# A release gate written as prose is a list of things somebody once believed. This one is a
+# declaration plus a measurement, and the job fails when they disagree in either direction:
+#
+#   * a criterion recorded as met that no longer is -- the ordinary regression;
+#   * a criterion recorded as blocked that has quietly become met -- the failure mode a release gate
+#     actually dies of, because nobody re-reads a document that says "not yet".
+#
+# The gate currently reports NOT READY, and correctly so: every mechanical criterion is met, and two
+# packaging questions await a decision no implementer may make alone. That is the gate working. This
+# job therefore passes while the verdict stands, and fails the moment the record and the reality
+# stop matching.
+
+name: C API release gate
+
+on:
+  push:
+    paths:
+      - 'tools/c-api/**'
+      - 'docs/c-api/**'
+      - 'modules/c-api/CMakeLists.txt'
+      - 'modules/c-api/examples/**'
+      - '.github/workflows/c-api-release-gate.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'tools/c-api/**'
+      - 'docs/c-api/**'
+      - 'modules/c-api/CMakeLists.txt'
+      - 'modules/c-api/examples/**'
+  workflow_dispatch:
+
+concurrency:
+  group: c-api-release-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    name: May the experimental C ABI be published?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the record against the measurement
+        run: python3 tools/c-api/check_release_gate.py --check
+
+      - name: Print the verdict
+        run: python3 tools/c-api/check_release_gate.py --run
+
+      # The direction that matters. A criterion recorded as blocked that has quietly become met is
+      # how a project ships something it had decided not to ship, so the job proves the check
+      # catches it rather than assuming so.
+      - name: Prove the gate rejects a decision recorded in only one place
+        run: |
+          set -euo pipefail
+          cp tools/c-api/limitations.json /tmp/limitations.json.orig
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("tools/c-api/limitations.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          for entry in data["environment"]:
+              if entry["subject"] == "There is no static configuration":
+                  entry["status"] = "by design"
+                  break
+          else:
+              raise SystemExit("the decision this check perturbs is no longer recorded")
+          path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
+          status=0
+          python3 tools/c-api/check_release_gate.py --check || status=$?
+          cp /tmp/limitations.json.orig tools/c-api/limitations.json
+          if [ "$status" -eq 0 ]; then
+            echo "::error::the release gate accepted a decision recorded in only one place" >&2
+            exit 1
+          fi
+          echo "the gate rejected the one-sided decision, as it must"
+
+      - name: Confirm the tree was restored
+        run: git diff --exit-code -- tools/c-api/limitations.json
+
+      - name: Verify regeneration is deterministic
+        run: |
+          set -euo pipefail
+          python3 tools/c-api/check_release_gate.py --write
+          if ! git diff --quiet -- docs/c-api/RELEASE_GATE.md; then
+            echo "::error::--write changed RELEASE_GATE.md even though --check passed" >&2
+            git --no-pager diff --stat -- docs/c-api/RELEASE_GATE.md
+            exit 1
+          fi
+          echo "regeneration is a no-op, as it must be"

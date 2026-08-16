@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "release": {
+    "name": "CNA C ABI 0.1.0, experimental",
+    "note": "This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the point at which only additive changes are permitted within a major version -- is a separate decision that this gate does not make and must not be read as making."
+  },
+  "criteria": [
+    {
+      "id": "compatibility-matrix",
+      "title": "The compatibility matrix is real, current and honest",
+      "requirement": "Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration.",
+      "check": "compatibility_matrix_current",
+      "recorded": "met",
+      "evidence": "docs/c-api/COMPATIBILITY.md, gated by CApiCompatibilityMatrix and CApiHeaderCompatibility",
+      "note": "C99 is a verified floor rather than a claim: the matrix found and killed a duplicate typedef that made C99 impossible."
+    },
+    {
+      "id": "abi-baseline",
+      "title": "No unreviewed ABI break",
+      "requirement": "Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff.",
+      "check": "abi_baseline_current",
+      "recorded": "met",
+      "evidence": "tools/c-api/abi_baseline.json, gated by CApiAbiHeaderBaseline and CApiAbiBaseline",
+      "note": "The header half needs no build and runs everywhere; the export half runs in each C API build tree."
+    },
+    {
+      "id": "coverage-closed",
+      "title": "No public C++ symbol is unaccounted for",
+      "requirement": "The generated inventory has no `planned` row: every public declaration is mapped, partially mapped with its subset named, or recorded as having no C form with the reason.",
+      "check": "coverage_has_no_planned_rows",
+      "recorded": "met",
+      "evidence": "docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix",
+      "note": "Closing the remaining partial rows is CBIND-044 and is not a condition of an experimental release."
+    },
+    {
+      "id": "limitations-matrix",
+      "title": "A known-limitations matrix a reader can act on",
+      "requirement": "What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task.",
+      "check": "limitations_current",
+      "recorded": "met",
+      "evidence": "docs/c-api/LIMITATIONS.md, gated by CApiLimitations",
+      "note": "This is the document a consumer reads to decide whether to adopt the ABI at all."
+    },
+    {
+      "id": "real-c-application",
+      "title": "A real C application, built the way a consumer builds one",
+      "requirement": "A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run.",
+      "check": "installed_consumer_gate_exists",
+      "recorded": "met",
+      "evidence": "modules/c-api/examples/c/hello_cna.c, gated by CApi_InstalledConsumer",
+      "note": "A program that only builds inside this repository would prove nothing about the package."
+    },
+    {
+      "id": "installable",
+      "title": "The package is installable and findable",
+      "requirement": "`find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version.",
+      "check": "package_config_installed",
+      "recorded": "met",
+      "evidence": "modules/c-api/cmake/CNAConfig.cmake.in and the CNACApi install component",
+      "note": "Before CBIND-041 the module installed a targets file and no package config, so this criterion was silently false."
+    },
+    {
+      "id": "documentation",
+      "title": "The consumer documentation exists",
+      "requirement": "Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented.",
+      "check": "required_documents_present",
+      "recorded": "met",
+      "evidence": "docs/c-api/",
+      "note": "CONSUMING.md is the entry point for somebody who has never read this repository."
+    },
+    {
+      "id": "safety-evidence",
+      "title": "The lifetime and byte-facing contracts are measured, not asserted",
+      "requirement": "Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle.",
+      "check": "safety_tests_present",
+      "recorded": "met",
+      "evidence": "CApi_StressSmoke and CApi_Utf8Oracle, plus tests/fuzz/StringViewFuzz.cpp",
+      "note": "The stress suite found a heap use-after-free on its first run; that is what this criterion is for."
+    },
+    {
+      "id": "packaging-dependencies",
+      "title": "Whether the package ships its native dependencies",
+      "requirement": "A decision on whether SDL3, SDL3_image, SDL3_mixer and FFmpeg are installed alongside libcna_c_api.so, or whether placing them is the consumer's job.",
+      "check": "owner_decision_still_open:The package does not ship SDL3 or FFmpeg",
+      "recorded": "owner-decision",
+      "evidence": "docs/c-api/LIMITATIONS.md, recorded as an open decision",
+      "note": "Not a defect and not something an implementer may settle: it is a redistribution decision. Until it is ruled on, a consumer must place those libraries themselves, and this gate reports the release as not ready."
+    },
+    {
+      "id": "static-configuration",
+      "title": "Whether a static configuration is ever offered",
+      "requirement": "A decision on `CNA_C_API_STATIC`, which names a configuration that does not exist.",
+      "check": "owner_decision_still_open:There is no static configuration",
+      "recorded": "owner-decision",
+      "evidence": "docs/c-api/LIMITATIONS.md, recorded as an open decision",
+      "note": "A static build would export every C++ symbol it archived, and the ABI promise -- 2,720 cna_* names and nothing else -- would stop meaning anything. Offering one requires a design, not a build option."
+    }
+  ],
+  "required_documents": [
+    "README.md",
+    "CONSUMING.md",
+    "LIMITATIONS.md",
+    "ABI_VERSIONING.md",
+    "HANDLES.md",
+    "ERRORS.md",
+    "STRINGS_AND_BUFFERS.md",
+    "CALLBACKS_AND_THREADING.md",
+    "RENDERERS_AND_CAPABILITIES.md",
+    "OWNERSHIP.md",
+    "COMPATIBILITY.md",
+    "COVERAGE.md",
+    "FUZZING.md"
+  ]
+}

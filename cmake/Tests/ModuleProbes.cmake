@@ -205,6 +205,21 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/generate_limitations.py" --check)
 
+        # plan_binding.md CBIND-042B: the experimental release gate.
+        #
+        # A release gate written as prose is a list of things somebody once believed. This one is a
+        # declaration plus a measurement, and the check fails when they disagree **in either
+        # direction**: a criterion recorded as met that no longer is, and -- the failure mode a
+        # release gate actually dies of -- one recorded as blocked that has quietly become met,
+        # because nobody re-reads a document that says "not yet".
+        #
+        # It currently reports NOT READY, and correctly: every mechanical criterion is met, and two
+        # packaging questions await a decision that no implementer may make alone. That is the gate
+        # working, not the gate failing, so the test passes while the verdict stands.
+        add_test(NAME CApiReleaseGate
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/c-api/check_release_gate.py" --check)
+
         # plan_binding.md CBIND-039: the ABI layout and export baseline.
         #
         # A generated probe reports what the compiler *actually* laid out -- every struct size,

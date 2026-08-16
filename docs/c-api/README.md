@@ -165,3 +165,5 @@ here to *use* this ABI rather than to build it, start at [`CONSUMING.md`](CONSUM
 carries the installation, the CMake package and a complete C program to copy, and then
 [`LIMITATIONS.md`](LIMITATIONS.md), which answers the question the coverage inventory cannot: what
 is **not** here, grouped by the reason, so you can tell whether any of it stands in your way.
+[`RELEASE_GATE.md`](RELEASE_GATE.md) records whether this ABI may be published at all, measured on
+every run rather than written down once.

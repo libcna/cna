@@ -122,6 +122,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > the same inventory; enforcing that every unmapped reason has a declared theme and that no deferral
 > names a finished task turned up three stale deferrals, one of which had silently become
 > implemented — the snapshot is now 6,067 implemented, 28 partial, 0 planned, 320 not-applicable.
+> `CBIND-042B` closes Phase B7's release question with a gate that is measured rather than written
+> down: ten criteria, eight of them met and re-measured on every run, and two packaging decisions
+> that no implementer may make alone. The published verdict is **not ready**, and correctly so.
 
 ---
 

@@ -123,6 +123,15 @@ def analyze() -> dict:
                     f"a partial mapping still defers to {task}, which the plan records as finished: "
                     f"{entry['mapping'][:90]}")
 
+    # The same rule one level up: an open decision whose owner is a finished task is nobody's.
+    # A decision with no live owner is not deferred, it is dropped.
+    for entry in declaration["environment"]:
+        owner = entry.get("owner", "")
+        if re.fullmatch(r"CBIND-[0-9A-Za-z]+", owner) and owner not in live:
+            problems.append(
+                f"the limitation \"{entry['subject']}\" is owned by {owner}, "
+                "which the plan records as finished")
+
     for entry in unmapped:
         entry["theme"] = classify(entry["mapping"], declaration["themes"])
         if entry["theme"] is None:
