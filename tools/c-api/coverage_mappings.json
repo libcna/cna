@@ -2599,10 +2599,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_gamer_get_signed_in_gamer_count` reports the count and `cna_gamer_get_signed_in_gamer_at_player_index` reaches an element. The collection object itself has no handle, so there is no view to enumerate, copy from or hold; `CBIND-044` owns the decision to add one or to record its absence as permanent",
-      "tests": "`NetSmoke.c` creates a signed-in gamer, reads its gamertag through count/copy, publishes and clears the process-wide collection, asserts the published-retention refusal to release it early, and drives all three canonical session-creation overloads through it",
-      "status": "partial",
-      "task": "CBIND-036E2"
+      "mapping": "the collection object has no C form -- a handle would need the whole `cna_gamer_collection_*` family generalized to a second element type for one property -- so the ABI names what a caller does with it instead: `cna_gamer_get_signed_in_gamer_count`, `cna_gamer_get_signed_in_gamer_at` for the positional indexer, `cna_gamer_get_signed_in_gamer_at_player_index` for the `PlayerIndex` one, and `cna_gamer_signed_in_index_of` and `cna_gamer_signed_in_contains`. Position and player index are different questions with different answers, which is why they are different routes",
+      "tests": "`GamersSmoke.c` publishes a gamer and then covers the count, both indexers, the position of a gamer that is in the collection and the -1 of one that is not, containment both ways, a position outside the collection, a null output and a handle of the wrong family -- with the refusal probes taking a handle of their own, because a refused lookup clears its output first",
+      "status": "implemented",
+      "task": "CBIND-044C"
     },
     {
       "id": "gamer-gamertag",

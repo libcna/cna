@@ -701,6 +701,77 @@ CNA_Result cna_gamer_begin_get_partner_token(
     });
 }
 
+CNA_Result cna_gamer_get_signed_in_gamer_at(
+    const int32_t index,
+    CNA_SignedInGamerHandle* const outGamer)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outGamer == nullptr) {
+            return InvalidInput("The signed-in gamer output handle is null.");
+        }
+        *outGamer = CNA_INVALID_HANDLE;
+        SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
+        if (collection == nullptr || index < 0 || index >= collection->getCountProperty()) {
+            return InvalidInput("The signed-in gamer position is outside the collection.");
+        }
+        SignedInGamer* const gamer = (*collection)[static_cast<int>(index)];
+        if (gamer == nullptr) {
+            // The collection reported the position as valid, so a null element is an internal
+            // inconsistency rather than an ordinary "nobody is signed in at that slot".
+            return Fail(
+                CNA_RESULT_INTERNAL,
+                CNA_ERROR_CATEGORY_INTERNAL,
+                "The signed-in gamer collection reported an empty element inside its own count.");
+        }
+        return CreateBorrowedSignedInGamer(gamer, outGamer);
+    });
+}
+
+CNA_Result cna_gamer_signed_in_index_of(
+    const CNA_SignedInGamerHandle gamerHandle,
+    int32_t* const outIndex)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outIndex == nullptr) {
+            return InvalidInput("The signed-in gamer index output is null.");
+        }
+        *outIndex = INT32_C(-1);
+        SignedInGamer* gamer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
+        if (collection == nullptr) {
+            return CNA_RESULT_SUCCESS;
+        }
+        // Not being in the collection is an answer, not a failure -- the canonical IndexOf reports
+        // a negative position for it, and so does this.
+        *outIndex = static_cast<int32_t>(collection->IndexOf(gamer));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_gamer_signed_in_contains(
+    const CNA_SignedInGamerHandle gamerHandle,
+    CNA_Bool* const outContains)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outContains == nullptr) {
+            return InvalidInput("The signed-in gamer containment output is null.");
+        }
+        *outContains = CNA_FALSE;
+        SignedInGamer* gamer = nullptr;
+        if (const CNA_Result result = CNA::C::Detail::BorrowSignedInGamer(gamerHandle, &gamer);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SignedInGamerCollection* const collection = Gamer::getSignedInGamersProperty();
+        *outContains = (collection != nullptr && collection->Contains(gamer)) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
     const CNA_PlayerIndex playerIndex,
     CNA_Bool* const outHasGamer,

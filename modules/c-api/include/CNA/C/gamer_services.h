@@ -1221,6 +1221,50 @@ CNA_C_API CNA_Result cna_gamer_begin_get_partner_token(
  * answers at `CNA_PLAYER_INDEX_ONE` whatever player index it was created with. That is the canonical
  * behavior, reported rather than corrected.
  */
+/**
+ * @brief Gets the signed-in gamer at a position in the process-wide collection.
+ *
+ * @param index Zero-based position, which is **not** a player index.
+ * @param out_gamer Receives an owned handle borrowing the collection's gamer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a position outside the
+ *         collection or a null output, or a documented handle/thread failure.
+ *
+ * The canonical collection is indexed two ways -- by position and by `PlayerIndex` -- and they are
+ * different questions with different answers, so they are different routes. Position is what an
+ * iteration uses; @ref cna_gamer_get_signed_in_gamer_at_player_index is what a controller lookup
+ * uses.
+ */
+CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_at(
+    int32_t index,
+    CNA_SignedInGamerHandle* out_gamer);
+
+/**
+ * @brief Finds a signed-in gamer's position in the process-wide collection.
+ *
+ * @param gamer Signed-in gamer handle to look for.
+ * @param out_index Receives the zero-based position, or -1 when the gamer is not in the collection.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output, or a documented
+ *         handle/thread failure.
+ *
+ * Not finding the gamer is an answer, not a failure: the route succeeds and reports -1, exactly as
+ * the canonical `IndexOf` returns a negative position.
+ */
+CNA_C_API CNA_Result cna_gamer_signed_in_index_of(
+    CNA_SignedInGamerHandle gamer,
+    int32_t* out_index);
+
+/**
+ * @brief Reports whether a signed-in gamer is in the process-wide collection.
+ *
+ * @param gamer Signed-in gamer handle to look for.
+ * @param out_contains Receives `CNA_TRUE` when the collection holds the gamer.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a null output, or a documented
+ *         handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_gamer_signed_in_contains(
+    CNA_SignedInGamerHandle gamer,
+    CNA_Bool* out_contains);
+
 CNA_C_API CNA_Result cna_gamer_get_signed_in_gamer_at_player_index(
     CNA_PlayerIndex player_index,
     CNA_Bool* out_has_gamer,

@@ -15,8 +15,8 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,082 | A C route exists and is tested. |
-| **Partially mapped** | 13 | A route exists but covers a stated subset. Read the next section before relying on one. |
+| Fully mapped | 6,083 | A C route exists and is tested. |
+| **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 320 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
@@ -34,7 +34,6 @@ row says what you get and, in the same breath, what you do not.
 | `ContentManager::Load` | `cna_content_manager_load_texture2d`, `cna_content_manager_load_texture_cube` and `cna_content_manager_load_sound_effect` cover the canonical specializations of this template; the generic `Load<T>` itself has no C route because C cannot name an arbitrary C++ type, so each further asset type needs its own typed C route |
 | `ContentReader::ReadObject` | `cna_content_reader_read_object_tag` runs the same dispatch protocol and reports only whether a non-null object was produced. The canonical return is a type-erased object, which has no C representation, so the value itself cannot be handed back; the route exists so a C consumer can advance past an untyped field and observe its presence |
 | `ContentTypeReaderBase::ReadUntyped` | `cna_content_type_reader_read_untyped` runs the reader against a content reader and reports only whether an object was produced. The canonical operation both takes and returns a type-erased object, neither of which has a C representation, so the route always passes "no existing instance" and cannot hand the value back |
-| `Gamer::getSignedInGamersProperty` | `cna_gamer_get_signed_in_gamer_count` reports the count and `cna_gamer_get_signed_in_gamer_at_player_index` reaches an element. The collection object itself has no handle, so there is no view to enumerate, copy from or hold; `CBIND-044` owns the decision to add one or to record its absence as permanent |
 | `NetworkSessionProperties::operator[]` | `cna_network_session_properties_get_item` and `_set_item` express the strict read and the appending write separately, which is what the canonical header itself recommends. The proxy this operator returns has no C counterpart, so its documented quirk -- that a bare out-of-range *read* through it also appends, because the proxy must bind a slot before it knows whether the caller will read or write -- cannot be reproduced and is not simulated |
 
 ## No C form: the reasons, by theme

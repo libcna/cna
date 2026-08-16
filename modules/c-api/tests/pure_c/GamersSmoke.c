@@ -417,6 +417,57 @@ int main(void)
         return 12;
     }
 
+    /* CBIND-044C: the collection's remaining operations. The canonical property returns a
+       collection object, which has no C form; what a caller does with it -- count, position,
+       membership -- is named instead. Position is not the player index: the one published gamer is
+       at position zero whatever player index it carries. */
+    {
+        CNA_SignedInGamerHandle positional = CNA_INVALID_HANDLE;
+        int32_t position = INT32_C(-99);
+        CNA_Bool contains = CNA_FALSE;
+        if (cna_gamer_get_signed_in_gamer_at(0, &positional) != CNA_RESULT_SUCCESS ||
+            positional == CNA_INVALID_HANDLE) {
+            return 13;
+        }
+        if (cna_gamer_signed_in_index_of(positional, &position) != CNA_RESULT_SUCCESS ||
+            position != 0 ||
+            cna_gamer_signed_in_contains(positional, &contains) != CNA_RESULT_SUCCESS ||
+            contains != CNA_TRUE) {
+            return 14;
+        }
+        /* Not being in the collection is an answer, not a failure. */
+        CNA_SignedInGamerHandle outsider = CNA_INVALID_HANDLE;
+        if (cna_signed_in_gamer_create_ext(view("CnaCApiOutsider"), CNA_FALSE, CNA_FALSE,
+                                           CNA_PLAYER_INDEX_THREE, &outsider) !=
+                CNA_RESULT_SUCCESS ||
+            cna_gamer_signed_in_index_of(outsider, &position) != CNA_RESULT_SUCCESS ||
+            position != -1 ||
+            cna_gamer_signed_in_contains(outsider, &contains) != CNA_RESULT_SUCCESS ||
+            contains != CNA_FALSE ||
+            cna_signed_in_gamer_destroy(outsider) != CNA_RESULT_SUCCESS) {
+            return 15;
+        }
+        /* A refused lookup clears its output first, so the refusal probes take a handle of their
+           own rather than the live one -- reusing it would destroy the handle under test. */
+        CNA_SignedInGamerHandle refused = CNA_INVALID_HANDLE;
+        if (cna_gamer_get_signed_in_gamer_at(1, &refused) != CNA_RESULT_INVALID_ARGUMENT ||
+            refused != CNA_INVALID_HANDLE ||
+            cna_gamer_get_signed_in_gamer_at(-1, &refused) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_gamer_get_signed_in_gamer_at(0, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_gamer_signed_in_index_of(positional, 0) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_gamer_signed_in_contains(positional, 0) != CNA_RESULT_INVALID_ARGUMENT) {
+            return 16;
+        }
+        /* A handle of the wrong family is refused rather than searched for. */
+        if (cna_gamer_signed_in_index_of(CNA_INVALID_HANDLE, &position) !=
+            CNA_RESULT_INVALID_HANDLE) {
+            return 17;
+        }
+        if (cna_signed_in_gamer_destroy(positional) != CNA_RESULT_SUCCESS) {
+            return 18;
+        }
+    }
+
     sign_ins = 0;
     if (cna_signed_in_gamer_subscribe_signed_in_ext(&on_signed_in, &sign_ins, &registration) !=
             CNA_RESULT_SUCCESS ||
