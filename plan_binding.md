@@ -378,7 +378,10 @@ sub-partitioned when it is reached, as CBIND-035 and CBIND-036 were.
 | CBIND-037E5 | 11 | Complete the CNA runtime facade | ✅ | The slice turned out to have no routes to write, and finding that out was the work. **`CNA::Runtime` is declared and defined nowhere**: all five methods would fail to link if anything called them, nothing in the tree calls them, no translation unit includes `CNA/Misc.hpp`, and the built runtime archive contains no `CNA::Runtime::` symbol — a conclusion the repository's own `audit/include/CNA/Misc.hpp.audit.md` had already reached independently. This ABI cannot bind a symbol that does not exist, so all 11 rows are recorded `not-applicable` with that reason rather than left planned as if they were work waiting. `RuntimeOptions` is a sound value on its own but only parameterizes `Initialize`, so mapping it alone would hand a consumer a structure that configures nothing. The record is guarded rather than asserted: the new `CApi_UnimplementedRuntimeFacade` check inspects the built archive and **fails the moment any `CNA::Runtime::` symbol appears**, verified against a stub that produces one. Green in all four trees (66/66) and under ASan+UBSan with leak detection on. **This closes the runtime module** — 223 implemented, 4 partial, 0 planned, 69 not applicable. |
 | CBIND-037E3 | 35 | Complete the game window | ✅ | `runtime_window.h` and the window half of `CnaCApiGameProperties.cpp` map `GameWindow`, its two aliases and `Game::getWindowProperty`. The one-per-game question is answered the **fourth** time the same way — every route addresses the game handle — and the reason is written down beside the other three. Two canonical shapes collapse into one route each: the platform-handle property and the native-window accessor answer the same pointer, and the name-only screen-device-change overload is the sized one with the current client size, so a non-positive size means keep it. The slice found a result code this ABI had not been using: **a window state change is a request to the platform**, and one the platform refuses reports `CNA_RESULT_PLATFORM` rather than an internal failure — which is exactly what a dummy video driver answers for minimize on a window it never really showed, and what made this the one slice whose first green run was tree-dependent. The window's protected hooks are not mapped, by the same test `E1` applied with the opposite result: this ABI derives a component and does not derive a window. Strict-C coverage in `RuntimeGameSmoke.c`; green in all four trees (64/64), with and without a real SDL window, and under ASan+UBSan with leak detection on. |
 | CBIND-037E4 | 80 | Complete the graphics device manager | ✅ | `runtime_graphics_manager.h` and `CnaCApiGraphicsDeviceManager.cpp` map the manager, the candidate configuration, the interface, the settings event argument and `PresentationMode`. The manager is the **one runtime object a C caller creates**, and creating it registers both services `CBIND-037E1` named — closing that loop. The adapter inside a configuration is named by **index**, because a pointer into the runtime's adapter list is nothing C could hold. Two findings, both reported rather than smoothed over. First, **releasing a manager keeps the C++ object alive until its game is destroyed**: the canonical game caches a raw `IGraphicsDeviceService*` and never clears it, so the obvious implementation reproduced a heap-use-after-free on the next frame under ASan — a canonical defect this ABI works around, documented in `GAME_COMPONENTS.md`. Second, **`PreparingDeviceSettings` cannot change the settings in this runtime at all**: the canonical handler collection delivers a `const` reference, so the argument's mutable accessor is unreachable from any subscriber, C++ or C; the C callback is read-only and says why. `IGraphicsDeviceManager` gets no caller-provided implementation, the opposite of what `E1` decided for components, because the runtime constructs the manager itself. Strict-C `GraphicsDeviceManagerSmoke.c`; green in all four trees (65/65) and under ASan+UBSan with leak detection on. |
-| CBIND-037F | 205 | Complete the audio module | ⬜ | Map the remaining `SoundEffect`/`SoundEffectInstance` rows, `DynamicSoundEffectInstance`, `Microphone`, the XACT family (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`), 3D audio and `FrameworkDispatcher`. |
+| CBIND-037F1 | 48 | Complete sound effects and their instances | ✅ | `SoundEffect` gains three creation routes beside the one `CBIND-035E` already had — the seven-argument range-and-loop constructor, the stream factory (taking the bytes it would have read, since C has no stream) and the file constructor — plus the disposal and name queries, the four **process-wide** 3D-audio settings, both fire-and-forget play routes, both static sample computations and type names for the effect and its instances. Two canonical behaviors are reported rather than evened out: **pan is range-checked while pitch is clamped**, and an **empty asset path yields a silent effect** rather than an error. The C range route adds the boundary validation the canonical constructor lacks — a negative offset, an empty count or a range leaving the buffer is refused before the decoder sees a length nobody checked. Move operations are `not-applicable`: a handle already names an object C never copies or moves. Both audio exceptions now convert in the **exception firewall** rather than in the one creation route that caught the first locally. Strict-C `AudioSoundEffectSmoke.c`, including a WAV built in memory and decoded; green in all four trees (67/67) and under ASan+UBSan with leak detection on. |
+| CBIND-037F2 | 49 | Complete streaming and capture audio | ⬜ | Map `DynamicSoundEffectInstance`, `Microphone`, `MicrophoneState` and `NoMicrophoneConnectedException`. Expect the buffer-needed event and the submit/consume cycle to be the whole design: decide whether C submits owned byte buffers or borrows them for the duration of the call, and say which. The container reports playback available but has **no capture device**, so the microphone's unavailable path is what the trees will exercise — `CBIND-037F1`'s decode-or-unsupported shape is the precedent for accepting both. |
+| CBIND-037F3 | 32 | Complete 3D audio | ⬜ | Map `AudioEmitter`, `AudioListener`, `RendererDetail` and the two `SoundEffectInstance::Apply3D` overloads `CBIND-037F1` deliberately left, since they take the emitter and listener values this slice defines. Both are plain vector-and-scalar values, so expect fixed PODs; the multi-listener overload takes an array, which is the shape `cna_message_box_show_ext` already uses for a borrowed array. |
+| CBIND-037F4 | 70 | Complete the XACT audio surface | ⬜ | Map `AudioEngine`, its `InstanceLimitDecision`, `SoundBank`, `WaveBank`, `AudioCategory` and `Cue`. **Decide first whether this is reachable at all**: every one of these types loads a binary XACT file (`.xgs`, `.xsb`, `.xwb`) and no fixture in this repository has one. Either generate a minimal fixture and map the surface against it, or record the family the way `CBIND-037E5` recorded the unimplemented runtime facade — with the reason stated and a guard that fails if the situation changes. Do not leave rows planned to avoid the decision. |
 | CBIND-037G | 665 | Complete the gamer-services module | ⬜ | Map the remaining gamer, profile, presence, privilege, achievement, leaderboard, avatar and guide surfaces on top of the minimum signed-in-gamer surface CBIND-036E2 and E3 already borrowed. |
 
 #### CBIND-037B input implementation slices
@@ -1025,7 +1028,10 @@ value member, so C borrows it and the setter copies. The snapshot is now 5,246 i
 partial, 875 planned and 260 not applicable. CBIND-037E5 then closes the runtime module without
 writing a route: the `CNA::Runtime` facade is declared and never defined, so its 11 rows are recorded
 not-applicable and a new check fails if its symbols ever appear. The snapshot is now 5,246
-implemented, 34 partial, 864 planned and 271 not applicable.
+implemented, 34 partial, 864 planned and 271 not applicable. CBIND-037F1 then opens the audio module
+by completing sound effects: three more creation routes, the process-wide 3D-audio settings, the
+static sample computations, and both audio exceptions converting in the firewall rather than in one
+route. The snapshot is now 5,284 implemented, 32 partial, 816 planned and 283 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1034,26 +1040,23 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037E5` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037F1` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. **The whole `input` module is closed** —
   834 implemented, 27 not applicable, no partial and no planned row — as are `storage`, `content`,
   `net` and `core`.
-- **Next task:** `CBIND-037F`, the audio module — **205 rows**: `SoundEffect`,
-  `SoundEffectInstance`, `DynamicSoundEffectInstance`, `Microphone`, `Cue`, `AudioEngine`,
-  `SoundBank`, `WaveBank`, `AudioCategory`, `AudioEmitter`, `AudioListener`, `RendererDetail` and
-  the audio exception types. **The runtime module is closed**, joining `input`, `media`, `devices`,
-  `devices-ext`, `storage`, `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`; only
-  `audio` and `gamer-services` (665) remain in the whole campaign.
+- **Next task:** `CBIND-037F2`, streaming and capture audio — **49 rows**:
+  `DynamicSoundEffectInstance`, `Microphone`, `MicrophoneState` and
+  `NoMicrophoneConnectedException`. `F1` is done, so `AudioSoundEffectSmoke.c` exists, both audio
+  exceptions convert in the firewall, and the `SoundEffectInstance` handle contract is settled.
 
-  Three things are already known and should not be rediscovered: `CBIND-035E` already mapped a
-  minimal audio slice as `cna_sound_effect_*`, so check every row against it before naming a route;
-  this container has **no audio hardware** and the existing audio tests already prove the
-  unavailable path, so expect that to be the branch most rows exercise — the sensor slices'
-  test-backend pattern is the precedent for reaching the available one; and the XACT family
-  (`AudioEngine`, `SoundBank`, `WaveBank`, `Cue`, `AudioCategory`) needs binary content files no
-  fixture in this repo has, so decide early whether it is mapped against generated fixtures or
-  recorded as unreachable, and write the reason down rather than leaving rows planned. `CBIND-037E5`
-  is the precedent for the second option, and its guard check is the shape to copy.
+  Three things are already known and should not be rediscovered: this container **reports playback
+  available** — `cna_audio_get_capabilities` answers `CNA_TRUE`, so sound genuinely plays here — but
+  has **no capture device**, so the microphone's unavailable path is what the trees exercise, and
+  `F1`'s decode-or-unsupported shape is the precedent for accepting both answers in one assertion;
+  the buffer-needed event and the submit/consume cycle are the whole design of
+  `DynamicSoundEffectInstance`, so decide early whether C submits owned buffers or borrows them for
+  the call and write the reason down; and `NoMicrophoneConnectedException` joins the two exceptions
+  `F1` already put in the firewall, which is where it belongs rather than in one route.
 - **The `CNA_DEVICES` environment decision is done, not pending.** The owner directed (2026-08-15)
   that the `#ifdef CNA_DEVICES` half of `devices-ext` be genuinely exercised rather than only ever
   tested compiled-out. `cmake-build-binding-sdlrenderer` and `cmake-build-binding-asan` have been

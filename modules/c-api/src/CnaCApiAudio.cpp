@@ -10,11 +10,15 @@
 #include "Microsoft/Xna/Framework/Audio/SoundEffectInstance.hpp"
 #include "Microsoft/Xna/Framework/Audio/SoundState.hpp"
 #include "System/InvalidOperationException.hpp"
+#include "System/TimeSpan.hpp"
 
 #include <cmath>
+#include <cstring>
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <vector>
 
 namespace {
@@ -546,5 +550,542 @@ CNA_Result cna_sound_effect_instance_destroy(const CNA_Handle instanceHandle)
         }
         RemoveOwnedAudioResource();
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+namespace {
+
+[[nodiscard]] CNA_Result AudioInvalidInput(const char* const message)
+{
+    return Fail(CNA_RESULT_INVALID_ARGUMENT, CNA_ERROR_CATEGORY_ARGUMENT, message);
+}
+
+[[nodiscard]] CNA_Result CopyAudioText(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != UINT64_C(0))) {
+        return AudioInvalidInput("The audio text output is invalid.");
+    }
+    *outBytes = value.size();
+    if (capacity < value.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The destination capacity is smaller than the audio text.");
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+// Every creation route publishes its handle the same way, so the ownership bookkeeping stays in one
+// place: the effect is a child of the game and the game refuses to be destroyed while one is alive.
+[[nodiscard]] CNA_Result PublishSoundEffect(
+    std::shared_ptr<SoundEffect> nativeSoundEffect,
+    const CNA_Handle gameHandle,
+    CNA_Handle* const outSoundEffect)
+{
+    const auto resource = std::make_shared<SoundEffectResource>(
+        SoundEffectResource{std::move(nativeSoundEffect), gameHandle, 0U});
+    const CNA_Result result = GetRuntimeHandles().Create(
+        ObjectKind::SoundEffect,
+        resource,
+        outSoundEffect);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The owned SoundEffect handle could not be created.");
+    }
+    AddOwnedAudioResource();
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace
+
+CNA_Result cna_sound_effect_create_pcm16_range_ext(
+    const CNA_Handle gameHandle,
+    const CNA_SoundEffectCreateInfo* const createInfo,
+    const uint8_t* const pcmBytes,
+    const uint64_t byteCount,
+    const int32_t offset,
+    const int32_t count,
+    const int32_t loopStart,
+    const int32_t loopLength,
+    CNA_Handle* const outSoundEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSoundEffect == nullptr) {
+            return AudioInvalidInput("The SoundEffect output handle is null.");
+        }
+        *outSoundEffect = CNA_INVALID_HANDLE;
+        AudioChannels nativeChannels = AudioChannels::Mono;
+        if (createInfo == nullptr ||
+            createInfo->struct_size < sizeof(CNA_SoundEffectCreateInfo) ||
+            createInfo->struct_version != StructureVersion || createInfo->reserved != 0U ||
+            createInfo->sample_rate == 0U ||
+            createInfo->sample_rate > static_cast<uint32_t>(std::numeric_limits<int32_t>::max()) ||
+            !TryMapChannels(createInfo->channels, &nativeChannels)) {
+            return AudioInvalidInput("The SoundEffect PCM creation configuration is invalid.");
+        }
+        std::size_t nativeByteCount = 0U;
+        if (const CNA_Result result =
+                CheckedElementByteCount(pcmBytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The SoundEffect PCM byte range is invalid.");
+        }
+        // The canonical constructor takes the range as signed offsets into the buffer, so the range
+        // is checked here rather than left to it: a negative or overrunning range would otherwise
+        // reach the decoder as a length nobody validated.
+        if (offset < 0 || count <= 0 || loopStart < 0 || loopLength < 0 ||
+            static_cast<uint64_t>(offset) + static_cast<uint64_t>(count) > byteCount) {
+            return AudioInvalidInput("The SoundEffect PCM range lies outside the buffer.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        const std::vector<SharpRuntime::bytecs> pcm(pcmBytes, pcmBytes + nativeByteCount);
+        auto nativeSoundEffect = std::make_shared<SoundEffect>(
+            pcm,
+            static_cast<SharpRuntime::intcs>(offset),
+            static_cast<SharpRuntime::intcs>(count),
+            static_cast<SharpRuntime::intcs>(createInfo->sample_rate),
+            nativeChannels,
+            static_cast<SharpRuntime::intcs>(loopStart),
+            static_cast<SharpRuntime::intcs>(loopLength));
+        return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
+    });
+}
+
+CNA_Result cna_sound_effect_create_from_encoded_ext(
+    const CNA_Handle gameHandle,
+    const uint8_t* const bytes,
+    const uint64_t byteCount,
+    CNA_Handle* const outSoundEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSoundEffect == nullptr) {
+            return AudioInvalidInput("The SoundEffect output handle is null.");
+        }
+        *outSoundEffect = CNA_INVALID_HANDLE;
+        std::size_t nativeByteCount = 0U;
+        if (const CNA_Result result =
+                CheckedElementByteCount(bytes, byteCount, sizeof(uint8_t), &nativeByteCount);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The encoded audio byte range is invalid.");
+        }
+        if (byteCount == UINT64_C(0)) {
+            return AudioInvalidInput("The encoded audio data is empty.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // The canonical factory reads a C++ stream to the end, so C hands it the bytes it would
+        // have read. It answers a raw owning pointer, which this handle adopts immediately.
+        std::string encoded(reinterpret_cast<const char*>(bytes), nativeByteCount);
+        std::istringstream stream(std::move(encoded), std::ios::binary);
+        const std::shared_ptr<SoundEffect> nativeSoundEffect(SoundEffect::FromStream(stream));
+        if (!nativeSoundEffect) {
+            return Fail(
+                CNA_RESULT_NOT_SUPPORTED,
+                CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+                "The encoded audio could not be decoded by this build.");
+        }
+        return PublishSoundEffect(nativeSoundEffect, gameHandle, outSoundEffect);
+    });
+}
+
+CNA_Result cna_sound_effect_create_from_asset_ext(
+    const CNA_Handle gameHandle,
+    const CNA_StringView assetName,
+    CNA_Handle* const outSoundEffect)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSoundEffect == nullptr) {
+            return AudioInvalidInput("The SoundEffect output handle is null.");
+        }
+        *outSoundEffect = CNA_INVALID_HANDLE;
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string path;
+        if (const CNA_Result result =
+                CNA::C::Detail::CopyStringView(assetName, false, &path);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The audio asset name is not valid UTF-8.");
+        }
+        // An empty path is not an error: the canonical constructor answers an effect with no audio.
+        auto nativeSoundEffect = std::make_shared<SoundEffect>(path);
+        return PublishSoundEffect(std::move(nativeSoundEffect), gameHandle, outSoundEffect);
+    });
+}
+
+CNA_Result cna_sound_effect_get_is_disposed(
+    const CNA_Handle soundEffectHandle,
+    CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return AudioInvalidInput("The disposal output is null.");
+        }
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDisposed = soundEffect->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_name_size(
+    const CNA_Handle soundEffectHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The name size output is null.");
+        }
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = soundEffect->value->getNameProperty().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_copy_name(
+    const CNA_Handle soundEffectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyAudioText(soundEffect->value->getNameProperty(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_sound_effect_set_name(
+    const CNA_Handle soundEffectHandle,
+    const CNA_StringView name)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        std::string value;
+        if (const CNA_Result result = CNA::C::Detail::CopyStringView(name, false, &value);
+            result != CNA_RESULT_SUCCESS) {
+            return Fail(
+                result,
+                ErrorCategoryForResult(result),
+                "The SoundEffect name is not valid UTF-8.");
+        }
+        soundEffect->value->setNameProperty(std::move(value));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_master_volume(const CNA_Handle gameHandle, float* const outVolume)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outVolume == nullptr) {
+            return AudioInvalidInput("The master volume output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outVolume = SoundEffect::getMasterVolumeProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_set_master_volume(const CNA_Handle gameHandle, const float volume)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SoundEffect::setMasterVolumeProperty(volume);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_distance_scale(const CNA_Handle gameHandle, float* const outScale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outScale == nullptr) {
+            return AudioInvalidInput("The distance scale output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outScale = SoundEffect::getDistanceScaleProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_set_distance_scale(const CNA_Handle gameHandle, const float scale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SoundEffect::setDistanceScaleProperty(scale);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_doppler_scale(const CNA_Handle gameHandle, float* const outScale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outScale == nullptr) {
+            return AudioInvalidInput("The Doppler scale output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outScale = SoundEffect::getDopplerScaleProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_set_doppler_scale(const CNA_Handle gameHandle, const float scale)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SoundEffect::setDopplerScaleProperty(scale);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_speed_of_sound(const CNA_Handle gameHandle, float* const outSpeed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outSpeed == nullptr) {
+            return AudioInvalidInput("The speed of sound output is null.");
+        }
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outSpeed = SoundEffect::getSpeedOfSoundProperty();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_set_speed_of_sound(const CNA_Handle gameHandle, const float speed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (const CNA_Result result = ValidateActiveGameHandle(gameHandle);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        SoundEffect::setSpeedOfSoundProperty(speed);
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_play(const CNA_Handle soundEffectHandle, CNA_Bool* const outPlayed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPlayed == nullptr) {
+            return AudioInvalidInput("The playback output is null.");
+        }
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outPlayed = soundEffect->value->Play() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_play_with_settings(
+    const CNA_Handle soundEffectHandle,
+    const float volume,
+    const float pitch,
+    const float pan,
+    CNA_Bool* const outPlayed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outPlayed == nullptr) {
+            return AudioInvalidInput("The playback output is null.");
+        }
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        // Pan is range-checked by the canonical route and pitch is clamped; the asymmetry is
+        // reported rather than evened out here.
+        *outPlayed = soundEffect->value->Play(volume, pitch, pan) ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_sample_duration_ticks(
+    const int32_t sizeInBytes,
+    const int32_t sampleRate,
+    const CNA_AudioChannels channels,
+    int64_t* const outTicks)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outTicks == nullptr) {
+            return AudioInvalidInput("The sample duration output is null.");
+        }
+        AudioChannels nativeChannels = AudioChannels::Mono;
+        if (!TryMapChannels(channels, &nativeChannels)) {
+            return AudioInvalidInput("The audio channel count is not a defined identity.");
+        }
+        *outTicks = static_cast<int64_t>(
+            SoundEffect::GetSampleDuration(
+                static_cast<SharpRuntime::intcs>(sizeInBytes),
+                static_cast<SharpRuntime::intcs>(sampleRate),
+                nativeChannels)
+                .getTicksProperty());
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_sample_size_in_bytes(
+    const int64_t durationTicks,
+    const int32_t sampleRate,
+    const CNA_AudioChannels channels,
+    int32_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The sample size output is null.");
+        }
+        AudioChannels nativeChannels = AudioChannels::Mono;
+        if (!TryMapChannels(channels, &nativeChannels)) {
+            return AudioInvalidInput("The audio channel count is not a defined identity.");
+        }
+        *outBytes = static_cast<int32_t>(SoundEffect::GetSampleSizeInBytes(
+            System::TimeSpan(static_cast<SharpRuntime::longcs>(durationTicks)),
+            static_cast<SharpRuntime::intcs>(sampleRate),
+            nativeChannels));
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_get_type_name_size(
+    const CNA_Handle soundEffectHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The type-name size output is null.");
+        }
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = soundEffect->value->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_copy_type_name(
+    const CNA_Handle soundEffectHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectResource> soundEffect;
+        if (const CNA_Result result = GetSoundEffect(soundEffectHandle, &soundEffect);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyAudioText(soundEffect->value->GetTypeName(), destination, capacity, outBytes);
+    });
+}
+
+CNA_Result cna_sound_effect_instance_get_is_disposed(
+    const CNA_Handle instanceHandle,
+    CNA_Bool* const outDisposed)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outDisposed == nullptr) {
+            return AudioInvalidInput("The disposal output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outDisposed = instance->value->getIsDisposedProperty() ? CNA_TRUE : CNA_FALSE;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_instance_get_type_name_size(
+    const CNA_Handle instanceHandle,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return AudioInvalidInput("The type-name size output is null.");
+        }
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        *outBytes = instance->value->GetTypeName().size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sound_effect_instance_copy_type_name(
+    const CNA_Handle instanceHandle,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        std::shared_ptr<SoundEffectInstanceResource> instance;
+        if (const CNA_Result result = GetSoundEffectInstance(instanceHandle, &instance);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        return CopyAudioText(instance->value->GetTypeName(), destination, capacity, outBytes);
     });
 }

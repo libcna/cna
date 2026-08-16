@@ -267,6 +267,341 @@ CNA_C_API CNA_Result cna_sound_effect_instance_set_is_looped(
  */
 CNA_C_API CNA_Result cna_sound_effect_instance_destroy(CNA_Handle instance);
 
+/* ---- Sound effect completion ---- */
+
+/** @brief Fixed-width identity of how a sound stops. */
+typedef uint32_t CNA_AudioStopOptions;
+
+/** @brief Stop where the author's authored release allows. */
+#define CNA_AUDIO_STOP_OPTIONS_AS_AUTHORED UINT32_C(0)
+/** @brief Stop at once. */
+#define CNA_AUDIO_STOP_OPTIONS_IMMEDIATE UINT32_C(1)
+/** @brief Highest defined stop-option identity. */
+#define CNA_AUDIO_STOP_OPTIONS_MAXIMUM CNA_AUDIO_STOP_OPTIONS_IMMEDIATE
+
+/**
+ * @brief Creates a sound effect from PCM16 data with an explicit range and loop region.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param create_info Versioned sample rate and channel configuration.
+ * @param pcm_bytes Caller-owned PCM16LE bytes copied during this call.
+ * @param byte_count Bytes available at @p pcm_bytes.
+ * @param offset First byte of the range to use.
+ * @param count Number of bytes in the range.
+ * @param loop_start First sample frame of the loop region.
+ * @param loop_length Sample frames in the loop region; zero loops the whole range.
+ * @param out_sound_effect Receives an owned sound-effect handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the machine has no audio hardware,
+ *         or a documented argument/handle/thread failure.
+ *
+ * This is the canonical seven-argument constructor; `cna_sound_effect_create_pcm16` is the short one
+ * that uses the whole buffer and no loop region.
+ */
+CNA_C_API CNA_Result cna_sound_effect_create_pcm16_range_ext(
+    CNA_Handle game,
+    const CNA_SoundEffectCreateInfo* create_info,
+    const uint8_t* pcm_bytes,
+    uint64_t byte_count,
+    int32_t offset,
+    int32_t count,
+    int32_t loop_start,
+    int32_t loop_length,
+    CNA_Handle* out_sound_effect);
+
+/**
+ * @brief Creates a sound effect by decoding an encoded audio file already in memory.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param bytes Caller-owned encoded bytes copied during this call.
+ * @param byte_count Bytes available at @p bytes; must not be zero.
+ * @param out_sound_effect Receives an owned sound-effect handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the machine has no audio hardware or
+ *         the bytes are not a format this build can decode, or a documented argument/handle/thread
+ *         failure.
+ *
+ * The canonical operation takes a C++ stream and reads it to the end, so C takes the bytes it would
+ * have read. Whatever the audio backend can decode is accepted, which is more than the raw PCM the
+ * other creation routes take.
+ */
+CNA_C_API CNA_Result cna_sound_effect_create_from_encoded_ext(
+    CNA_Handle game,
+    const uint8_t* bytes,
+    uint64_t byte_count,
+    CNA_Handle* out_sound_effect);
+
+/**
+ * @brief Creates a sound effect by decoding an audio file from disk.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param asset_name UTF-8 file path; an empty path creates a silent effect rather than failing.
+ * @param out_sound_effect Receives an owned sound-effect handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` when the machine has no audio hardware or
+ *         the file is not a format this build can decode, or a documented argument/handle/thread
+ *         failure.
+ *
+ * **An empty path is not an error**: the canonical constructor returns an effect with no audio
+ * rather than throwing, and this route reports that as it is.
+ */
+CNA_C_API CNA_Result cna_sound_effect_create_from_asset_ext(
+    CNA_Handle game,
+    CNA_StringView asset_name,
+    CNA_Handle* out_sound_effect);
+
+/**
+ * @brief Reports whether a sound effect has been disposed.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param out_disposed Receives `CNA_TRUE` after disposal.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_is_disposed(
+    CNA_Handle sound_effect,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Returns the byte count of a sound effect's name.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_name_size(CNA_Handle sound_effect, uint64_t* out_bytes);
+
+/**
+ * @brief Copies a sound effect's name.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_copy_name(
+    CNA_Handle sound_effect,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Sets a sound effect's name.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param name UTF-8 name; borrowed for the duration of the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The canonical class has two setters, one taking a copy and one taking ownership of a moved string;
+ * both store the same name, so C has one route.
+ */
+CNA_C_API CNA_Result cna_sound_effect_set_name(CNA_Handle sound_effect, CNA_StringView name);
+
+/**
+ * @brief Returns the process-wide master volume applied to every sound effect.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_volume Receives the volume.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The four settings below are canonical **statics**: they belong to the process, not to a sound
+ * effect, and the game handle is taken for thread affinity only.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_master_volume(CNA_Handle game, float* out_volume);
+
+/**
+ * @brief Sets the process-wide master volume applied to every sound effect.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param volume New volume.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_set_master_volume(CNA_Handle game, float volume);
+
+/**
+ * @brief Returns the process-wide distance scale used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_scale Receives the scale.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_distance_scale(CNA_Handle game, float* out_scale);
+
+/**
+ * @brief Sets the process-wide distance scale used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param scale New scale.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_set_distance_scale(CNA_Handle game, float scale);
+
+/**
+ * @brief Returns the process-wide Doppler scale used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_scale Receives the scale.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_doppler_scale(CNA_Handle game, float* out_scale);
+
+/**
+ * @brief Sets the process-wide Doppler scale used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param scale New scale.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_set_doppler_scale(CNA_Handle game, float scale);
+
+/**
+ * @brief Returns the process-wide speed of sound used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param out_speed Receives the speed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_speed_of_sound(CNA_Handle game, float* out_speed);
+
+/**
+ * @brief Sets the process-wide speed of sound used by 3D audio.
+ *
+ * @param game Active owned or callback-borrowed game handle.
+ * @param speed New speed.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_set_speed_of_sound(CNA_Handle game, float speed);
+
+/**
+ * @brief Plays a sound effect once, without an instance to control it with.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param out_played Receives `CNA_TRUE` when playback started.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when too many instances are already
+ *         playing, or a documented argument/handle/thread/native failure.
+ *
+ * A disposed effect answers `CNA_FALSE` rather than failing, which is the canonical behavior.
+ */
+CNA_C_API CNA_Result cna_sound_effect_play(CNA_Handle sound_effect, CNA_Bool* out_played);
+
+/**
+ * @brief Plays a sound effect once with explicit settings.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param volume Volume for this playback.
+ * @param pitch Pitch for this playback; the canonical route **clamps** rather than refusing.
+ * @param pan Pan for this playback, in the closed interval -1 to 1.
+ * @param out_played Receives `CNA_TRUE` when playback started.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a pan outside its interval,
+ *         `CNA_RESULT_INVALID_STATE` when too many instances are already playing, or a documented
+ *         argument/handle/thread/native failure.
+ *
+ * The canonical asymmetry is preserved: **pan is range-checked and pitch is clamped**.
+ */
+CNA_C_API CNA_Result cna_sound_effect_play_with_settings(
+    CNA_Handle sound_effect,
+    float volume,
+    float pitch,
+    float pan,
+    CNA_Bool* out_played);
+
+/**
+ * @brief Returns how long a PCM buffer of a given size would play for.
+ *
+ * @param size_in_bytes Buffer size in bytes.
+ * @param sample_rate Sample rate in hertz.
+ * @param channels One `CNA_AUDIO_CHANNELS_*` identity.
+ * @param out_ticks Receives the duration in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined channel identity
+ *         or a null output.
+ *
+ * A pure computation: the canonical operation is static, so this takes no game handle either.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_sample_duration_ticks(
+    int32_t size_in_bytes,
+    int32_t sample_rate,
+    CNA_AudioChannels channels,
+    int64_t* out_ticks);
+
+/**
+ * @brief Returns how many bytes a PCM buffer of a given duration needs.
+ *
+ * @param duration_ticks Duration in 100-nanosecond ticks.
+ * @param sample_rate Sample rate in hertz.
+ * @param channels One `CNA_AUDIO_CHANNELS_*` identity.
+ * @param out_bytes Receives the byte count.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined channel identity
+ *         or a null output.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_sample_size_in_bytes(
+    int64_t duration_ticks,
+    int32_t sample_rate,
+    CNA_AudioChannels channels,
+    int32_t* out_bytes);
+
+/**
+ * @brief Returns the byte count of the sound-effect type's .NET type name.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_get_type_name_size(
+    CNA_Handle sound_effect,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the sound-effect type's fully-qualified .NET type name.
+ *
+ * @param sound_effect Owned sound-effect handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_copy_type_name(
+    CNA_Handle sound_effect,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports whether a sound-effect instance has been disposed.
+ *
+ * @param instance Owned instance handle.
+ * @param out_disposed Receives `CNA_TRUE` after disposal.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_instance_get_is_disposed(
+    CNA_Handle instance,
+    CNA_Bool* out_disposed);
+
+/**
+ * @brief Returns the byte count of the instance type's .NET type name.
+ *
+ * @param instance Owned instance handle.
+ * @param out_bytes Receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_instance_get_type_name_size(
+    CNA_Handle instance,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the instance type's fully-qualified .NET type name.
+ *
+ * @param instance Owned instance handle.
+ * @param destination Buffer receiving the UTF-8 bytes; may be null only when @p capacity is zero.
+ * @param capacity Bytes available in @p destination.
+ * @param out_bytes Always receives the required byte count, without a terminator.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with **no partial write**,
+ *         `CNA_RESULT_INVALID_ARGUMENT`, or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_sound_effect_instance_copy_type_name(
+    CNA_Handle instance,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

@@ -904,7 +904,29 @@
 > applicable. The inventory is 5,246 implemented, 34 partial, 864 planned and 271 N/A; all four trees
 > green at 66/66, ASan+UBSan clean. Only `audio` (205) and `gamer-services` (665) remain in the whole
 > coverage campaign.
-> **Next: CBIND-037F**, the 205-row audio module.
+> CBIND-037F1 then opens the audio module by completing sound effects — 48 rows, the 205-row module
+> having been split into four slices by what each part needs to exist. A sound effect can now be
+> created four ways, and the difference is what the bytes are: raw PCM (whole buffer, or an explicit
+> range with a loop region), an **encoded file already in memory** — the canonical stream factory
+> takes a C++ stream and reads it to the end, so the C route takes the bytes it would have read — or
+> a **path on disk**.
+>
+> Two canonical behaviors are reported rather than evened out: **pan is range-checked while pitch is
+> clamped**, and an **empty asset path yields a silent effect** rather than an error. The C range
+> route adds one check the canonical constructor lacks — a negative offset, an empty count or a range
+> leaving the buffer is refused before the decoder ever sees a length nobody validated — which is
+> boundary validation, this ABI's job, not a behavioral change.
+>
+> The four 3D-audio settings are canonical **statics**: their routes take a game handle for thread
+> affinity only, and setting one changes every sound effect in the process, including ones created
+> later. Move operations are recorded not-applicable, because a handle already names an object C
+> never copies or moves. And both audio exceptions now convert in the **exception firewall** rather
+> than in the single creation route that caught one of them locally, so every audio route gets the
+> same answer. The inventory is now 5,284 implemented, 32 partial, 816 planned and 283 N/A — two
+> long-standing `partial` rows closed along the way; all four trees green at 67/67, ASan+UBSan clean.
+> **Next: CBIND-037F2**, streaming and capture audio (49 rows). Then `F3` (3D audio, 32) and `F4`
+> (the XACT family, 70), whose first question is whether it is reachable at all without a binary
+> fixture this repository does not have.
 >
 > **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
 > one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,

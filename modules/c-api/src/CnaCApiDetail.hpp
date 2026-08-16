@@ -19,6 +19,8 @@
 #include "CNA/CNAException.hpp"
 #include "Microsoft/Xna/Framework/Content/ContentLoadException.hpp"
 #include "Microsoft/Devices/Sensors/SensorFailedException.hpp"
+#include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
+#include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
@@ -210,6 +212,10 @@ template<typename TCallable>
         return Fail(CNA_RESULT_IO, CNA_ERROR_CATEGORY_IO, exception.what());
     } catch (
         const Microsoft::Xna::Framework::Storage::StorageDeviceNotConnectedException& exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::Audio::NoAudioHardwareException& exception) {
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+    } catch (const Microsoft::Xna::Framework::Audio::InstancePlayLimitException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const Microsoft::Devices::Sensors::SensorFailedException& exception) {
         const CNA_Result result =

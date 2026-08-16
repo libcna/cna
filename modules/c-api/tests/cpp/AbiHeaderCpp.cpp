@@ -853,6 +853,7 @@ static_assert(CNA_MESSAGE_BOX_TYPE_MAXIMUM == UINT32_C(2));
 static_assert(sizeof(CNA_VibrationTestLog) == 48U);
 static_assert(alignof(CNA_VibrationTestLog) == 8U);
 static_assert(sizeof(CNA_MessageBoxTestLog) == 24U);
+static_assert(CNA_AUDIO_STOP_OPTIONS_MAXIMUM == UINT32_C(1));
 static_assert(CNA_PRESENTATION_MODE_MAXIMUM == UINT32_C(4));
 static_assert(CNA_GRAPHICS_DEVICE_MANAGER_EVENT_MAXIMUM == UINT32_C(4));
 static_assert(offsetof(CNA_GraphicsDeviceInformation, presentation_parameters) == 16U);

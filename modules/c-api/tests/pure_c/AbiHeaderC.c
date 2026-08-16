@@ -1260,6 +1260,12 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_AudioStopOptions) == sizeof(uint32_t) &&
+                   CNA_AUDIO_STOP_OPTIONS_AS_AUTHORED == UINT32_C(0) &&
+                   CNA_AUDIO_STOP_OPTIONS_IMMEDIATE == UINT32_C(1) &&
+                   CNA_AUDIO_STOP_OPTIONS_MAXIMUM == UINT32_C(1),
+               "CNA audio stop-option identities must remain stable");
+
 _Static_assert(sizeof(CNA_PresentationMode) == sizeof(uint32_t) &&
                    CNA_PRESENTATION_MODE_LETTERBOX == UINT32_C(0) &&
                    CNA_PRESENTATION_MODE_OVERSCAN == UINT32_C(1) &&

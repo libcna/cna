@@ -936,10 +936,10 @@
       "kinds": [
         "class"
       ],
-      "mapping": "owned game-child SoundEffect `CNA_Handle` for PCM16LE data",
-      "tests": "dummy/unavailable audio strict-C regression programs",
-      "status": "partial",
-      "task": "CBIND-030"
+      "mapping": "an owned game-child `CNA_Handle` created by four routes — `cna_sound_effect_create_pcm16` (the short PCM constructor), `cna_sound_effect_create_pcm16_range_ext` (the seven-argument one with an explicit range and loop region), `cna_sound_effect_create_from_encoded_ext` (the stream factory, taking the bytes it would have read) and `cna_sound_effect_create_from_asset_ext` (the file constructor) — with the duration, disposal, name and type-name queries, the fire-and-forget play routes, instance creation and `cna_sound_effect_destroy`",
+      "tests": "`AudioSmoke.c` covers the short constructor and the instance lifecycle; `AudioSoundEffectSmoke.c` covers the other three creation routes, the range refusals, the name round trip, both play routes and the disposal and stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037F1"
     },
     {
       "id": "sound-effect-pcm-constructor",
@@ -970,10 +970,10 @@
       "kinds": [
         "class"
       ],
-      "mapping": "owned SoundEffect child `CNA_Handle`",
-      "tests": "`AudioSmoke.c` state/control/lifetime and mixer-thread boundary",
-      "status": "partial",
-      "task": "CBIND-030"
+      "mapping": "an owned `SoundEffect`-child `CNA_Handle` with the transport routes, the volume, pitch, pan and looping setters, the state query, the disposal query, a type-name pair and `cna_sound_effect_instance_destroy`. The canonical instance is a value type with move semantics; C holds it by handle, so the move operations have no C form",
+      "tests": "`AudioSmoke.c` covers the transport and state surface; `AudioSoundEffectSmoke.c` covers the disposal query, the type name and the released-handle refusal",
+      "status": "implemented",
+      "task": "CBIND-037F1"
     },
     {
       "id": "sound-instance-control-members",
@@ -5313,6 +5313,83 @@
       "tests": "the `CApi_UnimplementedRuntimeFacade` CTest check inspects the built runtime archive and fails if any `CNA::Runtime::` symbol ever appears, so this record cannot go stale in silence; subsystem availability that a caller actually needs is answered by `cna_graphics_ext_is_available`, `cna_devices_ext_is_available` and the audio/renderer capability queries instead",
       "status": "not-applicable",
       "task": "CBIND-037E5"
+    },
+    {
+      "id": "audio-stop-options",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioStopOptions(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_AudioStopOptions` with one macro per canonical value at its canonical ordinal plus `CNA_AUDIO_STOP_OPTIONS_MAXIMUM`. The identity is exposed here because it is the vocabulary the XACT surface takes; the sound-effect instance's own stop route is a plain immediate stop",
+      "tests": "`AudioSoundEffectSmoke.c` pins both ordinals and the maximum; the ordinals are also pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037F1"
+    },
+    {
+      "id": "sound-effect-complete-surface",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffect::(SoundEffect|~SoundEffect|getIsDisposedProperty|getNameProperty|setNameProperty|getMasterVolumeProperty|setMasterVolumeProperty|getDistanceScaleProperty|setDistanceScaleProperty|getDopplerScaleProperty|setDopplerScaleProperty|getSpeedOfSoundProperty|setSpeedOfSoundProperty|Play|GetSampleDuration|GetSampleSizeInBytes|FromStream|GetTypeName)$",
+      "signature_regex": "^(?!\\(SoundEffect &&)(?!\\(const std::vector< SharpRuntime::bytecs > &buffer, SharpRuntime::intcs sampleRate, AudioChannels channels\\)$).*$",
+      "kinds": [
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "the creation routes named above plus `cna_sound_effect_get_is_disposed`, the name count/copy/set trio, the four **process-wide** 3D-audio settings as get/set pairs taking a game handle for thread affinity only, `cna_sound_effect_play` and `_play_with_settings`, the two static sample computations that take no handle at all, and a type-name pair. Two canonical behaviors are preserved rather than evened out: **pan is range-checked while pitch is clamped**, and an **empty asset path is not an error** — the canonical constructor answers an effect with no audio rather than throwing. The two name setters store the same name, so C has one route",
+      "tests": "`AudioSoundEffectSmoke.c` round-trips all four static settings and restores them, checks both sample computations against a known tenth of a second and refuses an undefined channel identity, creates from an explicit range and refuses a range that leaves the buffer, decodes a WAV built in memory, creates from an empty asset path, round-trips the name with its buffer-too-small case, plays with an extreme pitch and refuses both out-of-range pans, and covers the disposal, null-output and stale-handle refusals",
+      "status": "implemented",
+      "task": "CBIND-037F1"
+    },
+    {
+      "id": "sound-effect-move-operations",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::(SoundEffect::(SoundEffect|operator=)|SoundEffectInstance::(SoundEffectInstance|operator=))$",
+      "signature_regex": "^\\((SoundEffect|SoundEffectInstance) &&.*",
+      "kinds": [
+        "constructor",
+        "operator"
+      ],
+      "mapping": "No C mapping: the canonical types are movable values, and C holds each of them by handle. A handle already gives a caller a stable name for an object it never copies or moves, so there is nothing for a move operation to express",
+      "tests": "Doxygen declaration inventory; handle stability across every route is what `AudioSmoke.c` and `AudioSoundEffectSmoke.c` exercise instead",
+      "status": "not-applicable",
+      "task": "CBIND-037F1"
+    },
+    {
+      "id": "sound-effect-instance-surface",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::(~SoundEffectInstance|getIsDisposedProperty|GetTypeName)$",
+      "kinds": [
+        "destructor",
+        "method"
+      ],
+      "mapping": "`cna_sound_effect_instance_destroy`, `cna_sound_effect_instance_get_is_disposed` and a type-name pair, alongside the transport and mixing routes the minimal audio slice already established",
+      "tests": "`AudioSoundEffectSmoke.c` reads the disposal state and the exact type name of a live instance and asserts every route refuses a released one",
+      "status": "implemented",
+      "task": "CBIND-037F1"
+    },
+    {
+      "id": "sound-effect-instance-protected",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::(SoundEffectInstance|track_|playing_|hasStarted_|State_|trackMixerGeneration_|GetLiveTrackHandle|INTERNAL_applyComposedTrackProperties)$",
+      "signature_regex": "^(?!\\(SoundEffectInstance &&).*$",
+      "kinds": [
+        "constructor",
+        "field",
+        "method"
+      ],
+      "mapping": "No C mapping: the protected constructor, the mixer-track bookkeeping fields and the two internal helpers exist so `SoundEffect` and a derived instance can drive the mixer. C cannot derive, and every observable consequence — the playback state, the volume, pitch, pan and looping — already has a route",
+      "tests": "Doxygen declaration inventory; the observable half is covered in `AudioSmoke.c` and `AudioSoundEffectSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037F1"
+    },
+    {
+      "id": "audio-exception-types",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::(NoAudioHardwareException|InstancePlayLimitException)(::(NoAudioHardwareException|InstancePlayLimitException))?$",
+      "kinds": [
+        "class",
+        "constructor"
+      ],
+      "mapping": "boundary conversions rather than types: the exception firewall in `CnaCApiDetail.hpp` catches both and reports `CNA_RESULT_NOT_SUPPORTED` for a machine with no audio hardware and `CNA_RESULT_INVALID_STATE` for too many instances already playing, each with the canonical message as the diagnostic. The constructors are the canonical ways to raise one, which C never does — it only receives them",
+      "tests": "`AudioUnavailableSmoke.c` drives an audio-less process and asserts the `NOT_SUPPORTED` answer; the barrier arms give every audio route the same conversion rather than only the creation route that used to catch it locally",
+      "status": "implemented",
+      "task": "CBIND-037F1"
     }
   ]
 }

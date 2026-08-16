@@ -974,6 +974,23 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_audio_sound_effect_smoke
+        tests/pure_c/AudioSoundEffectSmoke.c
+    )
+    set_target_properties(cna_c_api_audio_sound_effect_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_audio_sound_effect_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_audio_sound_effect_smoke)
+    add_test(NAME CApi_AudioSoundEffectSmoke COMMAND cna_c_api_audio_sound_effect_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_AudioSoundEffectSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_graphics_device_manager_smoke
         tests/pure_c/GraphicsDeviceManagerSmoke.c
     )
@@ -1169,6 +1186,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/net/include
         ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
         ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
     )
     target_link_libraries(cna_c_api_handle_registry_test PRIVATE
@@ -1194,6 +1212,7 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/net/include
         ${PROJECT_SOURCE_DIR}/modules/gamer-services/include
         ${PROJECT_SOURCE_DIR}/modules/devices/include
+        ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
     )
     # The storage, network-join and CNA core exceptions are the canonical types this test throws whose constructors

@@ -59,3 +59,38 @@ The initial slice does not yet expose file/content sound loading, fire-and-forge
 or 3D properties, listeners/emitters, dynamic streaming, microphones, XACT engines/banks/cues, or
 audio events. They remain planned for the complete public CNA inventory and are not implied by the
 presence of this minimal PCM/instance route.
+
+## The complete sound-effect surface
+
+A sound effect can now be created four ways, and the difference is what the bytes are: raw PCM16
+(whole buffer, or an explicit range with a loop region), an **encoded file already in memory**, or a
+**path on disk**. The canonical stream factory takes a C++ stream and reads it to the end, so the C
+route takes the bytes it would have read; what it accepts is whatever the audio backend can decode,
+which is more than the raw PCM the other routes take.
+
+Two canonical behaviors are reported rather than evened out:
+
+- **Pan is range-checked and pitch is clamped.** `cna_sound_effect_play_with_settings` refuses a pan
+  outside -1 to 1 and silently accepts any pitch, because that is exactly what the canonical route
+  does.
+- **An empty asset path is not an error.** The canonical constructor answers an effect with no audio
+  rather than throwing, so `cna_sound_effect_create_from_asset_ext` reports success with a silent
+  effect.
+
+The C range route adds one check the canonical constructor does not have: a negative offset, an empty
+count or a range that leaves the buffer is refused before the decoder ever sees a length nobody
+validated. That is argument validation at the boundary, which is this ABI's job, not a behavioral
+change.
+
+### The four 3D-audio settings belong to the process
+
+Master volume, distance scale, Doppler scale and speed of sound are canonical **statics**. Their
+routes take a game handle for thread affinity only — setting one changes every sound effect in the
+process, including ones created later. The two sample computations (`..._get_sample_duration_ticks`
+and `..._get_sample_size_in_bytes`) are static too, and take no handle at all.
+
+### Both audio exceptions now convert at the boundary
+
+`NoAudioHardwareException` becomes `CNA_RESULT_NOT_SUPPORTED` and `InstancePlayLimitException`
+becomes `CNA_RESULT_INVALID_STATE`, in the exception firewall rather than in one creation route that
+happened to catch the first one locally. Every audio route gets the same conversion.
