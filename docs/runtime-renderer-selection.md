@@ -1,9 +1,10 @@
 # Runtime graphics renderer selection
 
 **Status: usable.** Runtime renderer selection works and is verified across several build sets (see
-the table at the end). What is *not* done is the test/example corpus: its ~892 renderer-gated sites
-still describe the build's default renderer rather than each compiled-in one. See
-`plan_runtimerenderer.md` phase P9 and `NEXT.md`.
+the table at the end). The renderer-gated test/example corpus has been audited and its applicable
+sites converted or deliberately retained as compile-time family/default gates. The remaining work
+is limited to the platform-specific validation sets and measurements listed at the end of
+`plan_runtimerenderer.md`.
 
 ---
 
@@ -24,10 +25,10 @@ linked in and the concrete one is chosen at runtime, before CNA is started.
 |---|---|
 | Descriptor / registry value types | ✅ present (`GraphicsRendererDescriptor`, `GraphicsRendererRegistry`, `GraphicsRendererFallbackRecord`) |
 | Pre-window contract extracted from `GraphicsDevice` | ✅ window flags, `SDL_INIT_VIDEO`, the no-window branch and OPENGL1's GLX attributes are all descriptor-driven |
-| Per-family descriptors | ✅ all 42 families; guarded by `scripts/check_runtime_renderer_discipline.py` |
-| Namespaced factories / generated registry | ✅ all 42 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
+| Per-family descriptors | ✅ all 43 families / 47 public identities; guarded by `scripts/check_runtime_renderer_discipline.py` |
+| Namespaced factories / generated registry | ✅ all 43 factories namespaced; `cmake/RendererRegistry.cmake` emits the table |
 | `GraphicsRendererSelection` API | ✅ selection, latch, env var, availability; 20 tests |
-| Fallback chain | ✅ resolution, recording, logging, exhaustion; cross-window-kind recreation unverified until a multi-renderer build |
+| Fallback chain | ✅ resolution, recording, logging and exhaustion; cross-window-kind recreation verified with `SDL_RENDERER;OPENGLES3;HEADLESS` and `OPENGLES3;VULKAN;SOFTWARE;HEADLESS;STUB` multi builds |
 | Multi-renderer CMake mode | ✅ `CNA_GRAPHICS_RENDERERS`, configure-time combination rules, CI job |
 | Runtime identity reporting | ✅ `GraphicsDevice::GetGraphicsRendererType/Name()` report the device's real renderer |
 

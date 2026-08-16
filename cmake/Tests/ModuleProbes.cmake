@@ -163,6 +163,19 @@ if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT ANDROID)
             COMMAND Python3::Interpreter
                 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_identities.py")
 
+        # plan_runtimerenderer.md RTR-P1-6/P3-17/P12-15: renderer-specific production
+        # decisions stay behind descriptors or virtuals, and every renderer family keeps exactly
+        # one descriptor translation unit.
+        add_test(NAME RuntimeRendererDiscipline
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_renderer_discipline.py")
+
+        # plan_runtimerenderer.md RTR-P6-19/P12-15: keep the configure-time combination
+        # restrictions synchronized with their public documentation.
+        add_test(NAME RendererCombinationRegistry
+            COMMAND Python3::Interpreter
+                "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_renderer_combinations.py")
+
         # plan_runtimerenderer.md RTR-P6-3: keeps RENDERER_TARGET from going back to being a
         # scalar that families read out of a global. The rule it enforces cannot be checked by
         # building: in a single-renderer build a wrong read gives the right answer, because the

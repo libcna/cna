@@ -471,7 +471,7 @@ running that family's own smoke/example target where one exists.
 |---|---|---|
 | RTR-P1-D01 | ✅ | `sdl-renderer` → `SDL_RENDERER` (plain window, no GL flag) |
 | RTR-P1-D02 | ✅ | `easygl` → `OPENGLES2`/`OPENGLES3`/`OPENGL33`/`WEBGL1`/`WEBGL2` — one descriptor, profile still compile-time (`CNA_GL_PROFILE_*`); the 5-identity split is P11 |
-| RTR-P1-D03 | 🟨 | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()` |
+| RTR-P1-D03 | ✅ | `bgfx` → `BGFX` — `prepareWindowFlags` wraps the existing `Bgfx::Detail::ResolveRendererType()`; subsequently verified end to end by the real BGFX multi-build recorded in RTR-P10-9. |
 | RTR-P1-D04 | ✅ | `vulkan` → `VULKAN` (`SDL_WINDOW_VULKAN`; `isAvailable` = real `vkEnumerateInstanceVersion` probe) |
 | RTR-P1-D05 | ✅ | `webgpu` → `WEBGPU` |
 | RTR-P1-D06 | ✅ | `magnum` → `MAGNUM` (`SDL_WINDOW_OPENGL`) |
@@ -537,7 +537,7 @@ export `GetDescriptor()` with a populated `create` pointer, verify the family's 
 |---|---|---|
 | RTR-P2-F01 | ✅ | `sdl-renderer` |
 | RTR-P2-F02 | ✅ | `easygl` |
-| RTR-P2-F03 | 🟨 | `bgfx` |
+| RTR-P2-F03 | ✅ | `bgfx` — the namespaced factory and generated-registry entry were subsequently verified end to end by the real BGFX multi-build recorded in RTR-P10-9. |
 | RTR-P2-F04 | ✅ | `vulkan` |
 | RTR-P2-F05 | ✅ | `webgpu` |
 | RTR-P2-F06 | ✅ | `magnum` |
@@ -909,28 +909,28 @@ glTF path, not in renderer selection.
 | RTR-P12-12 | ✅ | Remove the stale `CNA_RENDERER_SDL` reference in `modules/core/include/CNA/Entrypoint.hpp:22` — it names an identity that does not exist. |
 | RTR-P12-13 | ✅ | Final sweep: no `CNA_RENDERER_*` occurrence remains in `modules/graphics/src`; every remaining occurrence elsewhere is deliberate and documented. |
 | RTR-P12-14 | ✅ | Performance check: confirm the added indirection (one function-pointer call per device construction, none per frame) is not measurable — and say so with numbers rather than asserting it. |
-| RTR-P12-15 | ✅ | **Plan gate.** Measured 2026-08-15, and stated as what was actually proven rather than as the row's original wording. **(1) Single-renderer behaviour.** The claim "byte-identical" was never testable and is not what was checked; what was checked is stronger where it matters and weaker where the original phrasing was wrong. Each of the three single-renderer gates was rebuilt at the pre-campaign commit `a749fdce3` and its outcomes compared per named test with `scripts/compare_test_outcomes.py`: HEADLESS 6122→6172, SOFTWARE 6203→6253, OPENGLES3 6319→6369, and in all three **`no longer passing: 0`**. Counts necessarily ROSE (44→217, 50→134, 6→48 skips; +50 passing each) because converting compile-time gates to runtime skips makes tests EXIST that previously did not — a "same count" criterion would have forbidden the phase's central work rather than checking it. **(2) Documented:** `docs/runtime-renderer-selection.md`, 464 lines, 12 sections, including resolution order, the JS surface and the measured cost table. **(3) Tested:** `MultiRendererFallbackTest` 12 passed / 0 skipped, plus real multi builds — native `HEADLESS;LLGL;SOFTWARE;STUB`, `SDL_RENDERER;OPENGLES3;HEADLESS`, and the Emscripten `WEBGL2;CANVAS;HTML_DOM;SVG_DOM` and `WEBGL1;WEBGL2` bundles. **(4) CI-covered:** `multi-renderer-ci.yml` and `emscripten-multi-renderer-ci.yml`. **(5) Enforced:** four discipline checks green and registered as CTest tests, so the invariants outlive this plan. **What this gate does NOT assert:** 9 rows stay open and each says why — `RTR-P10-9/12/16` need bgfx / FNA3D / native wgpu checkouts absent from this machine, `RTR-P10-19/20/21/24` are Windows and macOS sets, `RTR-P3-18` needs a D3D9 runtime, `RTR-P10-25` deliberately omits build times (measuring them means clean rebuilds of every set, which this project treats as real SSD wear). A gate claiming a finished plan while those stand would be false. |
+| RTR-P12-15 | ✅ | **Plan gate.** Measured 2026-08-15 and reconciled after the 2026-08-16 platform merge, stated as what was actually proven rather than as the row's original wording. **(1) Single-renderer behaviour.** The claim "byte-identical" was never testable and is not what was checked; what was checked is stronger where it matters and weaker where the original phrasing was wrong. Each of the three single-renderer gates was rebuilt at the pre-campaign commit `a749fdce3` and its outcomes compared per named test with `scripts/compare_test_outcomes.py`: HEADLESS 6122→6172, SOFTWARE 6203→6253, OPENGLES3 6319→6369, and in all three **`no longer passing: 0`**. Counts necessarily ROSE (44→217, 50→134, 6→48 skips; +50 passing each) because converting compile-time gates to runtime skips makes tests EXIST that previously did not — a "same count" criterion would have forbidden the phase's central work rather than checking it. **(2) Documented:** `docs/runtime-renderer-selection.md`, including resolution order, the JS surface and the measured cost table. **(3) Tested:** `MultiRendererFallbackTest` 12 passed / 0 skipped, plus real multi builds — native `HEADLESS;LLGL;SOFTWARE;STUB`, `SDL_RENDERER;OPENGLES3;HEADLESS`, and the Emscripten `WEBGL2;CANVAS;HTML_DOM;SVG_DOM` and `WEBGL1;WEBGL2` bundles. **(4) CI-covered:** `multi-renderer-ci.yml` and `emscripten-multi-renderer-ci.yml`. **(5) Enforced:** all four discipline checks are registered as CTest tests, and the multi-renderer CI also invokes the runtime/combination checks directly. **What this gate does NOT assert:** six rows remain incomplete and each says why — `RTR-P10-19/20/21/24` are Windows and macOS sets, `RTR-P3-18` still lacks the D3D9 divergence run, and `RTR-P10-25` deliberately omits build times (measuring them means clean rebuilds of every set, which this project treats as real SSD wear). A gate claiming a fully finished plan while those stand would be false. |
 
 ---
 
 ## Task count
 
-| Phase | Done | Partial | Total |
-|---|---:|---:|---:|
-| P0 Foundations | 10 | 0 | 10 |
-| P1 Pre-window contract | 50 | 1 | 51 |
-| P2 Factory + registry | 48 | 1 | 50 |
-| P3 XNA-layer cleanup | 18 | 1 | 19 |
-| P4 Selection API | 16 | 0 | 16 |
-| P5 Fallback API | 22 | 1 | 23 |
-| P6 CMake multi-build | 21 | 2 | 24 |
-| P7 Identity reporting | 11 | 0 | 11 |
-| P8 First multi set | 12 | 0 | 12 |
-| P9 Test/example corpus | 9 | 0 | 27 |
-| P10 Wider multi sets | 15 | 1 | 25 |
-| P11 EasyGL runtime profile | 7 | 1 | 12 |
-| P12 Documentation and gates | 12 | 0 | 15 |
-| **Total** | **251** | **8** | **295** |
+| Phase | Done | Partial | Not started | Total |
+|---|---:|---:|---:|---:|
+| P0 Foundations | 10 | 0 | 0 | 10 |
+| P1 Pre-window contract | 51 | 0 | 0 | 51 |
+| P2 Factory + registry | 50 | 0 | 0 | 50 |
+| P3 XNA-layer cleanup | 18 | 1 | 0 | 19 |
+| P4 Selection API | 16 | 0 | 0 | 16 |
+| P5 Fallback API | 23 | 0 | 0 | 23 |
+| P6 CMake multi-build | 24 | 0 | 0 | 24 |
+| P7 Identity reporting | 11 | 0 | 0 | 11 |
+| P8 First multi set | 12 | 0 | 0 | 12 |
+| P9 Test/example corpus | 27 | 0 | 0 | 27 |
+| P10 Wider multi sets | 20 | 1 | 4 | 25 |
+| P11 EasyGL runtime profile | 12 | 0 | 0 | 12 |
+| P12 Documentation and gates | 15 | 0 | 0 | 15 |
+| **Total** | **289** | **2** | **4** | **295** |
 
 ## Merge with the platform campaign (`next`)
 
@@ -954,19 +954,22 @@ Verified on HEADLESS: 6747/6973 pass, the single failure being the known environ
 previously tolerated as environmental -- the stdout startup banner and the order-dependent
 `PollEventsClearsStaleCallerContent` -- rather than leaving them tolerated.
 
-Status as of 2026-08-15 (second pass). ✅ = implemented **and** verified against its stated acceptance criteria;
-🟨 = implemented but not verifiable in this environment (a Windows/macOS/Emscripten target, or a
-third-party dependency not present).
+Status as of 2026-08-16 (third pass, after the platform merge). ✅ = implemented **and** verified
+against its stated acceptance criteria; 🟨 = implemented but not fully verified; ⬜ = not started.
 
-P0–P5 change no observable behaviour and are individually valuable refactors; P6 onward introduces
-the second build mode. Both halves are complete and verified.
+P0–P5 deliver the selection/fallback architecture without changing the default single-renderer
+mode; P6 onward introduces the opt-in multi-renderer build mode. The feature is implemented and
+usable, with the six platform-specific validation/measurement rows below still open.
 
-What remains is concentrated in three places, none of which blocks the feature:
+Six validation/measurement rows remain, none of which blocks the already usable feature:
 
-- **P9** — the bulk corpus conversion (752 sites). The idiom, the audit and a cross-renderer suite
-  are in place; the mechanical work is not.
-- **P10** — multi sets needing a platform or dependency this environment does not have: the Windows
-  DirectX sets, the Emscripten browser set, macOS Metal, and the heavier middleware families
-  (BGFX, LLGL, DILIGENT, FNA3D, WICKED, SOKOL, MAGNUM, SKIA, WEBGPU).
-- **P11** — EasyGL's GL profile as a runtime choice, which is what would let the five GL identities
-  coexist. Until then the configure step refuses that combination with a message saying so.
+- **P3** — `RTR-P3-18`: the Skia oracle is verified, but the D3D9 divergence suite still needs a
+  Windows/Wine run.
+- **P10 platform sets** — `RTR-P10-19/20/21/24`: three Windows DirectX combinations and the macOS
+  `METAL + OPENGL4 + SOFTWARE` combination have not been built.
+- **P10 measurements** — `RTR-P10-25`: binary sizes are published, but the intentionally expensive
+  clean-build timing matrix is not.
+
+P9's corpus audit/conversion and P11's EasyGL runtime-profile work are complete. BGFX's descriptor
+and namespaced factory, formerly left 🟨 for lack of a checkout, were subsequently exercised by the
+real multi-renderer build documented in `RTR-P10-9` and are now counted as verified.
