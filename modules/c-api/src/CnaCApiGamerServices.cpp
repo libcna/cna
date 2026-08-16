@@ -4,6 +4,10 @@
 #include "CnaCApiGamerServicesDetail.hpp"
 #include "CnaCApiRuntimeDetail.hpp"
 
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPreset.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarAnimationPresetNamesEXT.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyType.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/AvatarBodyTypeNamesEXT.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/Gamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamer.hpp"
 #include "Microsoft/Xna/Framework/GamerServices/SignedInGamerCollection.hpp"
@@ -24,6 +28,8 @@ using CNA::C::Detail::Fail;
 using CNA::C::Detail::GetRuntimeHandles;
 using CNA::C::Detail::ObjectKind;
 using Microsoft::Xna::Framework::PlayerIndex;
+using Microsoft::Xna::Framework::GamerServices::AvatarAnimationPreset;
+using Microsoft::Xna::Framework::GamerServices::AvatarBodyType;
 using Microsoft::Xna::Framework::GamerServices::Gamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamer;
 using Microsoft::Xna::Framework::GamerServices::SignedInGamerCollection;
@@ -59,6 +65,53 @@ std::vector<std::shared_ptr<SignedInGamerResource>>& PublishedGamers()
         result,
         ErrorCategoryForResult(result),
         "The owned SignedInGamer handle is invalid for this call.");
+}
+
+// The two avatar name functions are pure value operations: no gamer, no handle, no thread affinity.
+// They validate the identity here rather than letting the canonical `ArgumentException` reach the
+// firewall, so an undefined identity is refused with a message that names the identity.
+[[nodiscard]] CNA_Result CopyAvatarName(
+    const std::string& value,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    if (outBytes == nullptr || (destination == nullptr && capacity != 0U)) {
+        return InvalidArgument("The avatar name output buffer is invalid.");
+    }
+    *outBytes = value.size();
+    if (capacity < value.size()) {
+        return Fail(
+            CNA_RESULT_BUFFER_TOO_SMALL,
+            CNA_ERROR_CATEGORY_RANGE,
+            "The avatar name output buffer is too small.");
+    }
+    if (!value.empty()) {
+        std::memcpy(destination, value.data(), value.size());
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
+[[nodiscard]] bool TryMapAnimationPreset(
+    const CNA_AvatarAnimationPreset preset,
+    AvatarAnimationPreset* const outPreset) noexcept
+{
+    if (preset > CNA_AVATAR_ANIMATION_PRESET_MAXIMUM) {
+        return false;
+    }
+    *outPreset = static_cast<AvatarAnimationPreset>(preset);
+    return true;
+}
+
+[[nodiscard]] bool TryMapBodyType(
+    const CNA_AvatarBodyType bodyType,
+    AvatarBodyType* const outBodyType) noexcept
+{
+    if (bodyType > CNA_AVATAR_BODY_TYPE_MAXIMUM) {
+        return false;
+    }
+    *outBodyType = static_cast<AvatarBodyType>(bodyType);
+    return true;
 }
 
 } // namespace
@@ -303,5 +356,82 @@ CNA_Result cna_gamer_get_signed_in_gamer_count(int32_t* const outCount)
             ? INT32_C(0)
             : static_cast<int32_t>(collection->getCountProperty());
         return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_avatar_animation_preset_get_clip_name_size_ext(
+    const CNA_AvatarAnimationPreset preset,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The avatar clip-name size output is null.");
+        }
+        AvatarAnimationPreset nativePreset = AvatarAnimationPreset::Stand0;
+        if (!TryMapAnimationPreset(preset, &nativePreset)) {
+            return InvalidArgument("The avatar animation preset is not a defined identity.");
+        }
+        *outBytes = Microsoft::Xna::Framework::GamerServices::AvatarAnimationPresetToClipNameEXT(
+                        nativePreset)
+                        .size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_avatar_animation_preset_copy_clip_name_ext(
+    const CNA_AvatarAnimationPreset preset,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        AvatarAnimationPreset nativePreset = AvatarAnimationPreset::Stand0;
+        if (!TryMapAnimationPreset(preset, &nativePreset)) {
+            return InvalidArgument("The avatar animation preset is not a defined identity.");
+        }
+        return CopyAvatarName(
+            Microsoft::Xna::Framework::GamerServices::AvatarAnimationPresetToClipNameEXT(
+                nativePreset),
+            destination,
+            capacity,
+            outBytes);
+    });
+}
+
+CNA_Result cna_avatar_body_type_get_content_name_size_ext(
+    const CNA_AvatarBodyType bodyType,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        if (outBytes == nullptr) {
+            return InvalidArgument("The avatar content-name size output is null.");
+        }
+        AvatarBodyType nativeBodyType = AvatarBodyType::Female;
+        if (!TryMapBodyType(bodyType, &nativeBodyType)) {
+            return InvalidArgument("The avatar body type is not a defined identity.");
+        }
+        *outBytes =
+            Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT(nativeBodyType)
+                .size();
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_avatar_body_type_copy_content_name_ext(
+    const CNA_AvatarBodyType bodyType,
+    char* const destination,
+    const uint64_t capacity,
+    uint64_t* const outBytes)
+{
+    return CallWithExceptionBarrier([&]() -> CNA_Result {
+        AvatarBodyType nativeBodyType = AvatarBodyType::Female;
+        if (!TryMapBodyType(bodyType, &nativeBodyType)) {
+            return InvalidArgument("The avatar body type is not a defined identity.");
+        }
+        return CopyAvatarName(
+            Microsoft::Xna::Framework::GamerServices::AvatarBodyTypeToContentNameEXT(nativeBodyType),
+            destination,
+            capacity,
+            outBytes);
     });
 }

@@ -5593,6 +5593,41 @@
       "tests": "`GamerIdentitiesSmoke.c` walks every value of all nine in canonical order and asserts each sits at its own index and that the maximum is the last; C and C++ ABI assertions pin the width and the endpoints of each",
       "status": "implemented",
       "task": "CBIND-037G1"
+    },
+    {
+      "id": "avatar-bone",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarBone(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_AvatarBone` with one macro per canonical bone at the ordinal the canonical skeleton gives it. **The numbering is sparse** -- fifty-five bones spread over ordinals 0 to 70, with gaps -- and the gaps are preserved rather than renumbered, because a bone index is what an avatar animation stores and closing them would silently repoint every animation",
+      "tests": "`AvatarIdentitiesSmoke.c` pins each bone against its exact canonical ordinal rather than against its position in a list, and asserts the sequence is strictly ascending so a duplicate or a reordering fails too; C and C++ ABI assertions pin the width, both endpoints and the maximum",
+      "status": "implemented",
+      "task": "CBIND-037G2"
+    },
+    {
+      "id": "avatar-identities",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarAnimationPreset|AvatarEye|AvatarMouth|AvatarEyebrow|AvatarRendererState|AvatarBodyType)(::[A-Za-z0-9_]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "one fixed-width `uint32_t` identity each, with a macro per canonical value at its canonical ordinal and a `_MAXIMUM`. Unlike the skeleton these six are contiguous, so a value's ordinal is its position",
+      "tests": "`AvatarIdentitiesSmoke.c` writes every value of all six out in canonical order and asserts each sits at its own index and that the maximum is the last; C and C++ ABI assertions pin the width and the endpoints of each",
+      "status": "implemented",
+      "task": "CBIND-037G2"
+    },
+    {
+      "id": "avatar-name-functions",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarAnimationPresetToClipNameEXT|AvatarBodyTypeToContentNameEXT)$",
+      "kinds": [
+        "function"
+      ],
+      "mapping": "`cna_avatar_animation_preset_get_clip_name_size_ext` / `..._copy_clip_name_ext` and `cna_avatar_body_type_get_content_name_size_ext` / `..._copy_content_name_ext`, count/copy pairs over an identity. They take **no game handle and no thread affinity**, because they are pure value operations -- the same shape the static sample computations already use. An undefined identity is refused at the boundary rather than left to the canonical argument exception, so the diagnostic names the identity",
+      "tests": "`AvatarIdentitiesSmoke.c` asserts a clip name is the identity's own spelling while a body-type name is a content path instead, refuses a buffer that cannot hold the whole name with nothing written, and refuses an undefined identity and a null output on all four routes",
+      "status": "implemented",
+      "task": "CBIND-037G2"
     }
   ]
 }

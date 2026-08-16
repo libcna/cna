@@ -201,6 +201,41 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
                   offsetof(CNA_AudioEmitter, up) == 36U &&
                   offsetof(CNA_AudioEmitter, velocity) == 48U,
               "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_AvatarBodyType) == sizeof(uint32_t) &&
+                 CNA_AVATAR_BODY_TYPE_FEMALE == UINT32_C(0) &&
+                 CNA_AVATAR_BODY_TYPE_MALE == UINT32_C(1) &&
+                 CNA_AVATAR_BODY_TYPE_MAXIMUM == CNA_AVATAR_BODY_TYPE_MALE,
+            "CNA AvatarBodyType identities must remain stable");
+static_assert(sizeof(CNA_AvatarRendererState) == sizeof(uint32_t) &&
+                 CNA_AVATAR_RENDERER_STATE_LOADING == UINT32_C(0) &&
+                 CNA_AVATAR_RENDERER_STATE_UNAVAILABLE == UINT32_C(2) &&
+                 CNA_AVATAR_RENDERER_STATE_MAXIMUM == CNA_AVATAR_RENDERER_STATE_UNAVAILABLE,
+            "CNA AvatarRendererState identities must remain stable");
+static_assert(sizeof(CNA_AvatarEyebrow) == sizeof(uint32_t) &&
+                 CNA_AVATAR_EYEBROW_NEUTRAL == UINT32_C(0) &&
+                 CNA_AVATAR_EYEBROW_RAISED == UINT32_C(4) &&
+                 CNA_AVATAR_EYEBROW_MAXIMUM == CNA_AVATAR_EYEBROW_RAISED,
+            "CNA AvatarEyebrow identities must remain stable");
+static_assert(sizeof(CNA_AvatarEye) == sizeof(uint32_t) &&
+                 CNA_AVATAR_EYE_NEUTRAL == UINT32_C(0) &&
+                 CNA_AVATAR_EYE_BLINK == UINT32_C(13) &&
+                 CNA_AVATAR_EYE_MAXIMUM == CNA_AVATAR_EYE_BLINK,
+            "CNA AvatarEye identities must remain stable");
+static_assert(sizeof(CNA_AvatarMouth) == sizeof(uint32_t) &&
+                 CNA_AVATAR_MOUTH_NEUTRAL == UINT32_C(0) &&
+                 CNA_AVATAR_MOUTH_PHONETIC_DTH == UINT32_C(13) &&
+                 CNA_AVATAR_MOUTH_MAXIMUM == CNA_AVATAR_MOUTH_PHONETIC_DTH,
+            "CNA AvatarMouth identities must remain stable");
+static_assert(sizeof(CNA_AvatarAnimationPreset) == sizeof(uint32_t) &&
+                 CNA_AVATAR_ANIMATION_PRESET_STAND_0 == UINT32_C(0) &&
+                 CNA_AVATAR_ANIMATION_PRESET_MALE_YAWN == UINT32_C(30) &&
+                 CNA_AVATAR_ANIMATION_PRESET_MAXIMUM == CNA_AVATAR_ANIMATION_PRESET_MALE_YAWN,
+            "CNA AvatarAnimationPreset identities must remain stable");
+static_assert(sizeof(CNA_AvatarBone) == sizeof(uint32_t) &&
+                 CNA_AVATAR_BONE_ROOT == UINT32_C(0) &&
+                 CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT == UINT32_C(70) &&
+                 CNA_AVATAR_BONE_MAXIMUM == CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT,
+            "CNA AvatarBone identities must remain stable");
 static_assert(sizeof(CNA_GamerPresenceMode) == sizeof(uint32_t) &&
                   CNA_GAMER_PRESENCE_MODE_NONE == UINT32_C(0) &&
                  CNA_GAMER_PRESENCE_MODE_CORNFLOWER_BLUE == UINT32_C(59) &&

@@ -269,6 +269,368 @@ typedef uint32_t CNA_RacingCameraAngle;
 /** @brief Highest defined `CNA_RacingCameraAngle` identity. */
 #define CNA_RACING_CAMERA_ANGLE_MAXIMUM CNA_RACING_CAMERA_ANGLE_INSIDE
 
+/** @brief Fixed-width identity for an avatar body type. */
+typedef uint32_t CNA_AvatarBodyType;
+
+/** @brief A female body type. */
+#define CNA_AVATAR_BODY_TYPE_FEMALE UINT32_C(0)
+/** @brief A male body type. */
+#define CNA_AVATAR_BODY_TYPE_MALE UINT32_C(1)
+/** @brief Highest defined `CNA_AvatarBodyType` identity. */
+#define CNA_AVATAR_BODY_TYPE_MAXIMUM CNA_AVATAR_BODY_TYPE_MALE
+
+/** @brief Fixed-width identity for whether an avatar renderer is ready to draw. */
+typedef uint32_t CNA_AvatarRendererState;
+
+/** @brief The avatar's assets are loading. */
+#define CNA_AVATAR_RENDERER_STATE_LOADING UINT32_C(0)
+/** @brief The avatar is ready to render. */
+#define CNA_AVATAR_RENDERER_STATE_READY UINT32_C(1)
+/** @brief The avatar is unavailable. */
+#define CNA_AVATAR_RENDERER_STATE_UNAVAILABLE UINT32_C(2)
+/** @brief Highest defined `CNA_AvatarRendererState` identity. */
+#define CNA_AVATAR_RENDERER_STATE_MAXIMUM CNA_AVATAR_RENDERER_STATE_UNAVAILABLE
+
+/** @brief Fixed-width identity for an avatar eyebrow expression. */
+typedef uint32_t CNA_AvatarEyebrow;
+
+/** @brief A neutral eyebrow shape. */
+#define CNA_AVATAR_EYEBROW_NEUTRAL UINT32_C(0)
+/** @brief A sad eyebrow shape. */
+#define CNA_AVATAR_EYEBROW_SAD UINT32_C(1)
+/** @brief An angry eyebrow shape. */
+#define CNA_AVATAR_EYEBROW_ANGRY UINT32_C(2)
+/** @brief A confused eyebrow shape. */
+#define CNA_AVATAR_EYEBROW_CONFUSED UINT32_C(3)
+/** @brief A raised eyebrow shape. */
+#define CNA_AVATAR_EYEBROW_RAISED UINT32_C(4)
+/** @brief Highest defined `CNA_AvatarEyebrow` identity. */
+#define CNA_AVATAR_EYEBROW_MAXIMUM CNA_AVATAR_EYEBROW_RAISED
+
+/** @brief Fixed-width identity for an avatar eye expression. */
+typedef uint32_t CNA_AvatarEye;
+
+/** @brief A neutral eye shape. */
+#define CNA_AVATAR_EYE_NEUTRAL UINT32_C(0)
+/** @brief A sad eye shape. */
+#define CNA_AVATAR_EYE_SAD UINT32_C(1)
+/** @brief An angry eye shape. */
+#define CNA_AVATAR_EYE_ANGRY UINT32_C(2)
+/** @brief A confused eye shape. */
+#define CNA_AVATAR_EYE_CONFUSED UINT32_C(3)
+/** @brief A laughing eye shape. */
+#define CNA_AVATAR_EYE_LAUGHING UINT32_C(4)
+/** @brief A shocked eye shape. */
+#define CNA_AVATAR_EYE_SHOCKED UINT32_C(5)
+/** @brief A happy eye shape. */
+#define CNA_AVATAR_EYE_HAPPY UINT32_C(6)
+/** @brief A yawning eye shape. */
+#define CNA_AVATAR_EYE_YAWNING UINT32_C(7)
+/** @brief A sleeping eye shape. */
+#define CNA_AVATAR_EYE_SLEEPING UINT32_C(8)
+/** @brief Looking up. */
+#define CNA_AVATAR_EYE_LOOK_UP UINT32_C(9)
+/** @brief Looking down. */
+#define CNA_AVATAR_EYE_LOOK_DOWN UINT32_C(10)
+/** @brief Looking left. */
+#define CNA_AVATAR_EYE_LOOK_LEFT UINT32_C(11)
+/** @brief Looking right. */
+#define CNA_AVATAR_EYE_LOOK_RIGHT UINT32_C(12)
+/** @brief Blinking. */
+#define CNA_AVATAR_EYE_BLINK UINT32_C(13)
+/** @brief Highest defined `CNA_AvatarEye` identity. */
+#define CNA_AVATAR_EYE_MAXIMUM CNA_AVATAR_EYE_BLINK
+
+/** @brief Fixed-width identity for an avatar mouth expression. */
+typedef uint32_t CNA_AvatarMouth;
+
+/** @brief A neutral mouth shape. */
+#define CNA_AVATAR_MOUTH_NEUTRAL UINT32_C(0)
+/** @brief A sad mouth shape. */
+#define CNA_AVATAR_MOUTH_SAD UINT32_C(1)
+/** @brief An angry mouth shape. */
+#define CNA_AVATAR_MOUTH_ANGRY UINT32_C(2)
+/** @brief A confused mouth shape. */
+#define CNA_AVATAR_MOUTH_CONFUSED UINT32_C(3)
+/** @brief A laughing mouth shape. */
+#define CNA_AVATAR_MOUTH_LAUGHING UINT32_C(4)
+/** @brief A shocked mouth shape. */
+#define CNA_AVATAR_MOUTH_SHOCKED UINT32_C(5)
+/** @brief A happy mouth shape. */
+#define CNA_AVATAR_MOUTH_HAPPY UINT32_C(6)
+/** @brief The phonetic "o" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_O UINT32_C(7)
+/** @brief The phonetic "ai" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_AI UINT32_C(8)
+/** @brief The phonetic "ee" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_EE UINT32_C(9)
+/** @brief The phonetic "f"/"v" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_FV UINT32_C(10)
+/** @brief The phonetic "w" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_W UINT32_C(11)
+/** @brief The phonetic "l" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_L UINT32_C(12)
+/** @brief The phonetic "th" mouth shape. */
+#define CNA_AVATAR_MOUTH_PHONETIC_DTH UINT32_C(13)
+/** @brief Highest defined `CNA_AvatarMouth` identity. */
+#define CNA_AVATAR_MOUTH_MAXIMUM CNA_AVATAR_MOUTH_PHONETIC_DTH
+
+/** @brief Fixed-width identity for a built-in avatar animation. */
+typedef uint32_t CNA_AvatarAnimationPreset;
+
+/** @brief Standing idle animation, variant 0. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_0 UINT32_C(0)
+/** @brief Standing idle animation, variant 1. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_1 UINT32_C(1)
+/** @brief Standing idle animation, variant 2. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_2 UINT32_C(2)
+/** @brief Standing idle animation, variant 3. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_3 UINT32_C(3)
+/** @brief Standing idle animation, variant 4. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_4 UINT32_C(4)
+/** @brief Standing idle animation, variant 5. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_5 UINT32_C(5)
+/** @brief Standing idle animation, variant 6. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_6 UINT32_C(6)
+/** @brief Standing idle animation, variant 7. */
+#define CNA_AVATAR_ANIMATION_PRESET_STAND_7 UINT32_C(7)
+/** @brief Clapping animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_CLAP UINT32_C(8)
+/** @brief Waving animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_WAVE UINT32_C(9)
+/** @brief Celebrating animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_CELEBRATE UINT32_C(10)
+/** @brief Female idle: checking nails. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_IDLE_CHECK_NAILS UINT32_C(11)
+/** @brief Female idle: looking around. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_IDLE_LOOK_AROUND UINT32_C(12)
+/** @brief Female idle: shifting weight. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_IDLE_SHIFT_WEIGHT UINT32_C(13)
+/** @brief Female idle: fixing shoe. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_IDLE_FIX_SHOE UINT32_C(14)
+/** @brief Female angry animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_ANGRY UINT32_C(15)
+/** @brief Female confused animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_CONFUSED UINT32_C(16)
+/** @brief Female laugh animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_LAUGH UINT32_C(17)
+/** @brief Female cry animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_CRY UINT32_C(18)
+/** @brief Female shocked animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_SHOCKED UINT32_C(19)
+/** @brief Female yawn animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_FEMALE_YAWN UINT32_C(20)
+/** @brief Male idle: looking around. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_IDLE_LOOK_AROUND UINT32_C(21)
+/** @brief Male idle: stretching. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_IDLE_STRETCH UINT32_C(22)
+/** @brief Male idle: shifting weight. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_IDLE_SHIFT_WEIGHT UINT32_C(23)
+/** @brief Male idle: checking hand. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_IDLE_CHECK_HAND UINT32_C(24)
+/** @brief Male angry animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_ANGRY UINT32_C(25)
+/** @brief Male confused animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_CONFUSED UINT32_C(26)
+/** @brief Male laugh animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_LAUGH UINT32_C(27)
+/** @brief Male cry animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_CRY UINT32_C(28)
+/** @brief Male surprised animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_SURPRISED UINT32_C(29)
+/** @brief Male yawn animation. */
+#define CNA_AVATAR_ANIMATION_PRESET_MALE_YAWN UINT32_C(30)
+/** @brief Highest defined `CNA_AvatarAnimationPreset` identity. */
+#define CNA_AVATAR_ANIMATION_PRESET_MAXIMUM CNA_AVATAR_ANIMATION_PRESET_MALE_YAWN
+
+/** @brief Fixed-width identity for one bone of the canonical avatar skeleton. */
+ /* The canonical skeleton numbers its bones sparsely: fifty-five bones spread over ordinals
+    0 to 70, with gaps. The gaps are the canonical skeleton's, so they are preserved here
+    rather than renumbered -- a bone index is what an avatar animation stores. */
+typedef uint32_t CNA_AvatarBone;
+
+/** @brief The root bone. */
+#define CNA_AVATAR_BONE_ROOT UINT32_C(0)
+/** @brief The lower back bone. */
+#define CNA_AVATAR_BONE_BACK_LOWER UINT32_C(1)
+/** @brief The left hip bone. */
+#define CNA_AVATAR_BONE_HIP_LEFT UINT32_C(2)
+/** @brief The right hip bone. */
+#define CNA_AVATAR_BONE_HIP_RIGHT UINT32_C(3)
+/** @brief The upper back bone. */
+#define CNA_AVATAR_BONE_BACK_UPPER UINT32_C(5)
+/** @brief The left knee bone. */
+#define CNA_AVATAR_BONE_KNEE_LEFT UINT32_C(6)
+/** @brief The right knee bone. */
+#define CNA_AVATAR_BONE_KNEE_RIGHT UINT32_C(8)
+/** @brief The left ankle bone. */
+#define CNA_AVATAR_BONE_ANKLE_LEFT UINT32_C(11)
+/** @brief The left collar bone. */
+#define CNA_AVATAR_BONE_COLLAR_LEFT UINT32_C(12)
+/** @brief The neck bone. */
+#define CNA_AVATAR_BONE_NECK UINT32_C(14)
+/** @brief The right ankle bone. */
+#define CNA_AVATAR_BONE_ANKLE_RIGHT UINT32_C(15)
+/** @brief The right collar bone. */
+#define CNA_AVATAR_BONE_COLLAR_RIGHT UINT32_C(16)
+/** @brief The head bone. */
+#define CNA_AVATAR_BONE_HEAD UINT32_C(19)
+/** @brief The left shoulder bone. */
+#define CNA_AVATAR_BONE_SHOULDER_LEFT UINT32_C(20)
+/** @brief The left toe bone. */
+#define CNA_AVATAR_BONE_TOE_LEFT UINT32_C(21)
+/** @brief The right shoulder bone. */
+#define CNA_AVATAR_BONE_SHOULDER_RIGHT UINT32_C(22)
+/** @brief The right toe bone. */
+#define CNA_AVATAR_BONE_TOE_RIGHT UINT32_C(23)
+/** @brief The left elbow bone. */
+#define CNA_AVATAR_BONE_ELBOW_LEFT UINT32_C(25)
+/** @brief The right elbow bone. */
+#define CNA_AVATAR_BONE_ELBOW_RIGHT UINT32_C(28)
+/** @brief The left wrist bone. */
+#define CNA_AVATAR_BONE_WRIST_LEFT UINT32_C(33)
+/** @brief The right wrist bone. */
+#define CNA_AVATAR_BONE_WRIST_RIGHT UINT32_C(36)
+/** @brief The left index finger bone. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_LEFT UINT32_C(37)
+/** @brief The left middle finger bone. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_LEFT UINT32_C(38)
+/** @brief The left ring finger bone. */
+#define CNA_AVATAR_BONE_FINGER_RING_LEFT UINT32_C(39)
+/** @brief The left small finger bone. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_LEFT UINT32_C(40)
+/** @brief The left prop bone. */
+#define CNA_AVATAR_BONE_PROP_LEFT UINT32_C(41)
+/** @brief The left special bone. */
+#define CNA_AVATAR_BONE_SPECIAL_LEFT UINT32_C(42)
+/** @brief The left thumb bone. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_LEFT UINT32_C(43)
+/** @brief The right index finger bone. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_RIGHT UINT32_C(44)
+/** @brief The right middle finger bone. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_RIGHT UINT32_C(45)
+/** @brief The right ring finger bone. */
+#define CNA_AVATAR_BONE_FINGER_RING_RIGHT UINT32_C(46)
+/** @brief The right small finger bone. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_RIGHT UINT32_C(47)
+/** @brief The right prop bone. */
+#define CNA_AVATAR_BONE_PROP_RIGHT UINT32_C(48)
+/** @brief The right special bone. */
+#define CNA_AVATAR_BONE_SPECIAL_RIGHT UINT32_C(49)
+/** @brief The right thumb bone. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_RIGHT UINT32_C(50)
+/** @brief The left index finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_2_LEFT UINT32_C(51)
+/** @brief The left middle finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_2_LEFT UINT32_C(52)
+/** @brief The left ring finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_RING_2_LEFT UINT32_C(53)
+/** @brief The left small finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_2_LEFT UINT32_C(54)
+/** @brief The left thumb, second segment. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_2_LEFT UINT32_C(55)
+/** @brief The right index finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_2_RIGHT UINT32_C(56)
+/** @brief The right middle finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_2_RIGHT UINT32_C(57)
+/** @brief The right ring finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_RING_2_RIGHT UINT32_C(58)
+/** @brief The right small finger, second segment. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_2_RIGHT UINT32_C(59)
+/** @brief The right thumb, second segment. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_2_RIGHT UINT32_C(60)
+/** @brief The left index finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_3_LEFT UINT32_C(61)
+/** @brief The left middle finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_3_LEFT UINT32_C(62)
+/** @brief The left ring finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_RING_3_LEFT UINT32_C(63)
+/** @brief The left small finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_3_LEFT UINT32_C(64)
+/** @brief The left thumb, third segment. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_3_LEFT UINT32_C(65)
+/** @brief The right index finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_INDEX_3_RIGHT UINT32_C(66)
+/** @brief The right middle finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_MIDDLE_3_RIGHT UINT32_C(67)
+/** @brief The right ring finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_RING_3_RIGHT UINT32_C(68)
+/** @brief The right small finger, third segment. */
+#define CNA_AVATAR_BONE_FINGER_SMALL_3_RIGHT UINT32_C(69)
+/** @brief The right thumb, third segment. */
+#define CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT UINT32_C(70)
+/** @brief Highest defined `CNA_AvatarBone` identity. */
+#define CNA_AVATAR_BONE_MAXIMUM CNA_AVATAR_BONE_FINGER_THUMB_3_RIGHT
+
+/**
+ * @brief Reports the byte length of the clip name an animation preset maps to.
+ *
+ * @param preset One of the `CNA_AVATAR_ANIMATION_PRESET_*` identities.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or a null
+ *         output.
+ *
+ * CNAEXT: the clip name is how the avatar extension finds the matching animation inside a loaded
+ * skinned model. This is a pure value operation — no gamer, no handle, no thread affinity.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_preset_get_clip_name_size_ext(
+    CNA_AvatarAnimationPreset preset,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the clip name an animation preset maps to.
+ *
+ * @param preset One of the `CNA_AVATAR_ANIMATION_PRESET_*` identities.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or an invalid output.
+ *
+ * CNAEXT: the name is the identity's own canonical spelling.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_preset_copy_clip_name_ext(
+    CNA_AvatarAnimationPreset preset,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of the content asset name a body type maps to.
+ *
+ * @param body_type One of the `CNA_AVATAR_BODY_TYPE_*` identities.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or a null
+ *         output.
+ *
+ * CNAEXT: an avatar description never carries real body-type data in this runtime, so the body type
+ * is whatever the caller already knows and this is how it becomes a loadable asset name. A pure value
+ * operation — no gamer, no handle, no thread affinity.
+ */
+CNA_C_API CNA_Result cna_avatar_body_type_get_content_name_size_ext(
+    CNA_AvatarBodyType body_type,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the content asset name a body type maps to.
+ *
+ * @param body_type One of the `CNA_AVATAR_BODY_TYPE_*` identities.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity or an invalid output.
+ *
+ * CNAEXT: the name is a content path, not the identity's spelling.
+ */
+CNA_C_API CNA_Result cna_avatar_body_type_copy_content_name_ext(
+    CNA_AvatarBodyType body_type,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 /** @brief Owned handle for a signed-in gamer. */
 typedef CNA_Handle CNA_SignedInGamerHandle;
 

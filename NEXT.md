@@ -1014,9 +1014,21 @@
 > rename is caught by the compile instead. That is the pattern the remaining identity slices should
 > reuse. New `docs/c-api/GAMER_SERVICES.md`. The inventory is now 5,539 implemented, 32 partial, 557
 > planned and 287 N/A; all four trees green at 71/71, ASan+UBSan clean.
-> **Next: CBIND-037G2**, the avatar identities (133 rows), whose only new decision is the two
-> `*ToContentNameEXT` / `*ToClipNameEXT` name functions — count/copy routes over a canonical table
-> rather than identities.
+> CBIND-037G2 then adds the avatar identities, 133 rows, and turns up the one enumeration in the
+> whole inventory that is **not contiguous**: the canonical avatar skeleton numbers its fifty-five
+> bones sparsely over ordinals 0 to 70. Those gaps are preserved rather than renumbered — a bone index
+> is what an avatar animation stores, so closing them would silently repoint every animation onto the
+> wrong joint. The sits-at-its-own-index test from `G1` does not apply there; each bone is pinned
+> against its exact canonical ordinal, with an added strictly-ascending check so a duplicate or a
+> reordering fails too. **Check contiguity before reusing the index pattern on a new enumeration.**
+>
+> The two `*NamesEXT` functions became count/copy pairs over an identity that take **no game handle
+> and no thread affinity** — pure value operations, the shape the static sample computations already
+> use — and the test asserts the two answer genuinely different kinds of string: a clip name is the
+> identity's own spelling, a body-type name is a content path. The inventory is now 5,672
+> implemented, 32 partial, 424 planned and 287 N/A; all four trees green at 72/72, ASan+UBSan clean.
+> **Next: CBIND-037G3**, the six gamer-services exceptions (30 rows) as firewall arms — the smallest
+> slice left, whose whole content is deciding one result code per type and recording why.
 >
 > **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
