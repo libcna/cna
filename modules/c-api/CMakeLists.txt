@@ -1291,13 +1291,15 @@ if(CNA_BUILD_TESTS)
         ${PROJECT_SOURCE_DIR}/modules/audio/include
         ${PROJECT_SOURCE_DIR}/modules/math/include
     )
-    # The storage, network-join and CNA core exceptions are the canonical types this test throws whose constructors
-    # are not header-only, so proving their conversion needs those modules on the link line.
+    # The storage, network-join, gamer-services and CNA core exceptions are the canonical types this test
+    # throws whose constructors are not header-only, so proving their conversion needs those modules on the
+    # link line.
     target_link_libraries(cna_c_api_boundary_detail_test PRIVATE
         sharp_runtime_core_base
         cna_core
         cna_storage
         CNA_Net
+        CNA_GamerServices
         cna_devices
     )
     cna_link_sharp_runtime(cna_c_api_boundary_detail_test PRIVATE Core.Base IO Runtime)

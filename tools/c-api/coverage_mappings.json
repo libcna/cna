@@ -5628,6 +5628,18 @@
       "tests": "`AvatarIdentitiesSmoke.c` asserts a clip name is the identity's own spelling while a body-type name is a content path instead, refuses a buffer that cannot hold the whole name with nothing written, and refuses an undefined identity and a null output on all four routes",
       "status": "implemented",
       "task": "CBIND-037G2"
+    },
+    {
+      "id": "gamer-services-exceptions",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(GamerServicesNotAvailableException|GameUpdateRequiredException|NetworkNotAvailableException|NetworkException|GamerPrivilegeException|GuideAlreadyVisibleException)(::[A-Za-z0-9_~]+)?$",
+      "kinds": [
+        "class",
+        "constructor"
+      ],
+      "mapping": "boundary conversions rather than types, following the audio exceptions exactly: the firewall in `CnaCApiDetail.hpp` catches all six and answers four different results, because the differences are what a caller acts on. No gamer services at all and a title that needs updating are both `CNA_RESULT_NOT_SUPPORTED` — nothing the caller supplies or retries changes either. An absent network and a privilege the gamer does not have are both `CNA_RESULT_INVALID_STATE`, the shape a disconnected storage device already has, as is a guide that is already visible. A network operation that failed while the network was available is `CNA_RESULT_PLATFORM`: a native service failed and a retry may get past it. The constructors are the canonical ways to raise one, which C never does — it only receives them. **The arm order matters**: the net module's `NetworkSessionJoinException` derives from this module's `NetworkException`, so the two modules share one hierarchy and the derived arms sit before their base",
+      "tests": "`BoundaryDetailTest.cpp` throws each of the six through the firewall and asserts the result, the category and the canonical message, including that an absent network is distinguishable from a network operation that failed while connected — which is exactly what a mis-ordered arm would break",
+      "status": "implemented",
+      "task": "CBIND-037G3"
     }
   ]
 }

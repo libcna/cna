@@ -22,6 +22,12 @@
 #include "Microsoft/Xna/Framework/Audio/InstancePlayLimitException.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoAudioHardwareException.hpp"
 #include "Microsoft/Xna/Framework/Audio/NoMicrophoneConnectedException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "Microsoft/Xna/Framework/Storage/StorageDeviceNotConnectedException.hpp"
 
@@ -226,6 +232,25 @@ template<typename TCallable>
         return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
     } catch (const Microsoft::Xna::Framework::Audio::InstancePlayLimitException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException&
+                 exception) {
+        // The platform has no gamer services at all. Nothing the caller supplies or retries changes
+        // that, which is what separates it from every arm below.
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+    } catch (const Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException&
+                 exception) {
+        // The service is there and refuses this build of the title. Also unchangeable by the caller
+        // -- only shipping a new build fixes it -- so it is the same kind of answer as the one above
+        // rather than a state the game can wait out.
+        return Fail(CNA_RESULT_NOT_SUPPORTED, CNA_ERROR_CATEGORY_NOT_SUPPORTED, exception.what());
+    } catch (const Microsoft::Xna::Framework::GamerServices::GamerPrivilegeException& exception) {
+        // The operation is supported and well-formed; this gamer's privileges do not currently allow
+        // it. Privileges are per-gamer state that can change, so this is a state failure rather than
+        // an unsupported operation.
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::GamerServices::GuideAlreadyVisibleException&
+                 exception) {
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const Microsoft::Devices::Sensors::SensorFailedException& exception) {
         const CNA_Result result =
             Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
@@ -236,6 +261,17 @@ template<typename TCallable>
             Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
         SetLastJoinError(static_cast<uint32_t>(exception.getJoinErrorProperty()));
         return result;
+    } catch (const Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException&
+                 exception) {
+        // Sits after the join arm and before its own base, because all three are one hierarchy: the
+        // net module's join failure derives from this module's network exception. An absent network
+        // is a resource that is simply not there right now, the same shape a disconnected storage
+        // device already has.
+        return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
+    } catch (const Microsoft::Xna::Framework::GamerServices::NetworkException& exception) {
+        // The base of both arms above: a network operation failed while the network was available.
+        // That is a native service failure, and one a retry may well get past.
+        return Fail(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, exception.what());
     } catch (const CNA::CNAException& exception) {
         return Fail(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, exception.what());
     } catch (const System::ArgumentException& exception) {

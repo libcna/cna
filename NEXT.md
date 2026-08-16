@@ -1027,8 +1027,23 @@
 > use — and the test asserts the two answer genuinely different kinds of string: a clip name is the
 > identity's own spelling, a body-type name is a content path. The inventory is now 5,672
 > implemented, 32 partial, 424 planned and 287 N/A; all four trees green at 72/72, ASan+UBSan clean.
-> **Next: CBIND-037G3**, the six gamer-services exceptions (30 rows) as firewall arms — the smallest
-> slice left, whose whole content is deciding one result code per type and recording why.
+> CBIND-037G3 then converts the six gamer-services exceptions, 30 rows, into **four** distinct
+> results: no services at all and a title that needs updating are `NOT_SUPPORTED` because nothing the
+> caller supplies or retries changes either; an absent network, a missing privilege and an
+> already-visible guide are `INVALID_STATE`, the shape a disconnected storage device already has; and
+> a network operation that failed while the network was available is `PLATFORM`, a native service
+> failure a retry may get past.
+>
+> The slice turned up a **cross-module fact worth keeping**: the networking module's
+> `NetworkSessionJoinException` derives from *this* module's `NetworkException`, so the two modules
+> share one exception hierarchy. The compiler refused the first arm order outright (`-Werror=exceptions`
+> catches a base shadowing a derived arm), and both derived arms now sit before their common base.
+> When adding a firewall arm, check what already derives from the type being caught. The inventory is
+> now 5,702 implemented, 32 partial, 394 planned and 287 N/A; all four trees green at 72/72,
+> ASan+UBSan clean.
+> **Next: CBIND-037G4**, the gamer and its collections (129 rows) — the first gamer-services slice
+> that needs real objects rather than values, and the one that has to decide how the template
+> `GamerCollection<T>` maps.
 >
 > **State at this handoff.** Twenty-one slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,

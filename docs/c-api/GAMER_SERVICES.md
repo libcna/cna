@@ -58,3 +58,25 @@ it. A clip name is the identity's **own canonical spelling** (`CNA_AVATAR_ANIMAT
 name is a **content path** (`"avatar/male/avatar"`), because it is what a content manager loads. An
 undefined identity is refused at the boundary, so the diagnostic names the identity rather than
 surfacing a generic argument failure from underneath.
+
+## Six exceptions, four answers
+
+The gamer-services exception types are not bound; their **conversion** is, in the same exception
+firewall the audio exceptions already go through. The six of them answer four different results,
+because the differences are what a caller acts on:
+
+| Canonical exception | Result / category | Why |
+|---|---|---|
+| `GamerServicesNotAvailableException` | `CNA_RESULT_NOT_SUPPORTED` / `NOT_SUPPORTED` | The platform has no gamer services at all. Nothing the caller supplies or retries changes it. |
+| `GameUpdateRequiredException` | `CNA_RESULT_NOT_SUPPORTED` / `NOT_SUPPORTED` | The service is there and refuses this build of the title. Also unchangeable by the caller — only shipping a new build fixes it. |
+| `NetworkNotAvailableException` | `CNA_RESULT_INVALID_STATE` / `STATE` | The network is a resource that is simply not there right now, the same shape a disconnected storage device already has. |
+| `NetworkException` | `CNA_RESULT_PLATFORM` / `PLATFORM` | A network operation failed while the network was available: a native service failed, and a retry may get past it. |
+| `GamerPrivilegeException` | `CNA_RESULT_INVALID_STATE` / `STATE` | The operation is supported and well-formed; this gamer's privileges do not currently allow it, and privileges are per-gamer state that can change. |
+| `GuideAlreadyVisibleException` | `CNA_RESULT_INVALID_STATE` / `STATE` | The guide is already showing. |
+
+**The arm order is load-bearing, and it crosses a module boundary.** The networking module's
+`NetworkSessionJoinException` derives from *this* module's `NetworkException`, so the two modules
+share one exception hierarchy. The join arm and the not-available arm both sit before their common
+base; get that wrong and an absent network becomes indistinguishable from a network operation that
+failed while connected, and a join failure loses the join-error code it carries. The boundary test
+throws all three and asserts they stay distinguishable.

@@ -2,6 +2,12 @@
 
 #include "CnaCApiDetail.hpp"
 
+#include "Microsoft/Xna/Framework/GamerServices/GameUpdateRequiredException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerPrivilegeException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GamerServicesNotAvailableException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/GuideAlreadyVisibleException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkException.hpp"
+#include "Microsoft/Xna/Framework/GamerServices/NetworkNotAvailableException.hpp"
 #include "Microsoft/Xna/Framework/Net/NetworkSessionJoinException.hpp"
 #include "System/IO/FileNotFoundException.hpp"
 
@@ -232,6 +238,63 @@ int main()
         }) != CNA_RESULT_INVALID_STATE ||
         !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "core failure")) {
         return 19;
+    }
+
+    // The six gamer-services exceptions convert to four different answers, and the differences are
+    // the point: what the platform cannot do at all, what a resource's absence makes impossible right
+    // now, and what a native service failed at are three separate things a caller acts on differently.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GamerServicesNotAvailableException(
+                "no gamer services");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "no gamer services")) {
+        return 20;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GameUpdateRequiredException(
+                "update required");
+        }) != CNA_RESULT_NOT_SUPPORTED ||
+        !HasLastError(
+            CNA_RESULT_NOT_SUPPORTED,
+            CNA_ERROR_CATEGORY_NOT_SUPPORTED,
+            "update required")) {
+        return 21;
+    }
+
+    // The derived arm must win over its own base, or an absent network would be indistinguishable
+    // from a network operation that failed while connected.
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::NetworkNotAvailableException(
+                "no network");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "no network")) {
+        return 22;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::NetworkException("network failure");
+        }) != CNA_RESULT_PLATFORM ||
+        !HasLastError(CNA_RESULT_PLATFORM, CNA_ERROR_CATEGORY_PLATFORM, "network failure")) {
+        return 23;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GamerPrivilegeException("no privilege");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "no privilege")) {
+        return 24;
+    }
+
+    if (CallWithExceptionBarrier([]() -> CNA_Result {
+            throw Microsoft::Xna::Framework::GamerServices::GuideAlreadyVisibleException(
+                "guide is up");
+        }) != CNA_RESULT_INVALID_STATE ||
+        !HasLastError(CNA_RESULT_INVALID_STATE, CNA_ERROR_CATEGORY_STATE, "guide is up")) {
+        return 25;
     }
 
     return 0;

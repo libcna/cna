@@ -463,7 +463,7 @@ behind it.
 |---|---:|---|---|---|
 | CBIND-037G1 | 108 | Establish the gamer and guide identities | ✅ | `gamer_services.h` gains ten fixed-width identities — `GamerPresenceMode`, `NotificationPosition`, `GamerZone`, `LeaderboardKey`, `LeaderboardOutcome`, `MessageBoxIcon`, `ControllerSensitivity`, `GameDifficulty`, `GamerPrivilegeSetting` and `RacingCameraAngle` — each a `uint32_t` with one macro per canonical value at its canonical ordinal and a `_MAXIMUM`. `GamerPresenceMode` is the largest identity in the whole inventory at sixty values and **keeps `CornflowerBlue`**: the framework's own joke is a presence mode a game may really set, so a C caller has to be able to name it. `GamerIdentitiesSmoke.c` writes every value of all ten out **in canonical order and asserts each sits at its own index**, which is stronger than spot-checking ordinals — it catches a value inserted or removed in the middle, the change that actually breaks the ABI, while a rename is caught by the compile. C and C++ ABI assertions pin each identity's width, endpoints and maximum separately. Nothing here needs a gamer, a service or a handle, so it is the one gamer-services surface fully exercised on every tree. Green in all four (71/71) and under ASan+UBSan. New `docs/c-api/GAMER_SERVICES.md`. |
 | CBIND-037G2 | 133 | Establish the avatar identities | ✅ | `gamer_services.h` gains seven more identities — `AvatarBone`, `AvatarAnimationPreset`, `AvatarEye`, `AvatarMouth`, `AvatarEyebrow`, `AvatarRendererState` and `AvatarBodyType` — on the shape `G1` settled. **`AvatarBone` is the exception in the whole inventory: its numbering is sparse**, fifty-five bones spread over ordinals 0 to 70 with gaps, and the gaps are preserved rather than renumbered, because a bone index is what an avatar animation stores and closing them would silently repoint every animation onto the wrong joint. Its test pins each bone against its exact canonical ordinal instead of its list position, and asserts the sequence is strictly ascending so a duplicate or a reordering fails too. The two `*NamesEXT` free functions become count/copy pairs over an identity that take **no game handle and no thread affinity** — pure value operations, the shape the static sample computations already use — and refuse an undefined identity at the boundary so the diagnostic names it. The test asserts the two answer different kinds of string: a clip name is the identity's own spelling, a body-type name is a content path. Green in all four trees (72/72) and under ASan+UBSan. |
-| CBIND-037G3 | 30 | Convert the six gamer-services exceptions at the boundary | ⬜ | `GamerServicesNotAvailableException`, `NetworkNotAvailableException`, `NetworkException`, `GamerPrivilegeException`, `GuideAlreadyVisibleException` and `GameUpdateRequiredException` become firewall arms in `CnaCApiDetail.hpp`, following `CBIND-037F1`'s precedent exactly: the type is not bound, the conversion is. Decide one result code per type and record why; a service that is not available and a network that is not available are not the same answer as an invalid argument. |
+| CBIND-037G3 | 30 | Convert the six gamer-services exceptions at the boundary | ✅ | All six become firewall arms in `CnaCApiDetail.hpp` — the type is not bound, the conversion is — and they answer **four different results**, because the differences are what a caller acts on. No gamer services at all and a title that needs updating are both `NOT_SUPPORTED`: nothing the caller supplies or retries changes either. An absent network, a privilege the gamer does not have and a guide that is already visible are `INVALID_STATE`, the shape a disconnected storage device already has. A network operation that failed while the network was available is `PLATFORM` — a native service failed and a retry may get past it. **The slice turned up a cross-module fact worth keeping:** the networking module's `NetworkSessionJoinException` derives from *this* module's `NetworkException`, so the two modules share one exception hierarchy and the compiler refused the first arm order outright. Both derived arms now sit before their common base, and `BoundaryDetailTest.cpp` asserts an absent network stays distinguishable from a network operation that failed while connected. Green in all four trees (72/72) and under ASan+UBSan. |
 | CBIND-037G4 | 129 | Complete the gamer, its collections and its per-gamer surfaces | ⬜ | `Gamer`, `SignedInGamer`, `GamerCollection` and `SignedInGamerCollection`, `FriendGamer` and `FriendCollection`, `GamerProfile`, `GamerPrivileges`, `GamerPresence`, and the signed-in/signed-out event arguments. `CBIND-036E2`/`E3` already borrowed a minimum signed-in-gamer surface -- extend it rather than building a second one. The template `GamerCollection<T>` is the same C++-type-keyed problem `CBIND-037E1`'s service container hit: decide whether the instantiations this ABI can name are enough for `implemented` or only for `partial`, and record which. |
 | CBIND-037G5 | 58 | Complete the Guide, the dispatcher and the component | ⬜ | `Guide` is the single largest type left (45 rows) and is almost entirely modal UI: message boxes, keyboard input, marketplace and sign-in screens, each of which is asynchronous in the canonical API. Settle the async shape first -- this ABI has no promise type, so a begin/end pair with a completion callback is the only precedent (`CBIND-036F`'s storage device selection). `GamerServicesDispatcher` and `GamerServicesComponent` are what pump it. |
 | CBIND-037G6 | 124 | Complete achievements, leaderboards and property storage | ⬜ | `Achievement` and `AchievementCollection`, `LeaderboardReader`, `LeaderboardEntry`, `LeaderboardIdentity` and `LeaderboardWriter`, `PropertyDictionary` and `GameDefaults`. `PropertyDictionary` (35 rows) is a string-keyed variant map, so its C shape is a typed get/set family plus enumeration, not one route per property. A leaderboard read is asynchronous like the guide's routes and should reuse whatever `G5` settles. |
@@ -1072,6 +1072,8 @@ binary files can be authored by the test itself. The snapshot is now 5,431 imple
 identities. The snapshot is now 5,539 implemented, 32 partial, 557 planned and 287 not applicable.
 CBIND-037G2 then adds the avatar identities, preserving the canonical skeleton's sparse bone
 numbering rather than renumbering it. The snapshot is now 5,672 implemented, 32 partial, 424 planned
+and 287 not applicable. CBIND-037G3 then converts the six gamer-services exceptions at the
+boundary into four distinct results. The snapshot is now 5,702 implemented, 32 partial, 394 planned
 and 287 not applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
@@ -1081,17 +1083,18 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037G2` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037G3` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. `gamer-services` is the only module with
-  planned rows left — 424 of them, and 424 in the whole campaign.
-- **Next task:** `CBIND-037G3`, the six gamer-services exceptions — **30 rows**, and the smallest
-  slice left. `GamerServicesNotAvailableException`, `NetworkNotAvailableException`,
-  `NetworkException`, `GamerPrivilegeException`, `GuideAlreadyVisibleException` and
-  `GameUpdateRequiredException` become firewall arms in `CnaCApiDetail.hpp`, following
-  `CBIND-037F1`'s precedent exactly: the type is not bound, the conversion is. **Decide one result
-  code per type and record why** — a service that is not available and a network that is not
-  available are not the same answer as an invalid argument, and the guide already being visible is a
-  state failure rather than either.
+  planned rows left — 394 of them, and 394 in the whole campaign.
+- **Next task:** `CBIND-037G4`, the gamer and its collections — **129 rows** and the first
+  gamer-services slice that needs real objects rather than values. `Gamer`, `SignedInGamer`,
+  `GamerCollection` and `SignedInGamerCollection`, `FriendGamer` and `FriendCollection`,
+  `GamerProfile`, `GamerPrivileges`, `GamerPresence`, and the signed-in/signed-out event arguments.
+  `CBIND-036E2`/`E3` already borrowed a minimum signed-in-gamer surface in `gamer_services.h` and
+  `CnaCApiGamerServices.cpp` — **extend it rather than building a second one.** The template
+  `GamerCollection<T>` is the same C++-type-keyed problem `CBIND-037E1`'s service container hit:
+  decide whether the instantiations this ABI can name are enough for `implemented` or only for
+  `partial`, and record which.
 
   One thing applies to every remaining slice and should not be rediscovered per slice: **on every
   verification tree there is no signed-in gamer and no live service.** Report that as the real
