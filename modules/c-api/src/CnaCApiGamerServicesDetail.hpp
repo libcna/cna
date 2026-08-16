@@ -44,6 +44,13 @@ struct PropertyDictionaryResource final {
 
 // The guide takes gamers it did not create, and its routes accept either handle kind for the same
 // reason every `cna_gamer_*` route does: the canonical parameter is the base both derive from.
+// A leaderboard entry names a gamer the runtime owns, so the handle that reaches C borrows it and
+// keeps whatever owns it alive for exactly as long as the handle names it.
+[[nodiscard]] CNA_Result CreateBorrowedGamer(
+    Microsoft::Xna::Framework::GamerServices::Gamer* value,
+    std::shared_ptr<void> retentionOwner,
+    CNA_Handle* outGamer);
+
 [[nodiscard]] CNA_Result BorrowAnyGamer(
     CNA_Handle handle,
     Microsoft::Xna::Framework::GamerServices::Gamer** outGamer);

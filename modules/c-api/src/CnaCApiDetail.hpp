@@ -170,6 +170,8 @@ enum class ObjectKind : uint32_t {
     Achievement = 113,
     AchievementCollection = 114,
     PropertyDictionary = 115,
+    LeaderboardReader = 116,
+    LeaderboardEntry = 117,
     Test = UINT32_MAX
 };
 

@@ -280,6 +280,19 @@ _Static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dop
                    offsetof(CNA_AudioEmitter, up) == 36U &&
                    offsetof(CNA_AudioEmitter, velocity) == 48U,
                "CNA_AudioEmitter layout must remain stable");
+_Static_assert(sizeof(CNA_LeaderboardIdentity) == 76U &&
+                  offsetof(CNA_LeaderboardIdentity, game_mode) == 8U &&
+                  offsetof(CNA_LeaderboardIdentity, key) == 12U &&
+                  CNA_LEADERBOARD_IDENTITY_KEY_CAPACITY == UINT32_C(64),
+             "CNA_LeaderboardIdentity layout must remain stable");
+_Static_assert(sizeof(CNA_LeaderboardReaderInfo) == 24U &&
+                  offsetof(CNA_LeaderboardReaderInfo, page_start) == 8U &&
+                  offsetof(CNA_LeaderboardReaderInfo, is_disposed) == 20U,
+             "CNA_LeaderboardReaderInfo layout must remain stable");
+_Static_assert(sizeof(CNA_LeaderboardEntryInfo) == 24U &&
+                  offsetof(CNA_LeaderboardEntryInfo, ranking) == 8U &&
+                  offsetof(CNA_LeaderboardEntryInfo, rating) == 16U,
+             "CNA_LeaderboardEntryInfo layout must remain stable");
 _Static_assert(sizeof(CNA_GameDefaults) == 40U &&
                   offsetof(CNA_GameDefaults, game_difficulty) == 8U &&
                   offsetof(CNA_GameDefaults, has_primary_color) == 20U &&

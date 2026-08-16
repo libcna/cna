@@ -469,7 +469,7 @@ behind it.
 | CBIND-037G6 | 129 | Complete achievements, leaderboards and property storage | ⬜ | **Split into three slices below**; this row closes when all three do. The three families are unrelated to each other but not independent in order: a leaderboard entry's columns *are* a `PropertyDictionary`, so property storage has to land before leaderboards. |
 | CBIND-037G6a | 35 | Complete achievements | ✅ | An achievement is an **owned handle over a value**: a snapshot for the numbers and flags, four count/copy pairs for the text, and one `cna_achievement_equals` behind both canonical operators — and equality is **by value across every field**, which is what makes a handle the collection answered comparable with one the caller built. The collection **copies what it is given** and **both indexers answer a copy rather than a view**, because the canonical reference points into storage a later insert or remove would invalidate and a value loses nothing by being copied; a released source handle therefore changes nothing in it. Removal here answers **whether anything was found**, unlike the gamer collection's, because the canonical operation does. `begin`/`end` are not-applicable for the settled reason. **Two absences are kept distinct**: the gamer picture is *absent* (a clear flag, an ordinary success) while the achievement picture is *unimplemented* (`NOT_SUPPORTED`), so a caller can tell "there is none" from "this runtime cannot". `cna_signed_in_gamer_get_achievements` is the one gamer-services read that finds **real data** anywhere: it answers what `CBIND-037G4`'s award persisted, and each entry carries only a key, a flag and a timestamp because no catalog exists to supply more. Strict-C `AchievementsSmoke.c`; green in all four trees (75/75) and under ASan+UBSan. |
 | CBIND-037G6b | 50 | Complete property storage and game defaults | ✅ | A variant map is the one shape a C ABI cannot carry directly, so what crosses is a **typed family plus a kind query**: `cna_property_dictionary_try_get_value_kind_ext` says which of nine kinds a slot holds, and the matching typed getter reads it. That pair replaces the canonical boxed indexers, `Add` and `Values` — those four have **no C form**, and neither do `begin`/`end` — and loses nothing that matters, since every value the canonical getters understand is one of the nine kinds. **Every typed getter checks the kind at the boundary**: a wrong-kind read is `INVALID_STATE`, which a caller can act on, rather than the generic internal failure the canonical unboxing would produce, and an unknown key is `INVALID_ARGUMENT` — a deliberately different answer. Keys are walked by index because the canonical key list and bulk copy both answer containers C cannot receive. One canonical contradiction is reported rather than corrected: **the dictionary describes itself as read-only and is nonetheless writable.** `GameDefaults` is the ordinary case beside it — a fixed value whose two colors are **optional**, with a flag beside each, because not having chosen a color differs from having chosen black. Strict-C `GamerPropertiesSmoke.c`; green in all four trees (76/76) and under ASan+UBSan. |
-| CBIND-037G6c | 44 | Complete leaderboards | ⬜ | `LeaderboardReader` (23), `LeaderboardEntry` (11), `LeaderboardIdentity` (7), `LeaderboardWriter` (2) and `Gamer::getLeaderboardWriterProperty`. **The asynchronous question is already answered**: `LeaderboardReader::Read` spins on `GamerServicesDispatcher::UpdateAsync` until its own `BeginRead` completes, so a read is the **deferred** shape `CBIND-037G5` settled, and the synchronous `Read` overloads are routes that pump the dispatcher themselves. A `LeaderboardIdentity` is a fixed POD with an inline key buffer, since its key is a short canonical string; a key too long for it is refused rather than truncated. |
+| CBIND-037G6c | 44 | Complete leaderboards | ✅ | An identity is a **value with an inline key**, so a caller builds one on the stack; a key that does not fit or has no terminator inside it is refused rather than truncated. **The plan's own note was wrong and is corrected here**: a read is *not* the deferred shape. `LeaderboardAction::getIsCompletedProperty` returns `true` unconditionally, so `BeginRead` does the whole read inline and `Read`'s spin loop exits at once — each pair is one route that then invokes the callback, exactly like the gamer's reads. Every entry this ABI hands out is a **copy**, because the canonical entry list is answered by value; its columns are the exception, since the dictionary handle **aliases the entry's own** and keeps it alive. The rating-changed hook is not a subscription — one per entry, replaced on attach, alive as long as the entry. **Two things are deliberately absent, each for a defect this slice surfaced.** The `LeaderboardWriter` has **no C form**: it captures its owning gamer's address at construction and neither it nor `Gamer` re-points that on a copy — the canonical source says so outright — and every gamer this ABI publishes *is* a copy, so its writer's owner already dangles; binding it would hand a caller a route that crashes rather than writes a score, so its 3 rows are not-applicable. And the canonical synchronous `Read` **leaks the operation it creates**, unlike `Gamer::GetProfile` which deletes its own: these routes do the same work through the same two public halves and release it, which the ASan tree caught and now guards. Strict-C `LeaderboardsSmoke.c`; green in all four trees (77/77) and under ASan+UBSan. |
 | CBIND-037G7 | 83 | Complete the avatar surfaces and close the module | ⬜ | `AvatarRenderer`, `AvatarAnimation` and `IAvatarAnimation`, `AvatarDescription`, `AvatarAppearanceEXT` and `AvatarExpression`. Last because the renderer composes the graphics module as well as this one, so it needs the bone identities from `G2`, a graphics device, and the matrix and texture surfaces the graphics slices already finished. Closing this slice closes the `gamer-services` module and the `CBIND-037` campaign. |
 
 #### CBIND-036B content implementation slices
@@ -1085,7 +1085,10 @@ and finds the first genuinely deferred operations in the ABI. The snapshot is no
 surface that finds real persisted data. The snapshot is now 5,899 implemented, 32 partial, 177
 planned and 307 not applicable. CBIND-037G6b then completes property storage and game defaults,
 carrying a variant map across the ABI as a typed family plus a kind query. The snapshot is now 5,941
-implemented, 32 partial, 127 planned and 315 not applicable.
+implemented, 32 partial, 127 planned and 315 not applicable. CBIND-037G6c then completes leaderboards, correcting the plan's own
+note about the read's shape and declining to bind a writer whose owner pointer cannot survive the copy
+every published gamer is. The snapshot is now 5,982 implemented, 32 partial, 83 planned and 318 not
+applicable.
 
 ## Handoff for the next context / Claude Code (2026-08-15)
 
@@ -1094,19 +1097,16 @@ what remains. This section carries only what a fresh context cannot infer from t
 
 ### Where things stand
 
-- Branch: `feature/binding`. `CBIND-037G6b` is the last task completed; the working tree is clean
+- Branch: `feature/binding`. `CBIND-037G6c` is the last task completed; the working tree is clean
   and every slice below is committed one-task-one-commit. `gamer-services` is the only module with
-  planned rows left — 127 of them, and 127 in the whole campaign, in two slices.
-- **Next task:** `CBIND-037G6c`, leaderboards — **44 rows**, and the last slice before the avatars.
-  `LeaderboardReader` (23), `LeaderboardEntry` (11), `LeaderboardIdentity` (7), `LeaderboardWriter`
-  (2) and `Gamer::getLeaderboardWriterProperty`. Two things are already settled and should not be
-  re-derived: a leaderboard **read is the deferred shape** (`Read` spins on
-  `GamerServicesDispatcher::UpdateAsync` until its own `BeginRead` completes, so the synchronous
-  overloads are routes that pump the dispatcher themselves), and an entry's **columns are a
-  `PropertyDictionary`** — `CBIND-037G6b` published `CreateOwnedPropertyDictionary` in
-  `CnaCApiGamerServicesDetail.hpp` precisely so this slice can hand one back. A `LeaderboardIdentity`
-  is a fixed POD with an inline key buffer, since its key is a short canonical string; a key too long
-  for it is refused rather than truncated.
+  planned rows left — **83, and they are the last 83 in the whole campaign.**
+- **Next task:** `CBIND-037G7`, the avatar surfaces — **83 rows, and the last slice of the whole
+  `CBIND-037` campaign**: `AvatarRenderer` (29), `AvatarAnimation` (13), `IAvatarAnimation` (8),
+  `AvatarDescription` (11), `AvatarAppearanceEXT` (11) and `AvatarExpression` (11). It comes last
+  because the renderer composes the graphics module as well as this one: it needs `CBIND-037G2`'s
+  bone identities, a graphics device, and the matrix and texture surfaces the graphics slices
+  finished. `CnaCApiGuide.cpp` already shows how to reach a device, a sprite batch, a font and a
+  texture from outside the graphics adapter, and `CnaCApiGraphicsDetail.hpp` carries the accessors.
 
   One thing applies to every remaining slice and should not be rediscovered per slice: **on every
   verification tree there is no signed-in gamer and no live service.** Report that as the real

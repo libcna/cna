@@ -345,6 +345,29 @@ void RaiseGamerEvent(
 
 namespace CNA::C::Detail {
 
+CNA_Result CreateBorrowedGamer(
+    Gamer* const value,
+    std::shared_ptr<void> retentionOwner,
+    CNA_Handle* const outGamer)
+{
+    if (value == nullptr || outGamer == nullptr) {
+        return InvalidInput("The borrowed Gamer factory arguments are invalid.");
+    }
+    *outGamer = CNA_INVALID_HANDLE;
+    const auto resource = std::make_shared<GamerResource>();
+    // The aliasing constructor keeps the owner alive without ever deleting the gamer itself.
+    resource->value = std::shared_ptr<Gamer>(std::move(retentionOwner), value);
+    resource->friendGamer = dynamic_cast<FriendGamer*>(value);
+    const CNA_Result result = GetRuntimeHandles().Create(ObjectKind::Gamer, resource, outGamer);
+    if (result != CNA_RESULT_SUCCESS) {
+        return Fail(
+            result,
+            ErrorCategoryForResult(result),
+            "The borrowed Gamer handle could not be created.");
+    }
+    return CNA_RESULT_SUCCESS;
+}
+
 CNA_Result BorrowAnyGamer(const CNA_Handle handle, Gamer** const outGamer)
 {
     if (outGamer == nullptr) {

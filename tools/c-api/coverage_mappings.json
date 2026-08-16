@@ -5958,6 +5958,55 @@
       "tests": "not applicable; the kind query and the typed family are tested in their place",
       "status": "not-applicable",
       "task": "CBIND-037G6b"
+    },
+    {
+      "id": "leaderboard-identity",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::LeaderboardIdentity(::((get|set)(Key|GameMode)Property|Create))?$",
+      "kinds": [
+        "struct",
+        "method"
+      ],
+      "mapping": "the fixed value `CNA_LeaderboardIdentity`, with `cna_leaderboard_identity_init` mapping both canonical creation routes -- the one without a game mode is this one with zero. The key is carried **inline** rather than as a pointer, so an identity is a value a caller can build on the stack and pass by address; the canonical keys are short names, and a key that does not fit the inline capacity is **refused rather than truncated**, as is one with no terminator inside it. The two property pairs are the structure's own fields, which is what lets a caller name a leaderboard this ABI has no identity for",
+      "tests": "`LeaderboardsSmoke.c` builds identities from two canonical keys and a non-zero game mode and asserts both fields, and pins the refusals for an undefined key, a null output, an unterminated inline key and a wrong structure version; C and C++ ABI assertions pin the layout and the inline capacity",
+      "status": "implemented",
+      "task": "CBIND-037G6c"
+    },
+    {
+      "id": "leaderboard-entry",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::LeaderboardEntry(::(getColumnsProperty|getGamerProperty|(get|set)RatingProperty|SetOnRatingChangedHookEXT|getRankingEXTProperty|operator==|operator!=|CreateInternal))?$",
+      "kinds": [
+        "class",
+        "method",
+        "operator"
+      ],
+      "mapping": "an owned handle with one info snapshot, a rating setter, a gamer query, a columns handle and `cna_leaderboard_entry_equals` behind both canonical operators -- entries compare by **gamer, rating and ranking**, not by their columns. The columns handle **aliases the entry's own dictionary**, so writing through it changes the entry, and it keeps the entry alive for as long as it names them. The rating-changed hook is `_ext` and is **not a subscription**: there is one per entry, attaching replaces whatever was there, and it lives as long as the entry rather than as long as a registration handle. An entry with no gamer is an ordinary success with the flag clear",
+      "tests": "`LeaderboardsSmoke.c` builds three entries, asserts equality is by value over the three fields and that writing a rating changes it, attaches and detaches the hook and counts exactly one call for a write while attached and none while detached, and writes through the columns handle then reads the count back through a second one to prove the dictionary is the entry's own",
+      "status": "implemented",
+      "task": "CBIND-037G6c"
+    },
+    {
+      "id": "leaderboard-reader",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::LeaderboardReader(::(getIsDisposedProperty|getCanPage(Down|Up)Property|getEntriesProperty|getLeaderboardIdentityProperty|getPageStartProperty|getTotalLeaderboardSizeProperty|Dispose|Page(Down|Up)|Begin(Read|PageDown|PageUp)|End(Read|PageDown|PageUp)|Read|CreateInternal))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "an owned handle with one info snapshot, an identity read, index-addressed entries, both paging routes and all three read shapes. **A read is complete when it returns**: the canonical asynchronous form marks itself completed before its own begin route returns, so each begin/end pair is one route that then invokes the callback -- the same shape the gamer's own reads use, not the deferred shape the guide needed. Paging reslices entries the reader already holds, so it too finishes immediately. An entry read here is a **copy**, because the canonical entry list is answered by value. One deviation is recorded rather than passed on: the canonical synchronous read **leaks the operation it creates**, unlike `Gamer::GetProfile` which deletes its own, so these routes do the same work through the same two public halves and release the operation afterwards",
+      "tests": "`LeaderboardsSmoke.c` reads a leaderboard three ways, asserts the identity round-trips, pins both entry-index refusals and the state refusal for paging past an end, and asserts each callback form runs its callback exactly once while the null-callback form still answers a reader; the leak is what the ASan tree catches if that release is ever dropped",
+      "status": "implemented",
+      "task": "CBIND-037G6c"
+    },
+    {
+      "id": "leaderboard-writer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(LeaderboardWriter(::GetLeaderboard)?|Gamer::getLeaderboardWriterProperty)$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "no C form, and the reason is a constraint the canonical source states outright: a `LeaderboardWriter` **captures its owning gamer's address at construction and neither it nor `Gamer` re-points that pointer on a copy**, so a gamer's address must never change once its writer may be used. Every gamer this ABI publishes is a copy of the value the canonical factory returns, so its writer's owner already dangles -- reaching it crashes rather than writing a score. Binding it would hand a C caller a route that cannot be used safely. The entries a **reader** hands out are still fully mapped; they are snapshots, and nothing in this ABI writes a score back",
+      "tests": "not applicable; the route is deliberately absent rather than present and unsafe",
+      "status": "not-applicable",
+      "task": "CBIND-037G6c"
     }
   ]
 }

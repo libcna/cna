@@ -259,3 +259,35 @@ rather than by the binding.
 `CNA_GameDefaults` is the ordinary case beside it: a fixed value with no behavior, so no handle. Its
 two colors are **optional**, and the structure keeps that — a flag beside each says whether the gamer
 chose one at all, which is a different thing from having chosen black.
+
+## Leaderboards, and the two things this ABI will not hand a caller
+
+A leaderboard identity is a **value with an inline key**, so a caller builds one on the stack and
+passes its address. The canonical keys are short names, and a key that does not fit the inline
+capacity — or has no terminator inside it — is refused rather than truncated.
+
+A read is **complete when the route returns**. The canonical asynchronous form marks itself completed
+before its own begin route returns, so each begin/end pair here is one route that then invokes the
+callback: the same shape the gamer's reads use, not the deferred shape the guide needed. Paging
+reslices entries the reader already holds, so it finishes immediately too. Check which of the two
+shapes a canonical operation is before binding it; both exist in this module.
+
+**Every entry this ABI hands out is a copy.** The canonical entry list is answered by value, so an
+entry read from a reader is a snapshot: writing its rating changes the snapshot. Its columns are a
+different matter — the dictionary handle **aliases the entry's own columns**, so writing through it
+does change the entry, and it keeps the entry alive for as long as it names them. The rating-changed
+hook is not a subscription: there is one per entry, attaching replaces whatever was there, and it
+lives as long as the entry.
+
+Two things are deliberately absent:
+
+- **The leaderboard writer has no C form at all.** The canonical `LeaderboardWriter` captures its
+  owning gamer's address at construction and neither it nor `Gamer` re-points that pointer on a copy —
+  the canonical source says so outright and tells callers a gamer's address must never change once its
+  writer may be used. Every gamer this ABI publishes is a copy of the value the canonical factory
+  returns, so its writer's owner already dangles. Binding it would hand a C caller a route that
+  crashes instead of writing a score, so it is not bound.
+- **The operation the canonical synchronous read leaks is not leaked here.** `LeaderboardReader::Read`
+  creates an operation through its own `BeginRead` and never deletes it, unlike `Gamer::GetProfile`
+  which deletes its own. These routes do the same work through the same two public halves and release
+  the operation afterwards; the ASan tree is what would catch it if that release were ever dropped.

@@ -3388,6 +3388,439 @@ CNA_C_API CNA_Result cna_property_dictionary_copy_key_at(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/* ---- Leaderboards ---- */
+
+/** @brief Owned handle for a leaderboard reader. */
+typedef CNA_Handle CNA_LeaderboardReaderHandle;
+
+/** @brief Owned handle for one leaderboard entry. */
+typedef CNA_Handle CNA_LeaderboardEntryHandle;
+
+/** @brief Capacity of a leaderboard identity's inline key, including no terminator. */
+#define CNA_LEADERBOARD_IDENTITY_KEY_CAPACITY UINT32_C(64)
+
+/**
+ * @brief Names one leaderboard.
+ *
+ * The key is carried inline rather than as a pointer, so an identity is a value a caller can build on
+ * the stack and pass by address. The canonical keys are short names like `"BestScoreLifeTime"`; a key
+ * that does not fit is **refused rather than truncated**.
+ */
+typedef struct CNA_LeaderboardIdentity {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Game mode this leaderboard is scoped to. */
+    int32_t game_mode;
+
+    /** @brief Key, NUL-padded; write it directly to name a leaderboard this ABI has no identity for. */
+    char key[64];
+} CNA_LeaderboardIdentity;
+
+/**
+ * @brief What a leaderboard reader reports about its page.
+ */
+typedef struct CNA_LeaderboardReaderInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Index of the first entry on this page within the whole leaderboard. */
+    int32_t page_start;
+
+    /** @brief How many entries the whole leaderboard has. */
+    int32_t total_leaderboard_size;
+
+    /** @brief How many entries this page holds. */
+    int32_t entry_count;
+
+    /** @brief Non-zero once the reader has been disposed. */
+    CNA_Bool is_disposed;
+
+    /** @brief Non-zero when there is a further page below. */
+    CNA_Bool can_page_down;
+
+    /** @brief Non-zero when there is a further page above. */
+    CNA_Bool can_page_up;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved;
+} CNA_LeaderboardReaderInfo;
+
+/**
+ * @brief What one leaderboard entry reports.
+ */
+typedef struct CNA_LeaderboardEntryInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Where the entry sits in the whole leaderboard. */
+    int32_t ranking;
+
+    /** @brief Non-zero when the entry names a gamer. */
+    CNA_Bool has_gamer;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[3];
+
+    /** @brief The entry's score. */
+    int64_t rating;
+} CNA_LeaderboardEntryInfo;
+
+/**
+ * @brief Initializes a leaderboard identity from a canonical key.
+ *
+ * @param key One of the `CNA_LEADERBOARD_KEY_*` identities.
+ * @param game_mode Game mode to scope the leaderboard to.
+ * @param out_identity Receives the identity.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for an undefined key or a null
+ *         output.
+ *
+ * This is both canonical creation routes: the one without a game mode is this one with zero.
+ */
+CNA_C_API CNA_Result cna_leaderboard_identity_init(
+    CNA_LeaderboardKey key,
+    int32_t game_mode,
+    CNA_LeaderboardIdentity* out_identity);
+
+/**
+ * @brief Reads a page of a leaderboard.
+ *
+ * @param identity Which leaderboard to read.
+ * @param page_start Index of the first entry to return.
+ * @param page_size How many entries to return.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread/IO failure.
+ *
+ * **The read is complete when this returns.** The canonical asynchronous form completes before its
+ * own begin route returns, so there is nothing here to wait for; the callback form below exists
+ * because the canonical API has one, not because anything defers.
+ *
+ * One deviation is worth knowing: the canonical synchronous read **leaks the operation it creates**,
+ * unlike every other route of its shape. This one does the same work through the same two public
+ * halves and releases the operation afterwards.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_read(
+    const CNA_LeaderboardIdentity* identity,
+    int32_t page_start,
+    int32_t page_size,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Reads a page of a leaderboard centred on one gamer.
+ *
+ * @param identity Which leaderboard to read.
+ * @param pivot_gamer Gamer handle to centre the page on; may be `CNA_INVALID_HANDLE` for none.
+ * @param page_size How many entries to return.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/IO failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_read_from_pivot(
+    const CNA_LeaderboardIdentity* identity,
+    CNA_GamerHandle pivot_gamer,
+    int32_t page_size,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Reads a page of a leaderboard restricted to a set of gamers.
+ *
+ * @param identity Which leaderboard to read.
+ * @param gamers Array of @p gamer_count gamer handles, borrowed for the duration of the call; may be
+ *        null when @p gamer_count is zero.
+ * @param gamer_count Number of gamers.
+ * @param pivot_gamer Gamer handle to centre the page on; may be `CNA_INVALID_HANDLE` for none.
+ * @param page_size How many entries to return.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread/IO failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_read_from_gamers(
+    const CNA_LeaderboardIdentity* identity,
+    const CNA_GamerHandle* gamers,
+    uint64_t gamer_count,
+    CNA_GamerHandle pivot_gamer,
+    int32_t page_size,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Reads a page and reports completion through a callback.
+ *
+ * @param identity Which leaderboard to read.
+ * @param page_start Index of the first entry to return.
+ * @param page_size How many entries to return.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return The same answers as @ref cna_leaderboard_reader_read.
+ *
+ * One synchronous call that still invokes the callback, like every other completed-on-begin pair here.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_begin_read(
+    const CNA_LeaderboardIdentity* identity,
+    int32_t page_start,
+    int32_t page_size,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Reads a page centred on one gamer and reports completion through a callback.
+ *
+ * @param identity Which leaderboard to read.
+ * @param pivot_gamer Gamer handle to centre the page on; may be `CNA_INVALID_HANDLE` for none.
+ * @param page_size How many entries to return.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return The same answers as @ref cna_leaderboard_reader_read_from_pivot.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_begin_read_from_pivot(
+    const CNA_LeaderboardIdentity* identity,
+    CNA_GamerHandle pivot_gamer,
+    int32_t page_size,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Reads a page restricted to a set of gamers and reports completion through a callback.
+ *
+ * @param identity Which leaderboard to read.
+ * @param gamers Array of @p gamer_count gamer handles, borrowed for the duration of the call; may be
+ *        null when @p gamer_count is zero.
+ * @param gamer_count Number of gamers.
+ * @param pivot_gamer Gamer handle to centre the page on; may be `CNA_INVALID_HANDLE` for none.
+ * @param page_size How many entries to return.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_reader Receives an owned reader handle, or `CNA_INVALID_HANDLE` on failure.
+ * @return The same answers as @ref cna_leaderboard_reader_read_from_gamers.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_begin_read_from_gamers(
+    const CNA_LeaderboardIdentity* identity,
+    const CNA_GamerHandle* gamers,
+    uint64_t gamer_count,
+    CNA_GamerHandle pivot_gamer,
+    int32_t page_size,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_LeaderboardReaderHandle* out_reader);
+
+/**
+ * @brief Disposes a reader and releases its handle.
+ *
+ * @param reader Owned reader handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_destroy(CNA_LeaderboardReaderHandle reader);
+
+/**
+ * @brief Reads what a reader reports about its page.
+ *
+ * @param reader Owned reader handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_get_info(
+    CNA_LeaderboardReaderHandle reader,
+    CNA_LeaderboardReaderInfo* out_info);
+
+/**
+ * @brief Reads which leaderboard a reader is reading.
+ *
+ * @param reader Owned reader handle.
+ * @param out_identity Caller-initialized structure receiving the identity.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_get_identity(
+    CNA_LeaderboardReaderHandle reader,
+    CNA_LeaderboardIdentity* out_identity);
+
+/**
+ * @brief Reads the entry at an index on the current page.
+ *
+ * @param reader Owned reader handle.
+ * @param index Zero-based index into this page.
+ * @param out_entry Receives an owned entry handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the page, or a
+ *         documented handle/thread failure.
+ *
+ * **The handle is a copy, and every leaderboard entry this ABI hands out is.** The canonical entry
+ * list is answered by value, so an entry read here is a snapshot: writing its rating changes the
+ * snapshot, not the leaderboard. The canonical writer is the only thing that writes back, and it is
+ * not reachable from this ABI — see `docs/c-api/GAMER_SERVICES.md` for why.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_get_entry_at(
+    CNA_LeaderboardReaderHandle reader,
+    int32_t index,
+    CNA_LeaderboardEntryHandle* out_entry);
+
+/**
+ * @brief Moves a reader to the next page.
+ *
+ * @param reader Owned reader handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when there is no page below, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_page_down(CNA_LeaderboardReaderHandle reader);
+
+/**
+ * @brief Moves a reader to the previous page.
+ *
+ * @param reader Owned reader handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` when there is no page above, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_page_up(CNA_LeaderboardReaderHandle reader);
+
+/**
+ * @brief Moves a reader to the next page and reports completion through a callback.
+ *
+ * @param reader Owned reader handle.
+ * @param callback Callback invoked once the page has moved; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @return The same answers as @ref cna_leaderboard_reader_page_down.
+ *
+ * Paging reslices entries the reader already holds, so there is no second read to wait for.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_begin_page_down(
+    CNA_LeaderboardReaderHandle reader,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Moves a reader to the previous page and reports completion through a callback.
+ *
+ * @param reader Owned reader handle.
+ * @param callback Callback invoked once the page has moved; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @return The same answers as @ref cna_leaderboard_reader_page_up.
+ */
+CNA_C_API CNA_Result cna_leaderboard_reader_begin_page_up(
+    CNA_LeaderboardReaderHandle reader,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Creates a leaderboard entry.
+ *
+ * @param gamer Gamer the entry belongs to; may be `CNA_INVALID_HANDLE` for none.
+ * @param rating The entry's score.
+ * @param ranking Where the entry sits in the whole leaderboard.
+ * @param out_entry Receives an owned entry handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT: the canonical factory exists so a platform layer can publish a leaderboard page.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_create_ext(
+    CNA_GamerHandle gamer,
+    int64_t rating,
+    int32_t ranking,
+    CNA_LeaderboardEntryHandle* out_entry);
+
+/**
+ * @brief Releases a leaderboard entry handle.
+ *
+ * @param entry Owned entry handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_destroy(CNA_LeaderboardEntryHandle entry);
+
+/**
+ * @brief Reads what an entry reports.
+ *
+ * @param entry Owned entry handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_get_info(
+    CNA_LeaderboardEntryHandle entry,
+    CNA_LeaderboardEntryInfo* out_info);
+
+/**
+ * @brief Writes an entry's score.
+ *
+ * @param entry Owned entry handle.
+ * @param rating New score.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * A rating-changed hook, if one is attached, runs before this returns.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_set_rating(
+    CNA_LeaderboardEntryHandle entry,
+    int64_t rating);
+
+/**
+ * @brief Reads which gamer an entry belongs to.
+ *
+ * @param entry Owned entry handle.
+ * @param out_has_gamer Receives non-zero when the entry names a gamer.
+ * @param out_gamer Receives a borrowed gamer handle when @p out_has_gamer is non-zero, and is left
+ *        exactly as the caller set it otherwise.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Availability is separate from the answer: an entry with no gamer is an ordinary success with the
+ * flag clear.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_get_gamer(
+    CNA_LeaderboardEntryHandle entry,
+    CNA_Bool* out_has_gamer,
+    CNA_GamerHandle* out_gamer);
+
+/**
+ * @brief Reads an entry's columns.
+ *
+ * @param entry Owned entry handle.
+ * @param out_columns Receives an owned dictionary handle over the entry's own columns.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The dictionary is the entry's own, not a copy: writing through it changes the entry. The canonical
+ * API has a const and a non-const accessor; C gets one handle that does both, because a C caller
+ * cannot express constness of a handle anyway.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_get_columns(
+    CNA_LeaderboardEntryHandle entry,
+    CNA_PropertyDictionaryHandle* out_columns);
+
+/**
+ * @brief Attaches a callback that runs whenever an entry's score changes.
+ *
+ * @param entry Owned entry handle.
+ * @param callback Callback invoked after each score write; pass null to detach.
+ * @param context Caller context passed back to @p callback.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT. **The hook is not a subscription**: there is one per entry, attaching replaces whatever was
+ * there, and it lives as long as the entry rather than as long as a registration handle.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_set_rating_changed_hook_ext(
+    CNA_LeaderboardEntryHandle entry,
+    CNA_GamerAsyncCallback callback,
+    void* context);
+
+/**
+ * @brief Reports whether two entries are equal.
+ *
+ * @param entry Owned entry handle.
+ * @param other Owned entry handle to compare with.
+ * @param out_equals Receives non-zero when the two are equal.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Entries compare by **gamer, rating and ranking** — not by their columns. This one route is what both
+ * canonical equality operators map to; inequality is its negation.
+ */
+CNA_C_API CNA_Result cna_leaderboard_entry_equals(
+    CNA_LeaderboardEntryHandle entry,
+    CNA_LeaderboardEntryHandle other,
+    CNA_Bool* out_equals);
+
 #ifdef __cplusplus
 }
 #endif

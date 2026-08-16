@@ -1127,16 +1127,34 @@
 > receive. And one canonical contradiction is reported rather than corrected: **the dictionary
 > describes itself as read-only and is nonetheless writable.** The inventory is now 5,941 implemented,
 > 32 partial, 127 planned and 315 N/A; all four trees green at 76/76, ASan+UBSan clean.
-> **Next: CBIND-037G6c**, leaderboards (44 rows) — both of its design questions are already answered
-> in the plan.
+> CBIND-037G6c then completes leaderboards, 44 rows — and **corrects one of the plan's own notes**. A
+> leaderboard read is *not* the deferred shape: `LeaderboardAction::getIsCompletedProperty` returns
+> `true` unconditionally, so `BeginRead` does the whole read inline and `Read`'s spin loop exits at
+> once. Each pair is one route that then invokes the callback. The lesson is to check the action's
+> completion, not the presence of a spin loop, before deciding which shape a canonical operation is.
 >
-> **State at this handoff.** Twenty-eight slices are committed on `feature/binding` since
+> **The slice surfaced two canonical defects, and each changed what got bound.** The
+> `LeaderboardWriter` has **no C form**: it captures its owning gamer's address at construction and
+> neither it nor `Gamer` re-points that on a copy — the canonical source states the constraint outright
+> — and every gamer this ABI publishes *is* a copy of the value the canonical factory returns, so its
+> writer's owner already dangles and reaching it crashes. Binding it would have handed a caller a route
+> that cannot be used safely, so its three rows are not-applicable. And the canonical synchronous
+> `Read` **leaks the operation it creates**, unlike `Gamer::GetProfile` which deletes its own; the read
+> routes do the same work through the same two public halves and release it. **The ASan tree caught
+> that leak**, which is the clearest argument yet for keeping it in the gate.
+>
+> Everything else follows the settled shapes: every entry handed out is a **copy** (the canonical list
+> is answered by value) while its columns **alias the entry itself**, and the rating-changed hook is
+> one per entry rather than a subscription. The inventory is now 5,982 implemented, 32 partial, 83
+> planned and 318 N/A; all four trees green at 77/77, ASan+UBSan clean.
+> **Next: CBIND-037G7**, the avatar surfaces (83 rows) — the **last slice of the whole campaign**.
+>
+> **State at this handoff.** Thirty slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (127) is all
-> that remains in the whole campaign**, in two slices: leaderboards and the avatars. All four
-> verification trees are green at 76/76 with the coverage gate current, and the ASan tree runs with
-> leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (83) is all
+> that remains in the whole campaign**, in one slice: the avatars. All four verification trees are
+> green at 77/77 with the coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >
