@@ -565,6 +565,44 @@ TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
         System::NotSupportedException);
 }
 
+TEST(SdlGpuCompiledEffectDrawTest, DrawsASpriteWithACompiledEffect)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    runtime->SetParameterTexture(5, &white);  // FxTexture
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);  // P0: MainVertexShader/MainPixelShader
+
+    // plan_fx.md FX-071: exercised at the level SdlGpuRenderer::QueueSprite is reachable from
+    // directly, the same way this file's ordinary-draw tests bypass Effect/GraphicsDevice, because
+    // SupportsCompiledEffects() staying false means the public Effect(device, bytecode)
+    // constructor -- and therefore SpriteBatch::Begin's public Effect* overload -- refuses before
+    // ever reaching this renderer's own runtime, exactly as it should.
+    const CNA::Internal::Renderers::SdlGpu::SdlGpuSampledTextureEXT nativeTexture =
+        CNA::Internal::Renderers::SdlGpu::ResolveSampledTextureEXT(
+            &white.GetRenderer(), "SpriteBatchCompiledEffectTest");
+    EXPECT_NO_THROW(renderer->QueueSprite(
+        white.GetRenderer(), nativeTexture, Rectangle(0, 0, 1, 1), Rectangle(0, 0, 1, 1), Color::White,
+        0.0f, Vector2::Zero, SpriteEffects::None, 0.0f, Matrix::getIdentityProperty(),
+        /*textureFilter=*/0, /*addressU=*/1, /*addressV=*/1,
+        /*customEffect=*/nullptr, /*compiledEffect=*/sdlGpuEffect));
+
+    EXPECT_NO_THROW(renderer->Present());
+}
+
 TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
 {
     GraphicsDevice device;

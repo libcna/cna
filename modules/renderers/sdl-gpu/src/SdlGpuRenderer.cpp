@@ -3135,6 +3135,22 @@ namespace CNA::Internal::Renderers::SdlGpu
             SDL_PushGPUVertexUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, uniforms.data(), sizeof(uniforms));
         }
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        else if (command.compiledEffect.vertexShader != nullptr)
+        {
+            // Uniform bytes and (for slots > 0) sampler bindings were already captured at
+            // QueueSprite time -- see CompiledEffectBinding's own doc comment for why. The
+            // trailing command.texture sampler bind below still runs unconditionally after this
+            // branch and overrides slot 0, exactly matching FNA's SpriteBatch.DrawPrimitives,
+            // which sets GraphicsDevice.Textures[0] = texture AFTER applying a custom effect's
+            // pass -- unconditionally, regardless of what the effect itself bound there.
+            BindCompiledEffectForDrawEXT(
+                pass, cmd, command.compiledEffect, sizeof(SpriteVertex),
+                SDL_GPU_PRIMITIVETYPE_TRIANGLELIST, command.depthTest, command.depthWrite,
+                command.depthFunc, command.renderState, colorFormat, sampleCount,
+                depthStencilFormat, colorTargetCount, boundPipeline);
+        }
+#endif
         else
         {
             SDL_GPUGraphicsPipeline* pipeline = GetOrCreateSpritePipeline(
@@ -3179,7 +3195,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                              int textureFilter,
                                              int addressU,
                                              int addressV,
-                                             SdlGpuEffectRenderer* customEffect)
+                                             SdlGpuEffectRenderer* customEffect,
+                                             ICompiledEffectRuntime* compiledEffect)
     {
         if (destination.Width == 0 || destination.Height == 0 || source.Width == 0 || source.Height == 0)
             return;
@@ -3268,6 +3285,34 @@ namespace CNA::Internal::Renderers::SdlGpu
             command.customEffect = customEffect;
             command.customUniforms = customEffect->SnapshotUniforms();
         }
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        // plan_fx.md FX-071: the compiled-effect counterpart of the customEffect snapshot above --
+        // captured NOW for the same reason (SpriteCommand's own doc comment) and against the same
+        // fixed SpriteVertex layout every sprite shares, since SpriteBatch's vertex data is CNA's
+        // own generated geometry, never a caller-supplied VertexDeclaration.
+        if (compiledEffect != nullptr)
+        {
+            auto* sdlGpuEffect =
+                dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(compiledEffect);
+            if (sdlGpuEffect == nullptr)
+            {
+                throw std::runtime_error(
+                    "CNA SDL_GPU: the applied compiled effect was not created by this renderer.");
+            }
+            using Microsoft::Xna::Framework::Graphics::VertexElementFormat;
+            using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
+            static const std::vector<VertexElement> kSpriteVertexDeclaration = {
+                VertexElement(offsetof(SpriteVertex, x), VertexElementFormat::Vector2,
+                             VertexElementUsage::Position, 0),
+                VertexElement(offsetof(SpriteVertex, u), VertexElementFormat::Vector2,
+                             VertexElementUsage::TextureCoordinate, 0),
+                VertexElement(offsetof(SpriteVertex, r), VertexElementFormat::Vector4,
+                             VertexElementUsage::Color, 0),
+            };
+            command.compiledEffect =
+                BuildCompiledEffectBindingEXT(*sdlGpuEffect, kSpriteVertexDeclaration);
+        }
+#endif
         const float rgba[4] = {
             static_cast<float>(color.getRProperty()) / 255.0f,
             static_cast<float>(color.getGProperty()) / 255.0f,
@@ -4892,21 +4937,24 @@ namespace CNA::Internal::Renderers::SdlGpu
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
     SDL_GPUGraphicsPipeline* SdlGpuRenderer::GetOrCreatePipelineCompiledEffect(
-        const CompiledEffectDrawCommand& command,
+        const CompiledEffectBinding& binding, Uint32 vertexStride,
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        const RenderStateSnapshot& renderState,
         SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
         SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount)
     {
-        std::size_t key = PipelineCacheKey(command.topology, command.depthTest, command.depthWrite,
-                                           command.depthFunc, colorFormat, colorTargetCount,
-                                           sampleCount, depthStencilFormat, command.renderState);
+        std::size_t key = PipelineCacheKey(topology, depthTest, depthWrite, depthFunc, colorFormat,
+                                           colorTargetCount, sampleCount, depthStencilFormat,
+                                           renderState);
         // The base key above is exactly what every stock pipeline hashes; a compiled effect's
         // shader pair and vertex layout vary per pass/effect (unlike a stock family's fixed shader
-        // fields), so those are folded in here instead of being implicit in which cache this key
-        // is looked up in.
-        key = HashCombine(key, std::hash<const void*>{}(command.vertexShader));
-        key = HashCombine(key, std::hash<const void*>{}(command.pixelShader));
-        key = HashCombine(key, static_cast<std::size_t>(command.vertexStride));
-        for (const SDL_GPUVertexAttribute& attribute : command.vertexAttributes)
+        // fields, or SpriteBatch's own fixed SpriteVertex layout), so those are folded in here
+        // instead of being implicit in which cache this key is looked up in. One cache and one key
+        // scheme serves both the ordinary-draw and SpriteBatch routes.
+        key = HashCombine(key, std::hash<const void*>{}(binding.vertexShader));
+        key = HashCombine(key, std::hash<const void*>{}(binding.pixelShader));
+        key = HashCombine(key, static_cast<std::size_t>(vertexStride));
+        for (const SDL_GPUVertexAttribute& attribute : binding.vertexAttributes)
         {
             key = HashCombine(key, static_cast<std::size_t>(attribute.location));
             key = HashCombine(key, static_cast<std::size_t>(attribute.format));
@@ -4919,25 +4967,25 @@ namespace CNA::Internal::Renderers::SdlGpu
 
         SDL_GPUVertexBufferDescription vbDesc{};
         vbDesc.slot = 0;
-        vbDesc.pitch = command.vertexStride;
+        vbDesc.pitch = vertexStride;
         vbDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
 
         std::array<SDL_GPUColorTargetDescription, 4> colorTargets{};
-        FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, command.renderState);
+        FillColorTargetDescriptions(colorTargets, colorTargetCount, colorFormat, renderState);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.vertex_shader = command.vertexShader;
-        pipelineInfo.fragment_shader = command.pixelShader;
+        pipelineInfo.vertex_shader = binding.vertexShader;
+        pipelineInfo.fragment_shader = binding.pixelShader;
         pipelineInfo.vertex_input_state.vertex_buffer_descriptions = &vbDesc;
-        pipelineInfo.vertex_input_state.num_vertex_buffers = command.vertexAttributes.empty() ? 0 : 1;
-        pipelineInfo.vertex_input_state.vertex_attributes = command.vertexAttributes.data();
+        pipelineInfo.vertex_input_state.num_vertex_buffers = binding.vertexAttributes.empty() ? 0 : 1;
+        pipelineInfo.vertex_input_state.vertex_attributes = binding.vertexAttributes.data();
         pipelineInfo.vertex_input_state.num_vertex_attributes =
-            static_cast<Uint32>(command.vertexAttributes.size());
-        pipelineInfo.primitive_type = command.topology;
-        FillRasterizerState(pipelineInfo.rasterizer_state, command.renderState, pipelineInfo.primitive_type);
+            static_cast<Uint32>(binding.vertexAttributes.size());
+        pipelineInfo.primitive_type = topology;
+        FillRasterizerState(pipelineInfo.rasterizer_state, renderState, pipelineInfo.primitive_type);
         pipelineInfo.multisample_state.sample_count = sampleCount;
-        FillDepthStencilState(pipelineInfo.depth_stencil_state, command.depthTest, command.depthWrite,
-                              command.depthFunc, command.renderState);
+        FillDepthStencilState(pipelineInfo.depth_stencil_state, depthTest, depthWrite,
+                              depthFunc, renderState);
         pipelineInfo.target_info.color_target_descriptions = colorTargets.data();
         pipelineInfo.target_info.num_color_targets = static_cast<Uint32>(colorTargetCount);
         pipelineInfo.target_info.has_depth_stencil_target =
@@ -4948,6 +4996,101 @@ namespace CNA::Internal::Renderers::SdlGpu
             CreateGraphicsPipeline(pipelineInfo,
                                    "CNA SDL_GPU: failed to create compiled-effect pipeline: ");
         return CacheGraphicsPipeline(compiledEffectPipelines_, key, pipeline);
+    }
+
+    SdlGpuRenderer::CompiledEffectBinding SdlGpuRenderer::BuildCompiledEffectBindingEXT(
+        CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
+        const std::vector<VertexElement>& declaredElements)
+    {
+        CompiledEffectBinding binding;
+        binding.vertexAttributes =
+            effect.LinkAndGetShadersEXT(declaredElements, binding.vertexShader, binding.pixelShader);
+
+        MOJOSHADER_sdlShaderData* vertexShaderData = nullptr;
+        MOJOSHADER_sdlShaderData* pixelShaderData = nullptr;
+        effect.GetBoundShadersEXT(vertexShaderData, pixelShaderData);
+        const MOJOSHADER_parseData* vertexParseData =
+            MOJOSHADER_sdlGetShaderParseData(vertexShaderData);
+        const MOJOSHADER_parseData* pixelParseData =
+            MOJOSHADER_sdlGetShaderParseData(pixelShaderData);
+        if (vertexParseData != nullptr && vertexParseData->sampler_count > 0)
+        {
+            throw System::NotSupportedException(
+                "CNA SDL_GPU: this compiled effect's vertex shader samples a texture; vertex-stage "
+                "sampling is not implemented by this renderer's compiled-effect draw route yet.");
+        }
+
+        effect.CaptureUniformSnapshotEXT(binding.vertexUniformBytes, binding.pixelUniformBytes);
+
+        // MOJOSHADER_sdlCompileShader (mojoshader_sdlgpu.c) always reports at least one sampler
+        // slot for the compiled SDL_GPU shader module -- its own maxSamplerIndex starts at 0, not
+        // -1, so a shader with zero reflected samplers still gets num_samplers=1 -- and SDL_GPU's
+        // own debug validation checks that declared count, not MojoShader's reflected usage. Every
+        // slot in [0, GetSamplerSlots) therefore needs a real binding regardless of whether this
+        // pass's reflection lists one for it; an unlisted slot gets this renderer's default white
+        // texture, which the shader never actually samples.
+        EnsureDefaultPbrTextures();  // lazily creates defaultWhiteTexture_, reused here
+        const unsigned int pixelSamplerSlotCount = MOJOSHADER_sdlGetSamplerSlots(pixelShaderData);
+        binding.pixelSamplers.resize(pixelSamplerSlotCount);
+        for (unsigned int slot = 0; slot < pixelSamplerSlotCount; ++slot)
+        {
+            CompiledEffectSamplerBinding& samplerBinding = binding.pixelSamplers[slot];
+            const MOJOSHADER_sampler* reflectedSampler = nullptr;
+            if (pixelParseData != nullptr)
+            {
+                for (int i = 0; i < pixelParseData->sampler_count; ++i)
+                {
+                    if (static_cast<unsigned int>(pixelParseData->samplers[i].index) == slot)
+                    {
+                        reflectedSampler = &pixelParseData->samplers[i];
+                        break;
+                    }
+                }
+            }
+
+            if (reflectedSampler == nullptr)
+            {
+                samplerBinding.texture = ResolveSampledTextureEXT(
+                    defaultWhiteTexture_.get(), "CompiledEffect.UnreflectedSampler");
+                continue;
+            }
+
+            Texture* boundTexture = nullptr;
+            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
+            effect.GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState);
+            if (boundTexture == nullptr)
+            {
+                const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
+                                                                      : "<unnamed>";
+                throw std::runtime_error(
+                    std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
+                    name + "', but no texture is bound to it.");
+            }
+            auto* texture2D = dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(boundTexture);
+            if (texture2D == nullptr)
+            {
+                throw System::NotSupportedException(
+                    "CNA SDL_GPU: this compiled effect binds a 3D or cube texture to a "
+                    "sampler; this renderer's compiled-effect draw route supports 2D textures "
+                    "only so far.");
+            }
+
+            samplerBinding.texture = ResolveSampledTextureEXT(&texture2D->GetRenderer(),
+                                                              "CompiledEffect.Sampler");
+            samplerBinding.filter = static_cast<int>(samplerState.getFilterProperty());
+            samplerBinding.addressU = static_cast<int>(samplerState.getAddressUProperty());
+            samplerBinding.addressV = static_cast<int>(samplerState.getAddressVProperty());
+            samplerBinding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
+        }
+
+        binding.vertexDummySamplerCount = MOJOSHADER_sdlGetSamplerSlots(vertexShaderData);
+        if (binding.vertexDummySamplerCount > 0)
+        {
+            binding.vertexDummyTexture = ResolveSampledTextureEXT(
+                defaultWhiteTexture_.get(), "CompiledEffect.VertexDummySampler");
+        }
+
+        return binding;
     }
 
     void SdlGpuRenderer::QueueCompiledEffectDraw(const IVertexBufferRenderer& vb,
@@ -4972,99 +5115,9 @@ namespace CNA::Internal::Renderers::SdlGpu
                 "VertexDeclaration; this renderer does not infer one from stride for this route.");
         }
 
-        SDL_GPUShader* vertexShader = nullptr;
-        SDL_GPUShader* pixelShader = nullptr;
-        std::vector<SDL_GPUVertexAttribute> vertexAttributes =
-            sdlGpuEffect->LinkAndGetShadersEXT(declaration.GetElements(), vertexShader, pixelShader);
-
-        MOJOSHADER_sdlShaderData* vertexShaderData = nullptr;
-        MOJOSHADER_sdlShaderData* pixelShaderData = nullptr;
-        sdlGpuEffect->GetBoundShadersEXT(vertexShaderData, pixelShaderData);
-        const MOJOSHADER_parseData* vertexParseData =
-            MOJOSHADER_sdlGetShaderParseData(vertexShaderData);
-        const MOJOSHADER_parseData* pixelParseData =
-            MOJOSHADER_sdlGetShaderParseData(pixelShaderData);
-        if (vertexParseData != nullptr && vertexParseData->sampler_count > 0)
-        {
-            throw System::NotSupportedException(
-                "CNA SDL_GPU: this compiled effect's vertex shader samples a texture; vertex-stage "
-                "sampling is not implemented by this renderer's compiled-effect draw route yet.");
-        }
-
         CompiledEffectDrawCommand command;
         command.vertexStride = static_cast<Uint32>(declaration.GetStride());
-        command.vertexAttributes = std::move(vertexAttributes);
-        command.vertexShader = vertexShader;
-        command.pixelShader = pixelShader;
-        sdlGpuEffect->CaptureUniformSnapshotEXT(command.vertexUniformBytes, command.pixelUniformBytes);
-
-        // MOJOSHADER_sdlCompileShader (mojoshader_sdlgpu.c) always reports at least one sampler
-        // slot for the compiled SDL_GPU shader module -- its own maxSamplerIndex starts at 0, not
-        // -1, so a shader with zero reflected samplers still gets num_samplers=1 -- and SDL_GPU's
-        // own debug validation checks that declared count, not MojoShader's reflected usage. Every
-        // slot in [0, GetSamplerSlots) therefore needs a real binding regardless of whether this
-        // pass's reflection lists one for it; an unlisted slot gets this renderer's default white
-        // texture, which the shader never actually samples.
-        EnsureDefaultPbrTextures();  // lazily creates defaultWhiteTexture_, reused here
-        const unsigned int pixelSamplerSlotCount = MOJOSHADER_sdlGetSamplerSlots(pixelShaderData);
-        command.pixelSamplers.resize(pixelSamplerSlotCount);
-        for (unsigned int slot = 0; slot < pixelSamplerSlotCount; ++slot)
-        {
-            CompiledEffectDrawCommand::SamplerBinding& binding = command.pixelSamplers[slot];
-            const MOJOSHADER_sampler* reflectedSampler = nullptr;
-            if (pixelParseData != nullptr)
-            {
-                for (int i = 0; i < pixelParseData->sampler_count; ++i)
-                {
-                    if (static_cast<unsigned int>(pixelParseData->samplers[i].index) == slot)
-                    {
-                        reflectedSampler = &pixelParseData->samplers[i];
-                        break;
-                    }
-                }
-            }
-
-            if (reflectedSampler == nullptr)
-            {
-                binding.texture = ResolveSampledTextureEXT(defaultWhiteTexture_.get(),
-                                                            "CompiledEffect.UnreflectedSampler");
-                continue;
-            }
-
-            Texture* boundTexture = nullptr;
-            Microsoft::Xna::Framework::Graphics::SamplerState samplerState;
-            sdlGpuEffect->GetBoundSamplerEXT(slot, /*vertexStage=*/false, boundTexture, samplerState);
-            if (boundTexture == nullptr)
-            {
-                const char* name = reflectedSampler->name != nullptr ? reflectedSampler->name
-                                                                      : "<unnamed>";
-                throw std::runtime_error(
-                    std::string("CNA SDL_GPU: this compiled effect's pixel shader samples '") +
-                    name + "', but no texture is bound to it.");
-            }
-            auto* texture2D = dynamic_cast<Microsoft::Xna::Framework::Graphics::Texture2D*>(boundTexture);
-            if (texture2D == nullptr)
-            {
-                throw System::NotSupportedException(
-                    "CNA SDL_GPU: this compiled effect binds a 3D or cube texture to a "
-                    "sampler; this renderer's compiled-effect draw route supports 2D textures "
-                    "only so far.");
-            }
-
-            binding.texture = ResolveSampledTextureEXT(&texture2D->GetRenderer(),
-                                                        "CompiledEffect.Sampler");
-            binding.filter = static_cast<int>(samplerState.getFilterProperty());
-            binding.addressU = static_cast<int>(samplerState.getAddressUProperty());
-            binding.addressV = static_cast<int>(samplerState.getAddressVProperty());
-            binding.maxAnisotropy = samplerState.getMaxAnisotropyProperty();
-        }
-
-        command.vertexDummySamplerCount = MOJOSHADER_sdlGetSamplerSlots(vertexShaderData);
-        if (command.vertexDummySamplerCount > 0)
-        {
-            command.vertexDummyTexture = ResolveSampledTextureEXT(
-                defaultWhiteTexture_.get(), "CompiledEffect.VertexDummySampler");
-        }
+        command.binding = BuildCompiledEffectBindingEXT(*sdlGpuEffect, declaration.GetElements());
 
         const int vertexStart = params.vertexStart;
         const auto& shadow = sdlGpuVb.ShadowData();
@@ -5102,6 +5155,62 @@ namespace CNA::Internal::Renderers::SdlGpu
         framePending_ = true;
     }
 
+    void SdlGpuRenderer::BindCompiledEffectForDrawEXT(
+        SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+        const CompiledEffectBinding& binding, Uint32 vertexStride,
+        SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+        const RenderStateSnapshot& renderState,
+        SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+        SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+        SDL_GPUGraphicsPipeline*& boundPipeline)
+    {
+        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineCompiledEffect(
+            binding, vertexStride, topology, depthTest, depthWrite, depthFunc, renderState,
+            colorFormat, sampleCount, depthStencilFormat, colorTargetCount);
+        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
+        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(renderState.stencilReference));
+
+        if (!binding.vertexUniformBytes.empty())
+        {
+            SDL_PushGPUVertexUniformData(cmd, 0, binding.vertexUniformBytes.data(),
+                                         static_cast<Uint32>(binding.vertexUniformBytes.size()));
+        }
+        if (!binding.pixelUniformBytes.empty())
+        {
+            SDL_PushGPUFragmentUniformData(cmd, 0, binding.pixelUniformBytes.data(),
+                                           static_cast<Uint32>(binding.pixelUniformBytes.size()));
+        }
+
+        if (binding.vertexDummySamplerCount > 0)
+        {
+            SDL_GPUTextureSamplerBinding dummyBinding{};
+            dummyBinding.texture = binding.vertexDummyTexture.texture;
+            dummyBinding.sampler =
+                GetOrCreateSampler(0, 0, 0, 4, "CompiledEffectVertexDummy");
+            std::vector<SDL_GPUTextureSamplerBinding> dummyBindings(
+                binding.vertexDummySamplerCount, dummyBinding);
+            SDL_BindGPUVertexSamplers(pass, 0, dummyBindings.data(),
+                                      static_cast<Uint32>(dummyBindings.size()));
+        }
+
+        if (!binding.pixelSamplers.empty())
+        {
+            std::vector<SDL_GPUTextureSamplerBinding> samplerBindings;
+            samplerBindings.reserve(binding.pixelSamplers.size());
+            for (const CompiledEffectSamplerBinding& samplerBinding : binding.pixelSamplers)
+            {
+                SDL_GPUTextureSamplerBinding gpuSamplerBinding{};
+                gpuSamplerBinding.texture = samplerBinding.texture.texture;
+                gpuSamplerBinding.sampler = GetOrCreateSampler(
+                    samplerBinding.filter, samplerBinding.addressU, samplerBinding.addressV,
+                    samplerBinding.maxAnisotropy, "CompiledEffect");
+                samplerBindings.push_back(gpuSamplerBinding);
+            }
+            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings.data(),
+                                        static_cast<Uint32>(samplerBindings.size()));
+        }
+    }
+
     void SdlGpuRenderer::IssueCompiledEffectDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                                  const CompiledEffectDrawCommand& command,
                                                  SDL_GPUTextureFormat colorFormat,
@@ -5110,54 +5219,15 @@ namespace CNA::Internal::Renderers::SdlGpu
                                                  int colorTargetCount,
                                                  SDL_GPUGraphicsPipeline*& boundPipeline)
     {
-        SDL_GPUGraphicsPipeline* pipeline = GetOrCreatePipelineCompiledEffect(
-            command, colorFormat, sampleCount, depthStencilFormat, colorTargetCount);
-        if (pipeline != boundPipeline) { SDL_BindGPUGraphicsPipeline(pass, pipeline); boundPipeline = pipeline; }
-        SDL_SetGPUStencilReference(pass, static_cast<Uint8>(command.renderState.stencilReference));
-
-        if (!command.vertexUniformBytes.empty())
-        {
-            SDL_PushGPUVertexUniformData(cmd, 0, command.vertexUniformBytes.data(),
-                                         static_cast<Uint32>(command.vertexUniformBytes.size()));
-        }
-        if (!command.pixelUniformBytes.empty())
-        {
-            SDL_PushGPUFragmentUniformData(cmd, 0, command.pixelUniformBytes.data(),
-                                           static_cast<Uint32>(command.pixelUniformBytes.size()));
-        }
+        BindCompiledEffectForDrawEXT(pass, cmd, command.binding, command.vertexStride,
+                                     command.topology, command.depthTest, command.depthWrite,
+                                     command.depthFunc, command.renderState, colorFormat,
+                                     sampleCount, depthStencilFormat, colorTargetCount,
+                                     boundPipeline);
 
         SDL_GPUBufferBinding vbBinding{};
         vbBinding.buffer = command.uploadedVertexBuffer;
         SDL_BindGPUVertexBuffers(pass, 0, &vbBinding, 1);
-
-        if (command.vertexDummySamplerCount > 0)
-        {
-            SDL_GPUTextureSamplerBinding dummyBinding{};
-            dummyBinding.texture = command.vertexDummyTexture.texture;
-            dummyBinding.sampler =
-                GetOrCreateSampler(0, 0, 0, 4, "CompiledEffectVertexDummy");
-            std::vector<SDL_GPUTextureSamplerBinding> dummyBindings(
-                command.vertexDummySamplerCount, dummyBinding);
-            SDL_BindGPUVertexSamplers(pass, 0, dummyBindings.data(),
-                                      static_cast<Uint32>(dummyBindings.size()));
-        }
-
-        if (!command.pixelSamplers.empty())
-        {
-            std::vector<SDL_GPUTextureSamplerBinding> samplerBindings;
-            samplerBindings.reserve(command.pixelSamplers.size());
-            for (const CompiledEffectDrawCommand::SamplerBinding& binding : command.pixelSamplers)
-            {
-                SDL_GPUTextureSamplerBinding samplerBinding{};
-                samplerBinding.texture = binding.texture.texture;
-                samplerBinding.sampler = GetOrCreateSampler(binding.filter, binding.addressU,
-                                                            binding.addressV, binding.maxAnisotropy,
-                                                            "CompiledEffect");
-                samplerBindings.push_back(samplerBinding);
-            }
-            SDL_BindGPUFragmentSamplers(pass, 0, samplerBindings.data(),
-                                        static_cast<Uint32>(samplerBindings.size()));
-        }
 
         if (command.indexed && command.uploadedIndexBuffer != nullptr)
         {
@@ -7691,9 +7761,14 @@ namespace CNA::Internal::Renderers::SdlGpu
         SdlGpuEffectRenderer* customEffectRenderer = customEffect_
             ? dynamic_cast<SdlGpuEffectRenderer*>(customEffect_->GetEffectRendererPtr())
             : nullptr;
+        // plan_fx.md FX-071: customEffect_ is either ShaderEffect-derived (resolved above) or a
+        // compiled effect (resolved here), never both -- Effect::GetCompiledRuntimePtr() returns
+        // null for a ShaderEffect and GetEffectRendererPtr() returns null for a compiled effect.
+        ICompiledEffectRuntime* compiledEffectRuntime =
+            customEffect_ ? customEffect_->GetCompiledRuntimePtr() : nullptr;
         owner_->QueueSprite(texture, nativeTexture, destinationRectangle, sourceRectangle, color, rotation,
                             origin, effects, layerDepth, transform_, textureFilter_, addressU_, addressV_,
-                            customEffectRenderer);
+                            customEffectRenderer, compiledEffectRuntime);
     }
 
 }

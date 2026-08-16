@@ -1129,6 +1129,42 @@ namespace CNA::Internal::Renderers::SdlGpu
             int maxAnisotropy = 4;
         };
 
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+        /** @brief One resolved sampler binding, in ascending slot order. CNAEXT. */
+        struct CompiledEffectSamplerBinding
+        {
+            SdlGpuSampledTextureEXT texture;
+            int filter = 0;
+            int addressU = 0;
+            int addressV = 0;
+            int maxAnisotropy = 4;
+        };
+
+        /**
+         * @brief plan_fx.md FX-071: everything a compiled-effect draw needs from the applied pass,
+         * captured once so an ordinary 3D draw (`QueueCompiledEffectDraw`) and a SpriteBatch draw
+         * (`QueueSprite`) share one implementation (`BuildCompiledEffectBindingEXT`) rather than two
+         * that could silently drift apart. `vertexShader == nullptr` means "no compiled effect was
+         * applied for this command", the same not-set convention `SpriteCommand::customEffect`
+         * already uses. See `CompiledEffectDrawCommand`'s own doc comment for why this is captured
+         * at queue time instead of read again at `Present()`.
+         */
+        struct CompiledEffectBinding
+        {
+            SDL_GPUShader* vertexShader = nullptr;
+            SDL_GPUShader* pixelShader = nullptr;
+            std::vector<SDL_GPUVertexAttribute> vertexAttributes;
+            std::vector<std::uint8_t> vertexUniformBytes;
+            std::vector<std::uint8_t> pixelUniformBytes;
+            /// MOJOSHADER_sdlGetSamplerSlots(pixelShaderData) entries -- see
+            /// CompiledEffectDrawCommand::binding's own doc comment for the unreflected-slot
+            /// dummy-binding rule this follows.
+            std::vector<CompiledEffectSamplerBinding> pixelSamplers;
+            Uint32 vertexDummySamplerCount = 0;
+            SdlGpuSampledTextureEXT vertexDummyTexture;
+        };
+#endif  // CNA_SDL_GPU_COMPILED_EFFECTS
+
         struct SpriteCommand
         {
             // REMED-GFX-152: the same resolved, lifetime-owning value every 3D binding route now
@@ -1150,6 +1186,13 @@ namespace CNA::Internal::Renderers::SdlGpu
             // retroactively change this already-queued sprite's rendered result.
             SdlGpuEffectRenderer* customEffect = nullptr;
             std::array<float, 32> customUniforms{};
+#if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
+            // plan_fx.md FX-071: the compiled-effect counterpart of customEffect/customUniforms
+            // above -- mutually exclusive with them, since one Effect is either ShaderEffect-derived
+            // or compiled, never both. compiledEffect.vertexShader == nullptr means "not used",
+            // matching customEffect's own not-set convention.
+            CompiledEffectBinding compiledEffect;
+#endif
             // SDLGPU-18/19/20: SpriteBatch.Begin() sets GraphicsDevice.BlendState/DepthStencilState/
             // RasterizerState the same way any other draw does (defaulting to
             // BlendState.AlphaBlend/DepthStencilState.None/RasterizerState.CullCounterClockwise
@@ -1511,37 +1554,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             Sint32 vertexOffset = 0;  ///< REMED-GFX-117: public baseVertex, added once per index
             SDL_GPUPrimitiveType topology = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
             Uint32 vertexStride = 0;
-            std::vector<SDL_GPUVertexAttribute> vertexAttributes;
-            /// Stable for this renderer's MojoShader context's whole lifetime (linker cache) --
-            /// see LinkAndGetShadersEXT's own doc comment.
-            SDL_GPUShader* vertexShader = nullptr;
-            SDL_GPUShader* pixelShader = nullptr;
-            std::vector<std::uint8_t> vertexUniformBytes;
-            std::vector<std::uint8_t> pixelUniformBytes;
-
-            /// One resolved sampler binding, in ascending slot order.
-            struct SamplerBinding
-            {
-                SdlGpuSampledTextureEXT texture;
-                int filter = 0;
-                int addressU = 0;
-                int addressV = 0;
-                int maxAnisotropy = 4;
-            };
-            /// MOJOSHADER_sdlGetSamplerSlots(pixelShaderData) entries, one per slot in
-            /// [0, that count) -- a slot the applied pass actually reflects a texture for holds the
-            /// real resolved binding; every other slot (MojoShader reports at least one slot even
-            /// for a shader that samples nothing at all -- see QueueCompiledEffectDraw's own doc
-            /// comment) holds this renderer's default white texture so SDL_GPU's own binding-count
-            /// validation, which checks the compiled shader module's declared count rather than
-            /// MojoShader's reflected usage, is satisfied regardless.
-            std::vector<SamplerBinding> pixelSamplers;
-            /// MOJOSHADER_sdlGetSamplerSlots(vertexShaderData) dummy bindings (see pixelSamplers'
-            /// own doc comment) -- always vertexDummyTexture, since this renderer's first
-            /// implementation does not support a compiled effect's vertex shader sampling a texture
-            /// at all (QueueCompiledEffectDraw refuses one that tries to).
-            Uint32 vertexDummySamplerCount = 0;
-            SdlGpuSampledTextureEXT vertexDummyTexture;  ///< resolved once at queue time; see above
+            /// Everything BuildCompiledEffectBindingEXT captured from the applied pass -- shaders,
+            /// vertex attributes, uniform bytes, sampler bindings. See its own doc comment for the
+            /// unreflected-sampler-slot dummy-binding rule it applies.
+            CompiledEffectBinding binding;
 
             bool depthTest = false;
             bool depthWrite = false;
@@ -1835,7 +1851,8 @@ namespace CNA::Internal::Renderers::SdlGpu
                                 int textureFilter,
                                 int addressU,
                                 int addressV,
-                                SdlGpuEffectRenderer* customEffect = nullptr);
+                                SdlGpuEffectRenderer* customEffect = nullptr,
+                                ICompiledEffectRuntime* compiledEffect = nullptr);
 
         /** @brief Returns the underlying `SDL_GPUDevice`. CNAEXT — internal use only. */
         CNAEXT [[nodiscard]] SDL_GPUDevice* Device() const { return device_; }
@@ -2094,12 +2111,31 @@ namespace CNA::Internal::Renderers::SdlGpu
         // shader pair, vertex layout and render state, all captured at queue time (see
         // CompiledEffectDrawCommand's own doc comment for why).
         [[nodiscard]] SDL_GPUGraphicsPipeline* GetOrCreatePipelineCompiledEffect(
-            const CompiledEffectDrawCommand& command,
+            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            const RenderStateSnapshot& renderState,
             SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
             SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount);
+        // Everything QueueCompiledEffectDraw and QueueSprite's compiled-effect path share: linking
+        // the applied pass's shaders against a vertex declaration, capturing its uniform bytes and
+        // resolving its sampler bindings. See CompiledEffectBinding's own doc comment.
+        [[nodiscard]] CompiledEffectBinding BuildCompiledEffectBindingEXT(
+            CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect& effect,
+            const std::vector<VertexElement>& declaredElements);
         void QueueCompiledEffectDraw(const IVertexBufferRenderer& vb, const IIndexBufferRenderer* ib,
                                      PrimitiveType primitive, int primitiveCount,
                                      const GpuDrawParams& params);
+        // Binds the pipeline, uniforms and sampler bindings a compiled-effect draw needs -- shared
+        // by IssueCompiledEffectDraw (ordinary 3D draws, its own vertex/index buffer) and
+        // IssueSpriteDraw's compiled-effect branch (the shared packed sprite vertex buffer).
+        void BindCompiledEffectForDrawEXT(
+            SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+            const CompiledEffectBinding& binding, Uint32 vertexStride,
+            SDL_GPUPrimitiveType topology, bool depthTest, bool depthWrite, int depthFunc,
+            const RenderStateSnapshot& renderState,
+            SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,
+            SDL_GPUTextureFormat depthStencilFormat, int colorTargetCount,
+            SDL_GPUGraphicsPipeline*& boundPipeline);
         void IssueCompiledEffectDraw(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                     const CompiledEffectDrawCommand& command,
                                     SDL_GPUTextureFormat colorFormat, SDL_GPUSampleCount sampleCount,

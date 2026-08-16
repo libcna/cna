@@ -11,17 +11,20 @@
  * this renderer's own share: creating and disposing the native effect against its `SDL_GPUDevice`,
  * selecting a technique, applying a pass, and resolving a texture parameter to an SDL_GPU texture.
  *
- * FX-071 (`SdlGpuRenderer::QueueCompiledEffectDraw`/`GetOrCreatePipelineCompiledEffect`/
- * `IssueCompiledEffectDraw`) now gives ordinary (non-SpriteBatch) 3D draws a real draw route:
- * `LinkAndGetShadersEXT`, `CaptureUniformSnapshotEXT` and `GetBoundSamplerEXT` below are what that
- * route captures at queue time, since this renderer defers actual GPU submission to `Present()`.
+ * FX-071 gives both ordinary 3D draws (`SdlGpuRenderer::QueueCompiledEffectDraw`/
+ * `GetOrCreatePipelineCompiledEffect`/`IssueCompiledEffectDraw`) and SpriteBatch
+ * (`QueueSprite`'s compiled-effect branch, against SpriteVertex's own fixed layout) a real draw
+ * route, sharing one implementation (`SdlGpuRenderer::BuildCompiledEffectBindingEXT`/
+ * `BindCompiledEffectForDrawEXT`) built from `LinkAndGetShadersEXT`, `CaptureUniformSnapshotEXT`
+ * and `GetBoundSamplerEXT` below -- what a draw route captures at queue time, since this renderer
+ * defers actual GPU submission to `Present()`.
  *
- * The capability this backs (`GraphicsCapability::CompiledEffects`) still stays **false**: the
- * draw route does not yet cover SpriteBatch, a compiled effect's vertex shader sampling a texture,
- * a 3D/cube (rather than 2D) sampler binding, or more than one vertex stream, and it has not yet
- * run the FX-060 shared conformance suite or a golden-pixel test -- plan_fx.md requires both before
- * the capability may report true. Each of those gaps fails a draw explicitly (see
- * `QueueCompiledEffectDraw`) rather than silently drawing with a stock shader.
+ * The capability this backs (`GraphicsCapability::CompiledEffects`) still stays **false**: a
+ * compiled effect's vertex shader sampling a texture, a 3D/cube (rather than 2D) sampler binding,
+ * and more than one vertex stream remain unsupported, and the FX-060 shared conformance suite and
+ * a golden-pixel test have not run yet -- plan_fx.md requires both before the capability may
+ * report true. Each unsupported case fails a draw explicitly (see `QueueCompiledEffectDraw`/
+ * `QueueSprite`) rather than silently drawing with a stock shader.
  */
 
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
