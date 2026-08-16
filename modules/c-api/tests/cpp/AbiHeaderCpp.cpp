@@ -157,6 +157,10 @@ static_assert(CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY == UINT32_C(1));
 static_assert(CNA_SPRITE_EFFECT_FLIP_VERTICALLY == UINT32_C(2));
 static_assert(sizeof(CNA_SpriteBatchBeginInfo) == 16U);
 static_assert(sizeof(CNA_SpriteCommand) == 72U);
+static_assert(sizeof(CNA_SpriteScaledCommand) == 72U,
+              "CNA_SpriteScaledCommand layout must remain stable");
+static_assert(offsetof(CNA_SpriteScaledCommand, scale) == 56U,
+              "CNA_SpriteScaledCommand scale must follow the origin");
 static_assert(sizeof(CNA_Key) == sizeof(uint32_t));
 static_assert(CNA_KEY_NONE == UINT32_C(0));
 static_assert(CNA_KEY_A == UINT32_C(65));

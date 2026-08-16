@@ -3150,6 +3150,7 @@
   "cna_sprite_batch_end",
   "cna_sprite_batch_get_type_name_size",
   "cna_sprite_batch_submit_many",
+  "cna_sprite_batch_submit_scaled_many",
   "cna_sprite_effect_create",
   "cna_sprite_font_copy_characters",
   "cna_sprite_font_create",
@@ -9997,6 +9998,56 @@
     ]
    },
    "size": 64
+  },
+  "CNA_SpriteScaledCommand": {
+   "align": 8,
+   "fields": {
+    "color": [
+     40,
+     4
+    ],
+    "effects": [
+     64,
+     4
+    ],
+    "layer_depth": [
+     68,
+     4
+    ],
+    "origin": [
+     48,
+     8
+    ],
+    "position": [
+     16,
+     8
+    ],
+    "rotation": [
+     44,
+     4
+    ],
+    "scale": [
+     56,
+     8
+    ],
+    "source": [
+     24,
+     16
+    ],
+    "struct_size": [
+     0,
+     4
+    ],
+    "struct_version": [
+     4,
+     4
+    ],
+    "texture": [
+     8,
+     8
+    ]
+   },
+   "size": 72
   },
   "CNA_SpriteTextCommand": {
    "align": 8,

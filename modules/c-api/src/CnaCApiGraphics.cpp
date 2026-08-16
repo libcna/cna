@@ -19,6 +19,7 @@
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
 
 #include <cmath>
+#include <optional>
 #include <cstring>
 #include <limits>
 #include <memory>
@@ -1247,6 +1248,118 @@ CNA_Result cna_sprite_batch_submit_many(
                 Color(command.color.r, command.color.g, command.color.b, command.color.a),
                 command.rotation,
                 Vector2(command.origin.x, command.origin.y),
+                static_cast<SpriteEffects>(command.effects),
+                command.layer_depth);
+        }
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
+CNA_Result cna_sprite_batch_submit_scaled_many(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteScaledCommand* const commands,
+    const uint64_t commandCount)
+{
+    return CallWithExceptionBarrier([&]() {
+        std::size_t ignoredByteCount = 0U;
+        if (const CNA_Result validationResult = CheckedElementByteCount(
+                commands,
+                commandCount,
+                sizeof(CNA_SpriteScaledCommand),
+                &ignoredByteCount);
+            validationResult != CNA_RESULT_SUCCESS) {
+            return Fail(
+                validationResult,
+                ErrorCategoryForResult(validationResult),
+                "The SpriteBatch scaled-command array is invalid.");
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (!spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch has no active begin/end interval.");
+        }
+
+        struct ResolvedScaledCommand final {
+            CNA_SpriteScaledCommand value;
+            std::shared_ptr<Texture2DResource> texture;
+        };
+
+        std::vector<ResolvedScaledCommand> resolvedCommands;
+        if (commandCount > resolvedCommands.max_size()) {
+            return Fail(
+                CNA_RESULT_OVERFLOW,
+                CNA_ERROR_CATEGORY_RANGE,
+                "The SpriteBatch command count exceeds the native collection range.");
+        }
+        resolvedCommands.reserve(static_cast<std::size_t>(commandCount));
+        constexpr CNA_SpriteEffects ValidEffects =
+            CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY | CNA_SPRITE_EFFECT_FLIP_VERTICALLY;
+        for (uint64_t index = 0U; index < commandCount; ++index) {
+            const CNA_SpriteScaledCommand& command = commands[index];
+            if (command.struct_size != sizeof(CNA_SpriteScaledCommand) ||
+                command.struct_version != StructureVersion ||
+                (command.effects & ~ValidEffects) != 0U ||
+                !std::isfinite(command.rotation) || !std::isfinite(command.layer_depth) ||
+                !std::isfinite(command.position.x) || !std::isfinite(command.position.y) ||
+                !std::isfinite(command.origin.x) || !std::isfinite(command.origin.y) ||
+                !std::isfinite(command.scale.x) || !std::isfinite(command.scale.y)) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "A SpriteBatch scaled command contains an invalid version, effect or "
+                    "floating-point value.");
+            }
+
+            std::shared_ptr<Texture2DResource> texture;
+            if (const CNA_Result result = GetTexture2D(command.texture, &texture);
+                result != CNA_RESULT_SUCCESS) {
+                return result;
+            }
+            if (texture->parentGame != spriteBatch->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_HANDLE,
+                    CNA_ERROR_CATEGORY_HANDLE,
+                    "A SpriteBatch command texture belongs to a different game.");
+            }
+            resolvedCommands.push_back(ResolvedScaledCommand{command, std::move(texture)});
+        }
+
+        for (const ResolvedScaledCommand& resolved : resolvedCommands) {
+            if (resolved.texture->activeBatchReferenceCount ==
+                std::numeric_limits<uint64_t>::max()) {
+                return Fail(
+                    CNA_RESULT_OVERFLOW,
+                    CNA_ERROR_CATEGORY_RANGE,
+                    "The SpriteBatch texture reference count overflowed.");
+            }
+            spriteBatch->retainedTextures.push_back(resolved.texture);
+            ++resolved.texture->activeBatchReferenceCount;
+            const CNA_SpriteScaledCommand& command = resolved.value;
+            // Zero width and height is the empty optional the canonical overloads take, which draws
+            // the whole texture; anything else is a real source rectangle.
+            std::optional<Rectangle> source;
+            if (command.source.width != 0 || command.source.height != 0) {
+                source = Rectangle(
+                    command.source.x,
+                    command.source.y,
+                    command.source.width,
+                    command.source.height);
+            }
+            spriteBatch->value->Draw(
+                *resolved.texture->value,
+                Vector2(command.position.x, command.position.y),
+                source,
+                Color(command.color.r, command.color.g, command.color.b, command.color.a),
+                command.rotation,
+                Vector2(command.origin.x, command.origin.y),
+                Vector2(command.scale.x, command.scale.y),
                 static_cast<SpriteEffects>(command.effects),
                 command.layer_depth);
         }

@@ -132,8 +132,10 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > partially linking the whole closure into one object and localizing everything else, with the build
 > failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
 > verdict is **ready**. `CBIND-044A` then turns the first of the remaining partial rows into a real
-> route -- both `SpriteBatch::Begin` overloads that take a custom effect -- making the snapshot
-> 6,072 implemented, 23 partial, 0 planned and 320 not-applicable.
+> route -- both `SpriteBatch::Begin` overloads that take a custom effect -- and `CBIND-044B` closes
+> the largest remaining group by adding the `Draw` family that places a sprite by position and
+> scale, as a new structure and route rather than by growing a published one. The snapshot is now
+> 6,082 implemented, 13 partial, 0 planned and 320 not-applicable.
 
 ---
 

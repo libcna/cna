@@ -305,8 +305,76 @@ static CNA_Result on_draw(
         return CNA_RESULT_INVALID_STATE;
     }
     commands[0].effects = CNA_SPRITE_EFFECT_NONE;
-    if (cna_sprite_batch_submit_many(state->sprite_batch, commands, 2U) != CNA_RESULT_SUCCESS ||
-        cna_texture2d_destroy(state->texture) != CNA_RESULT_INVALID_STATE ||
+    if (cna_sprite_batch_submit_many(state->sprite_batch, commands, 2U) != CNA_RESULT_SUCCESS) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+
+    /* CBIND-044B: the canonical Draw family that places a sprite by position and scale rather than
+       by destination rectangle. With a position, the origin is measured in source pixels and the
+       scale applies after that offset, which a destination rectangle cannot express without
+       repeating the canonical arithmetic -- so it is its own command and its own route. */
+    {
+        CNA_SpriteScaledCommand scaled[2];
+        memset(scaled, 0, sizeof(scaled));
+        scaled[0].struct_size = (uint32_t)sizeof(CNA_SpriteScaledCommand);
+        scaled[0].struct_version = UINT32_C(1);
+        scaled[0].texture = state->texture;
+        scaled[0].position.x = 4.0f;
+        scaled[0].position.y = 6.0f;
+        /* Zero width and height is the empty optional: the whole texture. */
+        scaled[0].color.r = UINT8_C(255);
+        scaled[0].color.g = UINT8_C(255);
+        scaled[0].color.b = UINT8_C(255);
+        scaled[0].color.a = UINT8_C(255);
+        scaled[0].scale.x = 3.0f;
+        scaled[0].scale.y = 3.0f;
+        scaled[1] = scaled[0];
+        /* The second names a real source rectangle and a non-uniform scale, which is the other
+           canonical overload. */
+        scaled[1].position.x = 20.0f;
+        scaled[1].source.width = 1;
+        scaled[1].source.height = 1;
+        scaled[1].scale.x = 2.0f;
+        scaled[1].scale.y = 5.0f;
+        scaled[1].rotation = 0.5f;
+        scaled[1].origin.x = 0.5f;
+        scaled[1].origin.y = 0.5f;
+        scaled[1].effects = CNA_SPRITE_EFFECT_FLIP_HORIZONTALLY;
+
+        if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, 0, 0U) !=
+                CNA_RESULT_SUCCESS ||
+            cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
+                CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* Every field is validated before anything is submitted: an undefined effect bit, a
+           non-finite scale and a handle of the wrong family are all refused. */
+        scaled[0].effects = UINT32_C(4);
+        if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        scaled[0].effects = CNA_SPRITE_EFFECT_NONE;
+        scaled[0].scale.x = 1.0f / 0.0f;
+        if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        scaled[0].scale.x = 3.0f;
+        scaled[0].struct_version = UINT32_C(2);
+        if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
+            CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        scaled[0].struct_version = UINT32_C(1);
+        scaled[0].texture = state->sprite_batch;
+        if (cna_sprite_batch_submit_scaled_many(state->sprite_batch, scaled, 2U) !=
+            CNA_RESULT_INVALID_HANDLE) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
+    if (cna_texture2d_destroy(state->texture) != CNA_RESULT_INVALID_STATE ||
         cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_SUCCESS ||
         cna_sprite_batch_end(state->sprite_batch) != CNA_RESULT_INVALID_STATE) {
         return CNA_RESULT_INVALID_STATE;

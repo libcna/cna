@@ -15,8 +15,8 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,072 | A C route exists and is tested. |
-| **Partially mapped** | 23 | A route exists but covers a stated subset. Read the next section before relying on one. |
+| Fully mapped | 6,082 | A C route exists and is tested. |
+| **Partially mapped** | 13 | A route exists but covers a stated subset. Read the next section before relying on one. |
 | **No C form** | 320 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
@@ -27,7 +27,6 @@ row says what you get and, in the same breath, what you do not.
 
 | Symbols | What exists, and what it leaves out |
 |---|---|
-| `SpriteBatch::Draw` ×10 | `cna_sprite_batch_submit_many` rectangle-texture command subset |
 | `GameServiceContainer::GetService` ×2<br/>`GameServiceContainer::RemoveService` ×2 | `cna_game_services_contains_ext` and `cna_game_services_remove_ext`, **covering the two services the runtime registers and no others**. The canonical container is keyed by C++ type identity, which has no C expression: a caller cannot name a type, so the ABI names the types instead. Removing is exposed because the canonical operation permits it and cannot be undone from C; removing what is not registered is an ordinary success |
 | `ContentManager::ContentManager` ×2 | `cna_content_manager_create`, reachable only with a null service provider: `System::IServiceProvider` is a Sharp Runtime object that the C ABI must never expose, so a C-created manager always resolves services through its explicitly set graphics device instead |
 | `ResourceContentManager::ResourceContentManager` | `cna_content_manager_create_resource`, reachable only with a null service provider for the same hard ABI reason as the base manager's service-provider constructors |

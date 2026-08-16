@@ -217,6 +217,12 @@ _Static_assert(sizeof(CNA_SpriteBatchBeginInfo) == 16U,
                "CNA_SpriteBatchBeginInfo layout must remain stable");
 _Static_assert(sizeof(CNA_SpriteCommand) == 72U,
                "CNA_SpriteCommand layout must remain stable");
+_Static_assert(sizeof(CNA_SpriteScaledCommand) == 72U,
+               "CNA_SpriteScaledCommand layout must remain stable");
+_Static_assert(offsetof(CNA_SpriteScaledCommand, position) == 16U,
+               "CNA_SpriteScaledCommand position must follow the handle");
+_Static_assert(offsetof(CNA_SpriteScaledCommand, scale) == 56U,
+               "CNA_SpriteScaledCommand scale must follow the origin");
 _Static_assert(sizeof(CNA_Key) == sizeof(uint32_t),
                "CNA_Key must have a fixed-width representation");
 _Static_assert(CNA_KEY_NONE == UINT32_C(0) && CNA_KEY_A == UINT32_C(65) &&

@@ -427,6 +427,79 @@ typedef struct CNA_SpriteCommand {
 } CNA_SpriteCommand;
 
 /**
+ * @brief Describes one textured-quad command placed by position and scale.
+ *
+ * `CNA_SpriteCommand` gives a destination rectangle; the canonical API also has a family of Draw
+ * overloads that take a **position and a scale** instead, and the two are not interchangeable: with
+ * a position, @ref origin is measured in source-texture pixels and the scale applies after that
+ * offset, which a caller cannot reproduce by computing a rectangle without repeating the canonical
+ * arithmetic. This is a separate structure rather than more fields on the first one, so nothing
+ * already compiled against `CNA_SpriteCommand` changes size or meaning.
+ *
+ * The uniform-scale overload is the case where both components of @ref scale are equal; there is no
+ * separate route for it.
+ */
+typedef struct CNA_SpriteScaledCommand {
+    /** @brief Size of this array element in bytes; version 1 requires exact current size. */
+    uint32_t struct_size;
+
+    /** @brief Version of this array element. */
+    uint32_t struct_version;
+
+    /** @brief Owned Color Texture2D handle sampled by this command. */
+    CNA_Handle texture;
+
+    /** @brief Screen-space position of the command's origin, in pixels. Must be finite. */
+    CNA_Vector2 position;
+
+    /**
+     * @brief Source rectangle in texture pixels.
+     *
+     * A rectangle of zero width **and** zero height draws the whole texture, which is what an empty
+     * optional means to the canonical call.
+     */
+    CNA_Rectangle source;
+
+    /** @brief Per-channel tint multiplied with the sampled texture. */
+    CNA_Color color;
+
+    /** @brief Clockwise rotation in radians. Must be finite. */
+    float rotation;
+
+    /** @brief Rotation and scale origin in source-texture pixels. Both components must be finite. */
+    CNA_Vector2 origin;
+
+    /** @brief Per-axis scale. Both components must be finite; equal components are uniform scale. */
+    CNA_Vector2 scale;
+
+    /** @brief Zero or more `CNA_SPRITE_EFFECT_*` bits. */
+    CNA_SpriteEffects effects;
+
+    /** @brief Sort depth consumed by depth-based modes. Must be finite. */
+    float layer_depth;
+} CNA_SpriteScaledCommand;
+
+/**
+ * @brief Submits an array of position-and-scale commands through one C ABI transition.
+ *
+ * @param sprite_batch Owned SpriteBatch handle inside a begin/end interval.
+ * @param commands Caller-owned commands copied during this call, or null only when
+ *        @p command_count is zero.
+ * @param command_count Number of elements beginning at @p commands.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` outside a begin/end interval,
+ *         `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses the requested operation, or another
+ *         documented argument/handle/thread/native failure.
+ *
+ * The same rules as @ref cna_sprite_batch_submit_many: every handle and field is validated before
+ * native submission starts, every texture must belong to the same game as the SpriteBatch and
+ * cannot be destroyed until a successful @ref cna_sprite_batch_end releases the batch's references.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_submit_scaled_many(
+    CNA_Handle sprite_batch,
+    const CNA_SpriteScaledCommand* commands,
+    uint64_t command_count);
+
+/**
  * @brief Borrows the active graphics device during a game lifecycle callback.
  *
  * @param game Callback-borrowed game handle received by the active lifecycle callback.

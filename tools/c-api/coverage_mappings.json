@@ -717,10 +717,10 @@
       "kinds": [
         "method"
       ],
-      "mapping": "`cna_sprite_batch_submit_many` rectangle-texture command subset",
-      "tests": "command validation/lifetime plus exact SDL_RENDERER pixels",
-      "status": "partial",
-      "task": "CBIND-024"
+      "mapping": "`cna_sprite_batch_submit_many` for every overload that places a sprite by **destination rectangle**, and `cna_sprite_batch_submit_scaled_many` for every overload that places it by **position and scale**. The two are separate structures rather than one grown structure, because with a position the origin is measured in source pixels and the scale applies after that offset -- a destination rectangle cannot express it without repeating the canonical arithmetic -- and because appending fields would have changed the size of a structure consumers already compile against. A source rectangle of zero width and height is the empty optional that draws the whole texture; equal scale components are the uniform-scale overload",
+      "tests": "`LifecycleSmoke.c` submits both command families, covering the whole-texture and explicit source rectangle, uniform and non-uniform scale, rotation, origin and flip effects, plus the empty array and the refusals for an undefined effect bit, a non-finite scale, an unknown struct version and a handle of the wrong family; exact SDL_RENDERER pixels and the texture-retention lifetime are covered there too, under HEADLESS, SDL_RENDERER and SOFTWARE",
+      "status": "implemented",
+      "task": "CBIND-044B"
     },
     {
       "id": "spritebatch-end",
