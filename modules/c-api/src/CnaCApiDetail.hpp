@@ -169,6 +169,7 @@ enum class ObjectKind : uint32_t {
     GamerEventRegistration = 112,
     Achievement = 113,
     AchievementCollection = 114,
+    PropertyDictionary = 115,
     Test = UINT32_MAX
 };
 

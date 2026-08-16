@@ -230,3 +230,32 @@ timestamp — no catalog exists here to supply a name, a description or a score,
 rather than inventing them. The asynchronous form is one synchronous call that still invokes the
 callback, because the canonical read marks itself complete before `Begin` returns precisely so a game
 does not spin waiting for work that is already done.
+
+## A variant map across a C ABI
+
+`PropertyDictionary` is a string-keyed map of **boxed** values, which is the one shape a C ABI cannot
+carry directly. What crosses instead is a **typed family plus a kind query**:
+
+1. `cna_property_dictionary_try_get_value_kind_ext` says whether a key is present and, if so, which of
+   nine kinds the slot holds.
+2. The matching typed getter reads it.
+
+That pair is what replaces the canonical indexers, `Add` and `Values`, all of which hand out or take a
+box — those four have **no C form**, and neither do `begin`/`end`, for the reason already settled. The
+replacement loses nothing that matters: every value the canonical getters themselves understand is one
+of the nine kinds, so a caller can reach every usable state through the typed setters.
+
+**Every typed getter checks the kind at the boundary.** Reading a text slot with the integer getter is
+`CNA_RESULT_INVALID_STATE`, not the generic internal failure the canonical unboxing would produce — a
+caller can act on "that key holds something else". An unknown key is `CNA_RESULT_INVALID_ARGUMENT`, a
+deliberately different answer.
+
+Keys are walked by index in ascending order, because the canonical key list and the canonical bulk copy
+both answer containers C cannot receive. And one canonical contradiction is reported rather than
+corrected: **the dictionary describes itself as read-only and is nonetheless writable** — setting,
+removing and clearing all work, so a caller that trusted the flag would be surprised by the routes
+rather than by the binding.
+
+`CNA_GameDefaults` is the ordinary case beside it: a fixed value with no behavior, so no handle. Its
+two colors are **optional**, and the structure keeps that — a flag beside each says whether the gamer
+chose one at all, which is a different thing from having chosen black.

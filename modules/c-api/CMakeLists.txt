@@ -30,6 +30,7 @@ add_library(cna_c_api SHARED
     src/CnaCApiGamerServices.cpp
     src/CnaCApiAchievements.cpp
     src/CnaCApiGamers.cpp
+    src/CnaCApiGamerProperties.cpp
     src/CnaCApiGuide.cpp
     src/CnaCApiGeometry.cpp
     src/CnaCApiRenderTarget.cpp
@@ -1040,6 +1041,18 @@ if(CNA_BUILD_TESTS)
             ENVIRONMENT "SDL_VIDEODRIVER=dummy"
         )
     endif()
+
+    add_executable(cna_c_api_gamer_properties_smoke
+        tests/pure_c/GamerPropertiesSmoke.c
+    )
+    set_target_properties(cna_c_api_gamer_properties_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_gamer_properties_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_gamer_properties_smoke)
+    add_test(NAME CApi_GamerPropertiesSmoke COMMAND cna_c_api_gamer_properties_smoke)
 
     add_executable(cna_c_api_achievements_smoke
         tests/pure_c/AchievementsSmoke.c

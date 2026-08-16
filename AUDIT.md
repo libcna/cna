@@ -94,8 +94,8 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > adds the avatar identities, and `CBIND-037G3` converts the six gamer-services exceptions at the
 > boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces, and
 > `CBIND-037G5` completes the guide, its dispatcher and its component, and `CBIND-037G6a`
-> completes achievements. The
-> generated inventory currently records 5,899 implemented, 32 partial, 177 planned and 307
+> completes achievements, and `CBIND-037G6b` completes property storage and game defaults. The
+> generated inventory currently records 5,941 implemented, 32 partial, 127 planned and 315
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

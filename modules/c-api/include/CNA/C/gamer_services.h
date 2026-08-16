@@ -2882,6 +2882,512 @@ CNA_C_API CNA_Result cna_signed_in_gamer_begin_get_achievements(
     void* context,
     CNA_AchievementCollectionHandle* out_achievements);
 
+/* ---- Property storage and game defaults ---- */
+
+/** @brief Owned handle for a string-keyed property dictionary. */
+typedef CNA_Handle CNA_PropertyDictionaryHandle;
+
+/**
+ * @brief Fixed-width identity for what kind of value a property slot holds.
+ *
+ * CNAEXT: the canonical dictionary stores a boxed value a C caller cannot open, so this is how a
+ * caller reading a value it did not write learns which typed getter to use.
+ */
+typedef uint32_t CNA_PropertyValueKind;
+
+/** @brief The slot holds a value none of the typed getters understands. */
+#define CNA_PROPERTY_VALUE_KIND_UNKNOWN UINT32_C(0)
+/** @brief The slot holds a date and time. */
+#define CNA_PROPERTY_VALUE_KIND_DATE_TIME UINT32_C(1)
+/** @brief The slot holds a double-precision number. */
+#define CNA_PROPERTY_VALUE_KIND_DOUBLE UINT32_C(2)
+/** @brief The slot holds a 32-bit integer. */
+#define CNA_PROPERTY_VALUE_KIND_INT32 UINT32_C(3)
+/** @brief The slot holds a 64-bit integer. */
+#define CNA_PROPERTY_VALUE_KIND_INT64 UINT32_C(4)
+/** @brief The slot holds a leaderboard outcome. */
+#define CNA_PROPERTY_VALUE_KIND_OUTCOME UINT32_C(5)
+/** @brief The slot holds a single-precision number. */
+#define CNA_PROPERTY_VALUE_KIND_SINGLE UINT32_C(6)
+/** @brief The slot holds a stream. */
+#define CNA_PROPERTY_VALUE_KIND_STREAM UINT32_C(7)
+/** @brief The slot holds text. */
+#define CNA_PROPERTY_VALUE_KIND_STRING UINT32_C(8)
+/** @brief The slot holds a time span. */
+#define CNA_PROPERTY_VALUE_KIND_TIME_SPAN UINT32_C(9)
+/** @brief Highest defined `CNA_PropertyValueKind` identity. */
+#define CNA_PROPERTY_VALUE_KIND_MAXIMUM CNA_PROPERTY_VALUE_KIND_TIME_SPAN
+
+/**
+ * @brief A gamer's game-wide preferences.
+ *
+ * The two colors are **optional**: their flags say whether the gamer chose one at all, which is a
+ * different thing from having chosen black.
+ */
+typedef struct CNA_GameDefaults {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_GAME_DIFFICULTY_*` identities. */
+    CNA_GameDifficulty game_difficulty;
+
+    /** @brief One of the `CNA_CONTROLLER_SENSITIVITY_*` identities. */
+    CNA_ControllerSensitivity controller_sensitivity;
+
+    /** @brief One of the `CNA_RACING_CAMERA_ANGLE_*` identities. */
+    CNA_RacingCameraAngle racing_camera_angle;
+
+    /** @brief Non-zero when the gamer chose a primary color. */
+    CNA_Bool has_primary_color;
+
+    /** @brief Non-zero when the gamer chose a secondary color. */
+    CNA_Bool has_secondary_color;
+
+    /** @brief Non-zero when aiming assistance is on. */
+    CNA_Bool auto_aim;
+
+    /** @brief Non-zero when auto-centering is on. */
+    CNA_Bool auto_center;
+
+    /** @brief Non-zero when movement uses the right thumbstick. */
+    CNA_Bool move_with_right_thumb_stick;
+
+    /** @brief Non-zero when the vertical axis is inverted. */
+    CNA_Bool invert_y_axis;
+
+    /** @brief Non-zero when the gamer prefers manual transmission. */
+    CNA_Bool manual_transmission;
+
+    /** @brief Non-zero when acceleration is on a button rather than a trigger. */
+    CNA_Bool accelerate_with_buttons;
+
+    /** @brief Non-zero when braking is on a button rather than a trigger. */
+    CNA_Bool brake_with_buttons;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[3];
+
+    /** @brief Primary color, meaningful only when @ref has_primary_color is non-zero. */
+    CNA_Color primary_color;
+
+    /** @brief Secondary color, meaningful only when @ref has_secondary_color is non-zero. */
+    CNA_Color secondary_color;
+} CNA_GameDefaults;
+
+/**
+ * @brief Initializes game defaults to the canonical default.
+ *
+ * @param out_defaults Receives the defaults a gamer starts with.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_game_defaults_init(CNA_GameDefaults* out_defaults);
+
+/**
+ * @brief Reads a signed-in gamer's game defaults.
+ *
+ * @param gamer Owned signed-in gamer handle.
+ * @param out_defaults Caller-initialized structure receiving the defaults.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_signed_in_gamer_get_game_defaults(
+    CNA_SignedInGamerHandle gamer,
+    CNA_GameDefaults* out_defaults);
+
+/**
+ * @brief Creates an empty property dictionary.
+ *
+ * @param out_dictionary Receives an owned dictionary handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * CNAEXT. The canonical factory takes a map of boxed values, which C cannot express; an empty
+ * dictionary plus the typed setters reaches every state that map could hold, because every value the
+ * canonical getters understand is one of the nine kinds.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_create_ext(
+    CNA_PropertyDictionaryHandle* out_dictionary);
+
+/**
+ * @brief Releases a property dictionary handle.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_destroy(CNA_PropertyDictionaryHandle dictionary);
+
+/**
+ * @brief Reports how many properties a dictionary holds.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param out_count Receives the count.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_count(
+    CNA_PropertyDictionaryHandle dictionary,
+    int32_t* out_count);
+
+/**
+ * @brief Reports whether a dictionary describes itself as read-only.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param out_is_read_only Receives the canonical answer.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * **The canonical answer is always yes, and the dictionary is nonetheless writable.** Setting,
+ * removing and clearing all work. That contradiction is canonical and is reported rather than
+ * corrected, because a caller that trusts the flag would otherwise be surprised by the routes.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_is_read_only(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_Bool* out_is_read_only);
+
+/**
+ * @brief Reports whether a dictionary holds a key.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_contains Receives non-zero when the key is present.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_contains_key(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_Bool* out_contains);
+
+/**
+ * @brief Reports whether a key is present and what kind of value it holds.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_found Receives non-zero when the key is present.
+ * @param out_kind Receives one of the `CNA_PROPERTY_VALUE_KIND_*` identities, or
+ *        `CNA_PROPERTY_VALUE_KIND_UNKNOWN` when the key is absent or holds something no typed getter
+ *        understands.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * This is what replaces reading the raw boxed value: **ask what is in the slot, then use the matching
+ * typed getter.** Availability is separate from the answer here too — a key that is not present is an
+ * ordinary success with the flag clear.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_try_get_value_kind_ext(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_Bool* out_found,
+    CNA_PropertyValueKind* out_kind);
+
+/**
+ * @brief Reads a date-and-time property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_ticks Receives the value in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an unknown key,
+ *         `CNA_RESULT_INVALID_STATE` when the slot holds a different kind, or a documented
+ *         handle/thread failure.
+ *
+ * Every typed getter checks the slot's kind **at the boundary** and refuses a mismatch, rather than
+ * letting the canonical unboxing fail into a generic internal error a caller could not act on.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_date_time_ticks(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t* out_ticks);
+
+/**
+ * @brief Reads a double-precision property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_value Receives the value.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_double(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    double* out_value);
+
+/**
+ * @brief Reads a 32-bit integer property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_value Receives the value.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_int32(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int32_t* out_value);
+
+/**
+ * @brief Reads a 64-bit integer property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_value Receives the value.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_int64(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t* out_value);
+
+/**
+ * @brief Reads a leaderboard-outcome property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_outcome Receives one of the `CNA_LEADERBOARD_OUTCOME_*` identities.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_outcome(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_LeaderboardOutcome* out_outcome);
+
+/**
+ * @brief Reads a single-precision property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_value Receives the value.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_single(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    float* out_value);
+
+/**
+ * @brief Reports the size of a stream property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_has_stream Receives non-zero when the slot holds a stream that is not null.
+ * @param out_bytes Receives the stream length in bytes, zero when there is none.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ *
+ * CNAEXT: a stream object never crosses this ABI, so what a C caller can learn about one is whether
+ * it is there and how long it is.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_stream_size_ext(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_Bool* out_has_stream,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reports the byte length of a text property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_string_size(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies a text property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or the same
+ *         refusals as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_copy_string(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Reads a time-span property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_ticks Receives the value in 100-nanosecond ticks.
+ * @return The same answers as @ref cna_property_dictionary_get_date_time_ticks.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_time_span_ticks(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t* out_ticks);
+
+/**
+ * @brief Writes a date-and-time property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param ticks Value in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * Writing replaces whatever the slot held, including a value of a different kind.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_date_time_ticks(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t ticks);
+
+/**
+ * @brief Writes a double-precision property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param value Value to store.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_double(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    double value);
+
+/**
+ * @brief Writes a 32-bit integer property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param value Value to store.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_int32(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int32_t value);
+
+/**
+ * @brief Writes a 64-bit integer property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param value Value to store.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_int64(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t value);
+
+/**
+ * @brief Writes a leaderboard-outcome property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param outcome One of the `CNA_LEADERBOARD_OUTCOME_*` identities.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_outcome(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_LeaderboardOutcome outcome);
+
+/**
+ * @brief Writes a single-precision property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param value Value to store.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_single(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    float value);
+
+/**
+ * @brief Writes a text property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param value Text to store, copied during the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_string(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_StringView value);
+
+/**
+ * @brief Writes a time-span property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param ticks Value in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_set_time_span_ticks(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    int64_t ticks);
+
+/**
+ * @brief Removes a property.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param key Property key, borrowed for the duration of the call.
+ * @param out_removed Receives non-zero when the key was present and removed.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_remove(
+    CNA_PropertyDictionaryHandle dictionary,
+    CNA_StringView key,
+    CNA_Bool* out_removed);
+
+/**
+ * @brief Empties a dictionary.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_clear(CNA_PropertyDictionaryHandle dictionary);
+
+/**
+ * @brief Reports the byte length of the key at an index.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param index Zero-based index into the dictionary's keys, which are in ascending key order.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the dictionary, or
+ *         a documented handle/thread failure.
+ *
+ * Walking the keys by index is how a C caller enumerates a dictionary: the canonical key list and the
+ * canonical bulk copy both answer containers C cannot receive.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_get_key_size_at(
+    CNA_PropertyDictionaryHandle dictionary,
+    int32_t index,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies the key at an index.
+ *
+ * @param dictionary Owned dictionary handle.
+ * @param index Zero-based index into the dictionary's keys, which are in ascending key order.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written,
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an index outside the dictionary, or a documented
+ *         handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_property_dictionary_copy_key_at(
+    CNA_PropertyDictionaryHandle dictionary,
+    int32_t index,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
 #ifdef __cplusplus
 }
 #endif

@@ -201,6 +201,17 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
                   offsetof(CNA_AudioEmitter, up) == 36U &&
                   offsetof(CNA_AudioEmitter, velocity) == 48U,
               "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_GameDefaults) == 40U &&
+                 offsetof(CNA_GameDefaults, game_difficulty) == 8U &&
+                 offsetof(CNA_GameDefaults, has_primary_color) == 20U &&
+                 offsetof(CNA_GameDefaults, primary_color) == 32U &&
+                 offsetof(CNA_GameDefaults, secondary_color) == 36U,
+            "CNA_GameDefaults layout must remain stable");
+static_assert(sizeof(CNA_PropertyValueKind) == sizeof(uint32_t) &&
+                 CNA_PROPERTY_VALUE_KIND_UNKNOWN == UINT32_C(0) &&
+                 CNA_PROPERTY_VALUE_KIND_TIME_SPAN == UINT32_C(9) &&
+                 CNA_PROPERTY_VALUE_KIND_MAXIMUM == CNA_PROPERTY_VALUE_KIND_TIME_SPAN,
+            "CNA property value kinds must remain stable");
 static_assert(sizeof(CNA_AchievementInfo) == 24U &&
                  offsetof(CNA_AchievementInfo, gamer_score) == 8U &&
                  offsetof(CNA_AchievementInfo, is_earned) == 14U &&

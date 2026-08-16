@@ -1113,16 +1113,30 @@
 > expression, so a comparison against a size the call itself sets has to be sequenced explicitly. That
 > cost one debugging round here. The inventory is now 5,899 implemented, 32 partial, 177 planned and
 > 307 N/A; all four trees green at 75/75, ASan+UBSan clean.
-> **Next: CBIND-037G6b**, property storage and game defaults (50 rows) — the design question is how a
-> C caller reads a variant it did not write.
+> CBIND-037G6b then completes property storage and game defaults, 50 rows, and answers the question a
+> variant map poses to any C ABI. What crosses is a **typed family plus a kind query**: ask which of
+> nine kinds a slot holds, then use the matching typed getter. That pair replaces the canonical boxed
+> indexers, `Add` and `Values` — all four have **no C form** — and loses nothing that matters, because
+> every value the canonical getters themselves understand is one of the nine kinds. Reach for this
+> shape whenever a canonical container holds something untyped.
 >
-> **State at this handoff.** Twenty-seven slices are committed on `feature/binding` since
+> **Every typed getter checks the kind at the boundary**, so a wrong-kind read is `INVALID_STATE`
+> (something a caller can act on) rather than the generic internal failure the canonical unboxing
+> would produce, and an unknown key is `INVALID_ARGUMENT` — a deliberately different answer. Keys are
+> walked by index because the canonical key list and bulk copy both answer containers C cannot
+> receive. And one canonical contradiction is reported rather than corrected: **the dictionary
+> describes itself as read-only and is nonetheless writable.** The inventory is now 5,941 implemented,
+> 32 partial, 127 planned and 315 N/A; all four trees green at 76/76, ASan+UBSan clean.
+> **Next: CBIND-037G6c**, leaderboards (44 rows) — both of its design questions are already answered
+> in the plan.
+>
+> **State at this handoff.** Twenty-eight slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (177) is all
-> that remains in the whole campaign**, in three slices: property storage, leaderboards, and the
-> avatars. All four verification trees are green at 75/75 with the coverage gate current, and the ASan
-> tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (127) is all
+> that remains in the whole campaign**, in two slices: leaderboards and the avatars. All four
+> verification trees are green at 76/76 with the coverage gate current, and the ASan tree runs with
+> leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >
