@@ -131,7 +131,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > static archive that publishes the same 2,720 `cna_*` names the shared library does, built by
 > partially linking the whole closure into one object and localizing everything else, with the build
 > failing outright if a non-ABI symbol survives. With both decisions delivered the release gate's
-> verdict is **ready**.
+> verdict is **ready**. `CBIND-044A` then turns the first of the remaining partial rows into a real
+> route -- both `SpriteBatch::Begin` overloads that take a custom effect -- making the snapshot
+> 6,072 implemented, 23 partial, 0 planned and 320 not-applicable.
 
 ---
 

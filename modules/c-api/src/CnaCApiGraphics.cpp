@@ -1039,6 +1039,119 @@ CNA_Result cna_sprite_batch_begin_with_states(
     });
 }
 
+CNA_Result cna_sprite_batch_begin_with_effect(
+    const CNA_Handle spriteBatchHandle,
+    const CNA_SpriteSortMode sortMode,
+    const CNA_BlendState* const blendState,
+    const CNA_SamplerState* const samplerState,
+    const CNA_DepthStencilState* const depthStencilState,
+    const CNA_RasterizerState* const rasterizerState,
+    const CNA_Handle effectHandle,
+    const CNA_Matrix* const transformMatrix)
+{
+    return CallWithExceptionBarrier([&]() {
+        SpriteSortMode nativeSortMode{};
+        Microsoft::Xna::Framework::Graphics::BlendState nativeBlendState;
+        Microsoft::Xna::Framework::Graphics::SamplerState nativeSamplerState;
+        Microsoft::Xna::Framework::Graphics::DepthStencilState nativeDepthStencilState;
+        Microsoft::Xna::Framework::Graphics::RasterizerState nativeRasterizerState;
+        if (!TryMapSpriteSortMode(sortMode, &nativeSortMode)) {
+            return Fail(
+                CNA_RESULT_INVALID_ARGUMENT,
+                CNA_ERROR_CATEGORY_ARGUMENT,
+                "The SpriteBatch sort mode is invalid.");
+        }
+        if (const CNA_Result result = ToNativeBlendState(blendState, &nativeBlendState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeSamplerState(samplerState, &nativeSamplerState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeDepthStencilState(
+                depthStencilState, &nativeDepthStencilState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (const CNA_Result result = ToNativeRasterizerState(
+                rasterizerState, &nativeRasterizerState);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+
+        // The transform is read before any handle is touched, so a non-finite matrix is refused as
+        // an argument failure rather than after the batch has begun.
+        Microsoft::Xna::Framework::Matrix nativeTransform =
+            Microsoft::Xna::Framework::Matrix::getIdentityProperty();
+        if (transformMatrix != nullptr) {
+            const float* const components = &transformMatrix->m11;
+            for (std::size_t index = 0U; index < 16U; ++index) {
+                if (!std::isfinite(components[index])) {
+                    return Fail(
+                        CNA_RESULT_INVALID_ARGUMENT,
+                        CNA_ERROR_CATEGORY_ARGUMENT,
+                        "The SpriteBatch transform matrix has a non-finite component.");
+                }
+            }
+            nativeTransform = Microsoft::Xna::Framework::Matrix(
+                transformMatrix->m11, transformMatrix->m12,
+                transformMatrix->m13, transformMatrix->m14,
+                transformMatrix->m21, transformMatrix->m22,
+                transformMatrix->m23, transformMatrix->m24,
+                transformMatrix->m31, transformMatrix->m32,
+                transformMatrix->m33, transformMatrix->m34,
+                transformMatrix->m41, transformMatrix->m42,
+                transformMatrix->m43, transformMatrix->m44);
+        }
+
+        std::shared_ptr<SpriteBatchResource> spriteBatch;
+        if (const CNA_Result result = GetSpriteBatch(spriteBatchHandle, &spriteBatch);
+            result != CNA_RESULT_SUCCESS) {
+            return result;
+        }
+        if (spriteBatch->begun) {
+            return Fail(
+                CNA_RESULT_INVALID_STATE,
+                CNA_ERROR_CATEGORY_STATE,
+                "The SpriteBatch already has an active begin/end interval.");
+        }
+
+        // CNA_INVALID_HANDLE is the default sprite effect, which is what a null Effect* means to
+        // the canonical call -- not a missing argument.
+        Microsoft::Xna::Framework::Graphics::Effect* nativeEffect = nullptr;
+        std::shared_ptr<EffectResource> effect;
+        if (effectHandle != CNA_INVALID_HANDLE) {
+            const CNA_Result effectResult =
+                GetRuntimeHandles().Get(effectHandle, ObjectKind::Effect, &effect);
+            if (effectResult != CNA_RESULT_SUCCESS) {
+                return Fail(
+                    effectResult,
+                    ErrorCategoryForResult(effectResult),
+                    "The Effect handle is invalid for this call.");
+            }
+            if (effect->parentGame != spriteBatch->parentGame) {
+                return Fail(
+                    CNA_RESULT_INVALID_ARGUMENT,
+                    CNA_ERROR_CATEGORY_ARGUMENT,
+                    "The Effect belongs to a different game than the SpriteBatch.");
+            }
+            nativeEffect = effect->value.get();
+        }
+
+        spriteBatch->value->Begin(
+            nativeSortMode,
+            nativeBlendState,
+            &nativeSamplerState,
+            &nativeDepthStencilState,
+            &nativeRasterizerState,
+            nativeEffect,
+            nativeTransform);
+        spriteBatch->begun = true;
+        return CNA_RESULT_SUCCESS;
+    });
+}
+
 CNA_Result cna_sprite_batch_submit_many(
     const CNA_Handle spriteBatchHandle,
     const CNA_SpriteCommand* const commands,

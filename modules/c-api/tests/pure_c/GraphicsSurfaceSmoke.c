@@ -146,8 +146,71 @@ static CNA_Result validate_states(CNA_Handle graphics_device)
         &rasterizer);
     if ((begin_result == CNA_RESULT_SUCCESS &&
          cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) ||
-        (begin_result != CNA_RESULT_SUCCESS && begin_result != CNA_RESULT_NOT_SUPPORTED) ||
-        cna_sprite_batch_destroy(sprite_batch) != CNA_RESULT_SUCCESS) {
+        (begin_result != CNA_RESULT_SUCCESS && begin_result != CNA_RESULT_NOT_SUPPORTED)) {
+        return CNA_RESULT_INVALID_STATE;
+    }
+
+    /* CBIND-044A: the two remaining canonical Begin overloads, expressed as one route. A null
+       transform is the identity the effect-only overload uses, and CNA_INVALID_HANDLE selects the
+       default sprite effect exactly as a null Effect* does for the canonical call. */
+    {
+        CNA_Matrix transform;
+        CNA_Result effect_begin = CNA_RESULT_SUCCESS;
+        if (cna_matrix_create_scale_scalar(2.0f, &transform) != CNA_RESULT_SUCCESS) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        effect_begin = cna_sprite_batch_begin_with_effect(
+            sprite_batch,
+            CNA_SPRITE_SORT_MODE_DEFERRED,
+            &blend,
+            &sampler,
+            &depth,
+            &rasterizer,
+            CNA_INVALID_HANDLE,
+            0);
+        if ((effect_begin == CNA_RESULT_SUCCESS &&
+             cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) ||
+            (effect_begin != CNA_RESULT_SUCCESS && effect_begin != CNA_RESULT_NOT_SUPPORTED)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        effect_begin = cna_sprite_batch_begin_with_effect(
+            sprite_batch,
+            CNA_SPRITE_SORT_MODE_DEFERRED,
+            &blend,
+            &sampler,
+            &depth,
+            &rasterizer,
+            CNA_INVALID_HANDLE,
+            &transform);
+        if ((effect_begin == CNA_RESULT_SUCCESS &&
+             cna_sprite_batch_end(sprite_batch) != CNA_RESULT_SUCCESS) ||
+            (effect_begin != CNA_RESULT_SUCCESS && effect_begin != CNA_RESULT_NOT_SUPPORTED)) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        /* A non-finite component is refused before anything is begun, so the batch stays usable. */
+        transform.m11 = 1.0f / 0.0f;
+        if (cna_sprite_batch_begin_with_effect(
+                sprite_batch,
+                CNA_SPRITE_SORT_MODE_DEFERRED,
+                &blend, &sampler, &depth, &rasterizer,
+                CNA_INVALID_HANDLE,
+                &transform) != CNA_RESULT_INVALID_ARGUMENT) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+        transform.m11 = 2.0f;
+        /* An undefined sort mode and a handle of the wrong family are refused the same way here as
+           everywhere else. */
+        if (cna_sprite_batch_begin_with_effect(
+                sprite_batch, UINT32_MAX, &blend, &sampler, &depth, &rasterizer,
+                CNA_INVALID_HANDLE, &transform) != CNA_RESULT_INVALID_ARGUMENT ||
+            cna_sprite_batch_begin_with_effect(
+                sprite_batch, CNA_SPRITE_SORT_MODE_DEFERRED, &blend, &sampler, &depth, &rasterizer,
+                sprite_batch, &transform) != CNA_RESULT_INVALID_HANDLE) {
+            return CNA_RESULT_INVALID_STATE;
+        }
+    }
+
+    if (cna_sprite_batch_destroy(sprite_batch) != CNA_RESULT_SUCCESS) {
         return CNA_RESULT_INVALID_STATE;
     }
     return CNA_RESULT_SUCCESS;

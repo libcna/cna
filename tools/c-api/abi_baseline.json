@@ -3140,6 +3140,7 @@
   "cna_sound_effect_set_name",
   "cna_sound_effect_set_speed_of_sound",
   "cna_sprite_batch_begin",
+  "cna_sprite_batch_begin_with_effect",
   "cna_sprite_batch_begin_with_states",
   "cna_sprite_batch_copy_type_name",
   "cna_sprite_batch_create",

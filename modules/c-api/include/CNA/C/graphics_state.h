@@ -4,6 +4,7 @@
 #define CNA_C_GRAPHICS_STATE_H
 
 #include "CNA/C/graphics.h"
+#include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -500,6 +501,38 @@ CNA_C_API CNA_Result cna_sprite_batch_begin_with_states(
     const CNA_SamplerState* sampler_state,
     const CNA_DepthStencilState* depth_stencil_state,
     const CNA_RasterizerState* rasterizer_state);
+
+/**
+ * @brief Begins a SpriteBatch interval with a custom effect and an optional transform.
+ *
+ * @param sprite_batch Owned SpriteBatch handle.
+ * @param sort_mode One `CNA_SPRITE_SORT_MODE_*` identity.
+ * @param blend_state Blend state, or null for AlphaBlend.
+ * @param sampler_state Sampler state, or null for LinearClamp.
+ * @param depth_stencil_state Depth-stencil state, or null for None.
+ * @param rasterizer_state Rasterizer state, or null for CullCounterClockwise.
+ * @param effect Owned Effect handle belonging to the same game, or `CNA_INVALID_HANDLE` for the
+ *        default sprite effect.
+ * @param transform_matrix Matrix applied to every sprite before projection, or null for identity.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` if already begun,
+ *         `CNA_RESULT_INVALID_ARGUMENT` for an invalid identity, structure or non-finite matrix,
+ *         `CNA_RESULT_NOT_SUPPORTED` when the renderer refuses, or a documented handle/thread
+ *         failure.
+ *
+ * The two canonical overloads this covers differ only in whether a transform is supplied, so one
+ * route expresses both: a null @p transform_matrix is the identity the effect-only overload uses.
+ * The same is true of @p effect -- `CNA_INVALID_HANDLE` selects the default sprite effect, which is
+ * what a null `Effect*` means to the canonical call.
+ */
+CNA_C_API CNA_Result cna_sprite_batch_begin_with_effect(
+    CNA_Handle sprite_batch,
+    CNA_SpriteSortMode sort_mode,
+    const CNA_BlendState* blend_state,
+    const CNA_SamplerState* sampler_state,
+    const CNA_DepthStencilState* depth_stencil_state,
+    const CNA_RasterizerState* rasterizer_state,
+    CNA_Handle effect,
+    const CNA_Matrix* transform_matrix);
 
 #ifdef __cplusplus
 }
