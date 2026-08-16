@@ -95,9 +95,12 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > boundary, and `CBIND-037G4` completes the gamer, its collections and its per-gamer surfaces, and
 > `CBIND-037G5` completes the guide, its dispatcher and its component, and `CBIND-037G6a`
 > completes achievements, and `CBIND-037G6b` completes property storage and game defaults, and `CBIND-037G6c`
-> completes leaderboards. The
-> generated inventory currently records 5,982 implemented, 32 partial, 83 planned and 318
-> not-applicable public/protected declarations. This
+> completes leaderboards, and `CBIND-037G7` completes the avatar surfaces and **closes the
+> `CBIND-037` campaign**. The
+> generated inventory currently records 6,063 implemented, 32 partial, **0 planned** and 320
+> not-applicable public/protected declarations: every public/protected declaration it tracks is now
+> either mapped, partially mapped with the subset named, or explicitly recorded as having no C form
+> with the reason. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and
 > `docs/c-api/COVERAGE.md`.

@@ -172,6 +172,9 @@ enum class ObjectKind : uint32_t {
     PropertyDictionary = 115,
     LeaderboardReader = 116,
     LeaderboardEntry = 117,
+    AvatarDescription = 118,
+    AvatarAnimation = 119,
+    AvatarRenderer = 120,
     Test = UINT32_MAX
 };
 

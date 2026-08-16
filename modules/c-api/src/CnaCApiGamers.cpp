@@ -28,6 +28,8 @@
 namespace {
 
 using CNA::C::Detail::CallWithExceptionBarrier;
+using CNA::C::Detail::GamerRegistration;
+using CNA::C::Detail::GamerRegistrationBase;
 using CNA::C::Detail::CreateBorrowedSignedInGamer;
 using CNA::C::Detail::ErrorCategoryForResult;
 using CNA::C::Detail::Fail;
@@ -74,36 +76,6 @@ struct GamerCollectionResource final {
 struct GamerEnumeratorResource final {
     std::shared_ptr<GamerCollectionResource> collection;
     int position = -1;
-};
-
-class GamerRegistrationBase {
-public:
-    GamerRegistrationBase() = default;
-    GamerRegistrationBase(const GamerRegistrationBase&) = delete;
-    GamerRegistrationBase& operator=(const GamerRegistrationBase&) = delete;
-    virtual ~GamerRegistrationBase() = default;
-};
-
-template<typename TEventArgs>
-class GamerRegistration final : public GamerRegistrationBase {
-public:
-    using Source = System::EventHandler<TEventArgs>;
-    using Token = typename Source::Token;
-
-    GamerRegistration(Source* const source, const Token token)
-        : source_(source)
-        , token_(token)
-    {
-    }
-
-    ~GamerRegistration() override
-    {
-        source_->Remove(token_);
-    }
-
-private:
-    Source* source_;
-    Token token_;
 };
 
 [[nodiscard]] CNA_Result InvalidInput(const char* const message)

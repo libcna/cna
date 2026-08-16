@@ -6007,6 +6007,75 @@
       "tests": "not applicable; the route is deliberately absent rather than present and unsafe",
       "status": "not-applicable",
       "task": "CBIND-037G6c"
+    },
+    {
+      "id": "avatar-expression-and-appearance",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarExpression(::(get|set)[A-Za-z]+Property)?|AvatarAppearanceEXT(::(get|set)[A-Za-z]+Property)?)$",
+      "kinds": [
+        "struct",
+        "method"
+      ],
+      "mapping": "the fixed values `CNA_AvatarExpression` and `CNA_AvatarAppearanceEXT`, each with an `_init` route writing the canonical default. Both canonical types carry settings and no behavior, so neither earns a handle, and every property pair is a field the caller writes directly. An expression is validated where it is *used* -- the draw and set routes refuse an undefined identity in any of its five parts rather than letting one reach the renderer",
+      "tests": "`AvatarsSmoke.c` asserts a default face is neutral in every part and that the default appearance colors are opaque, and pins the refusal for an undefined mouth identity at the point a pose is drawn; C and C++ ABI assertions pin both layouts",
+      "status": "implemented",
+      "task": "CBIND-037G7"
+    },
+    {
+      "id": "avatar-description",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarDescription(::(AvatarDescription|getIsValidProperty|getDescriptionProperty|getHeightProperty|getBodyTypeProperty|CreateRandom|BeginGetFromGamer|EndGetFromGamer|Changed))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "event"
+      ],
+      "mapping": "an owned handle with one info snapshot, a byte copy, both random factories and a gamer read that folds the canonical begin/end pair into one route that then invokes the callback -- the canonical read completes before its own begin returns. A description is **exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes** and any other length is refused, which is what the canonical constructor does; whether it is *valid* is a separate question its first byte answers. **Two fields are constant on this runtime**: the height is always zero and the body type always female, because the canonical format carries neither and the implementation says so rather than guessing -- asking for a male body still reports female. The change notification is a **static** event, so its subscription takes no description",
+      "tests": "`AvatarsSmoke.c` builds a random description and asserts its exact size, its constant height and body type, copies its bytes and refuses a too-small buffer, asserts a wrong-length description is refused while a correct one is accepted and its validity follows its first byte, reads a gamer's description and asserts the callback ran once, and subscribes to and releases the change notification",
+      "status": "implemented",
+      "task": "CBIND-037G7"
+    },
+    {
+      "id": "avatar-animation",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(IAvatarAnimation(::(~IAvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update))?|AvatarAnimation(::(AvatarAnimation|getBoneTransformsProperty|(get|set)CurrentPositionProperty|getLengthProperty|getExpressionProperty|Update|getIsDisposedProperty|Dispose|SetRealClipNameEXT|GetRealClipNameEXT))?)$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method",
+        "destructor"
+      ],
+      "mapping": "an owned handle created from a preset, with one info snapshot, a position setter, an expression read, an advance route, index-addressed bone transforms and the real-clip-name pair. **The canonical animation interface has no separate C form**: a C caller cannot implement a C++ interface, and this ABI's animation handle is the only thing that does, so the interface's rows are the animation's routes -- the renderer's draw route takes an animation handle exactly where the canonical one takes the interface. **A built-in preset carries the whole skeleton but no timeline**: its length is zero until a real clip is loaded, so advancing it moves nothing, and the binding reports that rather than implying otherwise",
+      "tests": "`AvatarsSmoke.c` asserts a preset carries the full bone count with a zero length and that advancing it leaves the position where it was, reads a bone transform and pins both index refusals, reads the expression, asserts a preset's clip name is the identity's own spelling and can be replaced, and refuses an undefined preset and a non-boolean loop flag",
+      "status": "implemented",
+      "task": "CBIND-037G7",
+      "signature_regex": "(?!\\(bool disposing\\)).*"
+    },
+    {
+      "id": "avatar-animation-protected-dispose",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::(AvatarAnimation|AvatarRenderer)::Dispose$",
+      "signature_regex": "\\(bool disposing\\)",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "no C form: the protected half of the disposal pattern is what a *subclass* overrides, and this ABI supplies no derived animation or renderer to override it from -- the same rule the gamer's and the collection's protected members already follow",
+      "tests": "not applicable",
+      "status": "not-applicable",
+      "task": "CBIND-037G7"
+    },
+    {
+      "id": "avatar-renderer",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GamerServices::AvatarRenderer(::(BoneCount|AvatarRenderer|~AvatarRenderer|(get|set)(World|View|Projection|LightColor|LightDirection|AmbientLightColor)Property|getParentBonesProperty|getBindPoseProperty|getStateProperty|getIsDisposedProperty|Draw|EnableRealRenderingEXT|IsRealRenderingEnabledEXT|SetAppearanceEXT|DrawRealEXT|Dispose))?$",
+      "kinds": [
+        "class",
+        "constant",
+        "constructor",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned handle that **keeps its description alive**, since the canonical renderer holds a raw pointer to one. The three transforms are read and written together, and so are the three lighting vectors, because a caller that wants one almost always wants the set -- each is optional, so a caller asks for only what it needs. The bones are index-addressed against `CNA_AVATAR_RENDERER_BONE_COUNT`. Both canonical draw overloads are separate routes, one taking an animation handle and one a caller-supplied pose. **The bind pose is not readable on this runtime**: the renderer's state is always unavailable, so that route always refuses with a state failure while the parent-bone hierarchy still reads -- the renderer's real state rather than a gap. The real-rendering extension takes a graphics device and a skinned model the game supplies, because no avatar asset service exists here",
+      "tests": "`AvatarsSmoke.c` creates a renderer, releases the caller's description handle and asserts the renderer still works, round-trips one transform and one lighting vector and refuses a non-finite one, walks every parent bone and pins the index refusal, asserts the bind pose refuses with a state failure while the state is unavailable, draws both ways and refuses a wrong-sized pose and an undefined expression, sets an appearance, and asserts real rendering refuses an invalid device and that drawing without a model is a state failure",
+      "status": "implemented",
+      "task": "CBIND-037G7",
+      "signature_regex": "(?!\\(bool disposing\\)).*"
     }
   ]
 }

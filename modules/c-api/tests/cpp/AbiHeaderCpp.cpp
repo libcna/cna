@@ -201,6 +201,28 @@ static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, dopp
                   offsetof(CNA_AudioEmitter, up) == 36U &&
                   offsetof(CNA_AudioEmitter, velocity) == 48U,
               "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_AvatarExpression) == 28U &&
+                 offsetof(CNA_AvatarExpression, mouth) == 8U,
+            "CNA_AvatarExpression layout must remain stable");
+static_assert(sizeof(CNA_AvatarAppearanceEXT) == 28U &&
+                 offsetof(CNA_AvatarAppearanceEXT, skin_color) == 8U,
+            "CNA_AvatarAppearanceEXT layout must remain stable");
+static_assert(sizeof(CNA_AvatarDescriptionInfo) == 32U &&
+                 offsetof(CNA_AvatarDescriptionInfo, body_type) == 8U &&
+                 offsetof(CNA_AvatarDescriptionInfo, description_byte_count) == 16U &&
+                 offsetof(CNA_AvatarDescriptionInfo, is_valid) == 24U,
+            "CNA_AvatarDescriptionInfo layout must remain stable");
+static_assert(sizeof(CNA_AvatarAnimationInfo) == 32U &&
+                 offsetof(CNA_AvatarAnimationInfo, bone_transform_count) == 8U &&
+                 offsetof(CNA_AvatarAnimationInfo, current_position_ticks) == 16U,
+            "CNA_AvatarAnimationInfo layout must remain stable");
+static_assert(sizeof(CNA_AvatarRendererInfo) == 16U &&
+                 offsetof(CNA_AvatarRendererInfo, state) == 8U &&
+                 offsetof(CNA_AvatarRendererInfo, is_disposed) == 12U,
+            "CNA_AvatarRendererInfo layout must remain stable");
+static_assert(CNA_AVATAR_RENDERER_BONE_COUNT == INT32_C(71) &&
+                 CNA_AVATAR_DESCRIPTION_BYTE_COUNT == UINT64_C(1021),
+            "CNA avatar constants must remain stable");
 static_assert(sizeof(CNA_LeaderboardIdentity) == 76U &&
                  offsetof(CNA_LeaderboardIdentity, game_mode) == 8U &&
                  offsetof(CNA_LeaderboardIdentity, key) == 12U &&

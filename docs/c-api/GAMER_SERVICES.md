@@ -291,3 +291,30 @@ Two things are deliberately absent:
   creates an operation through its own `BeginRead` and never deletes it, unlike `Gamer::GetProfile`
   which deletes its own. These routes do the same work through the same two public halves and release
   the operation afterwards; the ASan tree is what would catch it if that release were ever dropped.
+
+## Avatars, and what an avatar can honestly report
+
+An expression and an appearance are **fixed values**: both canonical types carry settings and no
+behavior, so neither earns a handle and every property is a field. An expression is validated where it
+is *used* — the draw and set routes refuse an undefined identity in any of its five parts rather than
+letting one reach the renderer.
+
+A **description** is exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes and any other length is
+refused, which is what the canonical constructor does; whether it is *valid* is a separate question
+its first byte answers. Two of its fields are constant here: the **height is always zero** and the
+**body type always female**, because the canonical format carries neither — asking for a male body
+still reports female. The binding says so rather than implying the fields mean something.
+
+An **animation** built from a preset carries the whole skeleton but **no timeline**: its length is
+zero until a real clip is loaded, so advancing it moves nothing. The canonical animation *interface*
+has no separate C form, because a C caller cannot implement a C++ interface and this ABI's animation
+handle is the only thing that does — the renderer's draw route takes an animation handle exactly where
+the canonical one takes the interface.
+
+A **renderer** keeps its description alive, since the canonical one holds a raw pointer to it.
+Transforms and lighting are read and written as sets, each part optional, because a caller that wants
+one almost always wants the group. **The bind pose is not readable on this runtime**: the renderer's
+state is always unavailable, so that route always refuses with a state failure while the parent-bone
+hierarchy still reads — the renderer's real state rather than a gap in the binding. Real rendering
+takes a graphics device and a skinned model the game supplies, because no avatar asset service exists
+here.

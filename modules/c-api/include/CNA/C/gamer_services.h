@@ -4,6 +4,7 @@
 #define CNA_C_GAMER_SERVICES_H
 
 #include "CNA/C/input.h"
+#include "CNA/C/math_values.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -3820,6 +3821,622 @@ CNA_C_API CNA_Result cna_leaderboard_entry_equals(
     CNA_LeaderboardEntryHandle entry,
     CNA_LeaderboardEntryHandle other,
     CNA_Bool* out_equals);
+
+/* ---- Avatars ---- */
+
+/** @brief Owned handle for an avatar description. */
+typedef CNA_Handle CNA_AvatarDescriptionHandle;
+
+/** @brief Owned handle for an avatar animation. */
+typedef CNA_Handle CNA_AvatarAnimationHandle;
+
+/** @brief Owned handle for an avatar renderer. */
+typedef CNA_Handle CNA_AvatarRendererHandle;
+
+/** @brief How many bones an avatar skeleton has. */
+#define CNA_AVATAR_RENDERER_BONE_COUNT INT32_C(71)
+
+/** @brief Exactly how many bytes an avatar description occupies. */
+#define CNA_AVATAR_DESCRIPTION_BYTE_COUNT UINT64_C(1021)
+
+/**
+ * @brief The face an avatar is wearing.
+ */
+typedef struct CNA_AvatarExpression {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_AVATAR_MOUTH_*` identities. */
+    CNA_AvatarMouth mouth;
+
+    /** @brief One of the `CNA_AVATAR_EYE_*` identities. */
+    CNA_AvatarEye left_eye;
+
+    /** @brief One of the `CNA_AVATAR_EYE_*` identities. */
+    CNA_AvatarEye right_eye;
+
+    /** @brief One of the `CNA_AVATAR_EYEBROW_*` identities. */
+    CNA_AvatarEyebrow left_eyebrow;
+
+    /** @brief One of the `CNA_AVATAR_EYEBROW_*` identities. */
+    CNA_AvatarEyebrow right_eyebrow;
+} CNA_AvatarExpression;
+
+/**
+ * @brief The colors an avatar is drawn in.
+ *
+ * CNAEXT: the canonical avatar description carries no colors this runtime can read, so an appearance
+ * is what a game supplies instead.
+ */
+typedef struct CNA_AvatarAppearanceEXT {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Skin color. */
+    CNA_Color skin_color;
+
+    /** @brief Hair color. */
+    CNA_Color hair_color;
+
+    /** @brief Shirt color. */
+    CNA_Color shirt_color;
+
+    /** @brief Trouser color. */
+    CNA_Color pants_color;
+
+    /** @brief Shoe color. */
+    CNA_Color shoes_color;
+} CNA_AvatarAppearanceEXT;
+
+/**
+ * @brief What an avatar description reports.
+ *
+ * **Two fields are constant on this runtime**: the height is always zero and the body type is always
+ * female, because the canonical description format carries neither and the implementation says so
+ * rather than guessing. Only validity and the bytes themselves vary.
+ */
+typedef struct CNA_AvatarDescriptionInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_AVATAR_BODY_TYPE_*` identities. */
+    CNA_AvatarBodyType body_type;
+
+    /** @brief The avatar's height. */
+    float height;
+
+    /** @brief How many bytes the description occupies. */
+    uint64_t description_byte_count;
+
+    /** @brief Non-zero when the description is usable. */
+    CNA_Bool is_valid;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[7];
+} CNA_AvatarDescriptionInfo;
+
+/**
+ * @brief What an avatar animation reports.
+ *
+ * **A built-in preset carries the whole skeleton but no timeline**: its length is zero until a real
+ * clip is loaded, so advancing it moves nothing. The bone transforms are still the full skeleton.
+ */
+typedef struct CNA_AvatarAnimationInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief How many bone transforms the animation carries. */
+    int32_t bone_transform_count;
+
+    /** @brief Non-zero once the animation has been disposed. */
+    CNA_Bool is_disposed;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[3];
+
+    /** @brief Where the animation is, in 100-nanosecond ticks. */
+    int64_t current_position_ticks;
+
+    /** @brief How long the animation is, in 100-nanosecond ticks. */
+    int64_t length_ticks;
+} CNA_AvatarAnimationInfo;
+
+/**
+ * @brief What an avatar renderer reports.
+ */
+typedef struct CNA_AvatarRendererInfo {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief One of the `CNA_AVATAR_RENDERER_STATE_*` identities. */
+    CNA_AvatarRendererState state;
+
+    /** @brief Non-zero once the renderer has been disposed. */
+    CNA_Bool is_disposed;
+
+    /** @brief Non-zero when real rendering has been enabled. */
+    CNA_Bool is_real_rendering_enabled;
+
+    /** @brief Reserved; must be zero. */
+    uint8_t reserved[2];
+} CNA_AvatarRendererInfo;
+
+/**
+ * @brief Initializes an expression to the canonical default.
+ *
+ * @param out_expression Receives a neutral face.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ */
+CNA_C_API CNA_Result cna_avatar_expression_init(CNA_AvatarExpression* out_expression);
+
+/**
+ * @brief Initializes an appearance to the canonical default.
+ *
+ * @param out_appearance Receives the default colors.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * CNAEXT.
+ */
+CNA_C_API CNA_Result cna_avatar_appearance_init_ext(CNA_AvatarAppearanceEXT* out_appearance);
+
+/**
+ * @brief Creates an avatar description from its bytes.
+ *
+ * @param description Description bytes, borrowed for the duration of the call; may be null when
+ *        @p byte_count is zero.
+ * @param byte_count Number of bytes.
+ * @param out_description Receives an owned description handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * The canonical constructor takes **exactly `CNA_AVATAR_DESCRIPTION_BYTE_COUNT` bytes** and refuses
+ * anything else, so this route does too. Whether the description is *valid* is a separate question
+ * decided by its first byte, which `cna_avatar_description_get_info` answers.
+ */
+CNA_C_API CNA_Result cna_avatar_description_create(
+    const uint8_t* description,
+    uint64_t byte_count,
+    CNA_AvatarDescriptionHandle* out_description);
+
+/**
+ * @brief Creates a random avatar description.
+ *
+ * @param out_description Receives an owned description handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_description_create_random(
+    CNA_AvatarDescriptionHandle* out_description);
+
+/**
+ * @brief Creates a random avatar description of one body type.
+ *
+ * @param body_type One of the `CNA_AVATAR_BODY_TYPE_*` identities.
+ * @param out_description Receives an owned description handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity, or a
+ *         documented thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_description_create_random_for_body_type(
+    CNA_AvatarBodyType body_type,
+    CNA_AvatarDescriptionHandle* out_description);
+
+/**
+ * @brief Reads a gamer's avatar description.
+ *
+ * @param gamer Owned gamer or signed-in gamer handle.
+ * @param callback Callback invoked once the read completes; may be null.
+ * @param context Caller context passed back to @p callback.
+ * @param out_description Receives an owned description handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed gamer, or a documented
+ *         argument/handle/thread failure.
+ *
+ * One synchronous call that still invokes the callback: the canonical read completes before its own
+ * begin route returns.
+ */
+CNA_C_API CNA_Result cna_avatar_description_get_from_gamer(
+    CNA_GamerHandle gamer,
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_AvatarDescriptionHandle* out_description);
+
+/**
+ * @brief Releases an avatar description handle.
+ *
+ * @param description Owned description handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_description_destroy(CNA_AvatarDescriptionHandle description);
+
+/**
+ * @brief Reads what an avatar description reports.
+ *
+ * @param description Owned description handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_description_get_info(
+    CNA_AvatarDescriptionHandle description,
+    CNA_AvatarDescriptionInfo* out_info);
+
+/**
+ * @brief Copies an avatar description's bytes.
+ *
+ * @param description Owned description handle.
+ * @param destination Buffer receiving the bytes; may be null when @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the byte count whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_description_copy_description(
+    CNA_AvatarDescriptionHandle description,
+    uint8_t* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Subscribes to avatar descriptions changing.
+ *
+ * @param callback Callback invoked synchronously when a description changes.
+ * @param context Caller context passed back to @p callback.
+ * @param out_registration Receives an owned registration handle, released with
+ *        `cna_gamer_unsubscribe_ext`.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/thread failure.
+ *
+ * The canonical event is **static**: it is about descriptions in general, not about one of them, so
+ * this route takes no description handle. **Nothing in this runtime raises it.**
+ */
+CNA_C_API CNA_Result cna_avatar_description_subscribe_changed_ext(
+    CNA_GamerAsyncCallback callback,
+    void* context,
+    CNA_Handle* out_registration);
+
+/**
+ * @brief Creates an avatar animation from a built-in preset.
+ *
+ * @param preset One of the `CNA_AVATAR_ANIMATION_PRESET_*` identities.
+ * @param out_animation Receives an owned animation handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an undefined identity, or a
+ *         documented thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_create(
+    CNA_AvatarAnimationPreset preset,
+    CNA_AvatarAnimationHandle* out_animation);
+
+/**
+ * @brief Disposes an animation and releases its handle.
+ *
+ * @param animation Owned animation handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_destroy(CNA_AvatarAnimationHandle animation);
+
+/**
+ * @brief Reads what an animation reports.
+ *
+ * @param animation Owned animation handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_get_info(
+    CNA_AvatarAnimationHandle animation,
+    CNA_AvatarAnimationInfo* out_info);
+
+/**
+ * @brief Moves an animation to a position.
+ *
+ * @param animation Owned animation handle.
+ * @param position_ticks Position in 100-nanosecond ticks.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_set_current_position(
+    CNA_AvatarAnimationHandle animation,
+    int64_t position_ticks);
+
+/**
+ * @brief Reads the face an animation is currently showing.
+ *
+ * @param animation Owned animation handle.
+ * @param out_expression Caller-initialized structure receiving the expression.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_get_expression(
+    CNA_AvatarAnimationHandle animation,
+    CNA_AvatarExpression* out_expression);
+
+/**
+ * @brief Advances an animation.
+ *
+ * @param animation Owned animation handle.
+ * @param elapsed_ticks How much time has passed, in 100-nanosecond ticks.
+ * @param loop Non-zero to wrap around at the end rather than stopping.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_update(
+    CNA_AvatarAnimationHandle animation,
+    int64_t elapsed_ticks,
+    CNA_Bool loop);
+
+/**
+ * @brief Reads one of an animation's bone transforms.
+ *
+ * @param animation Owned animation handle.
+ * @param index Zero-based bone index.
+ * @param out_transform Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the skeleton, or a
+ *         documented handle/thread failure.
+ *
+ * The bone transforms are read one at a time because the canonical collection is answered by value;
+ * `cna_avatar_animation_get_info` reports how many there are.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_get_bone_transform_at(
+    CNA_AvatarAnimationHandle animation,
+    int32_t index,
+    CNA_Matrix* out_transform);
+
+/**
+ * @brief Reports the byte length of an animation's real clip name.
+ *
+ * @param animation Owned animation handle.
+ * @param out_bytes Receives the length in bytes, with no terminator counted.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT: the clip name is what the real-rendering path looks up inside a loaded skinned model.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_get_real_clip_name_size_ext(
+    CNA_AvatarAnimationHandle animation,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Copies an animation's real clip name.
+ *
+ * @param animation Owned animation handle.
+ * @param destination Buffer receiving UTF-8 bytes with no terminator; may be null when
+ *        @p capacity is zero.
+ * @param capacity Destination capacity in bytes.
+ * @param out_bytes Receives the length in bytes whether or not the copy succeeded.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_BUFFER_TOO_SMALL` with nothing written, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_copy_real_clip_name_ext(
+    CNA_AvatarAnimationHandle animation,
+    char* destination,
+    uint64_t capacity,
+    uint64_t* out_bytes);
+
+/**
+ * @brief Sets an animation's real clip name.
+ *
+ * @param animation Owned animation handle.
+ * @param clip_name Clip name, copied during the call.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_animation_set_real_clip_name_ext(
+    CNA_AvatarAnimationHandle animation,
+    CNA_StringView clip_name);
+
+/**
+ * @brief Creates an avatar renderer for a description.
+ *
+ * @param description Owned description handle the renderer draws.
+ * @param use_loading_effect Non-zero to draw the loading effect while assets arrive.
+ * @param out_renderer Receives an owned renderer handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The renderer keeps the description handle alive for as long as it draws it. The canonical
+ * constructor without the loading flag is this one with it clear.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_create(
+    CNA_AvatarDescriptionHandle description,
+    CNA_Bool use_loading_effect,
+    CNA_AvatarRendererHandle* out_renderer);
+
+/**
+ * @brief Disposes a renderer and releases its handle.
+ *
+ * @param renderer Owned renderer handle.
+ * @return `CNA_RESULT_SUCCESS` or a documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_destroy(CNA_AvatarRendererHandle renderer);
+
+/**
+ * @brief Reads what a renderer reports.
+ *
+ * @param renderer Owned renderer handle.
+ * @param out_info Caller-initialized structure receiving the snapshot.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_get_info(
+    CNA_AvatarRendererHandle renderer,
+    CNA_AvatarRendererInfo* out_info);
+
+/**
+ * @brief Reads a renderer's world, view and projection transforms.
+ *
+ * @param renderer Owned renderer handle.
+ * @param out_world Receives the world transform; may be null.
+ * @param out_view Receives the view transform; may be null.
+ * @param out_projection Receives the projection transform; may be null.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * The three canonical properties are read together because a caller that wants one almost always
+ * wants the set, and each is optional so a caller can ask for only what it needs.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_get_transforms(
+    CNA_AvatarRendererHandle renderer,
+    CNA_Matrix* out_world,
+    CNA_Matrix* out_view,
+    CNA_Matrix* out_projection);
+
+/**
+ * @brief Writes a renderer's world, view and projection transforms.
+ *
+ * @param renderer Owned renderer handle.
+ * @param world New world transform; may be null to leave it alone.
+ * @param view New view transform; may be null to leave it alone.
+ * @param projection New projection transform; may be null to leave it alone.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_set_transforms(
+    CNA_AvatarRendererHandle renderer,
+    const CNA_Matrix* world,
+    const CNA_Matrix* view,
+    const CNA_Matrix* projection);
+
+/**
+ * @brief Reads a renderer's lighting.
+ *
+ * @param renderer Owned renderer handle.
+ * @param out_light_color Receives the light color; may be null.
+ * @param out_light_direction Receives the light direction; may be null.
+ * @param out_ambient_light_color Receives the ambient light color; may be null.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_get_lighting(
+    CNA_AvatarRendererHandle renderer,
+    CNA_Vector3* out_light_color,
+    CNA_Vector3* out_light_direction,
+    CNA_Vector3* out_ambient_light_color);
+
+/**
+ * @brief Writes a renderer's lighting.
+ *
+ * @param renderer Owned renderer handle.
+ * @param light_color New light color; may be null to leave it alone.
+ * @param light_direction New light direction; may be null to leave it alone.
+ * @param ambient_light_color New ambient light color; may be null to leave it alone.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a non-finite component, or a
+ *         documented handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_set_lighting(
+    CNA_AvatarRendererHandle renderer,
+    const CNA_Vector3* light_color,
+    const CNA_Vector3* light_direction,
+    const CNA_Vector3* ambient_light_color);
+
+/**
+ * @brief Reads the index of a bone's parent.
+ *
+ * @param renderer Owned renderer handle.
+ * @param index Zero-based bone index.
+ * @param out_parent_index Receives the parent's index, or -1 for a root bone.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the skeleton, or a
+ *         documented handle/thread failure.
+ *
+ * The skeleton always has `CNA_AVATAR_RENDERER_BONE_COUNT` bones.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_get_parent_bone_at(
+    CNA_AvatarRendererHandle renderer,
+    int32_t index,
+    int32_t* out_parent_index);
+
+/**
+ * @brief Reads a bone's bind-pose transform.
+ *
+ * @param renderer Owned renderer handle.
+ * @param index Zero-based bone index.
+ * @param out_transform Receives the transform.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for an index outside the skeleton,
+ *         `CNA_RESULT_INVALID_STATE` while the avatar's assets are unavailable or the renderer has
+ *         been disposed, or a documented handle/thread failure.
+ *
+ * **On this runtime the state is always unavailable**, so this route always refuses — the parent-bone
+ * hierarchy is readable and the bind pose is not. That is the renderer's real state rather than a gap
+ * in the binding.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_get_bind_pose_at(
+    CNA_AvatarRendererHandle renderer,
+    int32_t index,
+    CNA_Matrix* out_transform);
+
+/**
+ * @brief Draws an avatar in an animation's current pose.
+ *
+ * @param renderer Owned renderer handle.
+ * @param animation Owned animation handle.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed renderer, or a documented
+ *         argument/handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_draw_animation(
+    CNA_AvatarRendererHandle renderer,
+    CNA_AvatarAnimationHandle animation);
+
+/**
+ * @brief Draws an avatar in a pose the caller supplies.
+ *
+ * @param renderer Owned renderer handle.
+ * @param bones Array of @p bone_count transforms, borrowed for the duration of the call.
+ * @param bone_count Number of transforms; must be `CNA_AVATAR_RENDERER_BONE_COUNT`.
+ * @param expression The face to draw.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_ARGUMENT` for a wrong bone count or an invalid
+ *         expression, `CNA_RESULT_INVALID_STATE` for a disposed renderer, or a documented
+ *         handle/thread failure.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_draw_bones(
+    CNA_AvatarRendererHandle renderer,
+    const CNA_Matrix* bones,
+    uint64_t bone_count,
+    const CNA_AvatarExpression* expression);
+
+/**
+ * @brief Enables drawing a real skinned model rather than the placeholder.
+ *
+ * @param renderer Owned renderer handle.
+ * @param device Graphics device handle.
+ * @param model Skinned model handle to draw.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed renderer, or a documented
+ *         argument/handle/thread failure.
+ *
+ * CNAEXT: no avatar asset service exists here, so a game supplies its own model.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_enable_real_rendering_ext(
+    CNA_AvatarRendererHandle renderer,
+    CNA_Handle device,
+    CNA_Handle model);
+
+/**
+ * @brief Sets the colors a real-rendered avatar is drawn in.
+ *
+ * @param renderer Owned renderer handle.
+ * @param appearance The colors to use.
+ * @return `CNA_RESULT_SUCCESS` or a documented argument/handle/thread failure.
+ *
+ * CNAEXT.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_set_appearance_ext(
+    CNA_AvatarRendererHandle renderer,
+    const CNA_AvatarAppearanceEXT* appearance);
+
+/**
+ * @brief Draws the real skinned model at a point in a named clip.
+ *
+ * @param renderer Owned renderer handle.
+ * @param animation_clip_name Clip to draw, borrowed for the duration of the call.
+ * @param position_ticks Position within the clip, in 100-nanosecond ticks.
+ * @param loop Non-zero to wrap around at the end of the clip.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed renderer or one with no
+ *         real model, or a documented argument/handle/thread failure.
+ *
+ * CNAEXT.
+ */
+CNA_C_API CNA_Result cna_avatar_renderer_draw_real_ext(
+    CNA_AvatarRendererHandle renderer,
+    CNA_StringView animation_clip_name,
+    int64_t position_ticks,
+    CNA_Bool loop);
 
 #ifdef __cplusplus
 }

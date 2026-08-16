@@ -5,6 +5,9 @@
 
 #include "CnaCApiDetail.hpp"
 
+#include "System/EventArgs.hpp"
+#include "System/EventHandler.hpp"
+
 #include <memory>
 
 namespace Microsoft::Xna::Framework::GamerServices {
@@ -44,6 +47,39 @@ struct PropertyDictionaryResource final {
 
 // The guide takes gamers it did not create, and its routes accept either handle kind for the same
 // reason every `cna_gamer_*` route does: the canonical parameter is the base both derive from.
+// Every gamer-services event registration -- sign-in, sign-out, title update, avatar change -- is
+// released through one `cna_gamer_unsubscribe_ext` route, so every one of them must be stored under
+// the same C++ type: the handle registry casts a slot straight back to the type the caller names.
+class GamerRegistrationBase {
+public:
+    GamerRegistrationBase() = default;
+    GamerRegistrationBase(const GamerRegistrationBase&) = delete;
+    GamerRegistrationBase& operator=(const GamerRegistrationBase&) = delete;
+    virtual ~GamerRegistrationBase() = default;
+};
+
+template<typename TEventArgs>
+class GamerRegistration final : public GamerRegistrationBase {
+public:
+    using Source = System::EventHandler<TEventArgs>;
+    using Token = typename Source::Token;
+
+    GamerRegistration(Source* const source, const Token token)
+        : source_(source)
+        , token_(token)
+    {
+    }
+
+    ~GamerRegistration() override
+    {
+        source_->Remove(token_);
+    }
+
+private:
+    Source* source_;
+    Token token_;
+};
+
 // A leaderboard entry names a gamer the runtime owns, so the handle that reaches C borrows it and
 // keeps whatever owns it alive for exactly as long as the handle names it.
 [[nodiscard]] CNA_Result CreateBorrowedGamer(

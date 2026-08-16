@@ -1147,14 +1147,37 @@
 > is answered by value) while its columns **alias the entry itself**, and the rating-changed hook is
 > one per entry rather than a subscription. The inventory is now 5,982 implemented, 32 partial, 83
 > planned and 318 N/A; all four trees green at 77/77, ASan+UBSan clean.
-> **Next: CBIND-037G7**, the avatar surfaces (83 rows) — the **last slice of the whole campaign**.
+> CBIND-037G7 then completes the avatar surfaces and **closes the whole `CBIND-037` campaign**: the
+> inventory has **no planned row left** — 6,063 implemented, 32 partial, 0 planned, 320 not applicable
+> across all fourteen modules.
 >
-> **State at this handoff.** Thirty slices are committed on `feature/binding` since
+> The slice itself is mostly the settled shapes, plus four things an avatar can honestly report and
+> three it cannot. A **description is one fixed size** and any other length is refused, while validity
+> is a separate question its first byte answers; its **height is always zero and its body type always
+> female**, because the canonical format carries neither — asking for a male body still reports
+> female. A **preset animation carries the whole skeleton but no timeline**, so advancing it moves
+> nothing. And a **renderer always refuses the bind pose**, because its state is always unavailable on
+> this runtime while the parent-bone hierarchy still reads. Each of those was found by testing and
+> then written into the binding rather than assumed away.
+>
+> One mapping decision is worth carrying: the canonical **animation interface has no separate C
+> form**, because a C caller cannot implement a C++ interface and this ABI's animation handle is the
+> only thing that does — the renderer's draw route takes the handle exactly where the canonical one
+> takes the interface. That is the same reasoning the component callbacks used, arrived at from the
+> other direction. All four trees green at 78/78, ASan+UBSan clean.
+>
+> **Next: the hardening tasks `CBIND-038`–`CBIND-042` and `CBIND-044`.** Nothing in the coverage
+> inventory is outstanding, so the remaining work is about the binding's own quality rather than its
+> breadth. The 32 `partial` rows are not gaps this campaign left open — each is a symbol whose
+> canonical form cannot be fully expressed in C and whose usable subset is named in
+> `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new capability to add.
+>
+> **State at this handoff.** Thirty-one slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
-> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **`gamer-services` (83) is all
-> that remains in the whole campaign**, in one slice: the avatars. All four verification trees are
-> green at 77/77 with the coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
+> module is closed and the inventory has no planned row. All four verification trees are green at
+> 78/78 with the coverage gate current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >

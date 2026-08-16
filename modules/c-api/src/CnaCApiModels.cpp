@@ -1778,6 +1778,31 @@ void AddMeshEffect(
 
 } // namespace
 
+namespace CNA::C::Detail {
+
+CNA_Result GetOwnedSkinnedModelValue(
+    const CNA_Handle handle,
+    std::shared_ptr<Microsoft::Xna::Framework::Graphics::SkinnedModelEXT>* const outModel)
+{
+    if (outModel == nullptr) {
+        return Fail(
+            CNA_RESULT_INVALID_ARGUMENT,
+            CNA_ERROR_CATEGORY_ARGUMENT,
+            "The SkinnedModelEXT output is null.");
+    }
+    outModel->reset();
+    std::shared_ptr<SkinnedModelResource> model;
+    if (const CNA_Result result = GetSkinnedModel(handle, &model);
+        result != CNA_RESULT_SUCCESS) {
+        return result;
+    }
+    *outModel = model->value;
+    return CNA_RESULT_SUCCESS;
+}
+
+} // namespace CNA::C::Detail
+
+
 CNA_Result cna_model_bone_create_default(CNA_ModelBoneHandle* const outBone)
 {
     return CallWithExceptionBarrier([&]() -> CNA_Result {
