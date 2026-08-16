@@ -181,27 +181,28 @@ Rewritten 2026-08-15 after §27.2 was assessed row by row. Four of the five clus
 list named are now closed (`GLTF-184`, `GLTF-244`, `GLTF-379`, `385`–`387`); what is left is the
 three open ROBUST rows, ordered by cost.
 
-1. **Finish Gate C on two more renderers (§27.2 row 12) — 2 of 4 are done.** OPENGLES3 and
-   **VULKAN** both pass all 14 rows now; the harness was the blocker and is fixed (`--goldens`
-   selects the renderer's own set, and golden comparison is pixel-exact rather than byte-exact,
-   which PLAT-65's PNG-encoder swap had broken). The last two need **system packages, not work**:
+1. **Gate C: 3 of 4 renderers pass; the fourth is blocked by a BGFX defect.** OPENGLES3, VULKAN
+   and **DIRECTX11 under Wine + DXVK** are green on all 14 rows, so the Direct3D path the row names
+   is done. Reproduce any of them with:
 
    ```bash
-   sudo apt-get install -y libwayland-egl-backend-dev libz-mingw-w64-dev
+   # DirectX11 -- needs libz-mingw-w64-dev and a DXVK'd prefix (dxvk-setup install)
+   CNA_D3D11_VIRTUAL_DESKTOP="CNA,1280x1024" xvfb-run -a python3 scripts/gltf-viewer-retake.py \
+     --renderer <pinned glTF-Sample-Renderer> --sample-assets <pinned samples> \
+     --viewer <build>/cna_gltf_viewer.exe --viewer-runner scripts/run-wine-dxvk.sh \
+     --viewer-source <viewer checkout> --goldens tests/gltf-l7/directx11 --output <empty dir>
    ```
 
-   The MinGW DirectX11 viewer — the Direct3D path the row requires — fails to configure because
-   sharp-runtime's io-compression wants a Windows zlib. **BGFX needs no package at all**: only the
-   `libwayland-egl.so` dev symlink is missing (the `.so.1` is installed), so a `-L` directory with
-   one symlink builds it. It then agrees with EasyGL within 1 LSB on nine of Gate C's ten
-   golden-backed assets and by 129 on the textured one, so it needs its own reviewed golden set and
-   an entry in `validate_policy`'s four-renderer allowlist — see §27.2 row 12 before starting.
-   DirectX11 additionally needs a Wine prefix with DXVK (`~/.wine-cna-d3d11`, absent here);
-   `scripts/run-wine-dxvk.sh` is the runner and asserts DXVK actually handled the run.
+   Do **not** force `VK_DRIVER_FILES=lvp_icd.json` for DirectX11: the goldens were captured on the
+   Intel GPU, and lavapipe shifts every row by one LSB against a tolerance of 0.
 
-   **Do not reach for SOFTWARE as the fourth.** It renders unlit — pure white where the reference
-   shades — so it fails Gate C's reference comparison at row 1 by MAE 206/255 while its own
-   whole-corpus goldens encode that white. Recorded in §27.2 row 12 with the numbers.
+   **BGFX is the open one, and it is a renderer bug rather than tooling.** It builds (only the
+   `libwayland-egl.so` dev symlink is missing) and renders, but fails the two-independent-process
+   byte-identity requirement on textured assets — `texture-shared-two-samplers` in a full-corpus
+   run, `tex-reference-checkerboard` once in ten probes — while being perfectly stable in isolation
+   (6/6 identical). Find that before capturing any BGFX goldens; a golden set is only meaningful if
+   two processes agree.
+
 2. **The `KHR_materials_specular` texture pair on `metal`, `webgpu`, `wicked` (`GLTF-344`,
    §27.2 row 3).** Not three small bindings: none of the three carries a second UV stream, and the
    binding contract is defined per map with its own UV selector, so the dual-UV foundation comes
