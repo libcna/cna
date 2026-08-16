@@ -21,7 +21,9 @@
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexDeclaration.hpp"
 #include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "Microsoft/Xna/Framework/Matrix.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <gtest/gtest.h>
@@ -461,6 +463,106 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, LinksTheAppliedPassAndReturnsStableSh
     EXPECT_NE(secondPixelShader, pixelShader);  // StatePass links FlatPixelShader, not MainPixelShader
     EXPECT_NE(vertexShader, nullptr);
     EXPECT_NE(pixelShader, nullptr);
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, DrawsIndexedAndNonIndexedPrimitivesWithTheAppliedPass)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    // FxTexture is parameter 5 (see ReflectionMatchesTheConformanceSource).
+    runtime->SetParameterTexture(5, &white);
+
+    const BlendState blend = BlendState::AlphaBlend;
+    const DepthStencilState depth = DepthStencilState::Default;
+    const RasterizerState raster = RasterizerState::CullCounterClockwise;
+    CompiledEffectDeviceState deviceState;
+    deviceState.blend = &blend;
+    deviceState.depthStencil = &depth;
+    deviceState.rasterizer = &raster;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);  // P0: MainVertexShader/MainPixelShader
+
+    GpuDrawParams params{};
+    params.compiledEffectRuntime = sdlGpuEffect;
+
+    // VertexIn declares float4 Position : POSITION0, float2 TexCoord : TEXCOORD0 (see
+    // CnaConformanceEffect.fx); a Vector3 position is a legal narrower supply (the vertex input
+    // assembler fills w=1), matching BuildsOneAttributePerShaderInputLocatedByArrayIndex.
+    const VertexDeclaration declaration(20, {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    });
+    struct Vertex { float x, y, z, u, v; };
+    const std::vector<Vertex> triangle = {
+        {0.0f, 0.5f, 0.0f, 0.0f, 0.0f},
+        {0.5f, -0.5f, 0.0f, 1.0f, 0.0f},
+        {-0.5f, -0.5f, 0.0f, 0.0f, 1.0f},
+    };
+
+    auto nonIndexedVb = renderer->CreateVertexBuffer(3);
+    nonIndexedVb->SetVertexDeclaration(declaration);
+    nonIndexedVb->SetData(triangle.data(), 3, sizeof(Vertex));
+    EXPECT_NO_THROW(renderer->DrawPrimitivesEx(*nonIndexedVb, Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               Matrix::getIdentityProperty(),
+                                               PrimitiveType::TriangleList, 1, params));
+
+    runtime->ApplyPass(0, deviceState, changes);  // re-apply: a fresh command needs fresh capture
+    auto indexedVb = renderer->CreateVertexBuffer(3);
+    indexedVb->SetVertexDeclaration(declaration);
+    indexedVb->SetData(triangle.data(), 3, sizeof(Vertex));
+    auto ib = renderer->CreateIndexBuffer16(3);
+    const std::uint16_t indices[3] = {0, 1, 2};
+    ib->SetData16(indices, 3);
+    EXPECT_NO_THROW(renderer->DrawIndexedPrimitivesEx(*indexedVb, *ib, Matrix::getIdentityProperty(),
+                                                       Matrix::getIdentityProperty(),
+                                                       Matrix::getIdentityProperty(),
+                                                       PrimitiveType::TriangleList, 1, params));
+
+    EXPECT_NO_THROW(renderer->Present());
+}
+
+TEST(SdlGpuCompiledEffectDrawTest, RefusesADrawWithNoVertexDeclaration)
+{
+    GraphicsDevice device;
+    SdlGpuRenderer* renderer = RendererOf(device);
+    if (renderer == nullptr) GTEST_SKIP() << "this build did not select the SDL_GPU renderer";
+
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr);
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    GpuDrawParams params{};
+    params.compiledEffectRuntime = sdlGpuEffect;
+
+    // No SetVertexDeclaration call -- DeclaredVertexLayout stays empty.
+    auto vb = renderer->CreateVertexBuffer(3);
+    struct Vertex { float x, y, z; };
+    const std::vector<Vertex> triangle = {{0, 0, 0}, {1, 0, 0}, {0, 1, 0}};
+    vb->SetData(triangle.data(), 3, sizeof(Vertex));
+
+    EXPECT_THROW(
+        renderer->DrawPrimitivesEx(*vb, Matrix::getIdentityProperty(), Matrix::getIdentityProperty(),
+                                   Matrix::getIdentityProperty(), PrimitiveType::TriangleList, 1, params),
+        System::NotSupportedException);
 }
 
 TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
