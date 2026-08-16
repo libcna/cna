@@ -3233,7 +3233,12 @@ namespace CNA::Internal::Renderers::Direct2D
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_DIRECT2D
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace Direct2D { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> Direct2D::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<Direct2D::Direct2DRenderer>(args);
     }

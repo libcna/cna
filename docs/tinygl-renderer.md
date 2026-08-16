@@ -184,8 +184,14 @@ expectations against this renderer need a tolerance of about 2, and the shipped 
 
 - **One renderer per process.** TinyGL keeps its context in a file-scope global (`glInit`/`glClose`)
   with no make-current entry point, so constructing a second `TinyGLRenderer` throws.
-- **Verified on Linux x86_64 only.** Nothing in the renderer is platform-specific and no platform
-  gate is declared, but no other host has been built or run (`plan_tinygl.md` `TINYGL-19`).
+- **Verified on native Linux x86_64 (GCC), macOS arm64 (AppleClang) and Windows x86_64 (MSVC).**
+  All three build, link and pass 14/14 suites in
+  [run 31893559239](https://github.com/openeggbert/cna/actions/runs/31893559239); the matrix is
+  `.github/workflows/tinygl-cross-platform-ci.yml` and the task record is `plan_tinygl.md`
+  `TINYGL-19`. Nothing in the renderer is platform-specific and no platform gate is declared. Not
+  one of the portability fixes that closed that task was a TinyGL rendering-contract difference —
+  every pixel expectation held identically on all three hosts. MSVC builds TinyGL single-threaded
+  (see the build section below).
 - **An unsupported argument reaching TinyGL kills the process.** Upstream calls `gl_fatal_error()`
   instead of setting an error flag. Every validation in this renderer runs *before* the native call
   for that reason; `TinyGL_Rejection` is the suite that keeps it that way. If you extend this
@@ -205,11 +211,16 @@ cmake --build cmake-build-tinygl -j4
 TinyGL is fetched at configure time; `-DFETCHCONTENT_SOURCE_DIR_TINYGL=/path/to/tinygl` points at an
 existing checkout for an offline build. OpenMP is used as an optional acceleration when available;
 without it the complete renderer builds and runs single-threaded with no OpenMP runtime dependency.
+MSVC always takes that single-threaded path: upstream's `#pragma omp simd` is an OpenMP 4.0
+construct, MSVC's default `/openmp` implements 2.0 and rejects it (C7660), and an optional
+acceleration is not worth a dependency on `/openmp:experimental`.
 
 Fourteen suites, 113 checks: `TinyGL_Smoke` (10), `TinyGL_3D` (8), `TinyGL_TextureSprite` (7),
 `TinyGL_State` (9), `TinyGL_Rejection` (17), the post-audit `TinyGL_Contract` (30), and
 `TinyGL_DrawRoutes` (6), `TinyGL_FixedLayouts` (4), `TinyGL_Lighting` (13), plus five unchanged
-shared golden-image suites (9). All pass. The golden tests set SDL's dummy video driver only to
+shared golden-image suites (9). All pass, on each of the three verified hosts above — including the
+shared golden images, whose references were produced by a different renderer on Linux. The golden
+tests set SDL's dummy video driver only to
 satisfy the shared `PixelTestGame` lifecycle; TinyGL itself still creates no native render window.
 
 `TinyGL_Smoke` alone would not earn `SupportsCapability(ThreeD)` — it draws a full-viewport quad at

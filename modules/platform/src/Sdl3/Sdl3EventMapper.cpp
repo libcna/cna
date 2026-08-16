@@ -317,6 +317,9 @@ namespace CNA::Platform::Sdl3 {
             case SDL_EVENT_LOW_MEMORY:
                 destination = AppLifecycleEvent{AppLifecycleKind::LowMemory};
                 return true;
+            case SDL_EVENT_TERMINATING:
+                destination = AppLifecycleEvent{AppLifecycleKind::Terminating};
+                return true;
 
             default:
                 // SDL emits far more than CNA consumes. Dropping the rest is deliberate, and

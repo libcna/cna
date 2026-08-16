@@ -4,6 +4,7 @@
 
 #include "CNA/GraphicsRendererType.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
+#include "CNA/Internal/Renderers/Gdi/GdiRenderer.hpp"
 #include "System/NotSupportedException.hpp"
 
 #include <SDL3/SDL.h>
@@ -40,7 +41,7 @@ int main()
         args.virtualWidth = 32;
         args.virtualHeight = 32;
         args.presentationMode = CnaPresentationMode::Stretch;
-        std::unique_ptr<IGraphicsRenderer> renderer = CreateGraphicsRenderer(args);
+        std::unique_ptr<IGraphicsRenderer> renderer = Gdi::CreateGraphicsRenderer(args);
 
         if (CNA::getCurrentGraphicsRendererType() != CNA::GraphicsRendererType::Gdi ||
             CNA::getCurrentGraphicsRendererName() != "GDI")

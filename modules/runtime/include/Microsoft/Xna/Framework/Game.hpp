@@ -33,6 +33,11 @@
 #include "System/Object.hpp"
 #include "System/TimeSpan.hpp"
 
+namespace CNA::Internal
+{
+    class GameTestPeer;
+}
+
 // Forward-declared rather than included: Game.hpp is included by every game, and the platform
 // contract is an implementation detail of how the loop is driven, not part of the XNA surface a
 // game writes against. The unique_ptr member below is why Game's destructor is defined out of
@@ -372,6 +377,8 @@ namespace Microsoft::Xna::Framework
         virtual void Dispose(bool disposing);
 
     private:
+        friend class CNA::Internal::GameTestPeer;
+
         struct PlatformEventBatch;
 
         // Declared before every other member, and therefore constructed first and destroyed last.
@@ -410,6 +417,11 @@ namespace Microsoft::Xna::Framework
         bool isDisposed_;
         bool forceElapsedTimeToZero_;
 
+        // Mobile lifecycle (plan_apple.md APPLE-7): true between the platform's
+        // WillEnterBackground and DidEnterForeground notifications. Only ever set on Android and
+        // iOS -- no other platform raises those transitions.
+        bool isSuspended_;
+
         GameTime gameTime_;
         std::uint64_t previousPerformanceCounter_;
         System::TimeSpan accumulatedElapsedTime_;
@@ -440,6 +452,7 @@ namespace Microsoft::Xna::Framework
         System::TimeSpan AdvanceElapsedTime();
         void UpdateEstimatedSleepPrecision(const System::TimeSpan& timeSpentSleeping);
         void PollEvents();
+        void WaitWhileSuspended();
 
         void OnComponentAdded(System::Object* sender, const GameComponentCollectionEventArgs& args);
         void OnComponentRemoved(System::Object* sender, const GameComponentCollectionEventArgs& args);

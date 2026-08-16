@@ -8,7 +8,10 @@
 // by CANVAS-82's manual checklist.
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_CANVAS) || defined(CNA_CANVAS_HOST_TESTS)
+// plan_runtimerenderer.md RTR-P9-9 plus `next`'s own host-test build: two independent reasons to
+// compile this suite, so both are kept -- picking one silently drops the other branch's coverage.
+#if defined(CNA_RENDERER_CANVAS) || defined(CNA_RENDERER_PRESENT_CANVAS) \
+    || defined(CNA_CANVAS_HOST_TESTS)
 #include "CNA/Internal/Renderers/Canvas/CanvasRenderer.hpp"
 #include "CNA/Internal/Renderers/Canvas/CanvasSpriteBatchRenderer.hpp"
 #include "Microsoft/Xna/Framework/Matrix.hpp"

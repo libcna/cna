@@ -11,7 +11,11 @@
 # silently resolve to the host's native FFmpeg and poison the cross-compile's include path with
 # native glibc headers). WIN32 covers both MinGW and native MSVC uniformly; MINGW is kept for
 # clarity/documentation even though it's now redundant with WIN32. ---
-if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID)
+# iOS joins that list for the same reason as the MinGW cross-build: pkg-config on a macOS host
+# resolves to Homebrew's *macOS* FFmpeg, whose headers and dylibs would poison an iOS
+# cross-compile (and fail the link with "built for macOS"). macOS itself keeps FFmpeg -- that is a
+# native build against exactly the libraries pkg-config reports.
+if(MINGW OR WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
     set(CNA_FFMPEG_AVAILABLE OFF)
 else()
     set(CNA_FFMPEG_AVAILABLE ON)

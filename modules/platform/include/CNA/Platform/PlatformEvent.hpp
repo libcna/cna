@@ -372,7 +372,16 @@ namespace CNA::Platform {
         /** @brief The application has returned to the foreground. */
         DidEnterForeground,
         /** @brief The system is low on memory. */
-        LowMemory
+        LowMemory,
+        /**
+         * @brief The operating system is about to terminate the application.
+         *
+         * The last event an application ever receives, and the only warning a mobile process gets
+         * before it is killed. Distinct from `QuitEvent`, which is a request the application may
+         * decline; this one is already decided, and the only thing left is to shut down in the
+         * short window before the process ends.
+         */
+        Terminating
     };
 
     /** @brief The application's lifecycle state changed. */

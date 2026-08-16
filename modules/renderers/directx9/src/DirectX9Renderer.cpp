@@ -9,6 +9,7 @@
 // names if windows.h is parsed first.
 #include "CNA/Logger.hpp"
 #include "CNA/Internal/Renderers/DirectX9/DirectX9Renderer.hpp"
+#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
 #include "CNA/Internal/Renderers/Common/NotYetImplemented.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9Buffers.hpp"
 #include "CNA/Internal/Renderers/DirectX9/D3D9ConstantUpload.hpp"
@@ -1541,11 +1542,43 @@ namespace CNA::Internal::Renderers::DirectX9
         if (!deviceLost_) return;
         PerformResetRecovery();
     }
+
+    // --- GraphicsProfile ceilings (plan_runtimerenderer.md design decision 9) -----------------
+    //
+    // D9-100's own table, previously enforced from #ifdef CNA_RENDERER_DIRECTX9 blocks inside
+    // Texture2D/Texture3D/TextureCube/GraphicsDevice. Checked as profile CEILINGS, not hardware
+    // queries: even where this device could allocate more, a Reach-profile game is restricted to
+    // the profile's limit, which is what XNA's portability guarantee means.
+
+    int DirectX9Renderer::GetMaxTextureSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxTextureSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const
+    {
+        return MaxRenderTargetsForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxCubeSizeForProfileEXT(int graphicsProfile) const
+    {
+        return MaxCubeSizeForProfileEXT(graphicsProfile);
+    }
+
+    int DirectX9Renderer::GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const
+    {
+        return MaxVolumeExtentForProfileEXT(graphicsProfile);
+    }
 }
 
 namespace CNA::Internal::Renderers
 {
-    std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
+    // plan_runtimerenderer.md design decision 4: declared in this family's own
+    // namespace so several renderer archives can link into one binary, then defined
+    // below with a qualified name -- the body keeps its place unchanged.
+    namespace DirectX9 { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+    std::unique_ptr<IGraphicsRenderer> DirectX9::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args)
     {
         return std::make_unique<DirectX9::DirectX9Renderer>(args);
     }

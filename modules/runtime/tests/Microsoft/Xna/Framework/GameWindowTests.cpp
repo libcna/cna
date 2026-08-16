@@ -5,6 +5,7 @@
 #include "CNA/Platform/IPlatformWindow.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
 #include "CNA/Platform/WindowDescription.hpp"
+#include "CNA/TargetPlatform.hpp"
 #include "Microsoft/Xna/Framework/Game.hpp"
 #include "Microsoft/Xna/Framework/GameWindow.hpp"
 
@@ -189,6 +190,147 @@ TEST(GameWindowTest, NullWindow_EndScreenDeviceChangeOneArgIsSafe)
     GameWindow window;
     EXPECT_NO_THROW(window.EndScreenDeviceChange("test"));
 }
+
+// plan_apple.md APPLE-15: SupportedOrientations is the framework's own bookkeeping on a desktop
+// and the channel into the operating system on iOS/Android. These cases pin down both halves --
+// the fallback rule that is platform-independent, and the forwarding to the platform window that
+// is what makes the declaration mean anything on a mobile target.
+namespace
+{
+    // SetSupportedOrientations is protected (XNA declares it protected internal on GameWindow);
+    // GraphicsDeviceManager reaches it as a friend, a test reaches it by deriving.
+    class TestableGameWindow : public GameWindow
+    {
+    public:
+        using GameWindow::GameWindow;
+        using GameWindow::SetSupportedOrientations;
+    };
+
+    // Records what GameWindow forwards, so the mapping can be asserted without a real display and
+    // without naming the native hint the platform ultimately sets.
+    class OrientationRecordingWindow final : public CNA::Platform::IPlatformWindow
+    {
+    public:
+        explicit OrientationRecordingWindow(CNA::Platform::IPlatformWindow* inner) : inner_(inner) {}
+
+        [[nodiscard]] CNA::Platform::WindowId GetId() const override { return inner_->GetId(); }
+        [[nodiscard]] CNA::Platform::NativeWindowHandle GetNativeHandle() const override
+        {
+            return inner_->GetNativeHandle();
+        }
+        [[nodiscard]] std::string GetTitle() const override { return inner_->GetTitle(); }
+        void SetTitle(const std::string& title) override { inner_->SetTitle(title); }
+        [[nodiscard]] CNA::Platform::WindowBounds GetClientBounds() const override
+        {
+            return inner_->GetClientBounds();
+        }
+        [[nodiscard]] CNA::Platform::WindowSize GetPixelSize() const override
+        {
+            return inner_->GetPixelSize();
+        }
+        void SetSize(const int width, const int height) override { inner_->SetSize(width, height); }
+        [[nodiscard]] float GetDisplayScale() const override { return inner_->GetDisplayScale(); }
+        [[nodiscard]] bool IsResizable() const override { return inner_->IsResizable(); }
+        void SetResizable(const bool resizable) override { inner_->SetResizable(resizable); }
+        [[nodiscard]] bool IsBorderless() const override { return inner_->IsBorderless(); }
+        void SetBorderless(const bool borderless) override { inner_->SetBorderless(borderless); }
+        void SetFullscreenMode(const CNA::Platform::WindowFullscreenMode mode) override
+        {
+            inner_->SetFullscreenMode(mode);
+        }
+        [[nodiscard]] CNA::Platform::WindowFullscreenMode GetFullscreenMode() const override
+        {
+            return inner_->GetFullscreenMode();
+        }
+        void Show() override { inner_->Show(); }
+        void Hide() override { inner_->Hide(); }
+        void Minimize() override { inner_->Minimize(); }
+        void Maximize() override { inner_->Maximize(); }
+        void Restore() override { inner_->Restore(); }
+        void Sync() override { inner_->Sync(); }
+        [[nodiscard]] bool HasFocus() const override { return inner_->HasFocus(); }
+        [[nodiscard]] bool IsMinimized() const override { return inner_->IsMinimized(); }
+        [[nodiscard]] std::string GetDisplayName() const override { return inner_->GetDisplayName(); }
+
+        void SetSupportedOrientations(const CNA::Platform::ScreenOrientation orientations) override
+        {
+            received = orientations;
+            ++callCount;
+        }
+
+        CNA::Platform::ScreenOrientation received = CNA::Platform::ScreenOrientation::None;
+        int callCount = 0;
+
+    private:
+        CNA::Platform::IPlatformWindow* inner_;
+    };
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_LeavesTheDefaultOrientationAlone)
+{
+    // DisplayOrientation::Default means "no orientation asserted" and counts as supported
+    // whatever the supported set is, so narrowing the set does not force a concrete orientation
+    // onto a window that never had one.
+    TestableGameWindow window;
+
+    window.SetSupportedOrientations(DisplayOrientation::Portrait);
+    EXPECT_EQ(DisplayOrientation::Default, window.getCurrentOrientationProperty());
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_FallsBackWhenTheCurrentOneStopsBeingSupported)
+{
+    // A concrete current orientation only comes from real window bounds, so this case needs a
+    // window: 128x64 is landscape, which is in GameWindow's default supported set.
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    CNA::Platform::WindowDescription description = MakeDescription("orientation");
+    description.width = 128;
+    description.height = 64;
+    std::unique_ptr<CNA::Platform::IPlatformWindow> platformWindow =
+        platform->CreateWindow(description);
+
+    TestableGameWindow window(platformWindow.get());
+    ASSERT_EQ(DisplayOrientation::LandscapeLeft, window.getCurrentOrientationProperty());
+
+    window.SetSupportedOrientations(DisplayOrientation::Portrait);
+    EXPECT_EQ(DisplayOrientation::Portrait, window.getCurrentOrientationProperty());
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_ForwardsTheRequestedSetToThePlatformWindow)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    std::unique_ptr<CNA::Platform::IPlatformWindow> inner =
+        platform->CreateWindow(MakeDescription("orientation-forwarding"));
+    OrientationRecordingWindow recording(inner.get());
+
+    TestableGameWindow window(&recording);
+    window.SetSupportedOrientations(
+        DisplayOrientation::Portrait | DisplayOrientation::LandscapeLeft);
+
+    EXPECT_EQ(1, recording.callCount);
+    EXPECT_TRUE(HasOrientation(recording.received, CNA::Platform::ScreenOrientation::Portrait));
+    EXPECT_TRUE(
+        HasOrientation(recording.received, CNA::Platform::ScreenOrientation::LandscapeLeft));
+    EXPECT_FALSE(
+        HasOrientation(recording.received, CNA::Platform::ScreenOrientation::LandscapeRight));
+}
+
+TEST(GameWindowTest, SetSupportedOrientations_DefaultClearsThePlatformPreference)
+{
+    std::unique_ptr<CNA::Platform::IPlatform> platform =
+        CNA::Platform::PlatformFactory::Create("Headless");
+    std::unique_ptr<CNA::Platform::IPlatformWindow> inner =
+        platform->CreateWindow(MakeDescription("orientation-default"));
+    OrientationRecordingWindow recording(inner.get());
+
+    TestableGameWindow window(&recording);
+    window.SetSupportedOrientations(DisplayOrientation::Default);
+
+    EXPECT_EQ(1, recording.callCount);
+    EXPECT_EQ(CNA::Platform::ScreenOrientation::None, recording.received);
+}
+
 
 TEST(GameWindowPlatformTest, DelegatesStateAndGeometryToTheSelectedPlatformWindow)
 {

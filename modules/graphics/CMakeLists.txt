@@ -2,7 +2,12 @@ file(GLOB_RECURSE CNA_GRAPHICS_CORE_SOURCES CONFIGURE_DEPENDS
     "src/Xna/*.cpp"
     "src/Internal/*.cpp"
 )
-cna_add_module(cna_graphics_core GraphicsCore ${CNA_GRAPHICS_CORE_SOURCES})
+# plan_runtimerenderer.md design decision 3: the generated renderer registry compiles into the
+# graphics core, which is where GraphicsDevice consumes it. It lives in the build tree, not
+# the source tree, so it is never committed and is regenerated whenever the selection changes.
+cna_add_module(cna_graphics_core GraphicsCore
+    ${CNA_GRAPHICS_CORE_SOURCES}
+    ${CNA_RENDERER_REGISTRY_SOURCE})
 # IGraphicsRenderer's window registry is keyed by the platform contract's WindowId. Public is
 # intentional: renderer modules include that common header and therefore need the platform include
 # interface too; the platform module itself depends only on cna_core_headers, so this adds no cycle.
@@ -24,7 +29,9 @@ target_link_libraries(cna_graphics_core PRIVATE cna_input)
 # edge must be declared on the graphics core itself; together with the reverse edges declared
 # by the renderer modules this closes the graphics-core <-> renderer cycle for the renderers
 # that have one, and a plain ordered dependency for the rest.
-target_link_libraries(cna_graphics_core PRIVATE ${RENDERER_TARGET})
+# plan_runtimerenderer.md phase P6: link every selected renderer, not only the default. The
+# declared archive cycles are per renderer, so each edge has to be declared individually.
+target_link_libraries(cna_graphics_core PRIVATE ${CNA_RENDERER_TARGETS})
 
 # Module-owned examples (module-examples campaign): demo/example registration is
 # module-local; the conditions historically applied by cmake/Examples.cmake live

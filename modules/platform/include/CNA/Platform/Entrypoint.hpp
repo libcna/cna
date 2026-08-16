@@ -13,6 +13,12 @@
  * object exists and before any runtime selection could occur. So this stays a header plus
  * build-system concern; see docs/platform-entrypoint-audit.md.
  *
+ * iOS needs the rename for the equivalent reason on the other side of the fence: UIKit, not the
+ * game, owns the process. The platform library renames the game's `main()` out of the way and
+ * supplies its own, which starts the UIKit application and only then calls back into the game's
+ * entry point from inside a running application. A game whose `main()` is not renamed never gets
+ * a UIApplication, so it has no event loop, no view controller and no window.
+ *
  * ### What changed when it moved here
  *
  * This header used to live in `modules/core` and key off renderer macros. Two defects came with
@@ -27,10 +33,13 @@
  * merely implied by this file compiling to nothing.
  */
 
+#include "CNA/TargetPlatform.hpp"
+
 #if defined(CNA_PLATFORM_SDL3)
-#  if defined(SDL_PLATFORM_ANDROID) || defined(__ANDROID__)
-// The only case where the rename is load-bearing: without it the app starts and exits
-// immediately, because the SDL_main symbol Android looks for is never exported.
+// The two cases where the rename is load-bearing. Android: without it the app starts and exits
+// immediately, because the entry-point symbol the Java bridge looks up is never exported. iOS:
+// without it the process never hands control to UIKit, so the app has no application object.
+#  if defined(SDL_PLATFORM_ANDROID) || defined(__ANDROID__) || defined(CNA_TARGET_IOS)
 #    include <SDL3/SDL_main.h>
 #  endif
 #endif

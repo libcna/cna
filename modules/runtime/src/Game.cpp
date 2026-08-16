@@ -8,6 +8,7 @@
 #include "CNA/Platform/IPlatform.hpp"
 #include "CNA/Platform/PlatformEvent.hpp"
 #include "CNA/Platform/PlatformFactory.hpp"
+#include "CNA/TargetPlatform.hpp"
 
 #include <algorithm>
 #include <iterator>
@@ -195,6 +196,7 @@ namespace Microsoft::Xna::Framework
           suppressDraw_(false),
           isDisposed_(false),
           forceElapsedTimeToZero_(false),
+          isSuspended_(false),
           gameTime_(),
           previousPerformanceCounter_(0),
           accumulatedElapsedTime_(System::TimeSpan::Zero),
@@ -965,11 +967,33 @@ namespace Microsoft::Xna::Framework
 #else
         while (RunApplication)
         {
+            // plan_apple.md APPLE-7: a backgrounded mobile application keeps its main thread
+            // alive but must neither render nor burn CPU. isMobilePlatform() is a
+            // compile-time constant, so desktop builds keep the plain Tick() loop unchanged.
+            if (CNA::isMobilePlatform() && isSuspended_)
+            {
+                WaitWhileSuspended();
+                continue;
+            }
+
             Tick();
         }
 
         OnExiting(this, System::EventArgs::Empty);
 #endif
+    }
+
+    void Game::WaitWhileSuspended()
+    {
+        // Park the thread instead of spinning: while suspended there is nothing to update and
+        // nothing that may be drawn. The platform contract has no blocking event wait, and
+        // deliberately so -- a sleep-then-poll pair says the same thing without every
+        // implementation having to grow one. The interval is short enough that the resume event,
+        // which arrives on the queue polled below, is acted on within a frame, and long enough
+        // that the wait costs nothing measurable.
+        constexpr std::uint32_t suspendedPollIntervalMs = 16;
+        platform_->Delay(suspendedPollIntervalMs);
+        PollEvents();
     }
 
     System::TimeSpan Game::AdvanceElapsedTime()
@@ -1087,14 +1111,42 @@ namespace Microsoft::Xna::Framework
                 {
                     switch (platformEvent.kind)
                     {
+                    // plan_apple.md APPLE-7 — a deviation from FNA, which tracks only IsActive
+                    // here. A mobile operating system terminates an application that submits GPU
+                    // work once it is in the background (iOS), or destroys the rendering surface
+                    // at that point (Android), so the loop must actually stop between these two
+                    // events rather than keep drawing into a dead surface. The flag is set on
+                    // every platform and acted on only where the events are raised, which is
+                    // mobile.
                     case CNA::Platform::AppLifecycleKind::WillEnterBackground:
+                        isSuspended_ = true;
                         setIsActiveProperty(false);
                         break;
                     case CNA::Platform::AppLifecycleKind::DidEnterForeground:
+                        isSuspended_ = false;
+                        // The suspension was not gameplay time. Restarting the counter makes the
+                        // first frame after the resume measure only itself, instead of the whole
+                        // background period clamped to MaxElapsedTime — which would run a burst of
+                        // catch-up Updates before the first visible frame.
+                        previousPerformanceCounter_ = 0;
+                        accumulatedElapsedTime_ = System::TimeSpan::Zero;
+                        ResetElapsedTime();
                         setIsActiveProperty(true);
                         GraphicsDevice_.GetRenderer().OnSurfaceInvalidated(0);
                         break;
+                    // Mobile memory pressure. The game itself decides what to release (XNA has no
+                    // hook for it), but the warning belongs in the log: the next step after this
+                    // event is usually the operating system killing the process.
                     case CNA::Platform::AppLifecycleKind::LowMemory:
+                        CNA::Logger::Warn("Game: the operating system reported low memory.");
+                        break;
+                    // Already decided by the operating system: this is the last event the
+                    // application receives, so the loop has to end here for OnExiting to run at
+                    // all. Clearing the suspended flag first is what lets Run() leave the wait
+                    // loop and reach OnExiting instead of parking until the process is killed.
+                    case CNA::Platform::AppLifecycleKind::Terminating:
+                        isSuspended_ = false;
+                        Exit();
                         break;
                     }
                 }

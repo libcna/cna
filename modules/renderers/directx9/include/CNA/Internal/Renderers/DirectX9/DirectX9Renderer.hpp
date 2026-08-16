@@ -69,6 +69,43 @@ namespace CNA::Internal::Renderers::DirectX9
     class DirectX9Renderer final : public IGraphicsRenderer
     {
     public:
+        // plan_runtimerenderer.md design decision 9 / plan_dx9.md D9-100/D9-103: D3D9 is the one
+        // renderer with a real capability structure to consult, so it is the one renderer that can
+        // enforce GraphicsProfile ceilings honestly. These used to live as
+        // #ifdef CNA_RENDERER_DIRECTX9 blocks inside Texture2D/Texture3D/TextureCube/GraphicsDevice.
+
+        /**
+         * @brief GraphicsProfile.Reach/HiDef texture-size ceiling (2048 / 4096).
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum texture edge length for that profile.
+         */
+        [[nodiscard]] int GetMaxTextureSizeForProfileEXT(int graphicsProfile) const override;
+
+        /**
+         * @brief GraphicsProfile.Reach's own MaxRenderTargets = 1 ceiling.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum number of simultaneous render targets for that profile.
+         */
+        [[nodiscard]] int GetMaxRenderTargetsForProfileEXT(int graphicsProfile) const override;
+        /**
+         * @brief GraphicsProfile.Reach/HiDef cube-map edge ceiling.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum cube-map edge length for that profile.
+         */
+        [[nodiscard]] int GetMaxCubeSizeForProfileEXT(int graphicsProfile) const override;
+
+        /**
+         * @brief GraphicsProfile volume-texture ceiling; 0 for Reach, which has no volume textures.
+         *
+         * @param graphicsProfile GraphicsProfile ordinal (Reach = 0, HiDef = 1).
+         * @return The maximum volume extent, or 0 when the profile has no volume textures at all.
+         */
+        [[nodiscard]] int GetMaxVolumeExtentForProfileEXT(int graphicsProfile) const override;
+
+
         explicit DirectX9Renderer(const GraphicsRendererCreateArgs& args);
         ~DirectX9Renderer() override;
 

@@ -107,6 +107,37 @@ and corrected or confirmed as expected C++ adaptations.
 
 ---
 
+## CNAEXT: runtime graphics renderer selection
+
+Not XNA 4.0 API — XNA had exactly one renderer and no notion of choosing between several, so this
+whole surface is a CNA extension (`plan_runtimerenderer.md`).
+
+| API | Status | Tests |
+|---|---|---|
+| `CNA::GraphicsRendererSelection::SetPreferred(GraphicsRendererType)` | ✅ | latch, unavailable-renderer refusal, precedence |
+| `CNA::GraphicsRendererSelection::SetPreferred(std::string_view)` | ✅ | canonical + case-insensitive names, unknown-name rejection |
+| `CNA::GraphicsRendererSelection::GetSelected()` | ✅ | default, env var, explicit call, does-not-latch |
+| `CNA::GraphicsRendererSelection::GetActive()` | ✅ | equals selected, diverges after substitution, throws before creation |
+| `CNA::GraphicsRendererSelection::IsLatched()` | ✅ | latches on success only, survives device destruction |
+| `CNA::GraphicsRendererSelection::GetAvailable()` / `IsAvailable()` | ✅ | matches the compiled-in registry |
+| `CNA::GraphicsRendererSelection::SetFallbackChain(span)` | ✅ | ordering, dedup, absent entries permitted |
+| `CNA::GraphicsRendererSelection::EnableAutomaticFallback(bool)` | ✅ | covers every compiled-in renderer, disable restores single attempt |
+| `CNA::GraphicsRendererSelection::IsFallbackEnabled()` | ✅ | off by default |
+| `CNA::GraphicsRendererSelection::GetFallbackHistory()` | ✅ | empty on first-attempt success, ordered otherwise, reason + message |
+| `CNA::GraphicsRendererSelection::ResetForTestingEXT()` | ✅ | test-only; documented as not part of the supported API |
+| `GraphicsDevice::GetGraphicsRendererType()` / `GetGraphicsRendererName()` | ✅ | report the device's real renderer (no longer `constexpr` — see below) |
+| `CNA::getGraphicsRendererName(GraphicsRendererType)` | ✅ | all 46 identities, distinct, non-placeholder |
+| `CNA::tryParseGraphicsRendererName()` | ✅ | round-trips every identity, case-insensitive |
+
+**Intentional deviation.** `GraphicsDevice::GetGraphicsRendererType()` and
+`GetGraphicsRendererName()` were `constexpr` and ignored `this`, returning the compile-time
+identity. They are now real accessors returning the renderer *that device* is using, and the
+`constexpr` was dropped: a compile-time answer cannot describe a runtime choice. Callers who want
+the build's compile-time identity still have `CNA::getCurrentGraphicsRendererType()`, which remains
+a constant expression in both build modes.
+
+---
+
 ## `Microsoft::Xna::Framework::Graphics`
 
 Partial audit via agent. Key gaps identified and fixed: SpriteBatch Draw overloads added as stubs.

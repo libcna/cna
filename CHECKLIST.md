@@ -93,6 +93,34 @@ If the class depends on `Game` / SDL / graphics renderer, document it and skip t
 
 ---
 
+## Adding a new renderer family
+
+Beyond the identity registries (`GraphicsRendererType.hpp`, `cmake/RendererSelection.cmake`,
+`scripts/check_renderer_identities.py`), a new renderer family must provide the runtime-dispatch
+surface (`plan_runtimerenderer.md`):
+
+- [ ] `modules/renderers/<family>/src/<X>RendererDescriptor.cpp` defining
+      `CNA::Internal::Renderers::<Family>::GetDescriptor()`. Enforced by
+      `scripts/check_runtime_renderer_discipline.py` — exactly one per family.
+- [ ] `CreateGraphicsRenderer` defined in the family's **own namespace**, not in
+      `CNA::Internal::Renderers`. A shared factory symbol is what made multi-renderer builds
+      impossible.
+- [ ] The descriptor answers all four pre-window questions honestly: `needsWindow`,
+      `needsVideoSubsystem`, `prepareWindowFlags()`, `applyPreWindowAttributes()`.
+- [ ] `windowKind` set to the kind the renderer's window really is — fallback uses it to decide
+      whether a window can be reused or must be recreated.
+- [ ] `isAvailable()` is a real probe where one is cheap and side-effect-free; `AlwaysAvailable`
+      otherwise. Returning true is not a promise construction will succeed.
+- [ ] The family's identity registered in `cmake/RendererRegistry.cmake`'s namespace map.
+- [ ] Any renderer-specific behaviour reaches the XNA layer through an `IGraphicsRenderer` virtual
+      or a `GraphicsRendererDescriptor::adapterQueries` hook — **never** an `#ifdef` in
+      `modules/graphics/src`. Enforced by the discipline gate.
+- [ ] If it cannot coexist with another renderer, a rule in `cmake/RendererCombinations.cmake`
+      **and** a row in `docs/runtime-renderer-selection.md`. Enforced by
+      `scripts/check_renderer_combinations.py`.
+
+---
+
 ## Known acceptable C++ deviations from FNA/XNA
 
 | Deviation | Reason |

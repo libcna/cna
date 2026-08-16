@@ -3,6 +3,11 @@
 #include "Sdl3Window.hpp"
 
 #include "CNA/Platform/PlatformException.hpp"
+#include "CNA/TargetPlatform.hpp"
+
+#if defined(CNA_TARGET_IOS)
+#include "Sdl3AppleOrientation.hpp"
+#endif
 
 #include <SDL3/SDL.h>
 
@@ -324,6 +329,47 @@ namespace CNA::Platform::Sdl3 {
         }
         const char* name = SDL_GetDisplayName(display);
         return name != nullptr ? std::string(name) : std::string();
+    }
+
+    void Sdl3Window::SetSupportedOrientations(const ScreenOrientation orientations)
+    {
+        // plan_apple.md APPLE-15. Desktop keeps this as pure framework bookkeeping; only a mobile
+        // operating system actually consults the declared set.
+        if constexpr (!CNA::isMobilePlatform())
+        {
+            return;
+        }
+        else
+        {
+            if (orientations == ScreenOrientation::None)
+            {
+                // "No preference" has to clear the value rather than set an empty one, so the
+                // platform falls back to the set declared at packaging time instead of retaining
+                // an explicitly empty override.
+                SDL_ResetHint(SDL_HINT_ORIENTATIONS);
+            }
+            else
+            {
+                std::string accepted;
+                if (HasOrientation(orientations, ScreenOrientation::LandscapeLeft))
+                {
+                    accepted += "LandscapeLeft ";
+                }
+                if (HasOrientation(orientations, ScreenOrientation::LandscapeRight))
+                {
+                    accepted += "LandscapeRight ";
+                }
+                if (HasOrientation(orientations, ScreenOrientation::Portrait))
+                {
+                    accepted += "Portrait ";
+                }
+                SDL_SetHint(SDL_HINT_ORIENTATIONS, accepted.c_str());
+            }
+
+#if defined(CNA_TARGET_IOS)
+            RequestAppleOrientationUpdate(window_);
+#endif
+        }
     }
 
 } // namespace CNA::Platform::Sdl3

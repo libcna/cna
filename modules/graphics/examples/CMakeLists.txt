@@ -1,9 +1,18 @@
-# Graphics-subsystem examples (module-local registration; the target definitions moved
-# here verbatim from cmake/Examples.cmake / cmake/Harnesses.cmake /
-# cmake/Tests/CrossRendererBenchmark.cmake when examples moved into their owning
-# physical modules). This directory also owns the shared renderer-agnostic conformance
-# fixtures the per-renderer suites instantiate (reached via CNA_GRAPHICS_EXAMPLES_DIR)
-# and the shared example-support headers under common/.
+# plan_runtimerenderer.md RTR-P9-13/P9-15 -- the rule these gates follow, corrected after getting it
+# wrong once:
+#
+#   * A gate deciding whether a TARGET EXISTS, where that target runs against whatever renderer the
+#     build DEFAULTS to, must test equality with CNA_GRAPHICS_RENDERER. Membership is wrong there: a
+#     multi-renderer build defaulting to SOFTWARE but containing OPENGLES3 would build a demo that
+#     needs 3D and then throw "3D not supported" at runtime -- a build that succeeds and a program
+#     that cannot work.
+#   * A gate deciding whether a RESOURCE is available -- a runtime library to copy, a renderer's own
+#     device-free test sources -- may test membership, because the user really can select that
+#     renderer at runtime in a multi build.
+#
+# In single-renderer mode the two are identical, which is exactly why the distinction is easy to
+# miss.
+
 
 # Example/demo executables historically live at the build root (docs, scripts and the
 # golden-image working-directory conventions rely on it); keep them there even though
@@ -11,6 +20,14 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 if(CNA_BUILD_EXAMPLES)
+    # ---- Runtime renderer selection reference (plan_runtimerenderer.md RTR-P4-14) ----
+    # Renderer-agnostic: it reports whatever this build contains rather than assuming one.
+    add_executable(cna_demo_renderer_selection
+        renderer_selection/renderer_selection_demo.cpp
+    )
+    target_link_libraries(cna_demo_renderer_selection PRIVATE CNA)
+    cna_link_sharp_runtime(cna_demo_renderer_selection PRIVATE)
+
     # ---- 2D sprite demo (works with all renderers) ----------------------------
     add_executable(cna_demo_2d
         demo_2d/src/Main.cpp
@@ -47,7 +64,7 @@ if(CNA_BUILD_EXAMPLES)
                 "${CMAKE_CURRENT_SOURCE_DIR}/demo_2d/Content"
                 "$<TARGET_FILE_DIR:cna_demo_2d>/Content"
             COMMENT "Copying Content next to cna_demo_2d executable")
-        if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU" AND CNA_WEBGPU_RUNTIME_LIBRARY)
+        if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES AND CNA_WEBGPU_RUNTIME_LIBRARY)
             add_custom_command(TARGET cna_demo_2d POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${CNA_WEBGPU_RUNTIME_LIBRARY}" "$<TARGET_FILE_DIR:cna_demo_2d>"

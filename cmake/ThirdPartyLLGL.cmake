@@ -115,13 +115,24 @@ function(cna_configure_llgl)
 
     # Mirrors the module set into compile definitions so the renderer's runtime renderer selection
     # can refuse a module that was never built instead of failing deep inside LLGL::RenderSystem.
+    #
+    # plan_runtimerenderer.md RTR-P6-8: published as a LIST for the llgl module to put on its own
+    # target, not applied with add_compile_definitions() here. add_compile_definitions() is
+    # DIRECTORY-scoped, and a function does not create a directory scope -- called from
+    # RendererSelection.cmake, which the top-level CMakeLists includes, it defined these three
+    # macros for every target in the project. That was invisible in a single-renderer build, where
+    # the only renderer is LLGL anyway; in a multi-renderer build it hands every other renderer's
+    # target macros describing LLGL's module set. Only
+    # modules/renderers/llgl/{include,src}/.../LlglRendererSelection.* ever reads them.
+    set(_cna_llgl_definitions "")
     if(CNA_LLGL_BUILD_RENDERER_OPENGL)
-        add_compile_definitions(CNA_LLGL_HAS_OPENGL)
+        list(APPEND _cna_llgl_definitions CNA_LLGL_HAS_OPENGL)
     endif()
     if(CNA_LLGL_BUILD_RENDERER_VULKAN)
-        add_compile_definitions(CNA_LLGL_HAS_VULKAN)
+        list(APPEND _cna_llgl_definitions CNA_LLGL_HAS_VULKAN)
     endif()
     if(CNA_LLGL_BUILD_RENDERER_NULL)
-        add_compile_definitions(CNA_LLGL_HAS_NULL)
+        list(APPEND _cna_llgl_definitions CNA_LLGL_HAS_NULL)
     endif()
+    set(CNA_LLGL_COMPILE_DEFINITIONS ${_cna_llgl_definitions} PARENT_SCOPE)
 endfunction()

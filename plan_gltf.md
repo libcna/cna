@@ -1,5 +1,12 @@
 # plan_gltf.md — CNA glTF 2.0 Correctness Remediation Campaign
 
+
+> **Renderer selection.** This document describes the renderer as a compile-time choice
+> (`-DCNA_GRAPHICS_RENDERER=...`), which remains the default and recommended mode. Since
+> `plan_runtimerenderer.md`, CNA can also be built with several renderers and choose between
+> them at runtime — see `docs/runtime-renderer-selection.md`. Nothing below changes in
+> single-renderer mode.
+
 Planning date: **2026-08-11**
 Baseline: `origin/develop` @ **`fb3728267e8f2179d43b96357ff372ae712b7e7f`**
 (`test(examples): add xvfb screenshot demo for EasyGL and SDL_Renderer`)

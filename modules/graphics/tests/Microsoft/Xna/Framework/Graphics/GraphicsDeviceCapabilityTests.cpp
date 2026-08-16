@@ -46,6 +46,10 @@
 using Microsoft::Xna::Framework::Graphics::GraphicsDevice;
 using CNA::GraphicsCapability;
 
+// Lets CNA_RENDERER_IS name identities bare, matching the guards it replaced. The oracle
+// header scopes its own copy inside its namespace, so a consumer needs this for itself.
+using namespace CNA::Testing::Renderers;   // NOLINT(google-build-using-namespace)
+
 // This test target is built for multiple renderer families. Per-renderer arms below preserve each
 // accepted capability boundary rather than assuming one principal renderer's answers are universal.
 //
@@ -61,183 +65,171 @@ using CNA::GraphicsCapability;
 // 2026-07-20) is no longer one of the differing checks -- both renderers now genuinely support it
 // (OPENGL1 via real ARB_occlusion_query/core-1.5 GL_SAMPLES_PASSED queries).
 
-// OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query mechanism
-// anywhere in the CM registry, and no shader compiler at all. Its `false` for these three is the
-// truthful answer, and is asserted here rather than left as a standing red -- the point of the
-// capability query is that a caller can trust it.
-#if defined(CNA_RENDERER_OPENGLES1)
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_EASYGL) \
-    && (defined(CNA_GL_PROFILE_OPENGLES2) || defined(CNA_GL_PROFILE_WEBGL1))
-// The GLSL ES 1.00 profiles of the EasyGL family (OPENGLES2 native; WEBGL1 is Emscripten-only
-// and cannot build this suite, listed for completeness) truthfully refuse the ES 3.0-level
-// features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays true
-// -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under these
-// profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible elsewhere.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = true;
-#elif defined(CNA_RENDERER_OPENGL1)
-// plan_opengl1.md phase 12: OPENGL1 is a second, legitimately-different, equally-honest
-// 3D-capable renderer -- no MRT and no custom-shader support in its fixed-function
-// pipeline, reported truthfully rather than inherited. Occlusion queries became real in
-// item 23 (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer
-// differs from EasyGL's.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_WICKED)
-// plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
-// IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection this
-// renderer does not do, so custom effects are refused at the call site rather than approximated.
-// MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with readback) are
-// genuinely implemented, so those two keep the default expectation. This arm became reachable
-// only when WICKED-78 made a bare device's teardown survivable; the catch-all below had been
-// answering for this renderer until then.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_SKIA)
-// The one 2D-only renderer in this block. All three answers are structural rather than
-// not-yet-implemented: SkCanvas produces exactly one colour result (docs/skia-renderer.md's MRT
-// row, `Skia_MRT_Rejection`), raster final pixels cannot distinguish positive from zero coverage
-// so no samples-passed query is definable at all, and the accepted custom-effect route is the
-// narrow opt-in CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would
-// promise. Reported false and asserted here rather than left to the catch-all below, which would
-// have claimed all three.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_BLEND2D)
-// Another 2D-only renderer, same shape as Skia immediately above: Blend2D's BLContext produces
-// exactly one colour result (no MRT mechanism), a raster surface has no samples-passed query to
-// report, and this renderer implements no custom-shader Effect ABI at all (CreateEffectRenderer
-// keeps the shared nullptr default). All three are honest structural refusals, not gaps.
-#elif defined(CNA_RENDERER_OPENVG)
-// OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query concept
-// at all -- and no programmable shader stage for a genuinely custom Effect (same reasoning as
-// Canvas/Skia's own arms just above/below).
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_PORTABLEGL)
-// PortableGL owns exactly one framebuffer per context and creates no render targets at all
-// (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and its
-// shader stage is a pair of C function pointers with nothing for a CNA Effect to be compiled into
-// (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect rather than drawing
-// with the built-in sprite shader). All three answers are structural, and each is backed by a
-// refusal in modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_TINYGL)
-// TinyGL answers the same three refusals as PortableGL above, for its own fixed-function reasons:
-// CreateRenderTarget2D()/CreateRenderTargetCube() keep IGraphicsRenderer's nullptr defaults and
-// SetRenderTargets() refuses a non-empty binding, CreateOcclusionQuery() keeps its nullptr default,
-// and TinyGL has no shader stage of any kind for a CNA Effect to be compiled into, so
-// CreateEffectRenderer() keeps its nullptr default and TinyGLSpriteBatchRenderer::SetCustomEffect()
-// refuses a non-null Effect. Each refusal is backed by
-// modules/renderers/tinygl/examples/tinygl_rejection_test.cpp.
-constexpr bool kExpectMultipleRenderTargets = false;
-constexpr bool kExpectOcclusionQuery        = false;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_DILIGENT)
-// plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own
-// honest, narrower profile at this point in its implementation -- no custom ShaderEffect
-// compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41, a
-// real IQuery, exact or binary depending on the device feature) are both real. Each answer
-// is reported truthfully rather than inherited from EasyGL, and each moves when its own task lands.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#elif defined(CNA_RENDERER_FNA3D)
-// plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a *compiled*
-// Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in the library
-// compiles a GLSL/HLSL source string, which is what IEffectRenderer/CreateEffectRenderer is handed.
-// The false is therefore structural, not not-yet-implemented, and CreateEffectRenderer returns
-// null to match (docs/fna3d-renderer.md). MRT (FNA3D_SetRenderTargets takes the whole ordered set)
-// and occlusion queries (FNA3D_CreateQuery/QueryPixelCount) are genuinely implemented.
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = false;
-#else
-constexpr bool kExpectMultipleRenderTargets = true;
-constexpr bool kExpectOcclusionQuery        = true;
-constexpr bool kExpectCustomEffects         = true;
-#endif
+/// plan_runtimerenderer.md RTR-P9-4: the per-renderer capability expectations. This was an
+/// `#if`/`#elif` chain of `constexpr bool`s, which in a multi-renderer build can only ever describe
+/// the DEFAULT renderer -- every other renderer in the same binary was asserted against the
+/// default's profile. It is a lookup keyed on the ACTIVE renderer now. Each arm keeps its own
+/// reasoning with it.
+struct CapabilityExpectation
+{
+    bool multipleRenderTargets;
+    bool occlusionQuery;
+    bool customEffects;
+};
+
+[[nodiscard]] inline CapabilityExpectation ExpectedCapabilities()
+{
+    using CNA::GraphicsRendererType;
+    switch (CNA::GraphicsRendererSelection::GetSelected())
+    {
+        // OpenGL ES 1.1 is a fixed-function pipeline with no MRT mechanism, no occlusion-query
+        // mechanism anywhere in the CM registry, and no shader compiler at all. Its `false` for
+        // these three is the truthful answer, and is asserted rather than left as a standing red --
+        // the point of the capability query is that a caller can trust it.
+        case GraphicsRendererType::OpenGLES1:
+            return {false, false, false};
+
+        // The GLSL ES 1.00 profiles of the EasyGL family truthfully refuse the ES 3.0-level
+        // features: core ES 2.0 has no draw-buffers MRT and no query objects. CustomEffects stays
+        // true -- the ShaderEffect mechanism works; the game's GLSL source must be ES 1.00 under
+        // these profiles (docs/opengles2-renderer.md), exactly as it must be ES 3.00-compatible
+        // elsewhere. The family's other three profiles take the default arm below, which is what
+        // the `CNA_GL_PROFILE_*` half of the old condition expressed.
+        case GraphicsRendererType::OpenGLES2:
+        case GraphicsRendererType::WebGL1:
+            return {false, false, true};
+
+        // plan_opengl1.md phase 12: a second, legitimately-different, equally-honest 3D-capable
+        // renderer -- no MRT and no custom-shader support in its fixed-function pipeline, reported
+        // truthfully rather than inherited. Occlusion queries became real in item 23
+        // (ARB_occlusion_query/core GL 1.5, GL_SAMPLES_PASSED), so that answer no longer differs
+        // from EasyGL's.
+        case GraphicsRendererType::OpenGL1:
+            return {false, true, false};
+
+        // plan_wicked.md WICKED-57/68: this renderer answers CustomEffects with a truthful false --
+        // IEffectRenderer addresses shader constants by name, which needs the SPIR-V reflection
+        // this renderer does not do, so custom effects are refused at the call site rather than
+        // approximated. MRT (up to 4 attachments) and occlusion queries (a real GPUQueryHeap with
+        // readback) are genuinely implemented.
+        case GraphicsRendererType::Wicked:
+            return {true, true, false};
+
+        // Skia: all three answers are structural rather than not-yet-implemented. SkCanvas produces
+        // exactly one colour result (docs/skia-renderer.md's MRT row, `Skia_MRT_Rejection`), raster
+        // final pixels cannot distinguish positive from zero coverage so no samples-passed query is
+        // definable at all, and the accepted custom-effect route is the narrow opt-in
+        // CNA_SKIA_SKSL_V1 ABI rather than the arbitrary-Effect support a true would promise.
+        case GraphicsRendererType::Skia:
+            return {false, false, false};
+
+        // Blend2D, same shape as Skia: BLContext produces exactly one colour result (no MRT
+        // mechanism), a raster surface has no samples-passed query to report, and this renderer
+        // implements no custom-shader Effect ABI at all (CreateEffectRenderer keeps the shared
+        // nullptr default). All three are honest structural refusals, not gaps.
+        //
+        // These three values are what this arm's comment always claimed, but the arm DEFINED
+        // nothing: `#elif defined(CNA_RENDERER_BLEND2D)` was followed straight by the next `#elif`,
+        // so a Blend2D build selected an empty arm, never reached the catch-all, and left
+        // kExpectMultipleRenderTargets and friends undefined at their use sites -- this file could
+        // not compile for that renderer at all. Same for OpenVG below. Neither is buildable in this
+        // environment, so the values are the documented intent rather than a measurement.
+        case GraphicsRendererType::Blend2D:
+            return {false, false, false};
+
+        // OpenVG is a 2D vector-graphics API with no 3D pipeline, no MRT, and no occlusion-query
+        // concept at all -- and no programmable shader stage for a genuinely custom Effect.
+        case GraphicsRendererType::OpenVg:
+            return {false, false, false};
+
+        // PortableGL owns exactly one framebuffer per context and creates no render targets at all
+        // (SetRenderTargets refuses every non-empty binding), has no occlusion-query mechanism, and
+        // its shader stage is a pair of C function pointers with nothing for a CNA Effect to be
+        // compiled into (PortableGLSpriteBatchRenderer::SetCustomEffect refuses a non-null Effect
+        // rather than drawing with the built-in sprite shader). All three answers are structural,
+        // and each is backed by a refusal in
+        // modules/renderers/portablegl/examples/portablegl_rejection_test.cpp.
+        case GraphicsRendererType::PortableGL:
+            return {false, false, false};
+
+        // From `next`: TinyGL answers the same three refusals as PortableGL, for its own
+        // fixed-function reasons -- CreateRenderTarget2D()/CreateRenderTargetCube() keep
+        // IGraphicsRenderer's nullptr defaults, SetRenderTargets() refuses a non-empty binding, and
+        // CreateOcclusionQuery() keeps its nullptr default.
+        case GraphicsRendererType::TinyGL:
+            return {false, false, false};
+
+        // plan_diligent.md DILIGENT-42: a third genuinely 3D-capable renderer with its own honest,
+        // narrower profile at this point in its implementation -- no custom ShaderEffect
+        // compilation. MRT (DILIGENT-24, up to four attachments) and occlusion queries (DILIGENT-41,
+        // a real IQuery, exact or binary depending on the device feature) are both real. Each answer
+        // is reported truthfully rather than inherited from EasyGL, and each moves when its own task
+        // lands.
+        case GraphicsRendererType::Diligent:
+            return {true, true, false};
+
+        // plan_fna3d.md: FNA3D's only shader entry point is FNA3D_CreateEffect, which takes a
+        // *compiled* Direct3D 9 Effect Framework binary and runs it through MojoShader; nothing in
+        // the library compiles a GLSL/HLSL source string, which is what
+        // IEffectRenderer/CreateEffectRenderer is handed. The false is therefore structural, not
+        // not-yet-implemented, and CreateEffectRenderer returns null to match
+        // (docs/fna3d-renderer.md). MRT (FNA3D_SetRenderTargets takes the whole ordered set) and
+        // occlusion queries (FNA3D_CreateQuery/QueryPixelCount) are genuinely implemented.
+        case GraphicsRendererType::Fna3d:
+            return {true, true, false};
+
+        // Software: one active colour buffer, so no MRT -- SoftwareRenderer::SetRenderTargets()
+        // throws for count > 1 and ApplyBlendState() applies slot-0's write mask only. It used to
+        // take the default arm and claim MRT support, which
+        // TheMultipleRenderTargetCapabilityMatchesWhatBindingActuallyDoes caught the moment that
+        // consistency check reached this renderer. Occlusion queries and custom effects are
+        // genuinely implemented, so those two keep the default's answer.
+        case GraphicsRendererType::Software:
+            return {false, true, true};
+
+        default:
+            return {true, true, true};
+    }
+}
 
 // Both of these assert `true` for every 3D-capable renderer. A deliberately 2D-only renderer
 // answers false, and that is the correct answer, not a gap -- so it gets its own arm rather than
 // a standing red. Only the arm for the renderer being added is written here; the other 2D-only
 // identities in this repository are untouched by this file and keep whatever they answer today.
-#if defined(CNA_RENDERER_SKIA) || defined(CNA_RENDERER_BLEND2D)
-TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
+/// plan_runtimerenderer.md RTR-P9-4: the deliberately 2D-only renderers. Each answers false, and
+/// that is the correct answer rather than a gap. The other 2D-only identities in this repository
+/// are untouched by this file and keep whatever they answer today -- exactly as the `#else` arm
+/// this replaces did.
+[[nodiscard]] inline bool IsTwoDimensionalOnly()
 {
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "this 2D-only raster renderer claims a 3D pipeline -- every 3D route it owns refuses "
-           "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
+    return CNA_RENDERER_IS(Skia, Blend2D, OpenVg);
 }
 
-TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
-{
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "this 2D-only raster renderer claims a depth/stencil buffer -- its render targets have "
-           "no attachment, and DepthStencilState::None is accepted only as the absence of one";
-}
-#elif defined(CNA_RENDERER_OPENVG)
 TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
 {
     GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "OpenVG (ShivaVG) claims a 3D pipeline -- every 3D route it owns refuses through "
-           "HandleUnsupported3DCall(), so a true report cannot be backed by anything";
-}
-
-TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
-{
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "OpenVG has no depth/stencil concept whatsoever -- OpenVgRenderer::SupportsDepthStencil "
-           "returns false unconditionally";
-}
-#elif defined(CNA_RENDERER_TINYGL)
-// TinyGL splits the pair the arms above keep together: it is genuinely 3D-capable, but its
-// ZBuffer carries a depth plane and no stencil plane. DepthStencilBuffer names the pair, so the
-// honest answer is false even though the depth half is real and implemented -- see
-// TinyGLRenderer::SupportsCapability(). SupportsStencilBuffer below asserts the same truth from
-// the renderer's own side.
-TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
-{
-    GraphicsDevice gd;
-    EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD))
-        << "TinyGL's fixed-function 3D routes (DrawPrimitivesEx/DrawIndexedPrimitivesEx) are real "
-           "and covered by modules/renderers/tinygl/examples/tinygl_3d_test.cpp";
-}
-
-TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
-{
-    GraphicsDevice gd;
-    EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
-        << "TinyGL's ZBuffer has a depth plane but no stencil plane, so the depth/stencil pair "
-           "this capability names cannot be claimed";
-}
-#else
-TEST(GraphicsDeviceCapabilityTest, SupportsThreeD)
-{
-    GraphicsDevice gd;
+    if (IsTwoDimensionalOnly())
+    {
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::ThreeD))
+            << "this 2D-only renderer claims a 3D pipeline -- every 3D route it owns refuses "
+               "through HandleUnsupported3DCall(), so a true report cannot be backed by anything";
+        return;
+    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::ThreeD));
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsDepthStencilBuffer)
 {
     GraphicsDevice gd;
+    if (IsTwoDimensionalOnly())
+    {
+        EXPECT_FALSE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer))
+            << "this 2D-only renderer claims a depth/stencil buffer -- its render targets have no "
+               "attachment, and DepthStencilState::None is accepted only as the absence of one";
+        return;
+    }
     EXPECT_TRUE(gd.SupportsCapability(GraphicsCapability::DepthStencilBuffer));
 }
-#endif
 
 TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 {
@@ -249,7 +241,7 @@ TEST(GraphicsDeviceCapabilityTest, SupportsStencilBuffer)
 TEST(GraphicsDeviceCapabilityTest, SupportsMultipleRenderTargets)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), kExpectMultipleRenderTargets);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::MultipleRenderTargets), ExpectedCapabilities().multipleRenderTargets);
 }
 
 // The consistency check the two tests above could not make between them.
@@ -311,13 +303,13 @@ TEST(GraphicsDeviceCapabilityTest, TheMultipleRenderTargetCapabilityMatchesWhatB
 TEST(GraphicsDeviceCapabilityTest, SupportsOcclusionQuery)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), kExpectOcclusionQuery);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::OcclusionQuery), ExpectedCapabilities().occlusionQuery);
 }
 
 TEST(GraphicsDeviceCapabilityTest, SupportsCustomEffects)
 {
     GraphicsDevice gd;
-    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), kExpectCustomEffects);
+    EXPECT_EQ(gd.SupportsCapability(GraphicsCapability::CustomEffects), ExpectedCapabilities().customEffects);
 }
 
 // MSAA/anisotropic filtering are genuinely device/driver-dependent -- don't assert a specific
@@ -395,11 +387,9 @@ TEST(GraphicsDeviceCapabilityTest, GetMaxTextureDimensionReturnsSanePositiveValu
 
 // The oracle itself -- geometry, probes, colours, the Solid control and the single-draw renderer
 // -- lives in WireFrameTriangleOracle.hpp so WEBGPU-115's rejection suite measures the identical
-// fixture instead of a copy that can drift from this one. The CNA_WIREFRAME_* selection macros are
-// defined there too, for the same reason.
-#ifdef CNA_WIREFRAME_PIXEL_ORACLE
+// fixture instead of a copy that can drift from this one. The wireframe selection predicates are
+// evaluated there too, for the same reason.
 using namespace CnaTest::WireFrameOracle;   // NOLINT(google-build-using-namespace)
-#endif
 
 // ---------------------------------------------------------------------------
 // The capability report, per renderer. Each arm states what THIS renderer answers today; none of
@@ -445,8 +435,8 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // satisfied more strongly than it asks -- Ensure3DSupported() rejects every 3D draw before any
     // vertex input is inspected, so no polygon topology can reach a raster queue to be silently
     // filled solid. Same truthful-false shape as DIRECTX1 and Stub, and like Stub it has no pixel route
-    // to measure, which is why WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE
-    // undefined here.
+    // to measure, which is why WireFrameTriangleOracle.hpp keeps this renderer out of
+    // HasPixelOracle() here.
     EXPECT_FALSE(reported)
         << "Skia claims WireFrame support -- this raster renderer has no polygon fill mode and no "
            "3D draw route, so a true report cannot be backed by any rendering path";
@@ -455,8 +445,8 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // mode and no vertex/primitive route at all -- SupportsCapability(ThreeD) is already false, and
     // DrawColoredPrimitives/DrawIndexedColoredPrimitives refuse every 3D draw before any vertex
     // input is inspected, so no polygon topology can reach a raster queue to be silently filled
-    // solid. Like Skia, WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined
-    // here (no pixel route to measure).
+    // solid. Like Skia, WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle()
+    // (no pixel route to measure).
     EXPECT_FALSE(reported)
         << "Blend2D claims WireFrame support -- this raster renderer has no polygon fill mode and "
            "no 3D draw route, so a true report cannot be backed by any rendering path";
@@ -465,7 +455,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // pipeline at all. Same truthful-false shape as Skia/DIRECTX1 -- OpenVgRenderer's own 3D
     // pure-virtuals all refuse through HandleUnsupported3DCall() before any topology could reach a
     // draw. Like Skia/DIRECTX1/Stub it has no pixel route to measure, which is why
-    // WireFrameTriangleOracle.hpp leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    // WireFrameTriangleOracle.hpp keeps this renderer out of HasPixelOracle().
     EXPECT_FALSE(reported)
         << "OpenVG claims WireFrame support -- this renderer has no 3D pipeline at all, so a true "
            "report cannot be backed by any rendering path";
@@ -480,7 +470,7 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
     // refusal obligation exists to stop a renderer from returning a frame that silently lies -- a
     // solid fill presented as a wireframe. Stub returns no frame at all, so it has the third shape
     // this file describes: an honest report with no pixel route to measure, which is why
-    // WireFrameTriangleOracle.hpp deliberately leaves CNA_WIREFRAME_PIXEL_ORACLE undefined here.
+    // WireFrameTriangleOracle.hpp deliberately keeps this renderer out of HasPixelOracle().
     //
     // Stub is also stricter than Headless, which reaches the default arm below by INHERITING
     // IGraphicsRenderer's true. Stub overrides SupportsCapability to false precisely so a no-op
@@ -497,23 +487,24 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameCapabilityReportIsThisBackendsOwn)
 #endif
 }
 
-#ifdef CNA_WIREFRAME_PIXEL_ORACLE
-
 // ---------------------------------------------------------------------------
 // POSITIVE CONTRACT -- renderers that genuinely rasterize a wireframe.
 // ---------------------------------------------------------------------------
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorUnfilled)
 {
-#if !defined(CNA_WIREFRAME_MEASURED)
-    GTEST_SKIP() << kRendererName
-                 << " has no runtime in this environment; the oracle compiles but cannot measure";
-#elif !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    // The rejecting renderer gets its own arm below; asserting the positive contract here would
-    // only duplicate that arm's failure mode with a worse diagnostic.
-    GTEST_SKIP() << kRendererName
-                 << " does not rasterize wireframe; see the deterministic-rejection arm";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured())
+        GTEST_SKIP() << RendererName()
+                     << " has no runtime in this environment; the oracle runs but cannot measure";
+    if (!RendersEdges())
+        // The rejecting renderer gets its own arm below; asserting the positive contract here would
+        // only duplicate that arm's failure mode with a worse diagnostic.
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize wireframe; see the deterministic-rejection arm";
     GraphicsDevice gd;
     const Result solid = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid", solid);
@@ -522,11 +513,11 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
 
     ExpectSolidTriangle(solid);
     ASSERT_TRUE(wire.rendered)
-        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
+        << RendererName() << " refused a WireFrame draw: " << wire.rejection;
 
     // 1. THE INTERIOR IS EMPTY. This is what separates a wireframe from a solid fill.
     EXPECT_EQ(0, wire.frame.LitIn(kInterior))
-        << kRendererName << " filled " << wire.frame.LitIn(kInterior)
+        << RendererName() << " filled " << wire.frame.LitIn(kInterior)
         << " interior pixels under FillMode::WireFrame -- that is a solid fill, not a wireframe ("
         << wire.frame.Describe() << ')';
 
@@ -535,38 +526,40 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameLightsEveryEdgeAndLeavesTheInteriorU
     for (std::size_t i = 0; i < kEdgeProbes.size(); ++i)
     {
         EXPECT_GE(wire.frame.LitIn(kEdgeProbes[i]), 8)
-            << kRendererName << " edge " << kEdgeNames[i]
+            << RendererName() << " edge " << kEdgeNames[i]
             << " is missing from the wireframe (" << wire.frame.Describe() << ')';
         EXPECT_TRUE(Frame::NearInk(wire.frame.FirstLitIn(kEdgeProbes[i])))
-            << kRendererName << " edge " << kEdgeNames[i] << " is "
+            << RendererName() << " edge " << kEdgeNames[i] << " is "
             << Describe(wire.frame.FirstLitIn(kEdgeProbes[i])) << ", not the ink colour";
     }
 
     // 3. THE FRAME IS NOT THE CLEAR. A dropped draw lights nothing at all, which the edge probes
     //    already reject; this states the whole-frame form of it so the failure names the cause.
     EXPECT_GT(wire.frame.LitTotal(), 0)
-        << kRendererName << " rendered nothing at all under FillMode::WireFrame";
+        << RendererName() << " rendered nothing at all under FillMode::WireFrame";
 
     // 4. THE TWO MODES DIFFER BY AN ORDER OF MAGNITUDE. Edges of this triangle are ~600 pixels;
     //    its interior is 18176. A renderer that quietly promoted the wireframe to a solid fill --
     //    or that widened lines until they became one -- cannot satisfy this.
     EXPECT_LT(wire.frame.LitTotal() * 4, solid.frame.LitTotal())
-        << kRendererName << " WireFrame covered " << wire.frame.LitTotal()
+        << RendererName() << " WireFrame covered " << wire.frame.LitTotal()
         << " pixels against Solid's " << solid.frame.LitTotal()
         << " -- not a measurably smaller figure";
 
     // 5. NOTHING BUT INK AND CLEAR. A second draw, a retry, or a blend over the first would leave
     //    a third colour somewhere in the frame.
     EXPECT_TRUE(wire.frame.EveryLitPixelIsInk())
-        << kRendererName << " WireFrame produced a lit pixel that is neither ink nor clear";
-#endif
+        << RendererName() << " WireFrame produced a lit pixel that is neither ink nor clear";
 }
 
 TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasterizerState)
 {
-#if !defined(CNA_WIREFRAME_MEASURED) || !defined(CNA_WIREFRAME_RENDERS_EDGES)
-    GTEST_SKIP() << kRendererName << " is not in the measured wireframe-rendering set";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured() || !RendersEdges())
+        GTEST_SKIP() << RendererName() << " is not in the measured wireframe-rendering set";
     GraphicsDevice gd;
     // WireFrame -> Solid -> WireFrame. A renderer that caches a pipeline, a polygon mode or an
     // expanded index buffer across state changes produces a different third frame; a renderer that
@@ -582,16 +575,15 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
     ASSERT_TRUE(third.rendered);
     ExpectSolidTriangle(solid);
 
-    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << kRendererName << ' ' << first.frame.Describe();
+    EXPECT_EQ(0, first.frame.LitIn(kInterior)) << RendererName() << ' ' << first.frame.Describe();
     EXPECT_EQ(0, third.frame.LitIn(kInterior))
-        << kRendererName << " kept the Solid state after returning to WireFrame -- "
+        << RendererName() << " kept the Solid state after returning to WireFrame -- "
         << third.frame.Describe();
     EXPECT_TRUE(first.frame.pixels == third.frame.pixels)
-        << kRendererName << " did not reproduce its own wireframe after a Solid draw ("
+        << RendererName() << " did not reproduce its own wireframe after a Solid draw ("
         << first.frame.Describe() << " then " << third.frame.Describe() << ')';
     EXPECT_FALSE(first.frame.pixels == solid.frame.pixels)
-        << kRendererName << " produced identical frames for WireFrame and Solid";
-#endif
+        << RendererName() << " produced identical frames for WireFrame and Solid";
 }
 
 // ---------------------------------------------------------------------------
@@ -600,27 +592,32 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameAndSolidAlternateWithoutStaleRasteri
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 {
-#ifndef CNA_WIREFRAME_MEASURED
-    GTEST_SKIP() << kRendererName << " has no runtime in this environment";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!IsMeasured())
+        GTEST_SKIP() << RendererName() << " has no runtime in this environment";
     GraphicsDevice gd;
     const Result wire = RenderTriangle(gd, FillMode::WireFrame);
     PrintReading("wireframe-before-recovery", wire);
-#ifdef CNA_WIREFRAME_REJECTED
-    // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that it
-    // left nothing behind for the next draw to trip over.
-    ASSERT_FALSE(wire.rendered)
-        << kRendererName << " accepted a WireFrame draw again -- " << wire.frame.Describe();
-    ExpectClearOnly(wire.frame, "the refused WireFrame draw");
-#else
-    ASSERT_TRUE(wire.rendered)
-        << kRendererName << " refused a WireFrame draw: " << wire.rejection;
-#endif
+    if (RejectsWireFrame())
+    {
+        // A refusal is this renderer's correct answer (WEBGPU-115) -- what must still hold is that
+        // it left nothing behind for the next draw to trip over.
+        ASSERT_FALSE(wire.rendered)
+            << RendererName() << " accepted a WireFrame draw again -- " << wire.frame.Describe();
+        ExpectClearOnly(wire.frame, "the refused WireFrame draw");
+    }
+    else
+    {
+        ASSERT_TRUE(wire.rendered)
+            << RendererName() << " refused a WireFrame draw: " << wire.rejection;
+    }
 
     const Result recovered = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-recovery", recovered);
     ExpectSolidTriangle(recovered);
-#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -629,9 +626,12 @@ TEST(GraphicsDeviceCapabilityTest, SolidRendersExactlyAfterAWireFrameDraw)
 // ---------------------------------------------------------------------------
 TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRenderer)
 {
-#ifndef CNA_WIREFRAME_REJECTED
-    GTEST_SKIP() << kRendererName << " is not in the WireFrame-rejecting set";
-#else
+    // plan_runtimerenderer.md RTR-P9-7: the oracle set, asked of the ACTIVE renderer.
+    if (!HasPixelOracle())
+        GTEST_SKIP() << RendererName()
+                     << " does not rasterize and read pixels back, so there is nothing to measure";
+    if (!RejectsWireFrame())
+        GTEST_SKIP() << RendererName() << " is not in the WireFrame-rejecting set";
     // The whole point of the boundary is that the two frames are NOT the same picture and NOT both
     // produced: Solid renders exactly, WireFrame throws, and the target the refused draw was aimed
     // at still holds nothing but the clear colour.
@@ -643,31 +643,29 @@ TEST(GraphicsDeviceCapabilityTest, WireFrameIsRefusedDeterministicallyOnThisRend
 
     ExpectSolidTriangle(solid);
     ASSERT_FALSE(wire.rendered)
-        << kRendererName << " accepted a WireFrame draw and produced " << wire.frame.Describe()
+        << RendererName() << " accepted a WireFrame draw and produced " << wire.frame.Describe()
         << ". If real wireframe rendering landed, move this renderer into "
-           "CNA_WIREFRAME_RENDERS_EDGES";
+           "the RendersEdges() set";
     // The message has to name the thing that was refused -- a bare "not supported" cannot be acted
     // on, and a message that names something else means a different guard fired.
     EXPECT_NE(std::string::npos, wire.rejection.find("WireFrame"))
-        << kRendererName << " refused the draw with a message that does not name FillMode::"
+        << RendererName() << " refused the draw with a message that does not name FillMode::"
         << "WireFrame: \"" << wire.rejection << '"';
     EXPECT_NE(std::string::npos, wire.rejection.find("SupportsCapability"))
-        << kRendererName << " refused the draw without pointing at the capability query: \""
+        << RendererName() << " refused the draw without pointing at the capability query: \""
         << wire.rejection << '"';
     ExpectClearOnly(wire.frame, "the refused WireFrame draw");
     EXPECT_FALSE(wire.frame.pixels == solid.frame.pixels)
-        << kRendererName << " produced the Solid picture for a refused WireFrame draw";
+        << RendererName() << " produced the Solid picture for a refused WireFrame draw";
 
     // The device survives the refusal: a second Solid draw renders exactly, on a new target.
     const Result again = RenderTriangle(gd, FillMode::Solid);
     PrintReading("solid-after-refusal", again);
     ExpectSolidTriangle(again);
     EXPECT_TRUE(again.frame.pixels == solid.frame.pixels)
-        << kRendererName << " did not reproduce its own Solid frame after a refused WireFrame draw";
-#endif
+        << RendererName() << " did not reproduce its own Solid frame after a refused WireFrame draw";
 }
 
-#endif  // CNA_WIREFRAME_PIXEL_ORACLE
 
 // ---------------------------------------------------------------------------
 // HONEST SKIP + EXACT CARDINALITY -- Headless has no pixel route at all, and is the one renderer

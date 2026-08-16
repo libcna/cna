@@ -1,3 +1,13 @@
+# plan_runtimerenderer.md RTR-P9-19: renderer gates that decide whether a renderer's OWN tests are
+# compiled, or its libraries exposed to the test executable, test LIST MEMBERSHIP
+# (CNA_RENDERER_IDENTITIES) rather than equality with the build default. In single-renderer mode the
+# list holds one entry and the two are identical; in a multi-renderer build a renderer's tests must
+# be kept whenever that renderer is compiled in, not only when it happens to be the default --
+# otherwise a multi build silently drops the suites of every non-default renderer it contains.
+#
+# The CROSSCOMPILING_EMULATOR chain further down is deliberately NOT converted: a target carries one
+# emulator property, so it can only ever describe one renderer, and the default is the honest choice.
+
 if(CNA_BUILD_TESTS)
     # Task DEVPERF-001: fail fast with an actionable message rather than
     # CMake's own generic "add_subdirectory given source ... which is not an
@@ -41,6 +51,12 @@ if(CNA_BUILD_TESTS)
     # standalone executables with their own main(), not GTest translation units -- same reason
     # as the Glide ABI programs just above.
     list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/modules/.*\\.cpp$")
+
+    # plan_apple.md APPLE-11: the Apple smoke application (cmake/AppleSmoke.cmake) is a complete
+    # program with its own main(), for the same reason as the two entries above. Swept into
+    # CnaTests it does not merely add a case -- its main() replaces GTest's, so the test binary
+    # links, runs the smoke app and exits without running a single test.
+    list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/tests/apple/.*\\.cpp$")
 
     # plan_platform.md PLAT-119: the platform module's SDL3-specific tests exercise
     # CNA::Platform::Sdl3, which is compiled only when CNA_PLATFORM=SDL3. Under any other
@@ -111,7 +127,7 @@ if(CNA_BUILD_TESTS)
     # REMED-BUILD-013 (discovered while verifying it): mirrors CnaLibrary.cmake's own
     # CNA_FFMPEG_AVAILABLE exclusion for VideoDecoder.cpp/VideoPlayer.cpp/Video.cpp/
     # VideoContentTypeReader.cpp -- these 4 test files exercise exactly those classes, which do not
-    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android),
+    # exist in the built CNA library on an FFmpeg-unavailable platform (MinGW/Emscripten/Android/iOS),
     # and previously failed to link there (never hit before this task: no FFmpeg-unavailable CnaTests
     # build had gotten this far). VideoSoundtrackTypeTests.cpp is unaffected -- that enum has no .cpp
     # and no FFmpeg dependency.
@@ -129,7 +145,9 @@ if(CNA_BUILD_TESTS)
     # multi-process spawning exists in a single Node.js/Wasm module. Also excluded on Android: the
     # harness path baked in via CNA_NET_HARNESS_PATH is an absolute path on the build machine, not
     # the on-device filesystem, and CnaTests is run as a bare pushed executable, not a packaged app
-    # with its own bundled assets. Not part of the Task 6.2/6.4 verification filters
+    # with its own bundled assets. iOS (plan_apple.md APPLE-5) is excluded for both of those
+    # reasons at once: an app-sandboxed process may not spawn another executable at all, and the
+    # baked-in build-machine harness path does not exist inside the .app either. Not part of the Task 6.2/6.4 verification filters
     # (*Network*:*Gamer*:*ENet*:*Packet*) either, since its suite name is TwoProcessLoopbackTest.
     # plan_dx1.md DX1-88 regression pass: found and fixed a pre-existing, not-DX1-specific gap --
     # this glob picks up ENet-specific tests unconditionally, but those files include
@@ -158,7 +176,7 @@ if(CNA_BUILD_TESTS)
         unset(_cna_disabled_net_test)
     endif()
 
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Net/TwoProcessLoopbackTest\\.cpp$")
         # GamerServicesDispatcherHangRegressionTest.cpp (Task 12.1) uses the same POSIX-only
         # posix_spawn/sys-wait process APIs, for the same reasons — see TwoProcessLoopbackTest's
@@ -172,14 +190,14 @@ if(CNA_BUILD_TESTS)
     # Excluded on the same platforms and for the same reasons (no real process spawning in a
     # single Node.js/Wasm module; CNA_AUDIO_NO_HARDWARE_HARNESS_PATH is a build-machine absolute
     # path, meaningless on-device on Android).
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Audio/AudioMixerTests\\.cpp$")
     endif()
 
     # GltfToCnjToolTests.cpp (plan_cnj.md CNB-52) uses the same POSIX-only posix_spawn/sys-wait
     # process APIs to spawn cna_tool_gltf_to_cnj as an independent OS process, for the same
     # reasons as the harness-spawning tests above.
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Xna/Framework/Content/GltfToCnjToolTests\\.cpp$")
     endif()
 
@@ -187,7 +205,7 @@ if(CNA_BUILD_TESTS)
     # (posix_spawn, poll, sys/wait.h) to spawn tools/devices/shutdown_ordering_harness.cpp as an
     # independent OS process, for the same reason TwoProcessLoopbackTest.cpp needs one above.
     # Excluded on the same platforms and for the same reasons.
-    if(WIN32 OR EMSCRIPTEN OR ANDROID)
+    if(WIN32 OR EMSCRIPTEN OR ANDROID OR CNA_APPLE_IOS)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/Microsoft/Devices/Detail/DevicesShutdownOrderingTests\\.cpp$")
     endif()
 
@@ -199,7 +217,7 @@ if(CNA_BUILD_TESTS)
     # a renderer-local test directory otherwise breaks every other renderer's CnaTests configure.
     # Under WICKED the corpus keeps them, and the dedicated cna_test_wicked_* targets
     # (cmake/Tests/WickedTests.cmake) build them standalone as well.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
+    if(NOT "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Wicked/.*\\.cpp$")
     endif()
 
@@ -208,7 +226,7 @@ if(CNA_BUILD_TESTS)
     # when the MAGNUM renderer is configured (the Magnum::GL include directories come with the
     # renderer target). Excluded from every other renderer's corpus by the same convention as the
     # Wicked directory above; under MAGNUM the corpus keeps it.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
+    if(NOT "MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Magnum/.*\\.cpp$")
     endif()
 
@@ -217,7 +235,7 @@ if(CNA_BUILD_TESTS)
     # the FNA3D renderer is configured (the FNA3D/MojoShader include roots come with the renderer
     # target). Excluded from every other renderer's corpus by the same convention as the Wicked
     # and Magnum directories above; under FNA3D the corpus keeps them.
-    if(NOT CNA_GRAPHICS_RENDERER STREQUAL "FNA3D")
+    if(NOT "FNA3D" IN_LIST CNA_RENDERER_IDENTITIES)
         list(FILTER CNA_TEST_SOURCES EXCLUDE REGEX ".*/CNA/Internal/Renderers/Fna3d/.*\\.cpp$")
     endif()
 
@@ -308,6 +326,10 @@ if(CNA_BUILD_TESTS)
     # not propagate to CnaTests via target_link_libraries and must be added here too.
     target_include_directories(CnaTests PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cgltf
+            # plan_runtimerenderer.md RTR-P9-2: shared test-support headers reached by their
+            # namespace path (CNA/RendererTestGate.hpp), matching how every module's public headers
+            # are spelled.
+            ${CMAKE_CURRENT_SOURCE_DIR}/modules/graphics/tests
             # plan_platform.md PLAT-77/PLAT-90: modules/platform/tests holds shared test
             # scaffolding (PlatformTestDecorator.hpp) that tests in other modules include to drive
             # CNA against a controlled platform. It replaces the eight per-subsystem injectable
@@ -322,10 +344,65 @@ if(CNA_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/modules/audio/src
     )
 
+    # plan_runtimerenderer.md RTR-P9-9: one CNA_RENDERER_PRESENT_<IDENTITY> define per renderer
+    # COMPILED INTO THIS BUILD, on the test executable only.
+    #
+    # A renderer's own test suite guards its body on `#if defined(CNA_RENDERER_<X>)`, and only the
+    # DEFAULT renderer's macro is defined project-wide (that is what keeps every other renderer-gated
+    # test in the corpus unambiguous). So in a multi-renderer build those files compiled to nothing:
+    # the sources were there, the tests were not. Keeping their sources without this define was the
+    # empty half of the fix.
+    #
+    # PRESENT_ says "compiled in", never "selected", so it cannot be confused with the identity
+    # macros and does not disturb the exactly-one invariant GraphicsRendererCompileDefinitionTests
+    # asserts.
+    foreach(_cna_present_identity IN LISTS CNA_RENDERER_IDENTITIES)
+        target_compile_definitions(CnaTests PRIVATE "CNA_RENDERER_PRESENT_${_cna_present_identity}")
+    endforeach()
+
+    # ...and each compiled-in renderer's own public include root, for the same reason: those suites
+    # include their renderer's headers ("CNA/Internal/Renderers/Magnum/MagnumBuffers.hpp"), and only
+    # the DEFAULT renderer's target contributes its include directory to this executable. Enabling
+    # the define without the include root just moves the failure from "no tests" to "no such file".
+    foreach(_cna_present_dir IN LISTS CNA_RENDERER_DIRS)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
+            target_include_directories(CnaTests PRIVATE
+                "${CMAKE_CURRENT_SOURCE_DIR}/${_cna_present_dir}/include")
+        endif()
+    endforeach()
+
+    # plan_runtimerenderer.md RTR-P9-9, second half: a module's own include root is not enough when
+    # its PUBLIC headers include a third-party library's headers in turn. LLGL is the case that
+    # showed it -- modules/renderers/llgl/include/.../LlglSdlSurface.hpp opens with
+    # `#include <LLGL/Surface.h>`, and LLGL's include directory reaches the llgl module through the
+    # LLGL target it links, not through any directory of CNA's own. Adding only CNA's root moved the
+    # failure from "no tests" to "LLGL/Surface.h: No such file or directory" in a multi build
+    # containing LLGL.
+    #
+    # Giving this executable each present renderer target's OWN include list keeps that generic:
+    # whatever a renderer module compiles against, its device-free suites can compile against too,
+    # without this file having to know which third-party library each family uses.
+    foreach(_cna_present_target IN LISTS CNA_RENDERER_TARGETS)
+        if(TARGET ${_cna_present_target})
+            target_include_directories(CnaTests PRIVATE
+                "$<TARGET_PROPERTY:${_cna_present_target},INCLUDE_DIRECTORIES>")
+        endif()
+    endforeach()
+
     # REMED-GFX-054's WebGPU-only IndexBuffer regression opens native error scopes around the
     # public operation. CNA's renderer intentionally keeps wgpu-native PRIVATE, so expose it only
     # to this test executable in the WebGPU configuration.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "WEBGPU")
+    # plan_runtimerenderer.md RTR-P10-12: FNA3D's suites include mojoshader.h, and that header
+    # includes the GENERATED mojoshader_version.h unless MOJOSHADER_NO_VERSION_INCLUDE is defined.
+    # cna_fna3d carries that switch for the renderer target, but RTR-P9-9 gave this executable the
+    # present renderers' include PATHS only -- so CnaTests found the header and then failed on the
+    # generated one it pulls in. The include root alone is not the whole surface a family's suites
+    # compile against; its switches are part of it.
+    if("FNA3D" IN_LIST CNA_RENDERER_IDENTITIES AND TARGET cna_fna3d)
+        target_link_libraries(CnaTests PRIVATE cna_fna3d)
+    endif()
+
+    if("WEBGPU" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(CnaTests PRIVATE WebGPU::WebGPU)
     endif()
 
@@ -333,14 +410,14 @@ if(CNA_BUILD_TESTS)
     # mappings and its generated stock GLSL directly, so they include Magnum's GL headers. CNA keeps
     # Magnum PRIVATE on the renderer target (same discipline as wgpu-native above), so it is exposed
     # to this test executable only, and only in the Magnum configuration.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "MAGNUM")
+    if("MAGNUM" IN_LIST CNA_RENDERER_IDENTITIES)
         target_link_libraries(CnaTests PRIVATE Magnum::GL Magnum::Magnum)
     endif()
 
     # plan_diligent.md DILIGENT-15: DiligentDeviceSelectionTests.cpp includes the renderer header,
     # which includes DiligentCore's own headers. cna_link_diligent() keeps those PRIVATE to the
     # renderer target (same discipline as WebGPU just above), so expose them here too.
-    if(CNA_GRAPHICS_RENDERER STREQUAL "DILIGENT")
+    if("DILIGENT" IN_LIST CNA_RENDERER_IDENTITIES)
         cna_link_diligent(CnaTests)
     endif()
 
@@ -501,7 +578,7 @@ if(CNA_BUILD_TESTS)
             # real D3D10 device (e.g. a bare --gtest_list_tests call).
             set_target_properties(CnaTests PROPERTIES
                 CROSSCOMPILING_EMULATOR "${CMAKE_COMMAND};-E;env;CNA_D3D10_SKIP_DXVK_GATE=1;bash;${CMAKE_SOURCE_DIR}/scripts/run-wine-directx10.sh")
-        elseif(CNA_GRAPHICS_RENDERER STREQUAL "DIRECT2D")
+        elseif("DIRECT2D" IN_LIST CNA_RENDERER_IDENTITIES)
             # Direct2D needs the normal/dedicated prefix selected by run-wine-direct2d.sh, not the
             # D3D11-only DXVK prefix (which may not contain Wine's d2d1 runtime). Pure unit tests
             # do not create a device, so skip the unrelated DXVK renderer-log gate.

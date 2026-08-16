@@ -1,0 +1,344 @@
+name: Apple platforms (macOS + iOS)
+
+# plan_apple.md APPLE-9. Four legs, deliberately unequal in what they claim:
+#
+#   apple-cmake-check — Linux, seconds, no Apple hardware: proves the Apple CMake layer still
+#                   parses and that the iOS allow-list accepts/refuses/overrides as documented.
+#   macos-build   — native macOS build + the portable test suites that do not need a GPU.
+#                   This is a real gate: a green run is evidence that CNA builds and its
+#                   platform/storage contracts hold on macOS.
+#   ios-device    — cross-compile and final-link a real arm64 iPhone/iPad application bundle.
+#   ios-simulator — build the same application for arm64 Simulator, install it, launch one CNA
+#                   frame, and require its success marker. See docs/apple-platforms.md for the
+#                   remaining device/rendering evidence boundary.
+#
+# The Metal renderer keeps its own dedicated workflow (metal-macos-ci.yml); this one covers the
+# platform layer underneath every renderer.
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apple-ci.yml'
+      - 'CMakeLists.txt'
+      - 'cmake/ApplePlatform.cmake'
+      - 'cmake/AppleSmoke.cmake'
+      - 'cmake/FixupMacOSBundle.cmake'
+      - 'cmake/AppleInfo.*.plist.in'
+      - 'cmake/toolchains/ios.cmake'
+      - 'cmake/ThirdPartySDL.cmake'
+      - 'cmake/RendererSelection.cmake'
+      - 'cmake/UnitTests.cmake'
+      - 'cmake/SharpRuntimeConsumption.cmake'
+      - 'modules/CMakeLists.txt'
+      - 'modules/runtime/CMakeLists.txt'
+      - 'modules/core/include/CNA/TargetPlatform.hpp'
+      - 'modules/platform/include/CNA/Platform/Entrypoint.hpp'
+      - 'modules/platform/include/CNA/Platform/IPlatformWindow.hpp'
+      - 'modules/platform/include/CNA/Platform/PlatformEvent.hpp'
+      - 'modules/platform/CMakeLists.txt'
+      - 'modules/platform/src/Sdl3/Sdl3AppleOrientation.mm'
+      - 'modules/platform/src/Sdl3/Sdl3Window.cpp'
+      - 'modules/platform/src/Sdl3/Sdl3Platform.cpp'
+      - 'modules/platform/src/Sdl3/Sdl3EventMapper.cpp'
+      - 'modules/core/CMakeLists.txt'
+      - 'modules/core/src/DesktopOS.cpp'
+      - 'modules/core/tests/CNA/TargetPlatformTests.cpp'
+      - 'modules/runtime/src/Game.cpp'
+      - 'modules/runtime/src/GameWindow.cpp'
+      - 'modules/runtime/tests/Microsoft/Xna/Framework/GameWindowTests.cpp'
+      - 'modules/runtime/tests/Microsoft/Xna/Framework/GameTests.cpp'
+      - 'modules/graphics/src/Xna/GraphicsDevice.cpp'
+      - 'modules/audio/tests/CNA/Internal/Audio/AudioMixerTests.cpp'
+      - 'modules/devices/tests/Microsoft/Devices/Detail/DevicesShutdownOrderingTests.cpp'
+      - 'modules/net/tests/CNA/Internal/Net/GamerServicesDispatcherHangRegressionTest.cpp'
+      - 'modules/content/src/Xna/ContentManager.cpp'
+      - 'modules/storage/src/StorageDevice.cpp'
+      - 'scripts/check-apple-platform-cmake.sh'
+      - 'tests/apple/apple_smoke.cpp'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apple-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Runs on Linux in seconds and needs no Apple hardware at all. The Apple platform layer is the
+  # one part of the build a non-Apple developer can never reach by configuring the project (every
+  # line is behind if(APPLE)), so this is the cheap gate that keeps it from rotting between the
+  # far more expensive macOS runs below.
+  apple-cmake-check:
+    name: Apple CMake layer (host-portable)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+
+      - name: Smoke-check cmake/ApplePlatform.cmake
+        run: ./scripts/check-apple-platform-cmake.sh
+
+  macos-build:
+    name: macOS (SDL_RENDERER, portable suites)
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache ffmpeg
+
+      - name: Configure
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-macos
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=ON
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build test suite
+        working-directory: cna
+        run: cmake --build cmake-build-macos --target CnaTests --parallel 3
+
+      # The CnaTests binary is run directly rather than through ctest: ctest spawns one process
+      # per case, which races the tests that share fixture paths (see CMakePresets.json's "tests"
+      # preset description).
+      #
+      # The video driver is deliberately left alone. A hosted macOS runner has a real window
+      # server (the Metal workflow's GPU tests depend on it), and the window-creating cases here
+      # skip themselves cleanly if SDL video init ever fails. Forcing SDL_VIDEODRIVER=dummy would
+      # be worse than either outcome: the dummy driver accepts window creation but rejects
+      # minimize/restore, turning a skip into a failure that says nothing about macOS.
+      - name: Run platform and storage suites
+        working-directory: cna
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: >
+          ./cmake-build-macos/CnaTests
+          --gtest_filter='TargetPlatformTest.*:GameWindowTest.*:GameTest.MobileLifecycleEventsSuspendResumeAndTerminateTheLoop:Storage*:*DesktopOS*'
+
+      # Exercise the opt-in shipping layout in a separate build tree so the CnaTests binary above
+      # remains a directly invokable executable. The persistent SDL install and ccache are shared,
+      # so this mostly reuses work while validating the otherwise-uncovered bundle fixup path.
+      - name: Configure self-contained application bundle
+        working-directory: cna
+        run: >
+          cmake -S . -B cmake-build-macos-bundle
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=OFF
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_ENABLE_NET=OFF
+          -DCNA_BUILD_APPLE_SMOKE_APP=ON
+          -DCNA_APPLE_BUNDLE_MACOS_EXECUTABLES=ON
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build self-contained application bundle
+        working-directory: cna
+        run: cmake --build cmake-build-macos-bundle --target cna_macos_smoke --parallel 3
+
+      - name: Verify and launch the macOS application bundle
+        working-directory: cna
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          app="$(find cmake-build-macos-bundle -type d -name 'cna_macos_smoke.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "cna_macos_smoke.app not found" >&2
+            exit 1
+          fi
+          executable="$app/Contents/MacOS/cna_macos_smoke"
+          test -x "$executable"
+          plutil -lint "$app/Contents/Info.plist"
+          test -d "$app/Contents/Frameworks"
+
+          dependencies="$(otool -L "$executable")"
+          echo "$dependencies"
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local)' <<< "$dependencies"; then
+            echo "macOS bundle executable retains a build-machine dependency" >&2
+            exit 1
+          fi
+          framework_dependencies="$(find "$app/Contents/Frameworks" -maxdepth 1 -type f -exec otool -L {} +)"
+          echo "$framework_dependencies"
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local)' <<< "$framework_dependencies"; then
+            echo "embedded macOS libraries retain a build-machine dependency" >&2
+            exit 1
+          fi
+
+          output="$("$executable" 2>&1)"
+          echo "$output"
+          grep -q 'CNA_APPLE_SMOKE_OK' <<< "$output"
+
+  ios-build:
+    name: iOS ${{ matrix.name }}
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: device
+            simulator: 'OFF'
+            build_dir: cmake-build-ios
+          - name: simulator
+            simulator: 'ON'
+            build_dir: cmake-build-ios-sim
+
+    steps:
+      - name: Checkout CNA
+        uses: actions/checkout@v4
+        with:
+          path: cna
+          submodules: true
+
+      - name: Checkout sharp-runtime sibling
+        uses: actions/checkout@v4
+        with:
+          repository: openeggbert/sharp-runtime
+          path: sharp-runtime
+
+      - name: Install build dependencies
+        run: brew install ccache
+
+      # Tests and examples are off: CnaTests is a console gtest binary that an app-sandboxed iOS
+      # process cannot run the way CI would need to, and the examples' fixtures assume a desktop
+      # filesystem layout. CNA_BUILD_APPLE_SMOKE_APP remains on by default for iOS: it is a real,
+      # minimal UIKit/SDL_main/Game product that final-links the selected renderer.
+      - name: Configure
+        working-directory: cna
+        run: >
+          cmake -S . -B ${{ matrix.build_dir }}
+          -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake
+          -DCNA_IOS_SIMULATOR=${{ matrix.simulator }}
+          -DCNA_GRAPHICS_RENDERER=SDL_RENDERER
+          -DCNA_BUILD_TESTS=OFF
+          -DCNA_BUILD_EXAMPLES=OFF
+          -DCNA_BUILD_APPLE_SMOKE_APP=ON
+          -DCNA_ENABLE_NET=OFF
+          -DCNA_USE_CCACHE=ON
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCNA_MAX_VENDORED_BUILD_JOBS=2
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      # Build the final application target, not `--target CNA`: the CNA umbrella is an INTERFACE
+      # library and has no build rule of its own. cna_ios_smoke depends on the whole selected CNA
+      # closure and exposes failures that an archive-only build cannot, without also building
+      # unrelated host-shaped tools for an app-sandboxed platform.
+      - name: Build CNA
+        working-directory: cna
+        run: cmake --build ${{ matrix.build_dir }} --target cna_ios_smoke --parallel 3
+
+      # A wrong-platform object file can hide inside a static archive until the final link needs
+      # that particular member. Read the platform directly from CNA's archive as an explicit
+      # assertion in addition to the application link.
+      - name: Verify the archive really targets iOS
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          archive="$(find ${{ matrix.build_dir }} -name 'libcna_core.a' -print -quit)"
+          if [ -z "$archive" ]; then
+            echo "libcna_core.a not found under ${{ matrix.build_dir }}" >&2
+            exit 1
+          fi
+          echo "Inspecting $archive"
+          platform="$(otool -l "$archive" | grep -m1 -A3 LC_BUILD_VERSION | grep platform || true)"
+          echo "$platform"
+          case "${{ matrix.simulator }}" in
+            ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
+            OFF) expected='platform 2' ;;   # PLATFORM_IOS
+          esac
+          grep -q "$expected" <<< "$platform" || {
+            echo "expected $expected in the Mach-O build-version load command" >&2
+            exit 1
+          }
+
+      - name: Verify the final iOS application bundle
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          app="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_smoke.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "cna_ios_smoke.app not found under ${{ matrix.build_dir }}" >&2
+            exit 1
+          fi
+          executable="$app/cna_ios_smoke"
+          test -x "$executable"
+          plutil -lint "$app/Info.plist"
+
+          platform="$(otool -l "$executable" | grep -m1 -A3 LC_BUILD_VERSION | grep platform || true)"
+          case "${{ matrix.simulator }}" in
+            ON)  expected='platform 7' ;;   # PLATFORM_IOSSIMULATOR
+            OFF) expected='platform 2' ;;   # PLATFORM_IOS
+          esac
+          grep -q "$expected" <<< "$platform"
+
+          symbols="$(nm "$executable")"
+          grep -Eq ' [Tt] _main$' <<< "$symbols"
+          grep -Eq ' [Tt] _SDL_main$' <<< "$symbols"
+
+          dependencies="$(otool -L "$executable")"
+          echo "$dependencies"
+          if grep -Eq '(\.sdl-prebuilt|/opt/homebrew|/usr/local|libSDL3(_image|_mixer)?[^/]*)' <<< "$dependencies"; then
+            echo "iOS smoke app contains a non-system dynamic SDL/build-machine dependency" >&2
+            exit 1
+          fi
+
+      - name: Launch the smoke application in the iOS simulator
+        if: matrix.simulator == 'ON'
+        timeout-minutes: 10
+        working-directory: cna
+        run: |
+          set -euo pipefail
+          app="$(find ${{ matrix.build_dir }} -type d -name 'cna_ios_smoke.app' -print -quit)"
+          udid="$(xcrun simctl list devices available -j | python3 -c 'import json, sys; data=json.load(sys.stdin); print(next(device["udid"] for runtime, devices in data["devices"].items() if ".iOS-" in runtime for device in devices if device["name"].startswith("iPhone") and device["isAvailable"]))')"
+          trap 'xcrun simctl shutdown "$udid" >/dev/null 2>&1 || true' EXIT
+          xcrun simctl boot "$udid" >/dev/null 2>&1 || true
+          xcrun simctl bootstatus "$udid" -b
+          codesign --force --deep --sign - "$app"
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl spawn "$udid" launchctl setenv SDL_AUDIODRIVER dummy
+          log_file="$RUNNER_TEMP/cna-ios-smoke.log"
+
+          # UIKit owns the application process lifetime; returning from SDL_main need not make
+          # `simctl launch --console` return. Stream it in the background, require the flushed
+          # one-frame marker within a bounded interval, then terminate the app ourselves.
+          xcrun simctl launch --console "$udid" com.openeggbert.cna.cna-ios-smoke >"$log_file" 2>&1 &
+          launch_pid=$!
+          smoke_ok=0
+          for _attempt in {1..60}; do
+            if grep -q 'CNA_APPLE_SMOKE_OK' "$log_file"; then
+              smoke_ok=1
+              break
+            fi
+            if ! kill -0 "$launch_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          xcrun simctl terminate "$udid" com.openeggbert.cna.cna-ios-smoke >/dev/null 2>&1 || true
+          wait "$launch_pid" || true
+          cat "$log_file"
+          test "$smoke_ok" -eq 1

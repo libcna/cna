@@ -63,6 +63,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guards it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -120,34 +125,39 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 using Microsoft::Xna::Framework::Graphics::VertexPositionColor;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE) || \
-    defined(CNA_RENDERER_SDL_GPU)
-#define CNA_ORDINARY_BINDING_OFFSET_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool OrdinaryBindingOffset()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
+                            DirectX12, Software, SdlGpu);
+}
 
 // REMED-GFX-113's renderer set: the above, minus the renderers without backbuffer readback.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_SOFTWARE)
-#define CNA_ORDINARY_BINDING_OFFSET_BACKBUFFER_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool OrdinaryBindingOffsetBackbuffer()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
+                            Software);
+}
 
 // REMED-GFX-118's instanced suite set: the renderers whose instanced route renders the geometry.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12)
-#define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_TRANSITION 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this describes
+/// the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool OrdinaryBindingOffsetInstancedTransition()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan,
+                           DirectX9, DirectX11, DirectX12);
+}
 
 // The renderers whose INSTANCED route consumes VertexBufferBinding.VertexOffset.
-#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_DIRECTX11) || defined(CNA_RENDERER_DIRECTX12)
-#define CNA_ORDINARY_BINDING_OFFSET_INSTANCED_OFFSET_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool OrdinaryBindingOffsetInstancedOffset()
+{
+    return CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, DirectX11, DirectX12);
+}
 
 namespace
 {
@@ -538,7 +548,6 @@ namespace
     };
 }
 
-#ifdef CNA_ORDINARY_BINDING_OFFSET_ORACLE
 
 // ---------------------------------------------------------------------------
 // Isolation control (coverage item 1): binding offset ZERO. Exactly the geometry, declaration,
@@ -550,6 +559,9 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetIndexedDrawRendersThePrefixDecoy)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -585,6 +597,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetIndexedDrawRendersThePrefixDecoy
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetIndexedDrawSkipsThePrefixDecoy)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -622,6 +637,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetIndexedDrawSkipsThePrefixDeco
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndex)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -658,6 +676,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndex)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithBaseVertex)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -693,6 +714,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithBaseVertex)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndexAndBaseVertex)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -729,6 +753,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetCombinesWithStartIndexAndBase
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetHonoredWithThirtyTwoBitIndices)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -764,6 +791,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetHonoredWithThirtyTwoBitIndice
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetNonIndexedDrawRendersThePrefixDecoy)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -789,6 +819,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, ZeroOffsetNonIndexedDrawRendersThePrefixDe
 
 TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetNonIndexedDrawCombinesWithVertexStart)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -823,6 +856,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, NonzeroOffsetNonIndexedDrawCombinesWithVer
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, MultipleStreamsUseOnlyTheGeometryStreamsOwnOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -867,6 +903,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, MultipleStreamsUseOnlyTheGeometryStreamsOw
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, DynamicBufferRewrittenBetweenDrawsIsReadAtTheOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -915,6 +954,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, DynamicBufferRewrittenBetweenDrawsIsReadAt
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OffsetReuseAcrossDrawsIsExact)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -960,6 +1002,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OffsetReuseAcrossDrawsIsExact)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, BindingOffsetSurvivesDisposalAndHandleReuse)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1014,6 +1059,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BindingOffsetSurvivesDisposalAndHandleReus
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1064,6 +1112,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OffsetIsIncludedInTheDrawRangeValidation)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffset())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = TargetLayout();
@@ -1097,9 +1148,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOf
     ExpectOnlyCellLit(render(), layout, 2, kLiveBand, "SetVertexBuffer clears the offset");
 }
 
-#endif // CNA_ORDINARY_BINDING_OFFSET_ORACLE
 
-#ifdef CNA_ORDINARY_BINDING_OFFSET_BACKBUFFER_ORACLE
 
 // ---------------------------------------------------------------------------
 // Coverage item 14: the BACKBUFFER destination. Same contract, same arithmetic, a different
@@ -1109,6 +1158,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, SetVertexBufferOverloadsCarryAndClearTheOf
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheBindingOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffsetBackbuffer())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = BackbufferLayout();
@@ -1140,6 +1192,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheBindingOffse
 
 TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonIndexedDraws)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffsetBackbuffer())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
 
     const GridLayout layout = BackbufferLayout();
@@ -1166,9 +1221,7 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
         "backbuffer non-indexed nonzero offset");
 }
 
-#endif // CNA_ORDINARY_BINDING_OFFSET_BACKBUFFER_ORACLE
 
-#ifdef CNA_ORDINARY_BINDING_OFFSET_INSTANCED_TRANSITION
 
 // ---------------------------------------------------------------------------
 // Coverage item 12: ordinary -> instanced -> ordinary. The two routes populate the shared draw
@@ -1180,6 +1233,9 @@ TEST_F(OrdinaryDrawBindingOffsetTest, BackbufferDestinationHonorsTheOffsetOnNonI
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEachRoutesOffset)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryBindingOffsetInstancedTransition())
+        GTEST_SKIP() << "this renderer\'s instanced route does not render the geometry";
     RequireOrdinaryRendering();
     // The middle leg of this transition is a hardware-instanced draw -- unavailable on a
     // renderer profile that reports GraphicsCapability::Instancing = false (e.g. the OPENGLES2
@@ -1235,15 +1291,17 @@ TEST_F(OrdinaryDrawBindingOffsetTest, OrdinaryInstancedOrdinaryTransitionsKeepEa
     ExpectOnlyCellLit(renderOrdinary(), layout, 3, kLiveBand, "ordinary before the instanced leg");
 
     const FrameSnapshot instanced = renderInstanced();
-#ifdef CNA_ORDINARY_BINDING_OFFSET_INSTANCED_OFFSET_ORACLE
-    // Offset 6 selects record 6+9=15, which is live record 12 -- slot 4, where the ordinary legs
-    // select slot 3, so the two routes cannot satisfy each other's expectation.
-    ExpectOnlyCellLit(instanced, layout, 4, kLiveBand, "instanced leg between the ordinary draws");
-#else
-    (void)instanced;
-#endif
+    if (OrdinaryBindingOffsetInstancedOffset())
+    {
+        // Offset 6 selects record 6+9=15, which is live record 12 -- slot 4, where the ordinary legs
+        // select slot 3, so the two routes cannot satisfy each other's expectation.
+        ExpectOnlyCellLit(instanced, layout, 4, kLiveBand, "instanced leg between the ordinary draws");
+    }
+    else
+    {
+        (void)instanced;
+    }
 
     ExpectOnlyCellLit(renderOrdinary(), layout, 3, kLiveBand, "ordinary after the instanced leg");
 }
 
-#endif // CNA_ORDINARY_BINDING_OFFSET_INSTANCED_TRANSITION

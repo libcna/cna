@@ -11,6 +11,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
@@ -39,11 +44,27 @@
 #include "System/ArgumentOutOfRangeException.hpp"
 #include "System/ObjectDisposedException.hpp"
 
-#ifdef CNA_RENDERER_EASYGL
+// plan_runtimerenderer.md RTR-P9-9: this file's EasyGL block needs that renderer's own headers, so
+// it stays a COMPILE-time guard -- no runtime predicate can make a type exist. What changes is the
+// condition: only the DEFAULT renderer's CNA_RENDERER_<X> is defined project-wide, so in a
+// multi-renderer build this block compiled to nothing even when EasyGL was in the binary. The
+// PRESENT_ defines say "compiled in", and EasyGL is a family of five public identities.
+#if defined(CNA_RENDERER_EASYGL) || defined(CNA_RENDERER_PRESENT_OPENGLES2) || \
+    defined(CNA_RENDERER_PRESENT_OPENGLES3) || defined(CNA_RENDERER_PRESENT_OPENGL33) || \
+    defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
+#define CNA_TEST_EASYGL_AVAILABLE 1
+#endif
+
+// Same for WebGPU, which is a single identity.
+#if defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_PRESENT_WEBGPU)
+#define CNA_TEST_WEBGPU_AVAILABLE 1
+#endif
+
+#ifdef CNA_TEST_EASYGL_AVAILABLE
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #endif
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
 #include "CNA/Internal/Renderers/WebGPU/WebGPURenderer.hpp"
 #endif
 
@@ -180,7 +201,7 @@ namespace
         }
     };
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
     struct WebGpuErrorScopeState
     {
         bool completed = false;
@@ -583,7 +604,11 @@ TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
     EXPECT_EQ(1, oddBuffer.GetRenderer().GetVertexCount());
     EXPECT_EQ(1, alignedBuffer.GetRenderer().GetVertexCount());
 
-#ifdef CNA_RENDERER_EASYGL
+#ifdef CNA_TEST_EASYGL_AVAILABLE
+    // Compiled whenever EasyGL is in the build; asserted only when it is the ACTIVE renderer --
+    // otherwise the dynamic_cast below is a null check against a different renderer's object.
+    if (CNA_RENDERER_IS(OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2))
+    {
     auto* oddEasy =
         dynamic_cast<CNA::Internal::Renderers::EasyGL::EasyGLVertexBufferRenderer*>(
             &oddBuffer.GetRenderer());
@@ -596,6 +621,7 @@ TEST_F(VertexBufferEmptyDataTest, RawDeclarationsAcceptOddAndAlignedStrides)
               oddEasy->GetDeclarationElements());
     EXPECT_EQ(PositionColorDeclaration().GetVertexElements(),
               alignedEasy->GetDeclarationElements());
+    }
 #endif
 }
 
@@ -629,9 +655,12 @@ TEST_F(VertexBufferEmptyDataTest, UploadedVerticesSupportNormalAndIndexedDrawing
     EXPECT_NO_THROW(device.Present());
 }
 
-#ifdef CNA_RENDERER_WEBGPU
+#ifdef CNA_TEST_WEBGPU_AVAILABLE
 TEST_F(VertexBufferEmptyDataTest, WebGpuNativeScopesCoverEmptyOddAndAlignedUploads)
 {
+    // plan_runtimerenderer.md RTR-P9-9: compiled whenever WebGPU is in the build, run only when it
+    // is the active renderer.
+    CNA_SKIP_IF_RENDERER_IS_NOT(CNA::GraphicsRendererType::WebGPU);
     RequireVertexBuffers();
 
     auto* graphicsRenderer =

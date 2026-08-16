@@ -3940,7 +3940,12 @@ bool MetalRenderer::SupportsCapability(CNA::GraphicsCapability capability) const
 namespace CNA::Internal::Renderers
 {
 #ifdef CNA_RENDERER_METAL
-std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args){return std::make_unique<Metal::MetalRenderer>(args);}
+// plan_runtimerenderer.md design decision 4: declared in this family's own
+// namespace so several renderer archives can link into one binary, then defined
+// below with a qualified name -- the body keeps its place unchanged.
+namespace Metal { std::unique_ptr<IGraphicsRenderer> CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args); }
+
+std::unique_ptr<IGraphicsRenderer> Metal::CreateGraphicsRenderer(const GraphicsRendererCreateArgs& args){return std::make_unique<Metal::MetalRenderer>(args);}
 #endif
 }
 #else

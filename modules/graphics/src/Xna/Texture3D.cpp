@@ -12,12 +12,9 @@
 #include <stdexcept>
 #include <vector>
 
-// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture
-// ceilings, real on this renderer only -- matches Texture2D.cpp's own #ifdef CNA_RENDERER_DIRECTX9
-// convention exactly.
-#ifdef CNA_RENDERER_DIRECTX9
-#include "CNA/Internal/Renderers/DirectX9/D3D9ProfileCapabilities.hpp"
-#endif
+// plan_dx9.md Phase D9-10 (D9-103 follow-up): GraphicsProfile.Reach/HiDef volume-texture ceilings.
+// plan_runtimerenderer.md design decision 9: asked of the active renderer rather than the
+// preprocessor -- only D3D9 has a real capability structure to answer from.
 
 namespace Microsoft::Xna::Framework::Graphics
 {
@@ -30,14 +27,13 @@ namespace Microsoft::Xna::Framework::Graphics
         return levels;
     }
 
-#ifdef CNA_RENDERER_DIRECTX9
     // D9-103 follow-up: D9-100's own table -- GraphicsProfile.Reach does not support volume
-    // textures AT ALL (MaxVolumeExtentForProfileEXT returns 0), not merely a small size ceiling;
-    // GraphicsProfile.HiDef caps at 256 in any dimension. Checked BEFORE the renderer is created.
+    // textures AT ALL (a reported extent of 0), not merely a small size ceiling; GraphicsProfile
+    // .HiDef caps at 256 in any dimension. Renderers with no profile distinction report no ceiling.
     static void ValidateVolumeSizeForProfileEXT(const GraphicsDevice& device, int width, int height, int depth)
     {
         const int profile = static_cast<int>(device.getGraphicsProfileProperty());
-        const int maxExtent = CNA::Internal::Renderers::DirectX9::MaxVolumeExtentForProfileEXT(profile);
+        const int maxExtent = device.GetRenderer().GetMaxVolumeExtentForProfileEXT(profile);
         if (maxExtent == 0)
         {
             throw System::NotSupportedException(
@@ -51,7 +47,6 @@ namespace Microsoft::Xna::Framework::Graphics
                 "extent of " + std::to_string(maxExtent) + " in any dimension");
         }
     }
-#endif
 
     Texture3D::~Texture3D() = default;
     Texture3D::Texture3D(Texture3D&&) noexcept = default;
@@ -77,9 +72,7 @@ namespace Microsoft::Xna::Framework::Graphics
             throw System::NotSupportedException(
                 "Texture3D: this renderer does not support real volume (3D) texture storage");
         }
-#ifdef CNA_RENDERER_DIRECTX9
         ValidateVolumeSizeForProfileEXT(device, width, height, depth);
-#endif
         Texture::ValidateFormat(format);
         format_     = format;
         levelCount_ = mipMap ? CalculateMipLevels(width, height) : 1;

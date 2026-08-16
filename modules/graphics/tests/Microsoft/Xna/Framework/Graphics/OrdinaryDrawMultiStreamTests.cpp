@@ -68,6 +68,11 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "CNA/RendererTestGate.hpp"
+
+// Lets CNA_RENDERER_IS name identities bare, matching the compile-time guard it replaced.
+using namespace CNA::Testing::Renderers;
+
 #include "CNA/GraphicsCapability.hpp"
 #include "Microsoft/Xna/Framework/Color.hpp"
 #include "Microsoft/Xna/Framework/Rectangle.hpp"
@@ -128,13 +133,13 @@ using Microsoft::Xna::Framework::Graphics::VertexElementUsage;
 
 // The portable pixel oracle: rasterizes 3D triangles and implements RenderTarget2D::GetData.
 // REMED-GFX-200's own set, which this file's geometry and readback path are taken from.
-#if defined(CNA_RENDERER_BGFX) || defined(CNA_RENDERER_EASYGL) || \
-    defined(CNA_RENDERER_WEBGPU) || defined(CNA_RENDERER_VULKAN) || \
-    defined(CNA_RENDERER_DIRECTX9) || defined(CNA_RENDERER_DIRECTX11) || \
-    defined(CNA_RENDERER_DIRECTX12) || defined(CNA_RENDERER_SOFTWARE) || \
-    defined(CNA_RENDERER_SDL_GPU)
-#define CNA_ORDINARY_MULTI_STREAM_ORACLE 1
-#endif
+/// plan_runtimerenderer.md RTR-P9-5: the same renderer set, evaluated at runtime so this
+/// describes the ACTIVE renderer rather than the build default.
+[[nodiscard]] inline bool OrdinaryMultiStream()
+{
+    return CNA_RENDERER_IS(Bgfx, OpenGLES2, OpenGLES3, OpenGL33, WebGL1, WebGL2, WebGPU, Vulkan, DirectX9, DirectX11, 
+                            DirectX12, Software, SdlGpu);
+}
 
 namespace
 {
@@ -648,7 +653,6 @@ namespace
         }                                                                                    \
     } while (false)
 
-#ifdef CNA_ORDINARY_MULTI_STREAM_ORACLE
 
 // ---------------------------------------------------------------------------
 // Coverage item 1: non-indexed, BOTH offsets zero. The baseline that proves the split layout
@@ -657,6 +661,9 @@ namespace
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedBothOffsetsZeroRendersBothPrefixDecoys)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -698,6 +705,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedBothOffsetsZeroRendersBothPrefixDe
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnItsDecoy)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -738,6 +748,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream0OffsetOnlyLeavesStream1OnIt
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream1OffsetOnlyLeavesStream0OnItsDecoy)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -779,6 +792,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedStream1OffsetOnlyLeavesStream0OnIt
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedDifferentNonzeroOffsetsSelectDifferentRecords)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -819,6 +835,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedDifferentNonzeroOffsetsSelectDiffe
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedVertexStartAdvancesEveryStream)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -860,6 +879,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, NonIndexedVertexStartAdvancesEveryStream)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16BothOffsetsZeroRendersBothPrefixDecoys)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -905,6 +927,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16BothOffsetsZeroRendersBothPrefixDec
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16DifferentNonzeroOffsetsSelectDifferentRecords)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -955,6 +980,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16DifferentNonzeroOffsetsSelectDiffer
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed16StartIndexAndBaseVertexApplyToEveryStreamOnce)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1005,6 +1033,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed16StartIndexAndBaseVertexApplyToEvery
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEveryStreamOnce)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1056,6 +1087,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, Indexed32StartIndexAndBaseVertexApplyToEvery
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheValidRange)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1097,6 +1131,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, StreamsWithDifferentVertexCountsRenderTheVal
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
      const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1130,6 +1167,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingStream0IsRejected)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
      const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1163,6 +1203,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, RangeLeavingOnlyStream1IsRejected)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
      const GridLayout layout = TargetLayout();
     const std::vector<PositionRecord> positions = BuildPositionStream(layout, kLiveBand);
@@ -1202,6 +1245,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, IndexedRangeLeavingOnlyStream1IsRejected)
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLegsOwnBindings)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1261,6 +1307,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, ReplacingOnlyStream1AndReturningKeepsEachLeg
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRendersItsOwnLayout)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1348,6 +1397,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, MultiStreamSingleStreamMultiStreamEachRender
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnElements)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1424,6 +1476,9 @@ TEST_F(OrdinaryDrawMultiStreamTest, ThreePerVertexStreamsEachSupplyTheirOwnEleme
 // ---------------------------------------------------------------------------
 TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewBuffer)
 {
+    // plan_runtimerenderer.md RTR-P9-5: reports a skip instead of not existing.
+    if (!OrdinaryMultiStream())
+        GTEST_SKIP() << "this renderer has no rasterizing/readback oracle for this draw path";
     RequireOrdinaryRendering();
     CNA_REQUIRE_MULTI_STREAM_INPUT();
 
@@ -1481,7 +1536,6 @@ TEST_F(OrdinaryDrawMultiStreamTest, DestroyingAndRecreatingStream1RebindsTheNewB
         "a recycled handle must not resurrect the destroyed stream");
 }
 
-#endif  // CNA_ORDINARY_MULTI_STREAM_ORACLE
 
 // ---------------------------------------------------------------------------
 // The capability boundary itself, asserted on EVERY renderer and in BOTH directions. A renderer that

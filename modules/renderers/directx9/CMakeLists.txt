@@ -30,8 +30,12 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/D3D9EffectRenderer.cpp")
     target_link_libraries(cna_renderer_d3d9_effect PRIVATE cna_graphics_core cna_core cna_math)
 endif()
 
-add_library(${RENDERER_TARGET} STATIC ${_cna_d3d9_sources})
-cna_renderer_common_setup()
+# plan_runtimerenderer.md RTR-P6-6: derive this family's own target rather than reading the global
+# scalar, which names the build DEFAULT.
+cna_renderer_target_name(_cna_d3d9_target)
+add_library(${_cna_d3d9_target} STATIC ${_cna_d3d9_sources})
+cna_renderer_common_setup(${_cna_d3d9_target})
+set(RENDERER_TARGET "${_cna_d3d9_target}")
 # plan_dx9.md design decision 16 / D9-2: d3d9 alone was confirmed sufficient (no dxguid, no
 # dxgi -- D3D9 predates DXGI) by D9-2's own spike. No cna_renderer_d3dcommon (design
 # decision 12 -- D3D9 does not share D3DCommon). d3dcompiler is deliberately NOT linked here --

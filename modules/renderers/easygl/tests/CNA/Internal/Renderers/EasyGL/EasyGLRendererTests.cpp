@@ -2,18 +2,30 @@
 
 #include <gtest/gtest.h>
 
-#if defined(CNA_RENDERER_EASYGL)
+// EasyGL is a FAMILY, not a public identity: cmake emits one PRESENT_ macro per PUBLIC IDENTITY, so
+// CNA_RENDERER_PRESENT_EASYGL is never defined and a guard naming it is dead (see 0bb99795e).
+#if defined(CNA_RENDERER_EASYGL) \
+    || defined(CNA_RENDERER_PRESENT_OPENGLES2) || defined(CNA_RENDERER_PRESENT_OPENGLES3) \
+    || defined(CNA_RENDERER_PRESENT_OPENGL33) \
+    || defined(CNA_RENDERER_PRESENT_WEBGL1) || defined(CNA_RENDERER_PRESENT_WEBGL2)
+// plan_runtimerenderer.md RTR-P9-9: PRESENT_, not the identity macro. This suite is
+// device-free policy coverage for its own renderer, so it is worth compiling and running
+// whenever that renderer is COMPILED IN -- in a multi-renderer build it need not be the
+// selected one. Only the default renderer's CNA_RENDERER_EASYGL is defined project-wide.
+// EasyGL is a FAMILY, not a public identity, so cmake never generates
+// (CNA_RENDERER_IDENTITIES). Naming the family here made the guard dead, so this suite still
+// compiled only for the default renderer: exactly the gap RTR-P9-9 existed to close, reintroduced
+// by the fix for it. Verified against a real multi build, whose build.ninja defines PRESENT_ only
+// for the identities in the set. The five public identities this family serves are named instead.
+#include <stdexcept>
 #include "CNA/Internal/Renderers/Common/IGraphicsRenderer.hpp"
 #include "CNA/Internal/Renderers/EasyGL/EasyGLRenderer.hpp"
 #include "CNA/Platform/PlatformException.hpp"
-
-#include <stdexcept>
 #include <string>
 
 namespace {
 
 using CNA::Internal::Renderers::CnaPresentationMode;
-using CNA::Internal::Renderers::CreateGraphicsRenderer;
 using CNA::Internal::Renderers::GraphicsRendererCreateArgs;
 using CNA::Internal::Renderers::IGraphicsRenderer;
 using CNA::Internal::Renderers::RendererSurfaceInfo;
@@ -149,7 +161,12 @@ TEST(EasyGLRendererFactory, MissingGlServiceIsAPlatformCapabilityRefusal)
 
     try
     {
-        (void)CreateGraphicsRenderer(args);
+        // plan_runtimerenderer.md design decision 4: the factory lives in the FAMILY's namespace
+        // so several renderer archives can link into one binary. Called qualified, exactly as the
+        // GDI family's own programs do: IGraphicsRenderer.hpp also declares a bare
+        // CNA::Internal::Renderers::CreateGraphicsRenderer, so an unqualified call is ambiguous --
+        // and the bare symbol is not the one this family defines.
+        (void)CNA::Internal::Renderers::EasyGL::CreateGraphicsRenderer(args);
         FAIL() << "factory accepted a missing GL context service";
     }
     catch (const PlatformNotSupportedException& error)

@@ -1,5 +1,7 @@
+# plan_runtimerenderer.md RTR-P9-21: membership, not equality -- these standalone targets should
+# build whenever WICKED is compiled in, including a multi-renderer build where it is not the default.
 if(CNA_BUILD_TESTS AND NOT EMSCRIPTEN AND NOT WIN32
-   AND CNA_GRAPHICS_RENDERER STREQUAL "WICKED")
+   AND "WICKED" IN_LIST CNA_RENDERER_IDENTITIES)
 
     enable_testing()
 

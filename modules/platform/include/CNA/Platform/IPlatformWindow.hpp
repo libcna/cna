@@ -33,6 +33,55 @@ namespace CNA::Platform {
     };
 
     /**
+     * @brief The screen orientations an application is willing to be displayed in.
+     *
+     * A bit mask, because the answer is genuinely a set: a game commonly accepts both landscape
+     * orientations and no portrait one. `None` means the application expresses no preference and
+     * the platform's own default applies — deliberately distinct from "no orientation is
+     * acceptable", which is not a thing an application can usefully say.
+     *
+     * Backs `GameWindow::SetSupportedOrientations`. Stated in CNA's own vocabulary rather than
+     * reusing the XNA `DisplayOrientation` enum, which lives in a module this one must not depend
+     * on.
+     */
+    enum class ScreenOrientation : std::uint32_t
+    {
+        /** @brief No preference; the platform default applies. */
+        None = 0,
+        /** @brief Landscape with the device rotated left. */
+        LandscapeLeft = 1u << 0,
+        /** @brief Landscape with the device rotated right. */
+        LandscapeRight = 1u << 1,
+        /** @brief Upright portrait. */
+        Portrait = 1u << 2
+    };
+
+    /**
+     * @brief Combines two orientation sets.
+     *
+     * @param left First set.
+     * @param right Second set.
+     * @return The union of both sets.
+     */
+    constexpr ScreenOrientation operator|(ScreenOrientation left, ScreenOrientation right)
+    {
+        return static_cast<ScreenOrientation>(
+            static_cast<std::uint32_t>(left) | static_cast<std::uint32_t>(right));
+    }
+
+    /**
+     * @brief Tests whether an orientation set contains a given orientation.
+     *
+     * @param set The set to test.
+     * @param orientation The orientation to look for.
+     * @return True when @p orientation is present in @p set.
+     */
+    constexpr bool HasOrientation(ScreenOrientation set, ScreenOrientation orientation)
+    {
+        return (static_cast<std::uint32_t>(set) & static_cast<std::uint32_t>(orientation)) != 0;
+    }
+
+    /**
      * @brief One window represented by a platform implementation.
      *
      * The surface `Microsoft::Xna::Framework::GameWindow` is built on. Every member here is
@@ -216,6 +265,25 @@ namespace CNA::Platform {
          * @return The display's name, or an empty string when the platform has no displays.
          */
         [[nodiscard]] virtual std::string GetDisplayName() const = 0;
+
+        /**
+         * @brief Declares which screen orientations the application accepts.
+         *
+         * On a desktop platform the supported set is the framework's own bookkeeping and this is
+         * legitimately a no-op — which is why it has a default implementation rather than being
+         * pure. On a mobile platform it is the operating system, not the application, that decides
+         * whether the device may rotate, and this is the only channel that tells it. The platform
+         * may further intersect the request with a bound declared at packaging time (on iOS, the
+         * bundle's supported-orientation list): the request can narrow that bound but never widen
+         * it.
+         *
+         * @param orientations The orientations the application accepts, or `ScreenOrientation::None`
+         *        to express no preference and restore the platform default.
+         */
+        virtual void SetSupportedOrientations(ScreenOrientation orientations)
+        {
+            (void) orientations;
+        }
     };
 
 } // namespace CNA::Platform
