@@ -27,6 +27,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -144,6 +145,26 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT void CaptureUniformSnapshotEXT(std::vector<std::uint8_t>& vertexBytes,
                                               std::vector<std::uint8_t>& pixelBytes) const;
 
+        /**
+         * @brief CNAEXT. Returns the texture and sampler state currently bound to one sampler slot.
+         *
+         * plan_fx.md FX-071: this renderer does not route a compiled effect's texture/sampler
+         * bindings through `GraphicsDevice`'s public collections the way stock effects' fixed
+         * texture0/texture1/envMap slots do (a compiled effect's bindings are arbitrary, and its
+         * texture may be 2D, 3D or a cube, which `GpuDrawParams` has no single field type for).
+         * `ApplyPass()` keeps this state persistent across passes/techniques, matching real XNA
+         * behavior: a pass that reassigns nothing leaves an earlier pass's binding standing.
+         *
+         * @param slot Sampler register index.
+         * @param vertexStage True for a vertex-stage sampler, false for a pixel-stage one.
+         * @param texture Receives the bound texture, or null if the slot was never assigned.
+         * @param sampler Receives the bound sampler state; only meaningful when @p texture is
+         *        non-null.
+         */
+        CNAEXT void GetBoundSamplerEXT(std::uint32_t slot, bool vertexStage,
+                                       Texture*& texture,
+                                       Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const;
+
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
 
@@ -156,6 +177,19 @@ namespace CNA::Internal::Renderers::SdlGpu
         std::vector<Texture*> textures_;
         std::uint32_t techniqueIndex_ = 0;
         bool passActive_ = false;
+        // FX-071: persistent per-slot sampler/texture state, updated from every ApplyPass()'s own
+        // CompiledEffectSamplerChange list -- see GetBoundSamplerEXT's own doc comment for why this
+        // exists instead of reading GraphicsDevice.
+        std::array<Texture*, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundTextures_{};
+        std::array<Texture*, Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexTextures_{};
+        std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundSamplers_{};
+        std::array<Microsoft::Xna::Framework::Graphics::SamplerState,
+                   Microsoft::Xna::Framework::Graphics::SamplerStateCollection::MaxSamplers>
+            boundVertexSamplers_{};
     };
 }
 

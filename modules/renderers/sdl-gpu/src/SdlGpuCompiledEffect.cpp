@@ -118,6 +118,10 @@ namespace CNA::Internal::Renderers::SdlGpu
             samplerTextureParameters_ =
                 MojoShaderEffect::BuildSamplerTextureParameterMap(effectData_);
             textures_ = cloneSource.textures_;
+            boundTextures_ = cloneSource.boundTextures_;
+            boundVertexTextures_ = cloneSource.boundVertexTextures_;
+            boundSamplers_ = cloneSource.boundSamplers_;
+            boundVertexSamplers_ = cloneSource.boundVertexSamplers_;
             SetTechnique(techniqueIndex_);
         }
         catch (...)
@@ -256,9 +260,36 @@ namespace CNA::Internal::Renderers::SdlGpu
             /*vertexStage=*/true, maxSlots, samplerTextureParameters_, textures_,
             deviceState, changes);
 
-        // No native sampler or texture binding happens here, unlike the FNA3D backend. This
-        // renderer binds textures and samplers as part of building a draw's pipeline, and the
-        // compiled-effect draw route that would do so does not exist yet -- see the header.
+        // FX-071: fold this pass's assignments into the persistent per-slot state a draw route
+        // reads through GetBoundSamplerEXT. Matches real XNA behavior -- a slot this pass does not
+        // touch keeps whatever an earlier pass assigned, so only entries this pass actually
+        // reported (samplerChanged/textureChanged) are written here.
+        for (const auto& sampler : changes.samplers)
+        {
+            if (sampler.slot >= maxSlots) continue;
+            auto& textureSlot = sampler.vertexStage ? boundVertexTextures_ : boundTextures_;
+            auto& samplerSlot = sampler.vertexStage ? boundVertexSamplers_ : boundSamplers_;
+            if (sampler.textureChanged) textureSlot[sampler.slot] = sampler.texture;
+            if (sampler.samplerChanged) samplerSlot[sampler.slot] = sampler.sampler;
+        }
+
+        // Native sampler/texture binding does not happen here, unlike the FNA3D backend. This
+        // renderer binds textures and samplers as part of building a draw's pipeline, through
+        // GetBoundSamplerEXT above.
+    }
+
+    void SdlGpuCompiledEffect::GetBoundSamplerEXT(
+        std::uint32_t slot, bool vertexStage, Texture*& texture,
+        Microsoft::Xna::Framework::Graphics::SamplerState& sampler) const
+    {
+        using Microsoft::Xna::Framework::Graphics::SamplerStateCollection;
+        if (slot >= static_cast<std::uint32_t>(SamplerStateCollection::MaxSamplers))
+        {
+            texture = nullptr;
+            return;
+        }
+        texture = vertexStage ? boundVertexTextures_[slot] : boundTextures_[slot];
+        sampler = vertexStage ? boundVertexSamplers_[slot] : boundSamplers_[slot];
     }
 
     void SdlGpuCompiledEffect::GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,

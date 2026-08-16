@@ -255,7 +255,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, EveryFormatAndUsageMapsToADistinctNat
     EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::NormalizedShort4), SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM);
     EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::HalfVector2), SDL_GPU_VERTEXELEMENTFORMAT_HALF2);
     EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::HalfVector4), SDL_GPU_VERTEXELEMENTFORMAT_HALF4);
-    EXPECT_THROW(ToSdlGpuVertexElementFormat(static_cast<VertexElementFormat>(999)), std::invalid_argument);
+    EXPECT_THROW((void) ToSdlGpuVertexElementFormat(static_cast<VertexElementFormat>(999)), std::invalid_argument);
 
     EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Position), MOJOSHADER_USAGE_POSITION);
     EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Color), MOJOSHADER_USAGE_COLOR);
@@ -270,7 +270,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, EveryFormatAndUsageMapsToADistinctNat
     EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::PointSize), MOJOSHADER_USAGE_POINTSIZE);
     EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Sample), MOJOSHADER_USAGE_SAMPLE);
     EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::TessellateFactor), MOJOSHADER_USAGE_TESSFACTOR);
-    EXPECT_THROW(ToMojoShaderUsage(static_cast<VertexElementUsage>(999)), std::invalid_argument);
+    EXPECT_THROW((void) ToMojoShaderUsage(static_cast<VertexElementUsage>(999)), std::invalid_argument);
 }
 
 TEST(SdlGpuCompiledEffectVertexLayoutTest, BuildsOneAttributePerShaderInputLocatedByArrayIndex)
@@ -344,7 +344,7 @@ TEST(SdlGpuCompiledEffectVertexLayoutTest, RefusesADeclarationMissingAShaderInpu
     };
 
     EXPECT_THROW(
-        CNA::Internal::Renderers::SdlGpu::BuildCompiledEffectVertexAttributes(
+        (void) CNA::Internal::Renderers::SdlGpu::BuildCompiledEffectVertexAttributes(
             *parseData, declaration, /*bufferSlot=*/0),
         System::NotSupportedException);
 }
@@ -383,6 +383,45 @@ TEST(SdlGpuCompiledEffectTest, CapturedUniformSnapshotReflectsTheAppliedPassAndC
     std::vector<std::uint8_t> secondPixelBytes;
     sdlGpuEffect->CaptureUniformSnapshotEXT(secondVertexBytes, secondPixelBytes);
     EXPECT_NE(pixelBytes, secondPixelBytes);
+}
+
+TEST(SdlGpuCompiledEffectTest, BoundSamplerPersistsAcrossAPassThatDoesNotReassignIt)
+{
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    Texture2D white = Texture2D::CreateFromPixels(
+        device, 1, 1, std::vector<std::uint8_t>{255, 255, 255, 255});
+    // FxTexture is parameter 5, the last of the six reflected parameters (see
+    // ReflectionMatchesTheConformanceSource); FxSampler is its only sampler, so it occupies
+    // register/slot 0.
+    runtime->SetParameterTexture(5, &white);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);  // P0: assigns FxSampler/FxTexture
+
+    Texture* boundTexture = nullptr;
+    SamplerState boundSampler;
+    sdlGpuEffect->GetBoundSamplerEXT(0, /*vertexStage=*/false, boundTexture, boundSampler);
+    EXPECT_EQ(boundTexture, &white);
+
+    // StatePass assigns render states but not FxSampler/FxTexture again; the earlier binding must
+    // still stand, matching real XNA GraphicsDevice.Textures/SamplerStates behavior.
+    runtime->ApplyPass(1, deviceState, changes);
+    boundTexture = nullptr;
+    sdlGpuEffect->GetBoundSamplerEXT(0, /*vertexStage=*/false, boundTexture, boundSampler);
+    EXPECT_EQ(boundTexture, &white);
+
+    // The vertex stage never bound anything.
+    Texture* vertexTexture = &white;
+    sdlGpuEffect->GetBoundSamplerEXT(0, /*vertexStage=*/true, vertexTexture, boundSampler);
+    EXPECT_EQ(vertexTexture, nullptr);
 }
 
 TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)
