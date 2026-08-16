@@ -274,6 +274,17 @@ _Static_assert(sizeof(CNA_SoundEffectInstanceInfo) == 32U,
                "CNA_SoundEffectInstanceInfo layout must remain stable");
 _Static_assert(sizeof(CNA_Vector3) == 12U,
                "CNA_Vector3 layout must remain stable");
+_Static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, doppler_scale) == 8U &&
+                   offsetof(CNA_AudioEmitter, forward) == 12U &&
+                   offsetof(CNA_AudioEmitter, position) == 24U &&
+                   offsetof(CNA_AudioEmitter, up) == 36U &&
+                   offsetof(CNA_AudioEmitter, velocity) == 48U,
+               "CNA_AudioEmitter layout must remain stable");
+_Static_assert(sizeof(CNA_AudioListener) == 56U && offsetof(CNA_AudioListener, forward) == 8U &&
+                   offsetof(CNA_AudioListener, position) == 20U &&
+                   offsetof(CNA_AudioListener, up) == 32U &&
+                   offsetof(CNA_AudioListener, velocity) == 44U,
+               "CNA_AudioListener layout must remain stable");
 _Static_assert(sizeof(CNA_Blend) == sizeof(uint32_t) &&
                    CNA_BLEND_ONE == UINT32_C(0) &&
                    CNA_BLEND_SOURCE_ALPHA_SATURATION == UINT32_C(12),

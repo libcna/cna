@@ -135,3 +135,34 @@ belongs to the type rather than to a device.
 
 `NoMicrophoneConnectedException` joins the other two audio exceptions in the firewall: no microphone
 connected is `CNA_RESULT_NOT_SUPPORTED`.
+
+## Positioning: two values and one supported listener
+
+An emitter and a listener are **fixed values, not handles**. The canonical types carry settings and
+no behavior — no identity, no lifetime, nothing to observe between calls — so `CNA_AudioEmitter` and
+`CNA_AudioListener` are structures the caller fills in, and `cna_audio_emitter_init` /
+`cna_audio_listener_init` write the canonical defaults: at the origin, facing -Z with +Y up, at rest,
+and (for the emitter alone) a Doppler scale of 1. The listener has no Doppler scale of its own, which
+is why the two are separate structures rather than one shared one.
+
+`cna_sound_effect_instance_apply_3d` positions a playing instance against one listener. The
+attenuation it applies is **full volume within the process-wide distance scale and a computed inverse
+law beyond it**, not a falloff that starts at zero distance, and pan is the emitter's offset projected
+onto the listener's own right axis — so which way the listener faces changes the result. The four
+process-wide settings are what this route reads, which is what makes them worth setting.
+
+**Positioning latches.** Once an instance has been positioned, the spatial gain, pan and pitch it
+computed are combined with the instance's own settings on every later call, and `..._set_pan` stops
+reaching the output. The instance's properties keep reading back whatever the caller last set them
+to; the output is driven by the position from then on. That is the canonical behavior, reported here
+rather than hidden.
+
+`cna_sound_effect_instance_apply_3d_multi_ext` covers the array overload, and it is `_ext` because it
+reports a limit a C caller could not otherwise see: **this runtime supports exactly one listener**.
+The canonical overload accepts the array XNA's split-screen API needs and then refuses every count
+but one, so a count of zero or two is `CNA_RESULT_NOT_SUPPORTED` rather than a silent fallback to the
+first listener. A null array is an argument failure, which is a different answer from an empty one.
+
+`RendererDetail` is not mapped here. Its constructor is private and its only source is
+`AudioEngine::getRendererDetailsProperty`, so it cannot be reached without an engine — it belongs
+with the XACT surface, and is recorded there.

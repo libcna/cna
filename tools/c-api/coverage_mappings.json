@@ -5434,6 +5434,43 @@
       "tests": "`AudioStreamingSmoke.c` enumerates whatever this machine reports — zero, since no verification tree has a capture device — reads every property of each device it does report, refuses the first index past the count on all nine index routes, checks the untouched-output contract of the default query, reads the type name and its buffer-too-small case, and pumps the buffer check",
       "status": "implemented",
       "task": "CBIND-037F2"
+    },
+    {
+      "id": "audio-emitter",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioEmitter(::(AudioEmitter|(get|set)(DopplerScale|Forward|Position|Up|Velocity)Property))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "the fixed value `CNA_AudioEmitter` plus `cna_audio_emitter_init`. The canonical emitter carries settings and no behavior, so every property is a field the caller writes directly rather than a route pair on a handle, and the constructor is what `_init` reproduces: origin, facing -Z with +Y up, at rest, Doppler scale 1",
+      "tests": "`Audio3DSmoke.c` asserts every default `_init` writes, refuses a null output, and drives all five settings through `cna_sound_effect_instance_apply_3d`; C and C++ ABI assertions pin the size and every field offset",
+      "status": "implemented",
+      "task": "CBIND-037F3"
+    },
+    {
+      "id": "audio-listener",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::AudioListener(::(AudioListener|(get|set)(Forward|Position|Up|Velocity)Property))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "the fixed value `CNA_AudioListener` plus `cna_audio_listener_init`, mirroring the emitter. The listener has no Doppler scale of its own — only the emitter does — so the two values are deliberately not one shared structure",
+      "tests": "`Audio3DSmoke.c` asserts every default `_init` writes, refuses a null output, and positions an instance against an oriented listener; C and C++ ABI assertions pin the size and every field offset",
+      "status": "implemented",
+      "task": "CBIND-037F3"
+    },
+    {
+      "id": "sound-effect-instance-apply-3d",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Audio::SoundEffectInstance::Apply3D$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "`cna_sound_effect_instance_apply_3d` for the single listener and `cna_sound_effect_instance_apply_3d_multi_ext` for the array overload. The array route is `_ext` because it reports a canonical limit C callers otherwise could not see: this runtime accepts exactly one listener and refuses every other count as unsupported rather than approximating one",
+      "tests": "`Audio3DSmoke.c` positions a playing instance from both sides with the process-wide distance and Doppler scales moved off their defaults, asserts the instance's own volume/pitch/pan still read back what the caller set after positioning latches the spatial values, and pins the multi-listener refusals for counts of zero and two, a null array and a released handle",
+      "status": "implemented",
+      "task": "CBIND-037F3"
     }
   ]
 }

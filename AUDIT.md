@@ -87,8 +87,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-037F1` opens the audio module by completing the sound-effect surface: three more creation
 > routes, the process-wide 3D-audio settings, the static sample computations and both audio
 > exceptions converting at the boundary, and `CBIND-037F2` adds streaming instances and the
-> index-addressed microphone surface. The
-> generated inventory currently records 5,333 implemented, 32 partial, 767 planned and 283
+> index-addressed microphone surface, and `CBIND-037F3` adds 3D
+> positioning: the emitter and listener values and both `Apply3D` overloads. The
+> generated inventory currently records 5,357 implemented, 32 partial, 743 planned and 283
 > not-applicable public/protected declarations. This
 > is not complete CNA C API coverage; status
 > and the required full-surface mapping remain tracked in `plan_binding.md` and

@@ -195,6 +195,17 @@ static_assert(sizeof(CNA_AudioCapabilities) == 16U);
 static_assert(sizeof(CNA_SoundEffectCreateInfo) == 24U);
 static_assert(sizeof(CNA_SoundEffectInstanceInfo) == 32U);
 static_assert(sizeof(CNA_Vector3) == 12U);
+static_assert(sizeof(CNA_AudioEmitter) == 60U && offsetof(CNA_AudioEmitter, doppler_scale) == 8U &&
+                  offsetof(CNA_AudioEmitter, forward) == 12U &&
+                  offsetof(CNA_AudioEmitter, position) == 24U &&
+                  offsetof(CNA_AudioEmitter, up) == 36U &&
+                  offsetof(CNA_AudioEmitter, velocity) == 48U,
+              "CNA_AudioEmitter layout must remain stable");
+static_assert(sizeof(CNA_AudioListener) == 56U && offsetof(CNA_AudioListener, forward) == 8U &&
+                  offsetof(CNA_AudioListener, position) == 20U &&
+                  offsetof(CNA_AudioListener, up) == 32U &&
+                  offsetof(CNA_AudioListener, velocity) == 44U,
+              "CNA_AudioListener layout must remain stable");
 static_assert(sizeof(CNA_Blend) == sizeof(uint32_t));
 static_assert(CNA_BLEND_ONE == UINT32_C(0));
 static_assert(CNA_BLEND_SOURCE_ALPHA_SATURATION == UINT32_C(12));

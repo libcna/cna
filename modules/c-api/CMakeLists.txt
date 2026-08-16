@@ -1008,6 +1008,23 @@ if(CNA_BUILD_TESTS)
         )
     endif()
 
+    add_executable(cna_c_api_audio_3d_smoke
+        tests/pure_c/Audio3DSmoke.c
+    )
+    set_target_properties(cna_c_api_audio_3d_smoke PROPERTIES
+        C_STANDARD 17
+        C_STANDARD_REQUIRED ON
+        C_EXTENSIONS OFF
+    )
+    target_link_libraries(cna_c_api_audio_3d_smoke PRIVATE cna_c_api)
+    cna_c_api_enable_strict_warnings(cna_c_api_audio_3d_smoke)
+    add_test(NAME CApi_Audio3DSmoke COMMAND cna_c_api_audio_3d_smoke)
+    if(CNA_GRAPHICS_RENDERER STREQUAL "SDL_RENDERER")
+        set_tests_properties(CApi_Audio3DSmoke PROPERTIES
+            ENVIRONMENT "SDL_VIDEODRIVER=dummy"
+        )
+    endif()
+
     add_executable(cna_c_api_graphics_device_manager_smoke
         tests/pure_c/GraphicsDeviceManagerSmoke.c
     )

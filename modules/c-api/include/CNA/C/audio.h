@@ -1089,6 +1089,129 @@ CNA_C_API CNA_Result cna_dynamic_sound_effect_instance_copy_type_name(
     uint64_t capacity,
     uint64_t* out_bytes);
 
+/* ---- 3D audio ---- */
+
+/**
+ * @brief Where a sound is, and how it moves.
+ *
+ * The canonical emitter is a plain settings object with no behavior of its own, so it is a fixed
+ * value here rather than a handle: every property is a field, and `cna_audio_emitter_init` writes
+ * the canonical defaults.
+ */
+typedef struct CNA_AudioEmitter {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Per-emitter Doppler multiplier, applied on top of the process-wide Doppler scale. */
+    float doppler_scale;
+
+    /** @brief Direction the emitter faces. */
+    CNA_Vector3 forward;
+
+    /** @brief Emitter position in world space. */
+    CNA_Vector3 position;
+
+    /** @brief Emitter up direction. */
+    CNA_Vector3 up;
+
+    /** @brief Emitter velocity, which is what produces the Doppler shift. */
+    CNA_Vector3 velocity;
+} CNA_AudioEmitter;
+
+/**
+ * @brief Where the ears are, and how they move.
+ *
+ * A fixed value for the same reason the emitter is: the canonical listener carries settings and no
+ * behavior. It has no Doppler scale of its own — only the emitter does.
+ */
+typedef struct CNA_AudioListener {
+    /** @brief Size of this caller-provided structure in bytes. */
+    uint32_t struct_size;
+
+    /** @brief Version of this caller-provided structure. */
+    uint32_t struct_version;
+
+    /** @brief Direction the listener faces; the pan calculation is relative to this. */
+    CNA_Vector3 forward;
+
+    /** @brief Listener position in world space. */
+    CNA_Vector3 position;
+
+    /** @brief Listener up direction; with @ref forward it fixes which way is right. */
+    CNA_Vector3 up;
+
+    /** @brief Listener velocity, which is what produces the Doppler shift. */
+    CNA_Vector3 velocity;
+} CNA_AudioListener;
+
+/**
+ * @brief Initializes an emitter to the canonical default.
+ *
+ * @param out_emitter Receives an emitter at the origin, facing forward, at rest.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_audio_emitter_init(CNA_AudioEmitter* out_emitter);
+
+/**
+ * @brief Initializes a listener to the canonical default.
+ *
+ * @param out_listener Receives a listener at the origin, facing forward, at rest.
+ * @return `CNA_RESULT_SUCCESS`, or `CNA_RESULT_INVALID_ARGUMENT` for a null output.
+ *
+ * This pure POD operation touches no runtime state and may run on any thread.
+ */
+CNA_C_API CNA_Result cna_audio_listener_init(CNA_AudioListener* out_listener);
+
+/**
+ * @brief Positions a playing instance relative to a listener.
+ *
+ * @param instance Owned instance handle.
+ * @param listener Where the ears are.
+ * @param emitter Where the sound is.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ *         argument/handle/thread/native failure.
+ *
+ * The distance attenuation this applies is a **computed inverse law beyond the process-wide distance
+ * scale and full volume within it**, not a falloff that starts at zero distance — the canonical
+ * implementation follows the reference behavior rather than the simpler curve. Pan is the emitter's
+ * offset projected onto the listener's own right axis, so which way the listener faces matters.
+ *
+ * Once an instance has been positioned, the spatial volume, pan and pitch it computes are **latched
+ * and combined with the instance's own settings on every later call**, and `..._set_pan` stops
+ * reaching the output. That is the canonical behavior: a positioned instance is driven by its
+ * position from then on.
+ */
+CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d(
+    CNA_Handle instance,
+    const CNA_AudioListener* listener,
+    const CNA_AudioEmitter* emitter);
+
+/**
+ * @brief Positions a playing instance relative to several listeners.
+ *
+ * @param instance Owned instance handle.
+ * @param listeners Array of @p listener_count listeners, borrowed for the duration of the call.
+ * @param listener_count Number of listeners.
+ * @param emitter Where the sound is.
+ * @return `CNA_RESULT_SUCCESS`, `CNA_RESULT_NOT_SUPPORTED` for any count other than one,
+ *         `CNA_RESULT_INVALID_STATE` for a disposed instance, or a documented
+ *         argument/handle/thread/native failure.
+ *
+ * **This runtime supports exactly one listener.** The canonical overload accepts the array XNA's
+ * split-screen API needs and then refuses every count but one, which is reported here as it is
+ * rather than smoothed into a silent single-listener fallback.
+ */
+CNA_C_API CNA_Result cna_sound_effect_instance_apply_3d_multi_ext(
+    CNA_Handle instance,
+    const CNA_AudioListener* listeners,
+    uint64_t listener_count,
+    const CNA_AudioEmitter* emitter);
+
 #ifdef __cplusplus
 }
 #endif

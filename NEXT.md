@@ -951,16 +951,36 @@
 > fails the "matched no symbols" check. Two such rules were written and removed. The inventory is now
 > 5,333 implemented, 32 partial, 767 planned and 283 N/A; the audio module stands at 119 implemented
 > with 102 planned, which is exactly `F3` plus `F4`. All four trees green at 68/68, ASan+UBSan clean.
-> **Next: CBIND-037F3**, 3D audio (32 rows), then `F4` (the XACT family, 70) whose first question is
-> whether it is reachable at all without a binary fixture this repository does not have.
+> CBIND-037F3 then adds 3D positioning, 24 rows. The design question was whether an emitter and a
+> listener earn handles, and the answer is **no**: the canonical types carry settings and no behavior
+> — no identity, no lifetime, nothing observable between calls — so `CNA_AudioEmitter` and
+> `CNA_AudioListener` are fixed values the caller fills in, with `_init` routes writing the canonical
+> defaults. They stay two structures rather than one, because only the emitter has a Doppler scale.
 >
-> **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
-> one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,
-> `media`, `devices` and `devices-ext` have no planned row left, joining `storage`, `content`, `net`,
-> `core`, `math`, `graphics` and `graphics-ext`. What remains is `runtime` (958 rows minus what
-> `E1`–`E3` took: `E4`'s 80 and `E2b`'s 3), `audio` (205) and `gamer-services` (665). All four
-> verification trees are green at 64/64 with the coverage gate current, and the ASan tree runs with
-> leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
+> Two canonical behaviors are reported rather than smoothed. **Positioning latches**: after
+> `cna_sound_effect_instance_apply_3d`, the spatial gain, pan and pitch it computed are combined with
+> the instance's own settings on every later call and `..._set_pan` stops reaching the output, while
+> the properties keep reading back what the caller last set — the test asserts exactly that. And
+> **this runtime supports exactly one listener**: the array overload accepts the array XNA's
+> split-screen API needs and then refuses every count but one, so `..._apply_3d_multi_ext` is `_ext`
+> and answers `NOT_SUPPORTED` for zero or two rather than quietly using the first listener. A null
+> array stays an argument failure, which is a different answer from an empty one.
+>
+> `RendererDetail` **moved to `F4`**, all 8 rows: its constructor is private with `AudioEngine` as the
+> friend, so `getRendererDetailsProperty` is the only way a C caller could ever obtain one, and an
+> engine needs the binary settings file `F4` has to decide about. The planned split of 32/70 was an
+> estimate; the real inventory is 24 here and 78 there. The inventory is now 5,357 implemented, 32
+> partial, 743 planned and 283 N/A; the audio module stands at 143 implemented with 78 planned, which
+> is exactly `F4`. All four trees green at 69/69, ASan+UBSan clean.
+> **Next: CBIND-037F4**, the XACT family (78 rows), whose first question is whether it is reachable at
+> all without a binary fixture this repository does not have.
+>
+> **State at this handoff.** Twenty slices are committed on `feature/binding` since `CBIND-037B7a`,
+> one task per commit. Five modules closed in this stretch: `input`, `media`, `devices`,
+> `devices-ext` and `runtime` have no planned row left, joining `storage`, `content`, `net`, `core`,
+> `math`, `graphics` and `graphics-ext`. What remains is `audio` (78, all of it `F4`) and
+> `gamer-services` (665). All four verification trees are green at 69/69 with the coverage gate
+> current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
 >
