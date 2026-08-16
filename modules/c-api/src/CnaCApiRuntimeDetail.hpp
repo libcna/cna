@@ -59,6 +59,12 @@ void RemoveOwnedGameComponent() noexcept;
 // later unsubscription can touch the destroyed native handler.
 void ResetGraphicsDeviceAdapterState() noexcept;
 
+// Releases every graphics device manager this ABI kept alive past its handle. The canonical game
+// caches a raw pointer to the graphics device service and never clears it, so a manager destroyed
+// while its game still lives would leave that pointer dangling; the object is therefore retained
+// until the game itself is going away.
+void ResetGraphicsDeviceManagerState() noexcept;
+
 void AddOwnedGraphicsResource() noexcept;
 
 void RemoveOwnedGraphicsResource() noexcept;

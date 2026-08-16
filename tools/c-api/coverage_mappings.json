@@ -5164,6 +5164,130 @@
       "tests": "Doxygen declaration inventory; the observable half is the window event coverage in `RuntimeGameSmoke.c`",
       "status": "not-applicable",
       "task": "CBIND-037E3"
+    },
+    {
+      "id": "presentation-mode",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::PresentationMode(::[A-Za-z]+)?$",
+      "kinds": [
+        "enum",
+        "enum-value"
+      ],
+      "mapping": "a fixed-width `CNA_PresentationMode` with one `CNA_PRESENTATION_MODE_*` macro per canonical value at its canonical ordinal, plus `CNA_PRESENTATION_MODE_MAXIMUM` for validation",
+      "tests": "`GraphicsDeviceManagerSmoke.c` pins every ordinal and the maximum, round-trips one through the manager's preference route and refuses the first undefined one; the ordinals are also pinned by C and C++ ABI assertions",
+      "status": "implemented",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-information",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceInformation(::(GraphicsDeviceInformation|getAdapterProperty|setAdapterProperty|getGraphicsProfileProperty|setGraphicsProfileProperty|getPresentationParametersProperty|setPresentationParametersProperty|Clone|GetTypeName))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "a fixed `CNA_GraphicsDeviceInformation` value with `cna_graphics_device_information_init`, `_clone` and a value-free type-name pair. **The adapter is named by index, not by pointer**: the canonical value holds a `GraphicsAdapter*` into the runtime's own list, which is nothing a C caller could hold safely, so C uses the same zero-based index every adapter query in this ABI already takes and a negative index means no adapter. The profile and the presentation parameters are the identities and the fixed value the graphics slice already settled, so nothing is duplicated here",
+      "tests": "`GraphicsDeviceManagerSmoke.c` asserts the canonical default, round-trips a configuration through the clone route including the adapter index, refuses an unversioned structure and one carrying an undefined profile, and checks the exact type name with its buffer-too-small case",
+      "status": "implemented",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-information-destructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceInformation::~GraphicsDeviceInformation$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "No C mapping: the C form is a fixed value a caller owns by declaring it, and a value needs no destructor",
+      "tests": "Doxygen declaration inventory; no callable native operation exists for C",
+      "status": "not-applicable",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceManager(::(DefaultBackBufferWidth|DefaultBackBufferHeight|Disposed|DeviceCreated|DeviceDisposing|DeviceReset|DeviceResetting|PreparingDeviceSettings|~GraphicsDeviceManager|getGraphicsProfileProperty|setGraphicsProfileProperty|getGraphicsDeviceProperty|getDeviceCreatedEvent|getDeviceDisposingEvent|getDeviceResetEvent|getDeviceResettingEvent|getIsFullScreenProperty|setIsFullScreenProperty|getPreferMultiSamplingProperty|setPreferMultiSamplingProperty|getPreferredBackBufferFormatProperty|setPreferredBackBufferFormatProperty|getPreferredBackBufferHeightProperty|setPreferredBackBufferHeightProperty|getPreferredBackBufferWidthProperty|setPreferredBackBufferWidthProperty|getPreferredDepthStencilFormatProperty|setPreferredDepthStencilFormatProperty|getSynchronizeWithVerticalRetraceProperty|setSynchronizeWithVerticalRetraceProperty|getSupportedOrientationsProperty|setSupportedOrientationsProperty|getPreferredPresentationModeProperty|setPreferredPresentationModeProperty|ApplyChanges|ToggleFullScreen|CreateDevice|BeginDraw|EndDraw|GetTypeName))?$",
+      "signature_regex": "^(?!\\(bool disposing\\)).*$",
+      "kinds": [
+        "class",
+        "constant",
+        "event",
+        "destructor",
+        "method"
+      ],
+      "mapping": "an owned `CNA_GraphicsDeviceManagerHandle` from `cna_graphics_device_manager_create`, the two default back-buffer constants as macros, every preference as a get/set pair, the borrowed managed device, `_apply_changes`, `_toggle_full_screen`, `_create_device`, `_begin_draw`, `_end_draw`, `_dispose`, a type-name pair, `cna_graphics_device_manager_subscribe` for the five data-free events and `_subscribe_preparing_device_settings` for the one that carries data. Creating the manager **registers both services**, which is what `cna_game_services_contains_ext` then reports, and a game accepts exactly one. Every reconfiguration reports `CNA_RESULT_PLATFORM` when the platform declines, the rule the window slice established. **Releasing a manager keeps the object alive until its game is destroyed**: the canonical game caches a raw pointer to the graphics device service and never clears it, so destroying the manager first would leave the game dereferencing freed memory on its next frame — a canonical defect this ABI works around rather than exposes",
+      "tests": "`GraphicsDeviceManagerSmoke.c` creates the manager and asserts both services appear, refuses a second manager, round-trips every preference and refuses every undefined identity, proves the orientation bit set accepts a combination, borrows the managed device, applies the changes and re-creates the device accepting a platform refusal as correct, runs the draw bracket, asserts disposal unregisters both services and raises its event exactly once across two disposals, and covers every released-handle refusal. The retained-object rule is proved by the suite running clean under ASan, where the earlier design reproduced a heap-use-after-free on the very next frame",
+      "status": "implemented",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager-detached-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceManager::GraphicsDeviceManager$",
+      "signature_regex": "^\\(\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "No C mapping: the game-less constructor exists for the game-attached one to delegate to. A manager with no game has no device to manage, no window to reconfigure and no services to register, so there is nothing a C caller could do with one",
+      "tests": "Doxygen declaration inventory; the game-attached constructor is what `cna_graphics_device_manager_create` maps",
+      "status": "not-applicable",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager-protected",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceManager::(Dispose|OnDeviceCreated|OnDeviceDisposing|OnDeviceReset|OnDeviceResetting|OnPreparingDeviceSettings|CanResetDevice|FindBestDevice|RankDevices)$",
+      "signature_regex": "^(?!\\(\\)$).*$",
+      "kinds": [
+        "method"
+      ],
+      "mapping": "No C mapping: the protected disposal overload, the five raise hooks and the three device-selection hooks are all derived-class extension points, and **this ABI does not derive the manager** — the same test the window slice applied, and the opposite of what the component slice found. A C consumer observes the raise hooks through the event subscriptions and influences device selection through the preference routes",
+      "tests": "Doxygen declaration inventory; the observable half is the event and preference coverage in `GraphicsDeviceManagerSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager-interface",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::IGraphicsDeviceManager(::(BeginDraw|CreateDevice|EndDraw))?$",
+      "kinds": [
+        "class",
+        "method"
+      ],
+      "mapping": "not a type in C: its three operations are `cna_graphics_device_manager_begin_draw`, `_create_device` and `_end_draw` on the manager that implements it. Unlike a game component, a C consumer cannot supply its own implementation — the runtime creates the manager itself and the game resolves it through the service container, so there is no seam for a caller-provided one. That is the same question the component slice answered the other way, and the difference is who constructs the object",
+      "tests": "`GraphicsDeviceManagerSmoke.c` drives all three through the manager, and the service query proves the game resolves the interface the manager registered",
+      "status": "implemented",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager-interface-destructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::IGraphicsDeviceManager::~IGraphicsDeviceManager$",
+      "kinds": [
+        "destructor"
+      ],
+      "mapping": "No C mapping: a virtual destructor exists so C++ can delete through the interface, and C holds a manager handle rather than an interface pointer",
+      "tests": "Doxygen declaration inventory; no callable native operation exists",
+      "status": "not-applicable",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "preparing-device-settings-event-arguments",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::PreparingDeviceSettingsEventArgs(::(PreparingDeviceSettingsEventArgs|getGraphicsDeviceInformationProperty))?$",
+      "kinds": [
+        "class",
+        "constructor",
+        "method"
+      ],
+      "mapping": "flattened into `cna_graphics_device_manager_subscribe_preparing_device_settings`, whose handler receives the candidate configuration as a **read-only** `CNA_GraphicsDeviceInformation`. In XNA this event is how an application overrides device settings; **in this runtime nobody can**, because the canonical event-handler collection delivers its argument as a `const` reference and the argument type's mutable accessor is therefore unreachable from any subscriber, C++ or C. This ABI reports what a subscriber can actually do rather than inventing a power the canonical event does not grant. C never constructs the argument object",
+      "tests": "`GraphicsDeviceManagerSmoke.c` subscribes to the event, applies changes and re-creates the device, and asserts that whatever the handler observed carried a real back-buffer width",
+      "status": "implemented",
+      "task": "CBIND-037E4"
+    },
+    {
+      "id": "graphics-device-manager-attached-constructor",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GraphicsDeviceManager::GraphicsDeviceManager$",
+      "signature_regex": "^\\(Game \\*game\\)$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "`cna_graphics_device_manager_create`, which takes the game handle the canonical constructor takes a pointer to. Creating the manager registers it as both the graphics device manager and the graphics device service, and a game accepts exactly one: a second creation reports the canonical refusal as `CNA_RESULT_INVALID_ARGUMENT`",
+      "tests": "`GraphicsDeviceManagerSmoke.c` creates one, asserts both services appear where none did before, and asserts the second creation is refused with its output left invalid",
+      "status": "implemented",
+      "task": "CBIND-037E4"
     }
   ]
 }

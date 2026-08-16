@@ -1260,6 +1260,33 @@ _Static_assert(sizeof(CNA_MessageBoxTestLog) == 24U &&
                    offsetof(CNA_MessageBoxTestLog, last_button_count) == 20U,
                "CNA_MessageBoxTestLog layout must remain stable");
 
+_Static_assert(sizeof(CNA_PresentationMode) == sizeof(uint32_t) &&
+                   CNA_PRESENTATION_MODE_LETTERBOX == UINT32_C(0) &&
+                   CNA_PRESENTATION_MODE_OVERSCAN == UINT32_C(1) &&
+                   CNA_PRESENTATION_MODE_STRETCH == UINT32_C(2) &&
+                   CNA_PRESENTATION_MODE_NATIVE_BACK_BUFFER == UINT32_C(3) &&
+                   CNA_PRESENTATION_MODE_FIXED_HEIGHT_DYNAMIC_WIDTH == UINT32_C(4) &&
+                   CNA_PRESENTATION_MODE_MAXIMUM == UINT32_C(4) &&
+                   sizeof(CNA_GraphicsDeviceManagerEvent) == sizeof(uint32_t) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DISPOSED == UINT32_C(0) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_CREATED == UINT32_C(1) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_DISPOSING == UINT32_C(2) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_RESET == UINT32_C(3) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_DEVICE_RESETTING == UINT32_C(4) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_EVENT_MAXIMUM == UINT32_C(4) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_DEFAULT_BACK_BUFFER_WIDTH == INT32_C(800) &&
+                   CNA_GRAPHICS_DEVICE_MANAGER_DEFAULT_BACK_BUFFER_HEIGHT == INT32_C(480),
+               "CNA graphics device manager identities must remain stable");
+
+/* The configuration carries the presentation parameters the graphics slice already froze, so its
+   own layout is pinned relative to them rather than by a number that would move with theirs. */
+_Static_assert(offsetof(CNA_GraphicsDeviceInformation, adapter_index) == 8U &&
+                   offsetof(CNA_GraphicsDeviceInformation, graphics_profile) == 12U &&
+                   offsetof(CNA_GraphicsDeviceInformation, presentation_parameters) == 16U &&
+                   sizeof(CNA_GraphicsDeviceInformation) ==
+                       16U + sizeof(CNA_PresentationParameters),
+               "CNA_GraphicsDeviceInformation layout must remain stable");
+
 _Static_assert(sizeof(CNA_GameWindowEvent) == sizeof(uint32_t) &&
                    CNA_GAME_WINDOW_EVENT_CLIENT_SIZE_CHANGED == UINT32_C(0) &&
                    CNA_GAME_WINDOW_EVENT_ORIENTATION_CHANGED == UINT32_C(1) &&

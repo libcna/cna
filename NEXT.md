@@ -843,8 +843,37 @@
 > window. The deciding question is never "is it protected" — it is "does this ABI have a derived
 > class to hang it on". The inventory is now 5,176 implemented, 34 partial, 958 planned and 247 N/A;
 > all four trees green at 64/64, ASan+UBSan clean.
-> **Next: CBIND-037E4**, the 80-row graphics-device-manager slice, after which only `CBIND-037E2b`'s
-> three content-manager rows remain in the runtime module.
+> CBIND-037E4 then adds the graphics device manager, 80 rows — the **one runtime object a C caller
+> creates**. Creating it registers both services `CBIND-037E1` named, so the service query written
+> before anything registered them now has something to find. The adapter inside a candidate
+> configuration is named by **index**, not by pointer, because a pointer into the runtime's adapter
+> list is nothing a C caller could hold safely.
+>
+> Two findings from this slice are worth more than its routes.
+>
+> **The canonical game caches a raw `IGraphicsDeviceService*` and never clears it** — not when the
+> service is unregistered, not when the manager is disposed. Writing `cna_graphics_device_manager_destroy`
+> the obvious way produced a heap-use-after-free on the very next frame, which AddressSanitizer
+> caught with a clean stack: `Game::getGraphicsDeviceProperty()` dereferencing the freed manager from
+> `Game::EndDraw()`. Releasing a manager therefore disposes it, invalidates the handle and **keeps the
+> object alive until the game is destroyed**; a disposed manager still answers that cached pointer
+> correctly, because disposal does not touch the game-owned device it points at. The retained objects
+> are freed with the game, which is why the suite stays leak-clean. This is a canonical defect worked
+> around, not a C API design choice, and it is written down in `docs/c-api/GAME_COMPONENTS.md`.
+>
+> **`PreparingDeviceSettings` cannot change device settings in this runtime at all.** In XNA it is how
+> an application overrides them; here the canonical event-handler collection delivers its argument as
+> a `const` reference, so the argument type's mutable accessor is unreachable from any subscriber,
+> C++ as much as C. The C callback is read-only and the header says why. Reporting what a subscriber
+> can actually do was the honest choice over `const_cast`-ing a power the canonical event does not
+> grant.
+>
+> `IGraphicsDeviceManager` gets no caller-provided implementation, the opposite of what `CBIND-037E1`
+> decided for game components, and the difference is who constructs the object: the runtime creates
+> the manager itself and resolves it through the service container. The inventory is now 5,243
+> implemented, 34 partial, 878 planned and 260 N/A; all four trees green at 65/65, ASan+UBSan clean.
+> **Next: CBIND-037E2b**, the last three runtime rows — the game's content manager, which needs the
+> borrowed-content-manager contract settled in `OWNERSHIP.md` before it is written.
 >
 > **State at this handoff.** Sixteen slices are committed on `feature/binding` since `CBIND-037B7a`,
 > one task per commit, and the branch is pushed. Four modules closed in this stretch: `input`,

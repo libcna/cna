@@ -61,5 +61,6 @@
 #include "CNA/C/devices.h"
 #include "CNA/C/runtime_components.h"
 #include "CNA/C/runtime_window.h"
+#include "CNA/C/runtime_graphics_manager.h"
 
 #endif

@@ -144,6 +144,7 @@ enum class ObjectKind : uint32_t {
     GameComponent = 98,
     GameComponentEventRegistration = 99,
     GameEventRegistration = 100,
+    GraphicsDeviceManager = 101,
     Video = 89,
     VideoPlayer = 90,
     Test = UINT32_MAX

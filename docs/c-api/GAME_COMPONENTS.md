@@ -129,3 +129,46 @@ applied with the opposite result: this ABI supplies the derived class for a comp
 component's protected hooks are callbacks; it does not derive the window, so the window's are out of
 reach. The deciding question is never "is it protected" — it is "does this ABI have a derived class
 to hang it on".
+
+## The graphics device manager
+
+The manager is the one runtime object a C caller **creates**: `cna_graphics_device_manager_create`
+takes the game handle the canonical constructor takes a pointer to, and creating it registers the
+manager as both the graphics device manager and the graphics device service. That is what
+`cna_game_services_contains_ext` reports, and it closes the loop the component slice opened — the
+service identities were named there before anything registered them. A game accepts exactly one; a
+second creation is refused.
+
+Preferences are recorded and then applied: every setter records a request and
+`cna_graphics_device_manager_apply_changes` is what turns it into a device reset and a window change.
+A platform that declines the reconfiguration reports `CNA_RESULT_PLATFORM`, the rule the window slice
+established. The adapter inside a `CNA_GraphicsDeviceInformation` is named by **index**, not by
+pointer, because a pointer into the runtime's adapter list is nothing a C caller could hold safely.
+
+### Releasing a manager keeps the object alive
+
+`cna_graphics_device_manager_destroy` disposes the manager, unregisters both services, invalidates
+the handle — and **keeps the C++ object alive until the game is destroyed**.
+
+That is not caution. The canonical game caches a raw `IGraphicsDeviceService*` the first time it
+resolves one and never clears it: not when the service is unregistered, not when the manager is
+disposed. Destroying the manager while its game still lives leaves the game dereferencing freed
+memory on its very next frame, which AddressSanitizer reproduced as a heap-use-after-free the first
+time this route was written the obvious way. A disposed manager still answers that cached pointer
+correctly, because disposal does not touch the game-owned device it points at, so retaining the
+object is both safe and invisible to a caller. The retained objects are freed with the game, which
+is why the suite stays leak-clean.
+
+### The device-settings event is an observation
+
+In XNA, `PreparingDeviceSettings` is how an application overrides device settings before the device
+is created. **In this runtime nobody can.** The canonical event-handler collection delivers its
+argument as a `const` reference, so the argument type's mutable accessor is unreachable from any
+subscriber — C++ as much as C. This ABI hands the handler a read-only configuration and says so,
+rather than inventing a power the canonical event does not grant. Change the settings through the
+manager's own preference routes and apply them.
+
+`IGraphicsDeviceManager` is an interface a caller could in principle implement, and this ABI does
+**not** let one: the runtime creates the manager itself and the game resolves it through the service
+container, so there is no seam for a caller-provided implementation. That is the same question the
+component model answered the other way, and the difference is who constructs the object.
