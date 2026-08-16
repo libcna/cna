@@ -403,6 +403,11 @@ def main() -> int:
                         help="empty directory for disposable PNGs and sidecars")
     parser.add_argument("--report-out", type=Path,
                         help="optional aggregate JSON report path")
+    parser.add_argument("--goldens", type=Path,
+                        help="renderer-owned L7 golden directory (default: tests/gltf-l7/easygl). "
+                             "Gate C must run on more than one renderer (plan_gltf.md §27.2 row 12) "
+                             "and each renderer owns its own goldens, exactly as the whole-corpus "
+                             "gate selects them with --policy.")
     parser.add_argument("--timeout", type=int, default=300,
                         help="per viewer/reference process timeout (default: 300 seconds)")
     args = parser.parse_args()
@@ -414,6 +419,9 @@ def main() -> int:
     viewer = args.viewer.resolve()
     viewer_source = args.viewer_source.resolve()
     output = args.output.resolve()
+    goldens = (args.goldens or repo / "tests/gltf-l7/easygl").resolve()
+    if not goldens.is_dir():
+        raise RuntimeError(f"golden directory does not exist: {goldens}")
     if args.timeout <= 0:
         parser.error("--timeout must be positive")
     if not os.environ.get("DISPLAY"):
@@ -495,7 +503,7 @@ def main() -> int:
 
                 golden: dict[str, Any] | None = None
                 if case.golden_id is not None:
-                    golden_path = repo / "tests/gltf-l7/easygl" / f"{case.golden_id}.png"
+                    golden_path = goldens / f"{case.golden_id}.png"
                     if not golden_path.is_file():
                         raise RuntimeError(
                             f"row {case.row} {case.case_id}: no L7 golden at {golden_path}"
@@ -511,6 +519,7 @@ def main() -> int:
                     # runs above must still produce identical files.
                     deltas = compare_to_golden(first_png, golden_path)
                     golden = {
+                        "goldenSet": goldens.name,
                         "path": str(golden_path.relative_to(repo)),
                         "sha256": sha256(golden_path),
                         "pixelIdentical": True,
