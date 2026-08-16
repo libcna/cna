@@ -1352,22 +1352,42 @@
 > **With both owner decisions delivered, the release gate's verdict is READY.** All ten criteria are
 > met and re-measured on every run.
 >
-> **Next: `CBIND-044`**, the final close — the last unfinished task in the plan. It asks that every
-> coverage row be implemented or carry an owner-approved limitation a caller can query. The 28
-> `partial` rows are exactly that list, and they are already published with their reasons in
-> `LIMITATIONS.md`; what `CBIND-044` must decide, row by row, is whether each becomes a route or
-> becomes permanent. Three of them name `CBIND-044` explicitly as their owner. The 28 `partial` rows are not gaps the
+> **CBIND-044 then went from 28 partial rows to 12, and the 12 are not work.** Three of the rows
+> were implementable and were implemented. `044A` added `cna_sprite_batch_begin_with_effect`, which
+> covers both canonical `Begin` overloads that take a custom effect — a null transform is the
+> identity the effect-only overload uses, so one route expresses two. `044B` closed the largest
+> group, the ten `Draw` overloads, with `CNA_SpriteScaledCommand` and
+> `cna_sprite_batch_submit_scaled_many`: **a new structure and route rather than more fields on the
+> published one**, because with a position the origin is measured in source pixels and the scale
+> applies after that offset, and because appending fields would have changed
+> `sizeof(CNA_SpriteCommand)` — which the ABI baseline would have called a break and which would
+> have forced a minor bump. Evolution path 1 costs nothing; path 2 would have cost the promise.
+> `044C` completed the signed-in gamer collection by naming its operations rather than giving the
+> collection a handle, the same judgment `GameServiceContainer` got.
+>
+> `044D` is the mechanical half of the close: every remaining partial rule now carries a
+> **disposition** — the kind of limitation and the callable route that reports it — and the
+> generator fails if one lacks it. "No unspecified omission" is not a claim that nothing is missing;
+> it is a guarantee that nothing is missing *silently*.
+>
+> **What is left of `CBIND-044` is a decision, not work.** Twelve symbols, all structural properties
+> of C: four `GameServiceContainer` lookups and `ContentManager::Load` (C cannot name a C++ type),
+> four content-manager service-provider members (a Sharp Runtime object), two untyped content reads
+> (a type-erased value) and the network-session properties indexer (a proxy). Each has a route that
+> reports the reduced answer. They are listed in `docs/c-api/LIMITATIONS.md` as **awaiting owner
+> approval**; approving them closes `CBIND-044` and with it the whole plan. The 28 `partial` rows are not gaps the
 > campaign left open — each is a symbol whose canonical form cannot be fully expressed in C, with
 > its usable subset named in `docs/c-api/COVERAGE.md`; do not "close" one without a concrete new
 > capability to add.
 >
-> **State at this handoff.** Forty slices are committed on `feature/binding` since
+> **State at this handoff.** Forty-five slices are committed on `feature/binding` since
 > `CBIND-037B7a`, one task per commit. Six modules closed in this stretch: `input`, `media`,
 > `devices`, `devices-ext`, `runtime` and `audio` have no planned row left, joining `storage`,
 > `content`, `net`, `core`, `math`, `graphics` and `graphics-ext`. **Nothing remains in the campaign at all**: every
 > module is closed and the inventory has no planned row; `CBIND-038` through `CBIND-042` are done,
-> as are `CBIND-045` and `CBIND-046` from the owner's two decisions, so **`CBIND-044` is the only
-> unfinished task left in the plan** and the release gate reads ready. All four verification trees are green at
+> as are `CBIND-045` and `CBIND-046` from the owner's two decisions and `CBIND-044A`–`D`, so
+> **nothing in the plan is waiting on implementation**: `CBIND-044` needs only the owner's approval
+> of its twelve recorded limitations, and the release gate reads ready. All four verification trees are green at
 > 81/81 with the coverage, compatibility, ABI-baseline, limitations and release gates current, and the ASan tree runs with leak detection on. `CNA_DEVICES` stays **ON** in `sdlrenderer` and `asan` and **OFF** in `headless`
 > and `software`, which is what makes every `_ext` route's compiled-out half real evidence rather
 > than an assumption.
