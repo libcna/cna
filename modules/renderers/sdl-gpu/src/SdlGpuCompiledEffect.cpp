@@ -269,6 +269,85 @@ namespace CNA::Internal::Renderers::SdlGpu
         if (context_ != nullptr) MOJOSHADER_sdlGetBoundShaderData(context_, &vertex, &pixel);
     }
 
+    namespace
+    {
+        /// Mirrors mojoshader_sdlgpu.c's own `update_uniform_buffer`, sourced from the register
+        /// files `MOJOSHADER_sdlMapUniformBufferMemory` exposes rather than that private function.
+        void PackUniformBuffer(const MOJOSHADER_sdlShaderData* shader,
+                               const float* regF, const int* regI, const unsigned char* regB,
+                               std::vector<std::uint8_t>& out)
+        {
+            out.clear();
+            if (shader == nullptr) return;
+            const MOJOSHADER_parseData* parseData = MOJOSHADER_sdlGetShaderParseData(
+                const_cast<MOJOSHADER_sdlShaderData*>(shader));
+            if (parseData == nullptr || parseData->uniform_count <= 0 || parseData->uniforms == nullptr)
+                return;
+
+            std::size_t offset = 0;
+            for (int i = 0; i < parseData->uniform_count; ++i)
+            {
+                const int size = parseData->uniforms[i].array_count > 0
+                                     ? parseData->uniforms[i].array_count
+                                     : 1;
+                offset += static_cast<std::size_t>(size) * 16u;
+            }
+            out.assign(offset, 0u);
+
+            offset = 0;
+            for (int i = 0; i < parseData->uniform_count; ++i)
+            {
+                const MOJOSHADER_uniform& uniform = parseData->uniforms[i];
+                const int index = uniform.index;
+                const int size = uniform.array_count > 0 ? uniform.array_count : 1;
+                switch (uniform.type)
+                {
+                    case MOJOSHADER_UNIFORM_FLOAT:
+                        std::memcpy(out.data() + offset, &regF[4 * index],
+                                   static_cast<std::size_t>(size) * 16u);
+                        break;
+                    case MOJOSHADER_UNIFORM_INT:
+                        std::memcpy(out.data() + offset, &regI[4 * index],
+                                   static_cast<std::size_t>(size) * 16u);
+                        break;
+                    case MOJOSHADER_UNIFORM_BOOL:
+                        for (int j = 0; j < size; ++j)
+                        {
+                            std::uint32_t bit = regB[index + j];
+                            std::memcpy(out.data() + offset + static_cast<std::size_t>(j) * 16u,
+                                       &bit, sizeof(bit));
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                offset += static_cast<std::size_t>(size) * 16u;
+            }
+        }
+    }
+
+    void SdlGpuCompiledEffect::CaptureUniformSnapshotEXT(std::vector<std::uint8_t>& vertexBytes,
+                                                         std::vector<std::uint8_t>& pixelBytes) const
+    {
+        vertexBytes.clear();
+        pixelBytes.clear();
+        if (context_ == nullptr) return;
+
+        MOJOSHADER_sdlShaderData* vertex = nullptr;
+        MOJOSHADER_sdlShaderData* pixel = nullptr;
+        MOJOSHADER_sdlGetBoundShaderData(context_, &vertex, &pixel);
+        if (vertex == nullptr && pixel == nullptr) return;
+
+        float* vsf = nullptr; int* vsi = nullptr; unsigned char* vsb = nullptr;
+        float* psf = nullptr; int* psi = nullptr; unsigned char* psb = nullptr;
+        MOJOSHADER_sdlMapUniformBufferMemory(context_, &vsf, &vsi, &vsb, &psf, &psi, &psb);
+
+        PackUniformBuffer(vertex, vsf, vsi, vsb, vertexBytes);
+        PackUniformBuffer(pixel, psf, psi, psb, pixelBytes);
+
+        MOJOSHADER_sdlUnmapUniformBufferMemory(context_);
+    }
+
     // ---- SdlGpuRenderer hooks (plan_fx.md FX-061) ------------------------------------------
     //
     // Defined here rather than in SdlGpuRenderer.cpp so the whole compiled-effect surface lives in

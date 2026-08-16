@@ -16,10 +16,13 @@
 #if defined(CNA_SDL_GPU_COMPILED_EFFECTS)
 
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffect.hpp"
+#include "CNA/Internal/Renderers/SdlGpu/SdlGpuCompiledEffectVertexLayout.hpp"
 #include "CNA/Internal/Renderers/SdlGpu/SdlGpuRenderer.hpp"
 #include "Microsoft/Xna/Framework/Graphics/GraphicsDevice.hpp"
 #include "Microsoft/Xna/Framework/Graphics/SamplerState.hpp"
 #include "Microsoft/Xna/Framework/Graphics/Texture2D.hpp"
+#include "Microsoft/Xna/Framework/Graphics/VertexElement.hpp"
+#include "System/NotSupportedException.hpp"
 
 #include <gtest/gtest.h>
 
@@ -231,6 +234,155 @@ TEST(SdlGpuCompiledEffectTest, CloneCarriesItsOwnValuesAndSurvivesTheSource)
     CompiledEffectDeviceState deviceState;
     CompiledEffectPassStateChanges changes;
     EXPECT_NO_THROW(clone->ApplyPass(0, deviceState, changes));
+}
+
+// ---- plan_fx.md FX-071: vertex-attribute builder and uniform snapshot capture ------------------
+
+TEST(SdlGpuCompiledEffectVertexLayoutTest, EveryFormatAndUsageMapsToADistinctNativeValue)
+{
+    using CNA::Internal::Renderers::SdlGpu::ToMojoShaderUsage;
+    using CNA::Internal::Renderers::SdlGpu::ToSdlGpuVertexElementFormat;
+
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Single), SDL_GPU_VERTEXELEMENTFORMAT_FLOAT);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Vector2), SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Vector3), SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Vector4), SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Color), SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Byte4), SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Short2), SDL_GPU_VERTEXELEMENTFORMAT_SHORT2);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::Short4), SDL_GPU_VERTEXELEMENTFORMAT_SHORT4);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::NormalizedShort2), SDL_GPU_VERTEXELEMENTFORMAT_SHORT2_NORM);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::NormalizedShort4), SDL_GPU_VERTEXELEMENTFORMAT_SHORT4_NORM);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::HalfVector2), SDL_GPU_VERTEXELEMENTFORMAT_HALF2);
+    EXPECT_EQ(ToSdlGpuVertexElementFormat(VertexElementFormat::HalfVector4), SDL_GPU_VERTEXELEMENTFORMAT_HALF4);
+    EXPECT_THROW(ToSdlGpuVertexElementFormat(static_cast<VertexElementFormat>(999)), std::invalid_argument);
+
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Position), MOJOSHADER_USAGE_POSITION);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Color), MOJOSHADER_USAGE_COLOR);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::TextureCoordinate), MOJOSHADER_USAGE_TEXCOORD);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Normal), MOJOSHADER_USAGE_NORMAL);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Binormal), MOJOSHADER_USAGE_BINORMAL);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Tangent), MOJOSHADER_USAGE_TANGENT);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::BlendIndices), MOJOSHADER_USAGE_BLENDINDICES);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::BlendWeight), MOJOSHADER_USAGE_BLENDWEIGHT);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Depth), MOJOSHADER_USAGE_DEPTH);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Fog), MOJOSHADER_USAGE_FOG);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::PointSize), MOJOSHADER_USAGE_POINTSIZE);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::Sample), MOJOSHADER_USAGE_SAMPLE);
+    EXPECT_EQ(ToMojoShaderUsage(VertexElementUsage::TessellateFactor), MOJOSHADER_USAGE_TESSFACTOR);
+    EXPECT_THROW(ToMojoShaderUsage(static_cast<VertexElementUsage>(999)), std::invalid_argument);
+}
+
+TEST(SdlGpuCompiledEffectVertexLayoutTest, BuildsOneAttributePerShaderInputLocatedByArrayIndex)
+{
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    // P0 (technique 0, pass 0): MainVertexShader declares float4 Position : POSITION0 and
+    // float2 TexCoord : TEXCOORD0, in that order (see CnaConformanceEffect.fx's VertexIn struct).
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    MOJOSHADER_sdlShaderData* vertex = nullptr;
+    MOJOSHADER_sdlShaderData* pixel = nullptr;
+    sdlGpuEffect->GetBoundShadersEXT(vertex, pixel);
+    ASSERT_NE(vertex, nullptr);
+    const MOJOSHADER_parseData* parseData = MOJOSHADER_sdlGetShaderParseData(vertex);
+    ASSERT_NE(parseData, nullptr);
+
+    // VertexPositionTexture's own layout (stride 20): a float4 shader input is satisfied by a
+    // Vector3 declared element -- the vertex input assembler fills the missing w with 1.0, the same
+    // rule every graphics API applies, so this is not a format mismatch.
+    const std::vector<VertexElement> declaration = {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+        VertexElement(12, VertexElementFormat::Vector2, VertexElementUsage::TextureCoordinate, 0),
+    };
+
+    const auto attributes = CNA::Internal::Renderers::SdlGpu::BuildCompiledEffectVertexAttributes(
+        *parseData, declaration, /*bufferSlot=*/0);
+
+    ASSERT_EQ(attributes.size(), 2u);
+    EXPECT_EQ(attributes[0].location, 0u);
+    EXPECT_EQ(attributes[0].buffer_slot, 0u);
+    EXPECT_EQ(attributes[0].format, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3);
+    EXPECT_EQ(attributes[0].offset, 0u);
+    EXPECT_EQ(attributes[1].location, 1u);
+    EXPECT_EQ(attributes[1].format, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2);
+    EXPECT_EQ(attributes[1].offset, 12u);
+}
+
+TEST(SdlGpuCompiledEffectVertexLayoutTest, RefusesADeclarationMissingAShaderInput)
+{
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    MOJOSHADER_sdlShaderData* vertex = nullptr;
+    MOJOSHADER_sdlShaderData* pixel = nullptr;
+    sdlGpuEffect->GetBoundShadersEXT(vertex, pixel);
+    ASSERT_NE(vertex, nullptr);
+    const MOJOSHADER_parseData* parseData = MOJOSHADER_sdlGetShaderParseData(vertex);
+    ASSERT_NE(parseData, nullptr);
+
+    // Position only -- the shader also needs TexCoord0, which this declaration does not supply.
+    const std::vector<VertexElement> declaration = {
+        VertexElement(0, VertexElementFormat::Vector3, VertexElementUsage::Position, 0),
+    };
+
+    EXPECT_THROW(
+        CNA::Internal::Renderers::SdlGpu::BuildCompiledEffectVertexAttributes(
+            *parseData, declaration, /*bufferSlot=*/0),
+        System::NotSupportedException);
+}
+
+TEST(SdlGpuCompiledEffectTest, CapturedUniformSnapshotReflectsTheAppliedPassAndCurrentValues)
+{
+    GraphicsDevice device;
+    auto runtime = CreateRuntime(device, "CnaConformanceEffect.fxb");
+    ASSERT_NE(runtime, nullptr) << "this build did not select the SDL_GPU renderer";
+    auto* sdlGpuEffect =
+        dynamic_cast<CNA::Internal::Renderers::SdlGpu::SdlGpuCompiledEffect*>(runtime.get());
+    ASSERT_NE(sdlGpuEffect, nullptr);
+
+    // P0: MainVertexShader reads Transform (a float4x4 uniform); MainPixelShader reads Gain, Tint
+    // and Lighting -- both stages have a non-empty uniform buffer to capture.
+    CompiledEffectDeviceState deviceState;
+    CompiledEffectPassStateChanges changes;
+    runtime->SetTechnique(0);
+    runtime->ApplyPass(0, deviceState, changes);
+
+    std::vector<std::uint8_t> vertexBytes;
+    std::vector<std::uint8_t> pixelBytes;
+    sdlGpuEffect->CaptureUniformSnapshotEXT(vertexBytes, pixelBytes);
+    EXPECT_FALSE(vertexBytes.empty());
+    EXPECT_FALSE(pixelBytes.empty());
+    // Each packed uniform occupies a whole number of 16-byte (float4-register) slots.
+    EXPECT_EQ(vertexBytes.size() % 16u, 0u);
+    EXPECT_EQ(pixelBytes.size() % 16u, 0u);
+
+    // Gain is parameter 0 (see ReflectionMatchesTheConformanceSource); changing it and reapplying
+    // the same pass must change the pixel shader's captured bytes, since MainPixelShader reads it.
+    const float newGain = 0.75f;
+    runtime->SetParameterValue(0, &newGain, sizeof(newGain));
+    runtime->ApplyPass(0, deviceState, changes);
+    std::vector<std::uint8_t> secondVertexBytes;
+    std::vector<std::uint8_t> secondPixelBytes;
+    sdlGpuEffect->CaptureUniformSnapshotEXT(secondVertexBytes, secondPixelBytes);
+    EXPECT_NE(pixelBytes, secondPixelBytes);
 }
 
 TEST(SdlGpuCompiledEffectTest, EveryCommittedStockEffectParses)

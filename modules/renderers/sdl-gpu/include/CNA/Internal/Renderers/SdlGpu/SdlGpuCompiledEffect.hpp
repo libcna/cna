@@ -121,6 +121,29 @@ namespace CNA::Internal::Renderers::SdlGpu
         CNAEXT void GetBoundShadersEXT(MOJOSHADER_sdlShaderData*& vertex,
                                        MOJOSHADER_sdlShaderData*& pixel) const;
 
+        /**
+         * @brief CNAEXT. Packs the currently applied pass's constant register values into the exact
+         * byte layout its vertex and pixel shaders' uniform buffers expect.
+         *
+         * plan_fx.md FX-071: this renderer defers a draw's actual GPU submission to `Present()`, by
+         * when a later `ApplyPass()` on this same effect (or a different one sharing this renderer's
+         * one MojoShader context) may have overwritten the native constant register files. Capturing
+         * the packed bytes immediately after `ApplyPass()` -- while the register files still hold
+         * exactly the values that call wrote -- is what makes a deferred draw command self-contained.
+         * The packing itself mirrors MojoShader's own `mojoshader_sdlgpu.c` `update_uniform_buffer`
+         * (float/int registers copied 16 bytes per element; a bool register's value occupies only the
+         * low 4 bytes of its 16-byte slot, matching that function's own layout) using only the public
+         * `MOJOSHADER_sdlMapUniformBufferMemory` accessor, since the register files themselves are not
+         * exposed by any other public API.
+         *
+         * @param vertexBytes Receives the packed vertex-shader uniform buffer bytes; empty if the
+         *        applied vertex shader declares no uniform buffer.
+         * @param pixelBytes Receives the packed pixel-shader uniform buffer bytes; empty if the
+         *        applied pixel shader declares no uniform buffer.
+         */
+        CNAEXT void CaptureUniformSnapshotEXT(std::vector<std::uint8_t>& vertexBytes,
+                                              std::vector<std::uint8_t>& pixelBytes) const;
+
     private:
         SdlGpuCompiledEffect(SdlGpuRenderer& renderer, const SdlGpuCompiledEffect& cloneSource);
 
