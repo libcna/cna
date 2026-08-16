@@ -72,21 +72,29 @@ cc -std=c99 -I/opt/cna/include main.c -L/opt/cna/lib -lcna_c_api -o my_game
 
 ## Shared and static
 
-The C API is built and installed as a **shared** library, and that is not incidental. The version
-script (`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` are what keep the exported symbol set
-to `cna_*` and nothing else — 2,720 names, pinned by `tools/c-api/abi_baseline.json`. A static
-build would export every C++ symbol of every module it archived, and the ABI promise would be
-meaningless. `CNA_C_API_STATIC` is reserved for a future static configuration; it is not one today.
+The C API is built and installed as a **shared** library by default. The version script
+(`cmake/CnaCApiExports.map`) and `--exclude-libs,ALL` are what keep the exported symbol set to
+`cna_*` and nothing else — 2,720 names, pinned by `tools/c-api/abi_baseline.json`.
 
-## What the package does not do yet
+## Native dependencies
 
-`libcna_c_api.so` carries `DT_NEEDED` entries for **SDL3, SDL3_image, SDL3_mixer and FFmpeg**,
-which the `CNACApi` component does not install — they are not this project's to redistribute. The
-library's `INSTALL_RPATH` is `$ORIGIN`, so a deployment that places those libraries beside it works
-with no environment variable at all; otherwise they must be where the dynamic loader already looks.
-Until a decision is made about shipping them, this is the one step a consumer has to take by hand,
-and `CApi_InstalledConsumer` takes it too rather than pretending otherwise: it passes
-`-Wl,-rpath-link` at link time and `LD_LIBRARY_PATH` at run time.
+`libcna_c_api.so` carries `DT_NEEDED` entries for SDL3, SDL3_image, SDL3_mixer and FFmpeg. The two
+halves of that list are handled differently, on purpose.
+
+**The SDL3 libraries ship with the package.** This project builds them, so the `CNACApi` component
+installs them into the same directory as `libcna_c_api.so`, whose `INSTALL_RPATH` is `$ORIGIN`. The
+result is that an installed CNA needs **no environment variable of any kind**: it links without
+`-rpath-link` and runs without `LD_LIBRARY_PATH`. `CApi_InstalledConsumer` passes neither, which is
+how that claim stays true — a regression fails a test instead of surprising a consumer.
+
+**FFmpeg does not.** `libavcodec`, `libavformat`, `libavutil` and `libswresample` come from the
+distribution, and copying a distribution's binaries into this package would take on their
+redistribution terms, freeze their soname against future security updates, and drag in the
+transitive libraries they were linked against. Install them the ordinary way:
+
+```sh
+sudo apt-get install -y libavcodec-dev libavformat-dev libavutil-dev libswresample-dev
+```
 
 The example runs headless. Set `SDL_VIDEODRIVER=dummy` where there is no display, exactly as this
 repository's own tests do.

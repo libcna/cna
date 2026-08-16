@@ -55,14 +55,11 @@ endif()
 if(DEFINED CNA_C_COMPILER_LAUNCHER AND NOT CNA_C_COMPILER_LAUNCHER STREQUAL "")
     list(APPEND _configure_arguments -DCMAKE_C_COMPILER_LAUNCHER=${CNA_C_COMPILER_LAUNCHER})
 endif()
-# The installed library carries DT_NEEDED entries for SDL3, which is not part of this package. A
-# real deployment puts those beside it -- the library's INSTALL_RPATH is $ORIGIN for exactly that --
-# and the staged install here does not, so the linker is told where to look instead. This is the
-# packaging gap docs/c-api/CONSUMING.md records rather than papers over.
+# CBIND-045: nothing about SDL is passed here any more, and that is the assertion. The package
+# installs the SDL3 libraries beside libcna_c_api.so and the library's INSTALL_RPATH is $ORIGIN, so
+# a consumer needs no -rpath-link to link it and no LD_LIBRARY_PATH to run it. If either becomes
+# necessary again, this test is where it shows up.
 set(_linker_flags "")
-if(DEFINED CNA_SDL_LIB_DIR AND NOT CNA_SDL_LIB_DIR STREQUAL "")
-    set(_linker_flags "-Wl,-rpath-link,${CNA_SDL_LIB_DIR}")
-endif()
 # A sanitized library refuses to load into a consumer that was not built the same way, so the
 # sanitized tree hands its own flags to the consumer rather than being excluded from the gate. This
 # is a property of the tree, not advice for a real consumer: an ordinary CNA is not sanitized.
@@ -83,14 +80,10 @@ if(NOT _consumer_program)
     message(FATAL_ERROR "The consumer built but produced no hello_cna program in ${_consumer}.")
 endif()
 
-set(_library_path "${_stage}/lib")
-if(DEFINED CNA_SDL_LIB_DIR AND NOT CNA_SDL_LIB_DIR STREQUAL "")
-    set(_library_path "${CNA_SDL_LIB_DIR}:${_library_path}")
-endif()
-
+# Deliberately no LD_LIBRARY_PATH: the consumer is run in an environment that knows nothing about
+# where CNA or SDL live, which is the only way to prove the installed package stands on its own.
 execute_process(
     COMMAND ${CMAKE_COMMAND} -E env
-        "LD_LIBRARY_PATH=${_library_path}"
         "SDL_VIDEODRIVER=dummy"
         "${_consumer_program}"
     RESULT_VARIABLE _run_code

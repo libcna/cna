@@ -116,6 +116,43 @@ install(DIRECTORY include/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     COMPONENT CNACApi
 )
+
+# CBIND-045: the package carries the native libraries CNA itself builds.
+#
+# libcna_c_api.so records DT_NEEDED entries for SDL3, SDL3_image and SDL3_mixer, which this project
+# builds from third_party/ into CNA_SDL_PREBUILT_ROOT. Shipping them in the same directory, with the
+# library's INSTALL_RPATH of $ORIGIN, is what makes the installed package load with no environment
+# variable and link with no -rpath-link: the loader looks beside the library and finds them.
+#
+# What is deliberately NOT shipped is every library CNA did not build. FFmpeg is the one that
+# matters -- libavcodec, libavformat, libavutil and libswresample come from the distribution, and
+# copying a distribution's binaries into this package would take on their redistribution terms,
+# freeze their soname against future security updates, and drag in the dozens of transitive
+# dependencies they were linked against. They stay a system dependency, named in
+# docs/c-api/CONSUMING.md, which is the honest arrangement rather than the convenient one.
+if(NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/lib")
+    install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/lib/"
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT CNACApi
+        # FILES_MATCHING must precede every PATTERN, including the exclusions -- CMake rejects the
+        # other order outright.
+        FILES_MATCHING
+            # The soname symlinks come too: DT_NEEDED names libSDL3.so.0, not the versioned file.
+            PATTERN "libSDL3*.so*"
+            PATTERN "SDL3*.dll"
+            # A consumer links CNA::CApi and never SDL directly, so SDL's own CMake package and
+            # pkg-config files have no business in this install.
+            PATTERN "cmake" EXCLUDE
+            PATTERN "pkgconfig" EXCLUDE
+    )
+endif()
+if(WIN32 AND NOT CNA_USE_SYSTEM_SDL AND EXISTS "${CNA_SDL_PREBUILT_ROOT}/install/bin")
+    install(DIRECTORY "${CNA_SDL_PREBUILT_ROOT}/install/bin/"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT CNACApi
+        FILES_MATCHING PATTERN "SDL3*.dll"
+    )
+endif()
 install(EXPORT CNACTargets
     FILE CNACTargets.cmake
     NAMESPACE CNA::
@@ -1498,8 +1535,9 @@ if(CNA_BUILD_TESTS)
     # but CMAKE_PREFIX_PATH, builds it and runs it. Everything else in this suite proves the ABI
     # works from inside the build; this proves the *package* works from outside it.
     #
-    # ELF-only for now: the run step relies on LD_LIBRARY_PATH to supply SDL3, which the package
-    # deliberately does not ship. See docs/c-api/CONSUMING.md.
+    # ELF-only: the run step inspects an installed shared object and its RPATH. Since CBIND-045 it
+    # passes no SDL path of any kind -- the package ships those libraries, so a consumer needing an
+    # environment variable would be a defect rather than a fact of life, and this is where it shows.
     if(UNIX AND NOT APPLE)
         add_test(NAME CApi_InstalledConsumer
             COMMAND ${CMAKE_COMMAND}
@@ -1508,7 +1546,6 @@ if(CNA_BUILD_TESTS)
                 -DCNA_WORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/installed-consumer
                 -DCNA_C_COMPILER=${CMAKE_C_COMPILER}
                 -DCNA_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
-                -DCNA_SDL_LIB_DIR=${CNA_SDL_PREBUILT_ROOT}/install/lib
                 -DCNA_SANITIZE=${CNA_SANITIZE}
                 -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunInstalledConsumer.cmake)
         # It installs, configures, compiles and runs; it is by far the slowest test here, and the

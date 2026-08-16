@@ -8,9 +8,8 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 ## Verdict
 
-**Not ready.** Every mechanical criterion is met. What remains is 2 decision(s) that no implementer may make alone.
+**Not ready.** Every mechanical criterion is met. What remains is 1 decision(s) that no implementer may make alone.
 
-- ⏸ **Whether the package ships its native dependencies** — no decision has been recorded.
 - ⏸ **Whether a static configuration is ever offered** — no decision has been recorded.
 
 This verdict is measured on every run, not written down once. A criterion recorded as met
@@ -30,7 +29,7 @@ decided not to ship.
 | ✅ | **The package is installable and findable** | `find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version. | CNAConfig.cmake, a version file from abi.h, and a CNACApi component |
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
 | ✅ | **The lifetime and byte-facing contracts are measured, not asserted** | Handle lifetime, teardown ordering and buffer boundaries are stressed under a sanitizer, and the surfaces that read caller-supplied bytes are covered against an independent oracle. | stress, exhaustive oracle and fuzz target all present |
-| ⏸ | **Whether the package ships its native dependencies** | A decision on whether SDL3, SDL3_image, SDL3_mixer and FFmpeg are installed alongside libcna_c_api.so, or whether placing them is the consumer's job. | no decision has been recorded |
+| ✅ | **The package carries the native libraries CNA builds** | An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN. | SDL3 ships beside the library; the consumer needs no environment variable |
 | ⏸ | **Whether a static configuration is ever offered** | A decision on `CNA_C_API_STATIC`, which names a configuration that does not exist. | no decision has been recorded |
 
 ## Why each one is here
@@ -83,11 +82,11 @@ CONSUMING.md is the entry point for somebody who has never read this repository.
 
 The stress suite found a heap use-after-free on its first run; that is what this criterion is for.
 
-### ⏸ Whether the package ships its native dependencies
+### ✅ The package carries the native libraries CNA builds
 
-*Evidence:* docs/c-api/LIMITATIONS.md, recorded as an open decision
+*Evidence:* the CNACApi install component, proved by CApi_InstalledConsumer
 
-Not a defect and not something an implementer may settle: it is a redistribution decision. Until it is ruled on, a consumer must place those libraries themselves, and this gate reports the release as not ready.
+Ruled on by the project owner on 2026-08-16: the package ships them. FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. CApi_InstalledConsumer now passes no -rpath-link and no LD_LIBRARY_PATH, so a regression here fails a test rather than surprising a consumer.
 
 ### ⏸ Whether a static configuration is ever offered
 

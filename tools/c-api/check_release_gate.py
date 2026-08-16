@@ -141,6 +141,22 @@ def check_safety_tests_present() -> tuple[str, str]:
     return MET, "stress, exhaustive oracle and fuzz target all present"
 
 
+def check_native_dependencies_shipped() -> tuple[str, str]:
+    """The package must carry what CNA builds, and the consumer gate must prove it needs nothing."""
+    lists = (C_API_DIR / "CMakeLists.txt").read_text(encoding="utf-8")
+    if "libSDL3*.so*" not in lists:
+        return NOT_MET, "the SDL3 runtime libraries are not installed with the C API component"
+    if 'INSTALL_RPATH "$ORIGIN"' not in lists:
+        return NOT_MET, "the installed library does not look beside itself for its dependencies"
+    script = (C_API_DIR / "cmake" / "RunInstalledConsumer.cmake").read_text(encoding="utf-8")
+    for needle, why in (
+            ("rpath-link", "the consumer gate still tells the linker where SDL lives"),
+            ("LD_LIBRARY_PATH", "the consumer gate still tells the loader where SDL lives")):
+        if needle in script.replace("no -rpath-link", "").replace("no LD_LIBRARY_PATH", ""):
+            return NOT_MET, why
+    return MET, "SDL3 ships beside the library; the consumer needs no environment variable"
+
+
 def check_owner_decision_still_open(subject: str) -> tuple[str, str]:
     limitations = json.loads(LIMITATIONS_PATH.read_text(encoding="utf-8"))
     for entry in limitations["environment"]:

@@ -1313,11 +1313,21 @@
 > fails the limitations gate, which is what caught `CBIND-042` naming itself as the owner of the two
 > questions it exists to escalate.
 >
-> **The two questions are yours, not an implementer's**, and they are the only thing standing
-> between this ABI and an experimental release: whether the package ships SDL3/FFmpeg beside the
-> library, and whether a static configuration is ever offered given that it would export every C++
-> symbol it archived. Both are recorded in `docs/c-api/LIMITATIONS.md` with the consequences spelled
-> out.
+> **The owner ruled on both questions on 2026-08-16: ship the dependencies, and build the static
+> configuration.** `CBIND-045` implements the first. The `CNACApi` component now installs
+> `libSDL3`, `libSDL3_image` and `libSDL3_mixer` -- with their soname symlinks, because `DT_NEEDED`
+> names `libSDL3.so.0` and not the versioned file -- beside `libcna_c_api.so`, whose `INSTALL_RPATH`
+> was already `$ORIGIN`. The package now needs **no environment variable of any kind**, and that is
+> measured rather than claimed: `CApi_InstalledConsumer` passes neither `-rpath-link` nor
+> `LD_LIBRARY_PATH`, and the program was additionally run under `env -i` with every SDL library
+> resolving out of the staged install. **FFmpeg deliberately does not ship** -- copying a
+> distribution's binaries here would take on their redistribution terms, freeze their soname against
+> security updates and drag in the transitive libraries they were linked against.
+>
+> Two traps from that slice. CMake rejects `FILES_MATCHING` after any `PATTERN`, exclusions
+> included. And more usefully: **one tree appeared to pass on a stale generated
+> `cmake_install.cmake`**, because the reconfigure had failed while its output went to `/dev/null`.
+> A green suite proves nothing if the configure that produced it errored — check the exit status.
 >
 > **Next: `CBIND-044`**, the final close — the last unfinished task in the plan. It asks that every
 > coverage row be implemented or carry an owner-approved limitation a caller can query. The 28

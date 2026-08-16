@@ -130,10 +130,10 @@
   ],
   "environment": [
     {
-      "subject": "The package does not ship SDL3 or FFmpeg",
-      "impact": "A consumer must place libSDL3, libSDL3_image, libSDL3_mixer and the FFmpeg libraries where the dynamic loader finds them. The installed library's RPATH is `$ORIGIN`, so putting them beside it is enough.",
-      "status": "open decision",
-      "owner": "the project owner"
+      "subject": "FFmpeg stays a system dependency",
+      "impact": "The package installs the SDL3, SDL3_image and SDL3_mixer libraries this project builds, beside `libcna_c_api.so`, whose RPATH is `$ORIGIN` -- so an installed CNA links and runs with no environment variable. FFmpeg is different: libavcodec, libavformat, libavutil and libswresample come from the distribution. Copying a distribution's binaries into this package would take on their redistribution terms, freeze their soname against future security updates and drag in the transitive libraries they were linked against, so they remain a system dependency a deployment installs the ordinary way.",
+      "status": "by design",
+      "owner": "CONSUMING.md"
     },
     {
       "subject": "There is no static configuration",

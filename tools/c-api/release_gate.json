@@ -79,12 +79,12 @@
     },
     {
       "id": "packaging-dependencies",
-      "title": "Whether the package ships its native dependencies",
-      "requirement": "A decision on whether SDL3, SDL3_image, SDL3_mixer and FFmpeg are installed alongside libcna_c_api.so, or whether placing them is the consumer's job.",
-      "check": "owner_decision_still_open:The package does not ship SDL3 or FFmpeg",
-      "recorded": "owner-decision",
-      "evidence": "docs/c-api/LIMITATIONS.md, recorded as an open decision",
-      "note": "Not a defect and not something an implementer may settle: it is a redistribution decision. Until it is ruled on, a consumer must place those libraries themselves, and this gate reports the release as not ready."
+      "title": "The package carries the native libraries CNA builds",
+      "requirement": "An installed CNA links and runs with no environment variable: the SDL3 libraries this project builds are installed beside libcna_c_api.so, whose RPATH is $ORIGIN.",
+      "check": "native_dependencies_shipped",
+      "recorded": "met",
+      "evidence": "the CNACApi install component, proved by CApi_InstalledConsumer",
+      "note": "Ruled on by the project owner on 2026-08-16: the package ships them. FFmpeg stays a system dependency for reasons that are not convenience -- redistribution terms, soname freezing against security updates, and the transitive libraries a distribution build was linked against. CApi_InstalledConsumer now passes no -rpath-link and no LD_LIBRARY_PATH, so a regression here fails a test rather than surprising a consumer."
     },
     {
       "id": "static-configuration",

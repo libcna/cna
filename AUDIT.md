@@ -125,6 +125,9 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > `CBIND-042B` closes Phase B7's release question with a gate that is measured rather than written
 > down: ten criteria, eight of them met and re-measured on every run, and two packaging decisions
 > that no implementer may make alone. The published verdict is **not ready**, and correctly so.
+> The owner ruled on both on 2026-08-16. `CBIND-045` implements the first: the package now carries
+> the SDL3 libraries CNA builds, so an installed C API links and runs with no environment variable
+> at all, while FFmpeg stays a system dependency on purpose.
 
 ---
 
