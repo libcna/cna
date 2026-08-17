@@ -10,7 +10,7 @@ This gate governs publishing an **experimental** C ABI release. ABI 1.0 -- the p
 
 **Not ready.** 1 criteria are unmet.
 
-- ❌ **No public C++ symbol is unaccounted for** — 1303 public symbols are still unmapped.
+- ❌ **No public C++ symbol is unaccounted for** — 36 public symbols are still unmapped.
 
 This verdict is measured on every run, not written down once. A criterion recorded as met
 that stops being met fails the check; so does a criterion recorded as blocked that has
@@ -23,8 +23,8 @@ decided not to ship.
 |---|---|---|---|
 | ✅ | **The compatibility matrix is real, current and honest** | Every public header compiles on its own, in every declared language mode of every installed toolchain, and the published matrix matches its declaration. | 23 declared cells across 7 toolchains |
 | ✅ | **No unreviewed ABI break** | Every struct layout, field offset, scalar width, constant value and exported symbol is recorded, and a change to any of them arrives as a reviewable diff. | 167 struct layouts and 2725 exported symbols recorded |
-| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 1303 public symbols are still unmapped |
-| ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 12 partially mapped symbols in 8 groups, 314 unmapped in 60 groups |
+| ❌ | **No public C++ symbol is unaccounted for** | The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason. | 36 public symbols are still unmapped |
+| ✅ | **A known-limitations matrix a reader can act on** | What the ABI does not do is published, grouped by reason, with no unclassified reason and no deferral owned by a finished task. | docs/c-api/LIMITATIONS.md is current: 12 partially mapped symbols in 8 groups, 380 unmapped in 68 groups |
 | ✅ | **A real C application, built the way a consumer builds one** | A complete C program exists, is built from outside the source tree against an installed CNA through find_package, and is run. | hello_cna is built from an installed prefix and run by CApi_InstalledConsumer |
 | ✅ | **The package is installable and findable** | `find_package(CNA CONFIG)` resolves from an installed prefix and yields one target, and the package version is the C ABI version. | CNAConfig.cmake, a version file from abi.h, and a CNACApi component |
 | ✅ | **The consumer documentation exists** | Consumption, handles, errors, strings and buffers, callbacks and threading, renderer capabilities, ABI versioning and fuzzing are each documented. | 13 documents present |
@@ -50,7 +50,7 @@ The header half needs no build and runs everywhere; the export half runs in each
 
 *Evidence:* docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix
 
-CBIND-044 closed on 2026-08-16: the twelve remaining partial rows were approved by the project owner as permanent limitations of a C ABI, each with a callable route that reports the reduced answer. An unapproved partial row now fails this criterion.
+CBIND-044 closed this on 2026-08-16 and the merge of `next` reopened it the same day: a new public surface arrived with the platform-separation campaign. CBIND-047 dispositioned all of it except the 36 rows that are worth binding rather than excusing -- the renderer selection and fallback surface, the logger sink and three platform helpers -- which CBIND-049 owns. The record says "not met" because that is what it is; the point of this gate is that the record and the measurement agree, not that the record flatters.
 
 ### ✅ A known-limitations matrix a reader can act on
 

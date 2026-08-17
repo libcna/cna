@@ -28,9 +28,9 @@
       "title": "No public C++ symbol is unaccounted for",
       "requirement": "The generated inventory has no `planned` row, and every partially mapped row carries an owner-approved disposition: every public declaration is mapped, partially mapped with its subset named and its limitation approved, or recorded as having no C form with the reason.",
       "check": "coverage_has_no_planned_rows",
-      "recorded": "met",
+      "recorded": "not met",
       "evidence": "docs/c-api/COVERAGE.md, gated by CApiCoverageMatrix",
-      "note": "CBIND-044 closed on 2026-08-16: the twelve remaining partial rows were approved by the project owner as permanent limitations of a C ABI, each with a callable route that reports the reduced answer. An unapproved partial row now fails this criterion."
+      "note": "CBIND-044 closed this on 2026-08-16 and the merge of `next` reopened it the same day: a new public surface arrived with the platform-separation campaign. CBIND-047 dispositioned all of it except the 36 rows that are worth binding rather than excusing -- the renderer selection and fallback surface, the logger sink and three platform helpers -- which CBIND-049 owns. The record says \"not met\" because that is what it is; the point of this gate is that the record and the measurement agree, not that the record flatters."
     },
     {
       "id": "limitations-matrix",

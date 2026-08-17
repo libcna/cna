@@ -30,6 +30,21 @@ from typing import Iterable
 SCHEMA_VERSION = 1
 PUBLIC_ROOTS = ("Microsoft", "CNA")
 EXCLUDED_PATH_SEGMENTS = ("Internal", "Detail")
+
+# CBIND-047, decided by the project owner on 2026-08-16: the platform-abstraction module is a
+# substrate the C ABI is built ON, not a surface it exposes. A C caller reaches platform behaviour
+# through the routes that use it -- a window through the game, a camera through the devices
+# surface, an input snapshot through cna_keyboard_get_state -- and never through IPlatform, which
+# deals in C++ interfaces, unique_ptr ownership and virtual dispatch that have no C form at all.
+# That is the same argument the Internal/Detail segments already encode, and it is written here as
+# a whole-module rule because the platform module's public headers are its internal contract: the
+# renderers and the runtime are its consumers, not applications.
+#
+# This is deliberately narrow and deliberately visible. It removes 1,196 rows from the inventory,
+# and a scope rule that large has to be a recorded decision rather than a quiet widening of an
+# exclusion list -- which is why it names its owner, its date and its reason here and is reported
+# by name in COVERAGE.md.
+EXCLUDED_MODULES = ("platform",)
 COMPOUND_KINDS = {"class", "struct", "union"}
 MEMBER_COMPOUND_KINDS = COMPOUND_KINDS | {"namespace", "file"}
 PUBLIC_ACCESS = {"public", "protected", None}
@@ -112,6 +127,10 @@ def discover_headers(root: Path) -> tuple[list[Path], list[Path]]:
     for module in sorted(path for path in modules_root.iterdir() if path.is_dir()):
         include_root = module / "include"
         if not include_root.is_dir():
+            continue
+        if module.name in EXCLUDED_MODULES:
+            for header in sorted((include_root).rglob("*.hpp")):
+                excluded.append(header.relative_to(root))
             continue
         for public_root in PUBLIC_ROOTS:
             candidate_root = include_root / public_root
@@ -560,7 +579,10 @@ def render_markdown(
         "This file is the complete reviewed CBIND-033 inventory of CNA's public C++ declaration",
         "surface. It is generated from every `modules/*/include/Microsoft/**/*.hpp` and",
         "`modules/*/include/CNA/**/*.hpp` header. Paths containing the explicit implementation",
-        "segments `Internal` or `Detail`, and the C API's own `.h` headers, are excluded. A",
+        "segments `Internal` or `Detail`, the whole `modules/platform` module, and the C API's own",
+        "`.h` headers, are excluded. The platform module is excluded as a **substrate**: the C ABI is",
+        "built on it and a C caller reaches platform behaviour through the routes that use it, never",
+        "through `IPlatform` -- an owner decision of 2026-08-16, recorded as `CBIND-047`. A",
         "header remains listed even when it declares no public/protected symbol.",
         "",
         "Every symbol below has a stable content-derived `CPP-*` ID, a C-native mapping, required",

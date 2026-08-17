@@ -2,6 +2,23 @@
   "schema_version": 1,
   "themes": [
     {
+      "id": "platform-hooks",
+      "title": "Hooks the platform layer calls into",
+      "match": [
+        "the `INTERNAL_` prefix marks the hooks"
+      ],
+      "note": "The platform layer hands input its window and its touch state through methods whose names say `INTERNAL_` out loud. A C caller owns no window handle and must not be able to re-point input at one; it reads input through the snapshot routes instead."
+    },
+    {
+      "id": "platform-substrate",
+      "title": "The platform substrate the ABI is built on",
+      "match": [
+        "platform substrate",
+        "is the audio module's platform substrate"
+      ],
+      "note": "Interfaces a backend implements and the value types they exchange -- audio devices, recording devices, their formats. The C ABI is built ON this layer rather than exposing it: a C caller reaches the behaviour through the routes that use it, never through a C++ interface it would have to implement. The platform module itself is excluded from the inventory for the same reason (CBIND-047)."
+    },
+    {
       "id": "deleted",
       "title": "Operations the C++ class deletes",
       "match": [
@@ -36,7 +53,8 @@
         "naming an arbitrary",
         "compile-time trait",
         "constructs a C++ reader object",
-        "implements a C++ interface"
+        "implements a C++ interface",
+        "platform substrate"
       ],
       "note": "C cannot name a C++ type, so a generic operation cannot be called from C at all. Where the canonical template has a small closed set of useful instantiations, the ABI names them one by one instead; the generic form itself stays unmapped."
     },
@@ -57,7 +75,8 @@
       "title": "Raw native backend pointers",
       "match": [
         "SDL_",
-        "native backend pointer"
+        "native backend pointer",
+        "native window handle"
       ],
       "note": "A route that accepts or returns an SDL pointer would make the caller's program depend on CNA's backend choice, which is the one thing this ABI exists to prevent."
     },
@@ -88,7 +107,8 @@
         "every method that produces one is private",
         "exactly one",
         "delegate to",
-        "the only collection that means anything"
+        "the only collection that means anything",
+        "owns no platform device"
       ],
       "note": "Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes."
     },
@@ -104,7 +124,9 @@
         "a value needs",
         "two flags",
         "cross-module signalling",
-        "no second name to move from"
+        "no second name to move from",
+        "`std::function` alias",
+        "an alias naming the platform's"
       ],
       "note": "Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface."
     },

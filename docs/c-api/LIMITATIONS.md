@@ -15,9 +15,9 @@ the C ABI is only repeating them.
 
 | | Symbols | What it means for a caller |
 |---|---:|---|
-| Fully mapped | 6,113 | A C route exists and is tested. |
+| Fully mapped | 6,080 | A C route exists and is tested. |
 | **Partially mapped** | 12 | A route exists but covers a stated subset. Read the next section before relying on one. |
-| **No C form** | 314 | Nothing callable was omitted; see the reasons below. |
+| **No C form** | 380 | Nothing callable was omitted; see the reasons below. |
 
 ## Partially mapped: a route exists, and it does less than the C++ does
 
@@ -48,6 +48,14 @@ All of them are **approved by the project owner on 2026-08-16 (CBIND-044)**.
 Every unmapped symbol falls under one of these. The generator fails if one does not, which
 is what stops this list from acquiring a silent "other" category.
 
+### Hooks the platform layer calls into — 3 symbols
+
+The platform layer hands input its window and its touch state through methods whose names say `INTERNAL_` out loud. A C caller owns no window handle and must not be able to re-point input at one; it reads input through the snapshot routes instead.
+
+### The platform substrate the ABI is built on — 52 symbols
+
+Interfaces a backend implements and the value types they exchange -- audio devices, recording devices, their formats. The C ABI is built ON this layer rather than exposing it: a C caller reaches the behaviour through the routes that use it, never through a C++ interface it would have to implement. The platform module itself is excluded from the inventory for the same reason (CBIND-047).
+
 ### Operations the C++ class deletes — 70 symbols
 
 A deleted copy constructor or assignment operator has no behavior to expose. Its absence from the C ABI is the same statement the C++ class already makes.
@@ -68,7 +76,11 @@ C cannot name a C++ type, so a generic operation cannot be called from C at all.
 
 Sharp Runtime is an implementation dependency and never a C type. An operation whose value *is* such an object has nothing to hand across the boundary; see SHARP_RUNTIME_BOUNDARY.md.
 
-### Friendship declarations — 6 symbols
+### Raw native backend pointers — 2 symbols
+
+A route that accepts or returns an SDL pointer would make the caller's program depend on CNA's backend choice, which is the one thing this ABI exists to prevent.
+
+### Friendship declarations — 12 symbols
 
 A friend declaration grants a canonical CNA type access to another's internals. It declares no callable operation.
 
@@ -76,11 +88,11 @@ A friend declaration grants a canonical CNA type access to another's internals. 
 
 Not a design choice: the canonical declaration has no definition anywhere in CNA, so there is nothing to bind. CApi_UnimplementedRuntimeFacade keeps that record from going stale in silence.
 
-### Objects the caller never constructs or destroys — 21 symbols
+### Objects the caller never constructs or destroys — 22 symbols
 
 Where CNA owns the only instance and its lifetime, the constructor and destructor are not operations a caller can perform, so they are not routes.
 
-### C++ language mechanics with no runtime behavior — 21 symbols
+### C++ language mechanics with no runtime behavior — 23 symbols
 
 Aliases, markers, move semantics and destructors that exist for the C++ type system. C holds every object by handle and never deletes through an interface.
 

@@ -2745,12 +2745,12 @@
     },
     {
       "id": "core-platform",
-      "qualified_name_regex": "^CNA::Platform(?:::[A-Za-z0-9_]+)?$",
+      "qualified_name_regex": "^CNA::TargetPlatform(?:::[A-Za-z0-9_]+)?$",
       "kinds": [
         "enum",
         "enum-value"
       ],
-      "mapping": "`CNA_Platform` and the `CNA_PLATFORM_*` identities at the canonical ordinals",
+      "mapping": "`CNA_Platform` and the `CNA_PLATFORM_*` identities at the canonical ordinals. The platform-separation campaign renamed the canonical enum from `CNA::Platform` to `CNA::TargetPlatform` because the old name now belongs to the platform abstraction module; the C identities keep their names, which are already published and pinned in the ABI baseline",
       "tests": "C and C++ ABI assertions freeze the ordinals; `CoreExtSmoke.c` reads the current platform and asserts it is one of them, under HEADLESS, SDL_RENDERER and SOFTWARE",
       "status": "implemented",
       "task": "CBIND-037A"
@@ -6069,6 +6069,173 @@
       "status": "implemented",
       "task": "CBIND-037G7",
       "signature_regex": "(?!\\(bool disposing\\)).*"
+    },
+    {
+      "id": "audio-platform-substrate",
+      "qualified_name_regex": "^CNA::Audio::Platform(?:::.*)?$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "no C form: `CNA::Audio::Platform` is the audio module's platform substrate -- the `IAudioDevice`/`IAudioRecordingDevice` interfaces a backend implements and the value types they exchange. It is what the audio surface is built ON, exactly as `CNA::Platform` is for windows and input, and the same reasoning applies: a C caller reaches audio behaviour through `cna_sound_effect_*`, `cna_microphone_*` and the audio-availability probes, never through a C++ interface it would have to implement",
+      "tests": "the audio surface these interfaces carry is covered end to end in `AudioSmoke.c`, `AudioSoundEffectSmoke.c`, `AudioStreamingSmoke.c`, `Audio3DSmoke.c`, `XactSmoke.c` and `AudioUnavailableSmoke.c`, under every verification tree",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "sensor-platform-subsystem",
+      "qualified_name_regex": "^Microsoft::Devices::Sensors::.*PlatformSensorSubsystem.*$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "no C form: these are the friendship declarations that let the internal sensor subsystem reach a sensor's private state. They declare no callable operation, and the platform separation renamed them from the SDL-specific spelling to a neutral one without changing that",
+      "tests": "the sensor surface itself is covered in `SensorDeviceSmoke.c` and `SensorEventsSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "input-platform-window-plumbing",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Input::(Mouse::INTERNAL_setWindow|TextInputEXT::INTERNAL_setWindowId|Touch::TouchPanel::INTERNAL_setTouchState)$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "no C form, and the name says so: the `INTERNAL_` prefix marks the hooks the platform layer calls to hand input its window. A C caller neither owns a window handle nor should be able to re-point input at one",
+      "tests": "the input surface they serve is covered in `InputSnapshotsSmoke.c` and `InputDevicesSmoke.c`",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "game-platform-accessors",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::Game::(GetPlatformEXT|GetPlatformCapabilitiesEXT|GameTestPeer)$",
+      "kinds": [
+        "method",
+        "function",
+        "class",
+        "friend"
+      ],
+      "mapping": "no C form: the first two hand back the game's `IPlatform` and its capability set, which are C++ objects of the substrate the C ABI sits on; `GameTestPeer` is a friendship declaration for the runtime's own tests. What a C caller can ask about the environment it runs on is `cna_platform_get_current` and the graphics capability queries",
+      "tests": "`RuntimeGameSmoke.c` and `LifecycleSmoke.c` cover the game surface these sit beside",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "haptic-device-empty-constructor",
+      "qualified_name_regex": "^CNA::Input::HapticDevice::HapticDevice$",
+      "kinds": [
+        "constructor"
+      ],
+      "mapping": "no C form: the default constructor makes an empty device that owns no platform device and answers nothing. C obtains haptic devices through the three `cna_haptics_open*` routes, which is the whole set of ways one can come into existence usefully",
+      "tests": "`HapticsSmoke.c` covers the three open routes and the refusals",
+      "status": "not-applicable",
+      "task": "CBIND-047",
+      "signature_regex": "^\\(\\)(=default)?$"
+    },
+    {
+      "id": "tray-entry-click-callback-alias",
+      "qualified_name_regex": "^CNA::Devices::TrayEntryClickCallback$",
+      "kinds": [
+        "alias"
+      ],
+      "mapping": "no C form: a `std::function` alias naming the C++ callback shape. The C ABI's own tray callback is a function pointer plus an opaque context, which is the C expression of the same thing",
+      "tests": "`DevicesSmoke.c` covers the tray surface and its callback",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "game-window-display-info-alias",
+      "qualified_name_regex": "^Microsoft::Xna::Framework::GameWindow::DisplayInfo$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "no C form: an alias naming the platform's display-information type inside GameWindow. The C ABI publishes display information as its own fixed value through `cna_display_mode_*` and the adapter queries, so there is nothing for an alias to add",
+      "tests": "`GraphicsSurfaceSmoke.c` covers the display surface",
+      "status": "not-applicable",
+      "task": "CBIND-047"
+    },
+    {
+      "id": "platform-shutdown-and-native-handle",
+      "qualified_name_regex": "^(Microsoft::Devices::VibrateController::DevicesShutdownCoordinator|Microsoft::Xna::Framework::GameWindow::GetNativeWindowHandleEXT)$",
+      "kinds": [
+        "class",
+        "struct",
+        "enum",
+        "enum-value",
+        "method",
+        "function",
+        "typedef",
+        "variable",
+        "field",
+        "constructor",
+        "destructor",
+        "operator",
+        "alias",
+        "constant",
+        "event",
+        "friend"
+      ],
+      "mapping": "no C form, for two different reasons that land in the same place. The shutdown coordinator is a friendship declaration letting the devices module order its own teardown; and `GetNativeWindowHandleEXT` hands back the platform's native window handle -- an X11 window number, an NSWindow pointer, an HWND -- which is exactly the kind of backend detail this ABI exists to keep out of a consumer's program. A C caller that needs the window asks the game for what it can do, not for the handle",
+      "tests": "`DevicesSmoke.c` covers vibration and its shutdown; `RuntimeGameSmoke.c` covers the window surface",
+      "status": "not-applicable",
+      "task": "CBIND-047"
     }
   ]
 }
