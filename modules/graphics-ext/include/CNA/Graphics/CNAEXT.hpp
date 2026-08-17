@@ -28,6 +28,7 @@
 
 // ---- Post-process infrastructure -----------------------------------------------------------
 #include "CNA/Graphics/BlitPass.hpp"
+#include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/FullscreenPass.hpp"
 #include "CNA/Graphics/PostProcessChain.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"

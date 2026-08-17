@@ -3,6 +3,7 @@
 
 #ifdef CNA_CNAEXT
 
+#include "CNA/Graphics/BloomPass.hpp"
 #include "CNA/Graphics/PostProcessContext.hpp"
 #include "CNA/Graphics/PostProcessPass.hpp"
 #include "CNA/Graphics/TonemapPass.hpp"
@@ -23,7 +24,8 @@ namespace CNA::Graphics {
     using Microsoft::Xna::Framework::Graphics::SurfaceFormat;
 
     RenderPipeline::RenderPipeline(GraphicsDevice& device)
-        : device_(device), chain_(device), tonemapPass_(std::make_unique<TonemapPass>(device))
+        : device_(device), chain_(device), bloomPass_(std::make_unique<BloomPass>(device)),
+          tonemapPass_(std::make_unique<TonemapPass>(device))
     {
     }
 
@@ -74,6 +76,7 @@ namespace CNA::Graphics {
         height_ = height;
         sceneTarget_.reset();
         chain_.resetTargets();
+        bloomPass_->resetTargets();
     }
 
     void RenderPipeline::begin(const Color& clearColor)
@@ -126,6 +129,10 @@ namespace CNA::Graphics {
         // everything that reasons about displayed pixels runs after. User passes come last, where
         // they see the frame as it will be shown.
         chain_.clear();
+        // Bloom reads scene-referred values -- its threshold separates genuinely bright pixels
+        // from merely white ones -- so it runs before the tonemapper compresses that range away.
+        if (settings_.isBloomEnabled())
+            chain_.addPass(bloomPass_.get());
         if (settings_.getTonemappingMode() != TonemappingMode::None || settings_.isHDREnabled())
             chain_.addPass(tonemapPass_.get());
         for (PostProcessPass* pass : userPasses_)
