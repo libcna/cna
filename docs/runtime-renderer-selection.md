@@ -491,5 +491,5 @@ archive sizes overstates it by an order of magnitude here.
 ## See also
 
 - `plan_runtimerenderer.md` — the design decisions and the full task breakdown.
-- `modules/core/include/CNA/GraphicsRendererType.hpp` — the 46 public renderer identities.
+- `modules/core/include/CNA/GraphicsRendererType.hpp` — the public renderer identities.
 - `cmake/RendererSelection.cmake` — compile-time selection.

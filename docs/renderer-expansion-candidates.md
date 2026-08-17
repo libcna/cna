@@ -12,7 +12,7 @@ Date: 2026-08-13
 
 Authoritative companions:
 
-- `docs/renderer-registry.md` — the **live** 47 public identities (canonical; this file never
+- `docs/renderer-registry.md` — the **live** public identities (canonical; this file never
   overrides it).
 - `FUTURE.md` §"Phase 2 — renderer expansion" — the already-planned, owner-visible additions.
 - `docs/graphics-renderer-feature-matrix.md` — what the established renderers actually prove.

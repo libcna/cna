@@ -8,6 +8,15 @@ table below. Any addition, removal or rename of a public identity fails here
 until the table (and therefore the documented public count) is deliberately
 updated.
 
+It also checks the DOCUMENTED count, in the handful of documents that state one
+(plan_runtimerenderer.md RTR-P13-8). A count written into prose is a fact with no
+owner: TINYGL, IGL and PIXIJS were each added without it, so documents went on
+saying 46 and 47 while the registry said 49, and a reader has no way to tell which
+number is the live one. Correcting them by hand does not hold either -- the pass
+that fixed four such documents still left three wrong, which is what this check
+was written to stop. Prefer not stating a number at all; where a document really
+wants one, this keeps it true.
+
 Exit codes: 0 ok, 1 mismatch.
 """
 import os
@@ -15,6 +24,29 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Documents that deliberately state a count. Each entry is a decision: a document is
+# better off describing the registry than restating its size, so adding to this list
+# should be rarer than removing from it.
+COUNTED_DOCUMENTS = (
+    "docs/runtime-renderer-selection.md",
+    "docs/renderer-expansion-candidates.md",
+    "docs/physical-modules.md",
+    "AUDIT.md",
+    "CHECKLIST.md",
+)
+
+# "49 public renderer identities", "45 families / 49 public identities", "45 implementation
+# families". Deliberately anchored on the words that mean the WHOLE registry: a legitimate
+# sub-count ("the five GL identities of the easygl family") does not match, because it never
+# says "public".
+#
+# The leading \b is load-bearing rather than decorative: without it the family pattern read the
+# "12" out of "the d3d11 and d3d12 families only" and reported the repo as having 12 renderer
+# families. Found by running this against the clean tree before trusting it, which is the only
+# reason it is not still there.
+IDENTITY_COUNT = re.compile(r"\b(\d+)\s+public\s+(?:renderer\s+)?identities")
+FAMILY_COUNT = re.compile(r"\b(\d+)\s+(?:implementation\s+)?families\b")
 
 # Canonical public identities: (cmake selection name, enum name). 49 entries.
 IDENTITIES = [
@@ -91,6 +123,36 @@ def cmake_identities():
     return re.findall(r"\"([A-Z0-9_]+)\"", m.group(1))
 
 
+def family_count():
+    """Renderer implementation families, counted the same way the discipline gate counts them."""
+    renderers = os.path.join(REPO, "modules", "renderers")
+    return sum(1 for name in os.listdir(renderers)
+               if os.path.isdir(os.path.join(renderers, name, "src")))
+
+
+def documented_counts(identities, families):
+    """Reports every stated count that disagrees with the registry."""
+    problems = []
+    for relative in COUNTED_DOCUMENTS:
+        path = os.path.join(REPO, relative)
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as handle:
+            for number, line in enumerate(handle, 1):
+                for match in IDENTITY_COUNT.finditer(line):
+                    if int(match.group(1)) != identities:
+                        problems.append(
+                            f"{relative}:{number}: says {match.group(1)} public renderer "
+                            f"identities; there are {identities}. Either correct it, or -- better "
+                            f"-- drop the number and name the registry, so the fact has an owner.")
+                for match in FAMILY_COUNT.finditer(line):
+                    if int(match.group(1)) != families:
+                        problems.append(
+                            f"{relative}:{number}: says {match.group(1)} renderer families; there "
+                            f"are {families} (directories under modules/renderers with a src/).")
+    return problems
+
+
 def main():
     expected_cmake = [c for c, _ in IDENTITIES]
     expected_enum = [e for _, e in IDENTITIES]
@@ -112,8 +174,17 @@ def main():
         print(f"  expected ({len(expected_cmake)}): {sorted(expected_cmake)}")
         print(f"  actual   ({len(actual_cmake)}): {sorted(actual_cmake)}")
 
+    families = family_count()
+    stale = documented_counts(len(IDENTITIES), families)
+    if stale:
+        ok = False
+        print("Documented renderer counts disagree with the registry:")
+        for problem in stale:
+            print(f"  - {problem}")
+
     if ok:
-        print(f"OK: {len(IDENTITIES)} public renderer identities preserved in both registries")
+        print(f"OK: {len(IDENTITIES)} public renderer identities preserved in both registries, "
+              f"over {families} implementation families; every documented count agrees")
         return 0
     return 1
 

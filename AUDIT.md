@@ -33,7 +33,7 @@ For intentionally excluded items see `docs/xna-4-api-coverage.md`.
 > view and the two CNAEXT queue routes, leaving the whole `net` module mapped. `CBIND-037A` then
 > opens `CBIND-037` by closing CNA's own `core` module: the logger, the process-wide minimum level,
 > the compile-time platform, desktop operating system, renderer identity and renderer name, and
-> both backend classifications for any of the 46 public renderer identities, and `CBIND-037B1`
+> both backend classifications for any public renderer identity, and `CBIND-037B1`
 > adds the gamepad controller type and the complete gamepad-capabilities value, and `CBIND-037B2`
 > adds the five gamepad value types — button set, directional pad, thumbsticks, triggers and the
 > snapshot itself — with every constructor, comparison, hash and string operation, and
