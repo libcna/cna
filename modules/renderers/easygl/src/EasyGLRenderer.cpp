@@ -5710,8 +5710,35 @@ CNA_GL_INSTANCE_TRANSFORM_DECL
 "uniform vec3 uEmissiveColor;\n"
 "uniform vec4 uAlphaTest;\n"
 "uniform vec3 uFogColor;\n"
+"uniform sampler2D uShadowMap;\n"
+"uniform mat4 uLightViewProj;\n"
+"uniform float uShadowsEnabled;\n"
+"uniform float uShadowBias;\n"
 "out vec4 FragColor;\n"
 CNA_GL_RT_SAMPLE_UV_DECL
+// MOD-835: the map holds light-space distance rather than a depth buffer -- CNA cannot sample a
+// depth attachment as a texture, so CNA::Graphics::ShadowMap writes distance into colour and this
+// samples it like any other texture. Returns 1 where the surface is lit, 0 where a caster is in
+// front of it, and a fraction in between: a single tap gives a hard, stair-stepped edge at every
+// shadow-map resolution, so the lookup averages a 3x3 neighbourhood (PCF).
+"float cnaShadowFactor(vec3 worldPos){\n"
+"    if(uShadowsEnabled<0.5) return 1.0;\n"
+"    vec4 lightSpace=uLightViewProj*vec4(worldPos,1.0);\n"
+"    vec3 ndc=lightSpace.xyz/lightSpace.w;\n"
+"    vec3 uv=ndc*0.5+0.5;\n"
+// Beyond the light's own volume nothing was rendered into the map, so nothing there can be
+// occluding: returning 0 would put everything outside the map's reach into shadow.
+"    if(uv.x<0.0||uv.x>1.0||uv.y<0.0||uv.y>1.0||uv.z>1.0) return 1.0;\n"
+"    float texel=1.0/float(textureSize(uShadowMap,0).x);\n"
+"    float lit=0.0;\n"
+"    for(int y=-1;y<=1;++y){\n"
+"        for(int x=-1;x<=1;++x){\n"
+"            float occluder=texture(uShadowMap,uv.xy+vec2(float(x),float(y))*texel).r;\n"
+"            lit+=(uv.z-uShadowBias<=occluder)?1.0:0.0;\n"
+"        }\n"
+"    }\n"
+"    return lit/9.0;\n"
+"}\n"
 "void main(){\n"
 // XNA uses a separate unlit shader variant. Do not merely zero the light colours and continue
 // through the lit math here: an unlit vertex at the default eye position makes normalize(0)
@@ -5724,12 +5751,15 @@ CNA_GL_RT_SAMPLE_UV_DECL
 "        float dotL0=dot(N,-uLight0Dir); float zeroL0=step(0.0,dotL0); float NdotL0=max(dotL0,0.0);\n"
 "        float dotL1=dot(N,-uLight1Dir); float zeroL1=step(0.0,dotL1); float NdotL1=max(dotL1,0.0);\n"
 "        float dotL2=dot(N,-uLight2Dir); float zeroL2=step(0.0,dotL2); float NdotL2=max(dotL2,0.0);\n"
-"        vec3 lightSum=uAmbientColor+uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2;\n"
+// MOD-838: the shadow attenuates direct light only. Ambient is light arriving from every
+// direction, and darkening it here would make a shadowed surface black rather than shaded.
+"        float shadow=cnaShadowFactor(vWorldPos);\n"
+"        vec3 lightSum=uAmbientColor+(uLight0Diffuse*NdotL0+uLight1Diffuse*NdotL1+uLight2Diffuse*NdotL2)*shadow;\n"
 "        litRGB=lightSum*uDiffuseColor.rgb+uEmissiveColor;\n"
 "        vec3 h0=normalize(E-uLight0Dir); float spec0=pow(max(dot(h0,N),0.0)*zeroL0,uSpecularPower);\n"
 "        vec3 h1=normalize(E-uLight1Dir); float spec1=pow(max(dot(h1,N),0.0)*zeroL1,uSpecularPower);\n"
 "        vec3 h2=normalize(E-uLight2Dir); float spec2=pow(max(dot(h2,N),0.0)*zeroL2,uSpecularPower);\n"
-"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor;\n"
+"        specularRGB=(spec0*uLight0Specular+spec1*uLight1Specular+spec2*uLight2Specular)*uSpecularColor*shadow;\n"
 "    }\n"
 "    FragColor=texture(uTexture,cnaSampleUV(vUV,uRtFlipV.x))*vec4(litRGB,uDiffuseColor.a);\n"
 "    FragColor.rgb+=specularRGB*FragColor.a;\n"
@@ -5740,6 +5770,10 @@ CNA_GL_RT_SAMPLE_UV_DECL
 
         CompileAndLink(prog_lit_textured_.prog, vsrc, fsrc, "lit+textured");
         ResolveRenderTargetOrientationUniforms(prog_lit_textured_);
+        prog_lit_textured_.loc_shadowmap     = prog_lit_textured_.prog.uniform_location("uShadowMap");
+        prog_lit_textured_.loc_lightviewproj = prog_lit_textured_.prog.uniform_location("uLightViewProj");
+        prog_lit_textured_.loc_shadows_on    = prog_lit_textured_.prog.uniform_location("uShadowsEnabled");
+        prog_lit_textured_.loc_shadow_bias   = prog_lit_textured_.prog.uniform_location("uShadowBias");
         prog_lit_textured_.loc_wvp         = prog_lit_textured_.prog.uniform_location("uWVP");
         prog_lit_textured_.loc_world       = prog_lit_textured_.prog.uniform_location("uWorld");
         prog_lit_textured_.loc_normalmat   = prog_lit_textured_.prog.uniform_location("uNormalMatrix");
@@ -7032,13 +7066,20 @@ CNA_GL_RT_SAMPLE_UV_DECL
     {
         if (params.pbr && params.skinned) return StockProgramShape::PbrSkinned;
         if (params.pbr) return StockProgramShape::Pbr;
+        // plan_modern.md MOD-840. A receiving draw is forced onto the per-pixel family whatever
+        // PreferPerPixelLighting says. Per-vertex lighting evaluates the shadow lookup at the
+        // corners and interpolates the result across the triangle, so a ground plane drawn as two
+        // large triangles would carry one shadow value per corner -- a gradient, not a shadow.
+        // The property is not a request for a particular quality of shadow, it is a request for
+        // Gouraud shading, and reception is a CNAEXT extension that the property predates.
+        const bool receivesShadow = params.shadowsEnabled && params.shadowMap != nullptr;
         if (params.skinned)
         {
             // Task 1102b (plan_dx9.md Divergence 1): real XNA's SkinnedEffect defaults
             // PreferPerPixelLighting=false too, same as BasicEffect (Task 1102). Only
             // meaningfully distinct while lighting is actually on, same reasoning as Task 1102's
             // own stride-32 gate.
-            return (params.lightingEnabled && !params.preferPerPixelLighting)
+            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::SkinnedVertexLit
                        : StockProgramShape::Skinned;
         }
@@ -7062,7 +7103,7 @@ CNA_GL_RT_SAMPLE_UV_DECL
             // degenerate to the identical trivial ambient=(1,1,1) case (see BindDrawParams()'s
             // own else-branch), so the existing pixel-lit program stays selected there to avoid
             // an unnecessary program switch.
-            return (params.lightingEnabled && !params.preferPerPixelLighting)
+            return (params.lightingEnabled && !params.preferPerPixelLighting && !receivesShadow)
                        ? StockProgramShape::LitVertexLit
                        : StockProgramShape::Lit;
         default: return StockProgramShape::Colored;
@@ -7598,6 +7639,34 @@ if (ProfileIsEs2ApiGeneration())
         for (int unit = 0; unit < 7; ++unit)
             Es2ApplyPendingSamplerToUnit(unit);
 }
+
+        // Shadow map (MOD-835). Unit 7, past the stock effects' 0-6 range, so attaching one
+        // cannot displace a texture an effect is already sampling. Every uniform is uploaded even
+        // when shadows are off: leaving a stale uLightViewProj behind would make the first
+        // shadowed draw after an unshadowed one sample with the previous light's matrix.
+        if (p.loc_shadows_on >= 0)
+        {
+            const bool haveShadow = params.shadowsEnabled && params.shadowMap != nullptr;
+            p.prog.set_uniform(p.loc_shadows_on, haveShadow ? 1.0f : 0.0f);
+            if (p.loc_shadow_bias >= 0)
+                p.prog.set_uniform(p.loc_shadow_bias, params.shadowDepthBias);
+            if (p.loc_lightviewproj >= 0)
+                p.prog.set_uniform_matrix4(p.loc_lightviewproj, params.lightViewProjColMajor);
+            if (p.loc_shadowmap >= 0)
+            {
+                p.prog.set_uniform(p.loc_shadowmap, 7);
+                if (haveShadow)
+                    params.shadowMap->BindGL(7);
+                else
+                {
+                    EnsureDefaultWhiteTexture();
+                    // White means "infinitely far", so an unbound unit reads as nothing occluding
+                    // -- the same convention ShadowMap clears its target to.
+                    default_white_texture_.active_bind(::easygl::TextureUnit::Texture7,
+                                                       ::easygl::TextureTarget::Texture2D);
+                }
+            }
+        }
 
         // Alpha test (always uploaded; default {0,0,1,1} = Always pass)
         if (p.loc_alphatest >= 0)

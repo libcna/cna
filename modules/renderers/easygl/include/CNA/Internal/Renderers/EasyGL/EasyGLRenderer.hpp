@@ -718,6 +718,13 @@ namespace CNA::Internal::Renderers::EasyGL
             int loc_specularpower = -1;  ///< BasicEffect.SpecularPower (Blinn-Phong exponent)
             int loc_texture       = -1;
             int loc_texture2      = -1;  ///< second sampler (DualTextureEffect only)
+            /// plan_modern.md MOD-835: shadow reception. Present only on the lit variants; every
+            /// other program leaves them at -1 and BindDrawParams skips them, exactly like the
+            /// other optional locations here.
+            int loc_shadowmap      = -1;  ///< sampler2D holding light-space distance
+            int loc_lightviewproj  = -1;  ///< mat4 world -> shadow-map space
+            int loc_shadows_on     = -1;  ///< float 0/1
+            int loc_shadow_bias    = -1;  ///< float
             int loc_envmap        = -1;  ///< samplerCube (EnvironmentMapEffect only)
             int loc_envmap_amount = -1;  ///< float blend [0,1]
             int loc_envmap_spec   = -1;  ///< vec3 specular tint

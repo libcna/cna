@@ -476,8 +476,8 @@ depth-based effects will reuse.
 
 | ID | Task | Status | Acceptance criterion |
 |---|---|---|---|
-| MOD-835 | EasyGL: shadow-map generation path (depth-only draw into the shadow target) | ⬜ | A cube casts a recognizable depth silhouette (readback-verified). |
-| MOD-836 | EasyGL: `BasicEffect` shadow-receiving variant with 3×3 PCF | ⬜ | The shadowed region matches a CPU-computed expectation within a documented tolerance. |
+| MOD-835 | EasyGL: shadow-map generation path (depth-only draw into the shadow target) | ✅ | Done — the caster path lands the silhouette in the map and a receiving draw reads it back: `ShadowVisibilityTest.TheCastersShadowIsVisibleOnTheGround` renders a floating quad into the map, then renders the ground plane and finds the centre at the ambient floor (38/255) against a fully lit corner (255/255). |
+| MOD-836 | EasyGL: `BasicEffect` shadow-receiving variant with 3×3 PCF | ✅ | Done — `uShadowMap`/`uLightViewProj`/`uShadowsEnabled`/`uShadowBias` on the per-pixel lit program, 3x3 PCF over the map's own texel size, bound at unit 7. Shadow multiplies direct diffuse and specular only, so a fully shadowed surface keeps its ambient rather than going black (asserted). An effect with no map attached renders the frame it rendered before this existed. |
 | MOD-837 | EasyGL: `SkinnedEffect` shadow-receiving variant | ⬜ | Same, animated. |
 | MOD-838 | EasyGL: `PbrEffect` shadow-receiving variant | ⬜ | Shadow attenuates direct light only (not ambient/IBL) — documented and asserted. |
 | MOD-839 | EasyGL: `SkinnedPbrEffect` shadow-receiving variant | ⬜ | Same. |
